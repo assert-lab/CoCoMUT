@@ -1,0 +1,218 @@
+<project
+    xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                              http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>org.assertlab.context4docugen</groupId>
+    <artifactId>context4docugen</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>Context4DocuGen — Parent</name>
+    <description>Static Java method-context extraction for documentation research and documentation-generation systems.</description>
+    <url>https://github.com/assert-lab/Context4DocuGen</url>
+
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>assert-lab</id>
+            <name>ASSERT Lab</name>
+            <organization>ASSERT Lab</organization>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/assert-lab/Context4DocuGen.git</connection>
+        <developerConnection>scm:git:https://github.com/assert-lab/Context4DocuGen.git</developerConnection>
+        <url>https://github.com/assert-lab/Context4DocuGen</url>
+        <tag>HEAD</tag>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub Issues</system>
+        <url>https://github.com/assert-lab/Context4DocuGen/issues</url>
+    </issueManagement>
+
+    <modules>
+        <module>analyzer-core</module>
+        <module>context4docugen-cli</module>
+        <module>analyzer-tests</module>
+    </modules>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <maven.compiler.encoding>UTF-8</maven.compiler.encoding>
+        <sootup.version>2.0.0</sootup.version>
+        <spoon.version>11.2.0</spoon.version>
+        <picocli.version>4.7.6</picocli.version>
+    </properties>
+
+    <!-- Centralise all dependency versions; children declare without repeating them -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.soot-oss</groupId>
+                <artifactId>sootup.core</artifactId>
+                <version>${sootup.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.soot-oss</groupId>
+                <artifactId>sootup.java.bytecode.frontend</artifactId>
+                <version>${sootup.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.soot-oss</groupId>
+                <artifactId>sootup.java.core</artifactId>
+                <version>${sootup.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.soot-oss</groupId>
+                <artifactId>sootup.callgraph</artifactId>
+                <version>${sootup.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.opencsv</groupId>
+                <artifactId>opencsv</artifactId>
+                <version>5.9</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>2.15.2</version>
+            </dependency>
+            <dependency>
+                <groupId>fr.inria.gforge.spoon</groupId>
+                <artifactId>spoon-core</artifactId>
+                <version>${spoon.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>junit</groupId>
+                <artifactId>junit</artifactId>
+                <version>4.13.2</version>
+            </dependency>
+            <dependency>
+                <groupId>info.picocli</groupId>
+                <artifactId>picocli</artifactId>
+                <version>${picocli.version}</version>
+            </dependency>
+            <!-- Internal: analyzer-tests depends on analyzer-core -->
+            <dependency>
+                <groupId>org.assertlab.context4docugen</groupId>
+                <artifactId>analyzer-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.assertlab.context4docugen</groupId>
+                <artifactId>context4docugen-cli</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <!-- Default: skip slow tests in every child module that runs surefire -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.0.0-M9</version>
+                    <configuration>
+                        <excludedGroups>org.assertlab.context4docugen.SlowTests</excludedGroups>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>exec-maven-plugin</artifactId>
+                    <version>3.1.0</version>
+                    <configuration>
+                        <cleanupDaemonThreads>false</cleanupDaemonThreads>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-source-plugin</artifactId>
+                    <version>3.3.1</version>
+                    <executions>
+                        <execution>
+                            <id>attach-sources</id>
+                            <goals>
+                                <goal>jar-no-fork</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-javadoc-plugin</artifactId>
+                    <version>3.8.0</version>
+                    <executions>
+                        <execution>
+                            <id>attach-javadocs</id>
+                            <goals>
+                                <goal>jar</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-shade-plugin</artifactId>
+                    <version>3.5.3</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
+    <profiles>
+        <!-- Run only slow/full-scale integration tests -->
+        <profile>
+            <id>slow-tests</id>
+            <build>
+                <pluginManagement>
+                    <plugins>
+                        <plugin>
+                            <groupId>org.apache.maven.plugins</groupId>
+                            <artifactId>maven-surefire-plugin</artifactId>
+                            <version>3.0.0-M9</version>
+                            <configuration>
+                                <groups>org.assertlab.context4docugen.SlowTests</groups>
+                                <excludedGroups/>
+                            </configuration>
+                        </plugin>
+                    </plugins>
+                </pluginManagement>
+            </build>
+        </profile>
+
+        <!-- Run all tests (fast + slow) -->
+        <profile>
+            <id>all-tests</id>
+            <build>
+                <pluginManagement>
+                    <plugins>
+                        <plugin>
+                            <groupId>org.apache.maven.plugins</groupId>
+                            <artifactId>maven-surefire-plugin</artifactId>
+                            <version>3.0.0-M9</version>
+                            <configuration>
+                                <excludedGroups/>
+                            </configuration>
+                        </plugin>
+                    </plugins>
+                </pluginManagement>
+            </build>
+        </profile>
+    </profiles>
+
+</project>

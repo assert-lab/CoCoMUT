@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assert-lab.github.io/context4docugen/schemas/method-context.schema.json",
+  "title": "Context4DocuGen Method Context",
+  "type": "object",
+  "required": ["MUT", "metadata", "provenance", "documentation_metrics", "javadoc_metadata", "dynamic_features"],
+  "properties": {
+    "MUT": {
+      "type": "object",
+      "required": [
+        "method_uri",
+        "method_name",
+        "source_set",
+        "signature",
+        "qualified_name",
+        "parameters",
+        "code",
+        "javadoc",
+        "class_hierarchy",
+        "source_context"
+      ],
+      "properties": {
+        "method_uri": {"type": "string"},
+        "method_name": {"type": "string"},
+        "source_set": {"type": "string"},
+        "signature": {"type": "string"},
+        "qualified_name": {"type": "string"},
+        "line_number": {"type": "integer"},
+        "parameters": {"type": "array"},
+        "annotations": {"type": "array"},
+        "throws": {"type": "array"},
+        "lines_of_code": {"type": "integer"},
+        "cyclomatic_complexity": {"type": "integer"},
+        "code": {"type": "string"},
+        "javadoc": {"type": "string"},
+        "class_hierarchy": {"type": "object"},
+        "source_context": {"type": "object"},
+        "class_javadoc": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "callers": {"type": "array"},
+    "callees": {"type": "array"},
+    "metadata": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "source_backend",
+        "source_backend_mode",
+        "method_identity",
+        "type_resolution",
+        "call_graph"
+      ],
+      "properties": {
+        "schema_version": {"type": "string"},
+        "source_backend": {"type": "string"},
+        "source_backend_mode": {"type": "string"},
+        "method_identity": {"type": "string"},
+        "type_resolution": {"type": "string"},
+        "call_graph": {"type": "object"}
+      },
+      "additionalProperties": true
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "method_source": {"type": "string"},
+        "method_matching": {"type": "string"},
+        "javadoc_extraction": {"type": "string"},
+        "compiled_project": {"type": "boolean"},
+        "context_confidence": {"type": "object"}
+      },
+      "additionalProperties": true
+    },
+    "documentation_metrics": {"type": "object"},
+    "javadoc_metadata": {"type": "object"},
+    "dynamic_features": {"type": "array"}
+  },
+  "additionalProperties": true
+}

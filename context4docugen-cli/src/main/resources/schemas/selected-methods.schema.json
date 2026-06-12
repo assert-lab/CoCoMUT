@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assert-lab.github.io/context4docugen/schemas/selected-methods.schema.json",
+  "title": "Context4DocuGen Selected Methods CSV",
+  "description": "Preferred pipe-delimited selected-method CSV columns.",
+  "type": "object",
+  "required": ["method_uri"],
+  "properties": {
+    "method_uri": {"type": "string"},
+    "docstring": {"type": "string"},
+    "test_prefix": {"type": "string"}
+  },
+  "additionalProperties": true
+}

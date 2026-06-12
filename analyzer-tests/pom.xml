@@ -1,0 +1,42 @@
+<project
+    xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                              http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.assertlab.context4docugen</groupId>
+        <artifactId>context4docugen</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>analyzer-tests</artifactId>
+    <name>Context4DocuGen — Analyzer Tests</name>
+
+    <!--
+        This module has no src/main/java — only src/test/java.
+        All production code comes transitively via analyzer-core.
+        Maven compiles the test sources and binds surefire to run them.
+    -->
+
+    <dependencies>
+        <!-- Bring in all production code + its transitive deps -->
+        <dependency>
+            <groupId>org.assertlab.context4docugen</groupId>
+            <artifactId>analyzer-core</artifactId>
+            <!-- compile scope so test classes can reference production classes -->
+        </dependency>
+        <dependency>
+            <groupId>org.assertlab.context4docugen</groupId>
+            <artifactId>context4docugen-cli</artifactId>
+        </dependency>
+        <!-- Test framework -->
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

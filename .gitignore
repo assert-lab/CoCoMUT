@@ -1,0 +1,41 @@
+# Maven
+target/
+.m2/
+dist/
+*.class
+*.jar
+*.war
+
+# IDE
+.vscode/
+.idea/
+*.iml
+.DS_Store
+
+# Generated CSV files
+*.csv
+!analyzer-tests/src/test/resources/**/*.csv
+
+# Large files
+*.xlsx
+*.backup
+
+# Test fixture build output (compiled on demand by TestFixtures)
+analyzer-tests/src/test/resources/fixtures/**/target/
+
+# Local settings and artifacts
+.claude/
+.windsurf/
+dev/
+
+# Regenerable build/pipeline artifacts
+**/build/
+**/build.log
+**/Output_CallGraph_CHA.txt
+**/method_context_json/
+**/methods.csv
+**/method_contexts.jsonl
+
+# Research artifacts do not belong in the minimal product repository.
+/Datasets/
+/docstring_generation/

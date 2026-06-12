@@ -1,0 +1,523 @@
+package org.assertlab.context4docugen;
+
+import org.assertlab.context4docugen.source.ProjectModel;
+import org.assertlab.context4docugen.strategy.MethodSourceStrategy;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.*;
+import java.util.stream.Collectors;
+
+/**
+ * Phase 7 (Final) of the method context extraction pipeline.
+ *
+ * Orchestrates all 6 phases in sequence:
+ * Phase 1: ProjectAnalyzer - Detect project, build system, Java version, classpath
+ * Phase 2: MethodIdentifier - Scan Java files, extract methods, generate IDs, write CSV
+ * Phase 3: CallGraphGenerator - Generate call graphs for methods (SootUp CHA)
+ * Phase 4: ContextExtractor - Extract method bodies, javadocs, class hierarchy
+ * Phase 5: JsonGenerator - Generate JSON files for each method
+ * Phase 6: CsvEnricher - Enrich CSV with call graph and JSON file paths
+ *
+ * Input: Project root path
+ * Output: CSV file with enriched data, JSON files for each method, execution report
+ */
+public class Orchestrator {
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+    private final Path projectPath;
+    private final ExecutionMode executionMode;
+    private final Map<String, Object> executionReport;
+    private Path inputCsvPath;  // SELECTED mode: override default inputs_selected.csv location
+    private MethodSourceStrategy methodSourceStrategy;  // optional Phase 2 override (FULL mode)
+    private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.CHA;
+    private Integer maxMethods;
+    private Integer maxSourceFiles;
+    private boolean attemptCompile;
+    private AnalysisOptions.OutputMode outputMode = AnalysisOptions.OutputMode.JSON;
+    private String previousMaxSourceFilesProperty;
+    private boolean sourceFileLimitConfigured;
+
+    // Pipeline state passed between phases
+    private ProjectMetadata projectMetadata;
+    private List<MethodInfo> methodInfos;
+    private CallGraphGenerator callGraphGenerator;
+    private Map<String, CallGraphResult> callGraphResults;
+    private Map<String, MethodContext> methodContexts;
+    private Map<String, String> jsonFilePaths;
+    private Map<String, String> contextExtractionFailures = new LinkedHashMap<>();
+    private final Set<FailureCode> failureCodes = new LinkedHashSet<>();
+
+    public enum ExecutionMode {
+        FULL, SELECTED
+    }
+
+    public Orchestrator(Path projectPath, ExecutionMode executionMode) {
+        this.projectPath = Objects.requireNonNull(projectPath, "projectPath cannot be null");
+        this.executionMode = Objects.requireNonNull(executionMode, "executionMode cannot be null");
+        this.executionReport = new LinkedHashMap<>();
+    }
+
+    public static Orchestrator create(Path projectPath) {
+        return new Orchestrator(projectPath, ExecutionMode.FULL);
+    }
+
+    /** SELECTED mode only: override the default inputs_selected.csv path. */
+    public Orchestrator setInputCsvPath(Path csv) {
+        this.inputCsvPath = csv;
+        return this;
+    }
+
+    /**
+     * Optional Phase 2 override for non-SELECTED modes: supply a
+     * {@link MethodSourceStrategy} (e.g., entry-points-only) whose
+     * {@code loadMethods()} result replaces the default full source scan.
+     * Ignored in SELECTED mode (which always reads inputs_selected.csv).
+     */
+    public Orchestrator setMethodSourceStrategy(MethodSourceStrategy strategy) {
+        this.methodSourceStrategy = strategy;
+        return this;
+    }
+
+    public Orchestrator setCallGraphAlgorithm(CallGraphGenerator.Algorithm algorithm) {
+        this.callGraphAlgorithm = Objects.requireNonNull(algorithm, "algorithm cannot be null");
+        return this;
+    }
+
+    public Orchestrator setMaxMethods(Integer maxMethods) {
+        this.maxMethods = maxMethods;
+        return this;
+    }
+
+    public Orchestrator setMaxSourceFiles(Integer maxSourceFiles) {
+        this.maxSourceFiles = maxSourceFiles;
+        return this;
+    }
+
+    public Orchestrator setAttemptCompile(boolean attemptCompile) {
+        this.attemptCompile = attemptCompile;
+        return this;
+    }
+
+    public Orchestrator setOutputMode(AnalysisOptions.OutputMode outputMode) {
+        this.outputMode = Objects.requireNonNull(outputMode, "outputMode cannot be null");
+        return this;
+    }
+
+    public boolean execute() {
+        long startTime = System.currentTimeMillis();
+        executionReport.put("start_time", new java.util.Date());
+        executionReport.put("execution_mode", executionMode.toString());
+
+        boolean success = false;
+        try {
+            if (!executePhase1()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 1); return false; }
+            configureSourceFileLimit();
+            if (!executePhase2()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 2); return false; }
+            if (!executePhase3()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 3); return false; }
+            if (!executePhase4()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 4); return false; }
+            if (!executePhase5()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 5); return false; }
+            if (!executePhase6()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 6); return false; }
+
+            executionReport.put("status", "SUCCESS");
+            executionReport.put("completed_phases", 6);
+            success = true;
+            return true;
+
+        } catch (Exception e) {
+            executionReport.put("status", "ERROR");
+            executionReport.put("error_message", e.getMessage());
+            return false;
+        } finally {
+            long endTime = System.currentTimeMillis();
+            executionReport.put("duration_ms", endTime - startTime);
+            executionReport.put("end_time", new java.util.Date());
+            executionReport.putIfAbsent("status", success ? "SUCCESS" : "FAILED");
+            executionReport.put("failure_codes", failureCodes.isEmpty()
+                    ? List.of(FailureCode.NONE.toString())
+                    : failureCodes.stream().map(Enum::toString).toList());
+            restoreSourceFileLimit();
+        }
+    }
+
+    private boolean executePhase1() {
+        try {
+            ProjectAnalyzer analyzer = new ProjectAnalyzer(projectPath, true, "auto", attemptCompile);
+            projectMetadata = analyzer.analyze();
+
+            executionReport.put("phase_1_project", projectMetadata.getProjectName());
+            executionReport.put("phase_1_build_system", projectMetadata.getBuildSystem());
+            executionReport.put("phase_1_java_version", projectMetadata.getJavaVersion());
+            executionReport.put("phase_1_compiles", projectMetadata.isCompiles());
+            executionReport.put("phase_1_compile_attempted", attemptCompile);
+            ProjectModel model = ProjectModel.from(projectMetadata);
+            executionReport.put("phase_1_source_available", model.sourceAvailable());
+            executionReport.put("phase_1_source_roots", model.sourceRoots().size());
+            executionReport.put("phase_1_test_source_roots", model.testSourceRoots().size());
+            executionReport.put("phase_1_class_output_dirs", model.classOutputDirs().size());
+            executionReport.put("phase_1_dependency_jars", model.dependencyJars().size());
+
+            if (!projectMetadata.isCompiles()) {
+                if (model.sourceAvailable()) {
+                    failureCodes.add(FailureCode.BUILD_FAILED);
+                    executionReport.put("phase_1_warning",
+                            "Project did not compile; continuing with source-only context");
+                    return true;
+                }
+                failureCodes.add(FailureCode.NO_SOURCE_ROOT);
+                return false;
+            }
+
+            return true;
+        } catch (Exception e) {
+            executionReport.put("phase_1_error", e.getMessage());
+            return false;
+        }
+    }
+
+    private boolean executePhase2() {
+        try {
+            if (executionMode == ExecutionMode.SELECTED) {
+                Path csv = (inputCsvPath != null) ? inputCsvPath
+                        : projectPath.resolve("inputs_selected.csv");
+                SelectedMethodLoader loader = new SelectedMethodLoader(projectMetadata, csv);
+                methodInfos = loader.load();
+                methodInfos = limitMethods(methodInfos);
+
+                // Still write a methods.csv so Phase 6 (CsvEnricher) has something to enrich.
+                Path csvPath = projectPath.resolve("methods.csv");
+                MethodIdentifier writer = new MethodIdentifier(projectMetadata,
+                        MethodIdentifier.IdStrategy.SEQUENTIAL, null, projectPath);
+                writer.writeCsv(methodInfos, csvPath);
+
+                executionReport.put("phase_2_mode", "SELECTED");
+                executionReport.put("phase_2_input_csv", csv.toString());
+                executionReport.put("phase_2_methods_loaded", methodInfos.size());
+                executionReport.put("phase_2_csv_file", csvPath.toString());
+                if (!loader.getFailures().isEmpty()) {
+                    Path failuresPath = writeSelectedMethodFailures(loader.getFailures());
+                    failureCodes.add(FailureCode.SELECTED_METHOD_NOT_FOUND);
+                    executionReport.put("phase_2_selected_failures", loader.getFailures().size());
+                    executionReport.put("phase_2_selected_failures_file", failuresPath.toString());
+                }
+                return !methodInfos.isEmpty();
+            }
+
+            Path csvPath = projectPath.resolve("methods.csv");
+
+            if (methodSourceStrategy != null) {
+                // Strategy override (e.g., entry-points-only): load via strategy,
+                // then still write methods.csv so Phase 6 (CsvEnricher) has input.
+                methodInfos = methodSourceStrategy.loadMethods(projectMetadata);
+                methodInfos = limitMethods(methodInfos);
+                MethodIdentifier writer = new MethodIdentifier(projectMetadata,
+                        MethodIdentifier.IdStrategy.SEQUENTIAL, null, projectPath);
+                writer.writeCsv(methodInfos, csvPath);
+                executionReport.put("phase_2_strategy", methodSourceStrategy.name());
+                executionReport.put("phase_2_methods_identified", methodInfos.size());
+                executionReport.put("phase_2_csv_file", csvPath.toString());
+                return !methodInfos.isEmpty();
+            }
+
+            MethodIdentifier identifier = new MethodIdentifier(projectMetadata,
+                    MethodIdentifier.IdStrategy.SEQUENTIAL, null, projectPath);
+
+            methodInfos = identifier.identify();
+            methodInfos = limitMethods(methodInfos);
+            identifier.writeCsv(methodInfos, csvPath);
+
+            executionReport.put("phase_2_methods_identified", methodInfos.size());
+            executionReport.put("phase_2_csv_file", csvPath.toString());
+            return true;
+        } catch (Exception e) {
+                executionReport.put("phase_2_error", e.getMessage());
+            failureCodes.add(FailureCode.PARSE_ERROR);
+            return false;
+        }
+    }
+
+    /**
+     * Phase 3: Build call graph once and store for reuse in Phase 4 and Phase 6.
+     */
+    private boolean executePhase3() {
+        try {
+            if (callGraphAlgorithm == CallGraphGenerator.Algorithm.NONE) {
+                callGraphGenerator = new CallGraphGenerator(projectMetadata);
+                callGraphResults = new HashMap<>();
+                failureCodes.add(FailureCode.CALL_GRAPH_DISABLED);
+                executionReport.put("phase_3_available", false);
+                executionReport.put("phase_3_algorithm", "NONE");
+                executionReport.put("phase_3_warning", "Call graph disabled by configuration");
+                executionReport.put("phase_3_call_graphs_generated", 0);
+                return true;
+            }
+
+            callGraphGenerator = new CallGraphGenerator(projectMetadata, callGraphAlgorithm);
+            if (!callGraphGenerator.initialize()) {
+                callGraphResults = new HashMap<>();
+                failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
+                executionReport.put("phase_3_available", false);
+                executionReport.put("phase_3_algorithm", callGraphAlgorithm.toString());
+                executionReport.put("phase_3_warning",
+                        "Call graph unavailable; continuing with source-only context");
+                executionReport.put("phase_3_call_graphs_generated", 0);
+                return true;
+            }
+
+            callGraphResults = callGraphGenerator.generateForMethods(methodInfos);
+
+            // Write Output_CallGraph_CHA.txt (matches core pipeline artifact)
+            String cgText = callGraphGenerator.getCallGraphText();
+            if (!cgText.isEmpty()) {
+                Path cgOutputPath = projectPath.resolve("Output_CallGraph_CHA.txt");
+                Files.writeString(cgOutputPath, cgText);
+                executionReport.put("phase_3_call_graph_file", cgOutputPath.toString());
+            }
+
+            executionReport.put("phase_3_available", true);
+            executionReport.put("phase_3_algorithm", callGraphAlgorithm.toString());
+            executionReport.put("phase_3_call_graphs_generated", callGraphResults.size());
+            return true;
+        } catch (Exception e) {
+            executionReport.put("phase_3_error", e.getMessage());
+            failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
+            return false;
+        }
+    }
+
+    /**
+     * Phase 4: Reuse the SAME CallGraphGenerator from Phase 3 so getCachedResult() works.
+     */
+    private boolean executePhase4() {
+        try {
+            ContextExtractor extractor = new ContextExtractor(projectMetadata, callGraphGenerator);
+            methodContexts = extractor.extractContextForMethods(methodInfos);
+            contextExtractionFailures = missingContextFailures(methodInfos, methodContexts);
+
+            executionReport.put("phase_4_contexts_extracted", methodContexts.size());
+            if (!contextExtractionFailures.isEmpty()) {
+                failureCodes.add(FailureCode.CONTEXT_EXTRACTION_FAILED);
+                Path failuresPath = writeContextExtractionFailures(contextExtractionFailures);
+                executionReport.put("phase_4_context_failures", contextExtractionFailures.size());
+                executionReport.put("phase_4_context_failures_file", failuresPath.toString());
+            }
+            return true;
+        } catch (Exception e) {
+            executionReport.put("phase_4_error", e.getMessage());
+            failureCodes.add(FailureCode.CONTEXT_EXTRACTION_FAILED);
+            return false;
+        }
+    }
+
+    private void configureSourceFileLimit() {
+        if (maxSourceFiles != null && maxSourceFiles > 0) {
+            if (!sourceFileLimitConfigured) {
+                previousMaxSourceFilesProperty = System.getProperty("c4dg.maxSourceFiles");
+                sourceFileLimitConfigured = true;
+            }
+            System.setProperty("c4dg.maxSourceFiles", String.valueOf(maxSourceFiles));
+            executionReport.put("source_max_files", maxSourceFiles);
+        }
+    }
+
+    private void restoreSourceFileLimit() {
+        if (!sourceFileLimitConfigured) {
+            return;
+        }
+        if (previousMaxSourceFilesProperty == null) {
+            System.clearProperty("c4dg.maxSourceFiles");
+        } else {
+            System.setProperty("c4dg.maxSourceFiles", previousMaxSourceFilesProperty);
+        }
+    }
+
+    /**
+     * Phase 5: Generate JSON for ALL methods (no sampling) and collect file paths.
+     */
+    private boolean executePhase5() {
+        try {
+            if (methodContexts == null || methodContexts.isEmpty()) {
+                executionReport.put("phase_5_warning", "No method contexts to generate JSON for");
+                executionReport.put("phase_5_files_generated", 0);
+                return true;
+            }
+
+            Path jsonDir = projectPath.resolve("method_context_json");
+            JsonGenerator jsonGen = new JsonGenerator(jsonDir, methodContexts, callGraphGenerator);
+            int filesGenerated = 0;
+            if (outputMode == AnalysisOptions.OutputMode.JSON || outputMode == AnalysisOptions.OutputMode.BOTH) {
+                Files.createDirectories(jsonDir);
+                filesGenerated = jsonGen.generateJsonFiles(methodContexts);
+            }
+
+            Path jsonlPath = projectPath.resolve("method_contexts.jsonl");
+            int jsonlRows = 0;
+            if (outputMode == AnalysisOptions.OutputMode.JSONL || outputMode == AnalysisOptions.OutputMode.BOTH) {
+                jsonlRows = jsonGen.generateJsonLinesFile(methodContexts, jsonlPath);
+            }
+
+            // Collect JSON file paths for Phase 6
+            jsonFilePaths = new HashMap<>();
+            for (Map.Entry<String, String> entry : jsonGen.getAllGenerationResults().entrySet()) {
+                String result = entry.getValue();
+                if (result.startsWith("SUCCESS:")) {
+                    jsonFilePaths.put(entry.getKey(), result.substring("SUCCESS:".length()));
+                }
+            }
+
+            executionReport.put("phase_5_output_mode", outputMode.toString());
+            if (outputMode == AnalysisOptions.OutputMode.JSON || outputMode == AnalysisOptions.OutputMode.BOTH) {
+                executionReport.put("phase_5_output_directory", jsonDir.toString());
+            }
+            if (outputMode == AnalysisOptions.OutputMode.JSONL || outputMode == AnalysisOptions.OutputMode.BOTH) {
+                executionReport.put("phase_5_jsonl_file", jsonlPath.toString());
+                executionReport.put("phase_5_jsonl_rows", jsonlRows);
+            }
+            executionReport.put("phase_5_files_generated", filesGenerated);
+            if ((outputMode == AnalysisOptions.OutputMode.JSON || outputMode == AnalysisOptions.OutputMode.BOTH)
+                    && filesGenerated < methodContexts.size()) {
+                failureCodes.add(FailureCode.JSON_GENERATION_FAILED);
+            }
+            return true;
+        } catch (Exception e) {
+            executionReport.put("phase_5_error", e.getMessage());
+            failureCodes.add(FailureCode.JSON_GENERATION_FAILED);
+            return false;
+        }
+    }
+
+    /**
+     * Phase 6: Pass call graph results and JSON paths to CsvEnricher before enriching.
+     */
+    private boolean executePhase6() {
+        try {
+            Path csvFile = projectPath.resolve("methods.csv");
+            if (!Files.exists(csvFile)) {
+                executionReport.put("phase_6_warning", "CSV file not found at " + csvFile);
+                return true;
+            }
+
+            CsvEnricher enricher = new CsvEnricher(csvFile);
+            if (callGraphResults != null) {
+                enricher.registerCallGraphResults(callGraphResults);
+            }
+            if (jsonFilePaths != null) {
+                enricher.registerJsonFilePaths(jsonFilePaths);
+            }
+            boolean enriched = enricher.enrich();
+
+            executionReport.put("phase_6_enriched", enriched);
+            executionReport.putAll(enricher.getEnrichmentStats()
+                    .entrySet().stream()
+                    .collect(Collectors.toMap(e -> "phase_6_" + e.getKey(), Map.Entry::getValue)));
+            if (!enriched) {
+                failureCodes.add(FailureCode.CSV_ENRICHMENT_FAILED);
+            }
+            return enriched;
+        } catch (Exception e) {
+            executionReport.put("phase_6_error", e.getMessage());
+            failureCodes.add(FailureCode.CSV_ENRICHMENT_FAILED);
+            return false;
+        }
+    }
+
+    public Map<String, Object> getExecutionReport() {
+        return new LinkedHashMap<>(executionReport);
+    }
+
+    public ProjectMetadata getProjectMetadata() {
+        return projectMetadata;
+    }
+
+    public List<MethodInfo> getMethodInfos() {
+        return methodInfos != null ? methodInfos : List.of();
+    }
+
+    public void printReport() {
+        System.out.println("\n=== ORCHESTRATOR EXECUTION REPORT ===");
+        executionReport.forEach((key, value) ->
+                System.out.println(String.format("%s: %s", key, value)));
+        System.out.println("=====================================\n");
+    }
+
+    public boolean validateConfiguration() {
+        return Files.exists(projectPath) && Files.isDirectory(projectPath);
+    }
+
+    private List<MethodInfo> limitMethods(List<MethodInfo> methods) {
+        if (maxMethods == null || maxMethods <= 0 || methods.size() <= maxMethods) {
+            return methods;
+        }
+        executionReport.put("phase_2_max_methods", maxMethods);
+        executionReport.put("phase_2_methods_before_limit", methods.size());
+        return new ArrayList<>(methods.subList(0, maxMethods));
+    }
+
+    private Map<String, String> missingContextFailures(List<MethodInfo> expected,
+                                                       Map<String, MethodContext> actual) {
+        Map<String, String> failures = new LinkedHashMap<>();
+        Set<String> extracted = actual != null ? actual.keySet() : Set.of();
+        for (MethodInfo method : expected) {
+            if (!extracted.contains(method.getId())) {
+                failures.put(method.getId(), "CONTEXT_EXTRACTION_FAILED");
+            }
+        }
+        return failures;
+    }
+
+    private Path writeSelectedMethodFailures(List<SelectedMethodLoader.Failure> failures)
+            throws java.io.IOException {
+        Path output = projectPath.resolve("selected_method_failures.jsonl");
+        try (var writer = Files.newBufferedWriter(output)) {
+            for (SelectedMethodLoader.Failure failure : failures) {
+                ObjectNode node = OBJECT_MAPPER.createObjectNode();
+                node.put("phase", "selected_method_loading");
+                node.put("failure_code", FailureCode.SELECTED_METHOD_NOT_FOUND.toString());
+                node.put("row_id", failure.rowId());
+                node.put("reason", failure.reason());
+                node.put("method_uri", failure.methodUri());
+                node.put("focal_method_prefix", failure.focalPrefix());
+                writer.write(OBJECT_MAPPER.writeValueAsString(node));
+                writer.newLine();
+            }
+        }
+        return output;
+    }
+
+    private Path writeContextExtractionFailures(Map<String, String> failures)
+            throws java.io.IOException {
+        Path output = projectPath.resolve("method_context_failures.jsonl");
+        try (var writer = Files.newBufferedWriter(output)) {
+            for (MethodInfo method : methodInfos) {
+                if (!failures.containsKey(method.getId())) {
+                    continue;
+                }
+                ObjectNode node = OBJECT_MAPPER.createObjectNode();
+                node.put("phase", "context_extraction");
+                node.put("failure_code", failures.get(method.getId()));
+                node.put("method_uri", method.getId());
+                node.put("class_name", method.getClassname());
+                node.put("method_name", method.getMethodName());
+                node.put("signature", method.getMethodSignature());
+                node.put("source_file", method.getSourceFile().toString());
+                node.put("line_number", method.getLineNumber());
+                writer.write(OBJECT_MAPPER.writeValueAsString(node));
+                writer.newLine();
+            }
+        }
+        return output;
+    }
+
+    private static boolean hasJavaSources(Path sourceRoot) {
+        if (sourceRoot == null || !Files.isDirectory(sourceRoot)) {
+            return false;
+        }
+        try (var stream = Files.walk(sourceRoot)) {
+            return stream.anyMatch(p -> p.toString().endsWith(".java"));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+}
