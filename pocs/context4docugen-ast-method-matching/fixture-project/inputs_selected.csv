@@ -1,0 +1,7 @@
+focal_method|test_prefix|docstring|id
+public int add(int left, int right) {\n        return left + right;\n    }||/** Control selected method. */|control_add
+<T extends Comparable<T>> T max(final T a, final T b) {\n        return a.compareTo(b) >= 0 ? a : b;\n    }||/** Generic selected method. */|generic_max
+public SelectedMethodMatchingFixture(String label) {\n        this.label = label;\n    }||/** Constructor selected method. */|constructor_label
+@Deprecated\npublic String annotated(String input) {\n        return label + input;\n    }||/** Annotated selected method. */|annotated_method
+public String value() {\n            return "nested";\n        }||/** Nested class selected method. */|nested_value
+RangeFixture {\n        if (start > end) {\n            throw new IllegalArgumentException("start > end");\n        }\n    }||/** Compact record constructor selected method. */|compact_record_constructor

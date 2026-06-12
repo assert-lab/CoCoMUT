@@ -15,6 +15,7 @@ dist/
 # Generated CSV files
 *.csv
 !analyzer-tests/src/test/resources/**/*.csv
+!pocs/**/inputs_selected.csv
 
 # Large files
 *.xlsx
