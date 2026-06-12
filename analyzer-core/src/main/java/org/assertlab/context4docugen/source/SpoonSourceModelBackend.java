@@ -53,6 +53,8 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     private static final Pattern INLINE_LINK = Pattern.compile("\\{@(?:link|linkplain)\\s+([^}\\s]+)");
     private static final String MAX_SOURCE_FILES_PROPERTY = "c4dg.maxSourceFiles";
     private static final String MAX_SOURCE_FILES_ENV = "C4DG_MAX_SOURCE_FILES";
+    private static final int MAX_CLASS_METHOD_CONTEXT = 500;
+    private static final int MAX_OVERLOAD_CONTEXT = 200;
     private final Map<String, ParsedProject> cache = new ConcurrentHashMap<>();
 
     @Override
@@ -90,11 +92,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         String classJavadoc = owner != null ? docComment(owner) : "";
         String classHierarchy = owner != null ? classHierarchy(owner) : "";
         String hierarchyResolution = hierarchyResolution(owner);
-        Map<String, String> classMethods = owner != null ? classMethods(owner) : Map.of();
-        List<String> siblingMethods = classMethods.keySet().stream().sorted().toList();
-        List<String> overloadGroup = siblingMethods.stream()
-                .filter(sig -> sig.startsWith(method.methodName() + "("))
-                .toList();
+        ClassContext classContext = owner != null ? classContext(parsed, owner, method.methodName()) : ClassContext.empty();
 
         return Optional.of(new SourceContext(
                 method,
@@ -103,11 +101,11 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 classJavadoc,
                 classHierarchy,
                 hierarchyResolution,
-                classMethods,
+                classContext.classMethods(),
                 fieldReads(executable),
                 fieldWrites(executable),
-                siblingMethods,
-                overloadGroup,
+                classContext.siblingMethods(),
+                classContext.overloadGroup(),
                 dynamicFeatures(executable),
                 javadocMetadata(executable, javadoc),
                 documentationMetrics(method, javadoc)));
@@ -163,7 +161,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             }
         }
 
-        return new ParsedProject(methods, methodsByUri, executablesByUri);
+        return new ParsedProject(methods, methodsByUri, executablesByUri, new ConcurrentHashMap<>());
     }
 
     private List<CtModel> parseModels(ProjectModel project) throws IOException {
@@ -394,6 +392,19 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
     }
 
+    private static ClassContext classContext(ParsedProject parsed, CtType<?> type, String methodName) {
+        String key = type.getQualifiedName() + "#" + methodName;
+        return parsed.classContextsByTypeAndMethod().computeIfAbsent(key, ignored -> {
+            Map<String, String> classMethods = classMethods(type);
+            List<String> siblingMethods = classMethods.keySet().stream().sorted().toList();
+            List<String> overloadGroup = siblingMethods.stream()
+                    .filter(sig -> sig.startsWith(methodName + "("))
+                    .limit(MAX_OVERLOAD_CONTEXT)
+                    .toList();
+            return new ClassContext(classMethods, siblingMethods, overloadGroup);
+        });
+    }
+
     private static Map<String, String> classMethods(CtType<?> type) {
         Map<String, String> methods = new LinkedHashMap<>();
         for (CtExecutable<?> executable : type.getTypeMembers().stream()
@@ -403,6 +414,9 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             String name = executable instanceof CtConstructor<?> ? type.getSimpleName() : executable.getSimpleName();
             String signature = name + "(" + parameterSignature(parameters(executable)) + ")";
             methods.put(signature, signature);
+            if (methods.size() >= MAX_CLASS_METHOD_CONTEXT) {
+                break;
+            }
         }
         return methods;
     }
@@ -707,11 +721,27 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     private record ParsedProject(
             List<SourceMethod> methods,
             Map<String, SourceMethod> methodsByUri,
-            Map<String, CtExecutable<?>> executablesByUri) {
+            Map<String, CtExecutable<?>> executablesByUri,
+            Map<String, ClassContext> classContextsByTypeAndMethod) {
         private ParsedProject {
             methods = List.copyOf(methods);
             methodsByUri = Map.copyOf(methodsByUri);
             executablesByUri = Map.copyOf(executablesByUri);
+        }
+    }
+
+    private record ClassContext(
+            Map<String, String> classMethods,
+            List<String> siblingMethods,
+            List<String> overloadGroup) {
+        private ClassContext {
+            classMethods = classMethods != null ? Map.copyOf(classMethods) : Map.of();
+            siblingMethods = siblingMethods != null ? List.copyOf(siblingMethods) : List.of();
+            overloadGroup = overloadGroup != null ? List.copyOf(overloadGroup) : List.of();
+        }
+
+        static ClassContext empty() {
+            return new ClassContext(Map.of(), List.of(), List.of());
         }
     }
 }

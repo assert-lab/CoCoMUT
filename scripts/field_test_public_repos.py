@@ -16,12 +16,13 @@ import time
 from pathlib import Path
 
 
-EXCLUDE = re.compile(
-    r"(android|sample|demo|tutorial|interview|coding|leetcode|example|"
+TUTORIAL_EXCLUDE = re.compile(
+    r"(sample|demo|tutorial|interview|coding|leetcode|example|"
     r"bootcamp|course|learning|starter|template|awesome|guide|toy|kata|"
     r"algorithm|algorithms|exercise|workshop|hello[- ]?world)",
     re.I,
 )
+ANDROID_HINT = re.compile(r"(android|gradle plugin|apk|mobile)", re.I)
 PREFER = re.compile(
     r"(parser|database|client|library|framework|tool|server|engine|plugin|"
     r"sdk|api|driver|testing|test|compiler|maven|gradle|search|crawler|"
@@ -43,6 +44,7 @@ FIELDS = [
     "jsonl_rows",
     "duration_ms",
     "failure_codes",
+    "retry_mode",
     "note",
 ]
 
@@ -59,7 +61,15 @@ def int_field(row: dict[str, str], name: str) -> int:
     return int(float(value))
 
 
-def select_repositories(csv_path: Path, limit: int) -> list[dict[str, str]]:
+def select_repositories(
+    csv_path: Path,
+    limit: int,
+    min_stars: int,
+    min_contributors: int,
+    min_quality: int,
+    max_size_kb: int,
+    include_android: bool,
+) -> list[dict[str, str]]:
     rows: list[tuple[tuple[int, int, int, int, int], dict[str, str]]] = []
     with csv_path.open(newline="", encoding="utf-8", errors="replace") as handle:
         for row in csv.DictReader(handle):
@@ -74,15 +84,17 @@ def select_repositories(csv_path: Path, limit: int) -> list[dict[str, str]]:
                 continue
             if not is_english(description):
                 continue
-            if EXCLUDE.search(text):
+            if TUTORIAL_EXCLUDE.search(text):
+                continue
+            if not include_android and ANDROID_HINT.search(text):
                 continue
             size = int_field(row, "size_kb")
             stars = int_field(row, "stars")
             contributors = int_field(row, "contributor_count")
             quality = int_field(row, "repo_quality_score")
-            if size <= 0 or size > 120_000:
+            if size <= 0 or (max_size_kb > 0 and size > max_size_kb):
                 continue
-            if stars < 300 or contributors < 5 or quality < 3:
+            if stars < min_stars or contributors < min_contributors or quality < min_quality:
                 continue
             score = (
                 1 if PREFER.search(text) else 0,
@@ -93,7 +105,8 @@ def select_repositories(csv_path: Path, limit: int) -> list[dict[str, str]]:
             )
             rows.append((score, row))
     rows.sort(key=lambda item: item[0], reverse=True)
-    return [row for _, row in rows[:limit]]
+    selected = [row for _, row in rows]
+    return selected if limit <= 0 else selected[:limit]
 
 
 def parse_report(log_path: Path) -> dict[str, str]:
@@ -130,7 +143,50 @@ def run_command(command: list[str], cwd: Path, log_path: Path, timeout: int, env
             return None
 
 
-def run_repo(root: Path, output_dir: Path, repo: str, timeout: int) -> dict[str, str]:
+def read_log_tail(log_path: Path, max_chars: int = 4000) -> str:
+    if not log_path.exists():
+        return ""
+    text = log_path.read_text(encoding="utf-8", errors="replace")
+    return text[-max_chars:]
+
+
+def run_extraction(
+    root: Path,
+    checkout: Path,
+    log_path: Path,
+    timeout: int,
+    env: dict[str, str],
+    max_source_files: int | None,
+    max_methods: int | None,
+) -> tuple[int | None, dict[str, str], str]:
+    command = [
+        str(root / "bin" / "c4dg"),
+        "extract",
+        "--project",
+        str(checkout),
+        "--scope",
+        "entry-points",
+        "--call-graph",
+        "none",
+        "--output",
+        "jsonl",
+    ]
+    if max_source_files and max_source_files > 0:
+        command.extend(["--max-source-files", str(max_source_files)])
+    if max_methods and max_methods > 0:
+        command.extend(["--max-methods", str(max_methods)])
+    status = run_command(command, root, log_path, timeout, env)
+    return status, parse_report(log_path), read_log_tail(log_path)
+
+
+def run_repo(
+    root: Path,
+    output_dir: Path,
+    repo: str,
+    timeout: int,
+    retry_max_source_files: int,
+    retry_max_methods: int,
+) -> dict[str, str]:
     safe = repo.replace("/", "__")
     checkout = output_dir / "checkouts" / safe
     logs = output_dir / "logs"
@@ -152,31 +208,49 @@ def run_repo(root: Path, output_dir: Path, repo: str, timeout: int) -> dict[str,
 
     env = os.environ.copy()
     env.setdefault("MAVEN_OPTS", "-Xmx2g")
+    env.setdefault("JAVA_TOOL_OPTIONS", "-Xmx2g")
     log_path = logs / f"{safe}.c4dg.log"
     start = time.time()
-    status = run_command(
-        [
-            str(root / "bin" / "c4dg"),
-            "extract",
-            "--project",
-            str(checkout),
-            "--scope",
-            "entry-points",
-            "--call-graph",
-            "none",
-            "--output",
-            "jsonl",
-        ],
-        root,
-        log_path,
-        timeout,
-        env,
-    )
+    status, data, tail = run_extraction(root, checkout, log_path, timeout, env, None, None)
+    retry_mode = "none"
+    note = "" if status == 0 else f"exit {status}"
+
+    should_retry = status is None or status != 0 or "Java heap space" in tail or "OutOfMemoryError" in tail
+    if should_retry and retry_max_source_files > 0:
+        retry_mode = f"max_source_files={retry_max_source_files}"
+        retry_log = logs / f"{safe}.c4dg.retry.log"
+        status, data, retry_tail = run_extraction(
+            root, checkout, retry_log, timeout, env, retry_max_source_files, None)
+        tail = retry_tail
+        note = "retry capped source files" if status == 0 else f"retry exit {status}"
+
+    should_retry_methods = status is None or status != 0 or "Java heap space" in tail or "OutOfMemoryError" in tail
+    if should_retry_methods and retry_max_methods > 0:
+        retry_mode = f"max_source_files={retry_max_source_files};max_methods={retry_max_methods}"
+        retry_log = logs / f"{safe}.c4dg.retry-max-methods.log"
+        status, data, retry_tail = run_extraction(
+            root,
+            checkout,
+            retry_log,
+            timeout,
+            env,
+            retry_max_source_files,
+            retry_max_methods,
+        )
+        tail = retry_tail
+        note = "retry capped source files and methods" if status == 0 else f"retry max-methods exit {status}"
+
     elapsed_ms = str(int((time.time() - start) * 1000))
     if status is None:
-        return {"repo": repo, "clone_status": "OK", "status": "TIMEOUT", "duration_ms": elapsed_ms, "note": "analysis timeout"}
+        return {
+            "repo": repo,
+            "clone_status": "OK",
+            "status": "TIMEOUT",
+            "duration_ms": elapsed_ms,
+            "retry_mode": retry_mode,
+            "note": "analysis timeout",
+        }
 
-    data = parse_report(log_path)
     return {
         "repo": repo,
         "clone_status": "OK",
@@ -188,16 +262,29 @@ def run_repo(root: Path, output_dir: Path, repo: str, timeout: int) -> dict[str,
         "jsonl_rows": data.get("phase_5_jsonl_rows", ""),
         "duration_ms": data.get("duration_ms", elapsed_ms),
         "failure_codes": data.get("failure_codes", ""),
-        "note": "" if status == 0 else f"exit {status}",
+        "retry_mode": retry_mode,
+        "note": note,
     }
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", type=Path, default=Path("../cleaned_mined_repos.csv"))
-    parser.add_argument("--limit", type=int, default=100)
+    parser.add_argument("--limit", type=int, default=100,
+                        help="Maximum selected repositories. Use 0 for all after filters.")
     parser.add_argument("--timeout", type=int, default=600)
     parser.add_argument("--output-dir", type=Path, default=Path("target/field-tests/public-repos"))
+    parser.add_argument("--min-stars", type=int, default=0)
+    parser.add_argument("--min-contributors", type=int, default=0)
+    parser.add_argument("--min-quality", type=int, default=0)
+    parser.add_argument("--max-size-kb", type=int, default=300_000,
+                        help="Skip very large repos before cloning. Use 0 for no size cap.")
+    parser.add_argument("--include-android", action="store_true",
+                        help="Do not exclude Android-heavy repos.")
+    parser.add_argument("--retry-max-source-files", type=int, default=1500,
+                        help="Retry failed/timeout/OOM repos with a source-file cap. Use 0 to disable.")
+    parser.add_argument("--retry-max-methods", type=int, default=5000,
+                        help="Final retry method cap for huge repos that still fail. Use 0 to disable.")
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parents[1]
@@ -205,7 +292,15 @@ def main() -> int:
     output_dir = (root / args.output_dir).resolve() if not args.output_dir.is_absolute() else args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    selected = select_repositories(csv_path, args.limit)
+    selected = select_repositories(
+        csv_path,
+        args.limit,
+        args.min_stars,
+        args.min_contributors,
+        args.min_quality,
+        args.max_size_kb,
+        args.include_android,
+    )
     repos_path = output_dir / "repos.tsv"
     with repos_path.open("w", encoding="utf-8") as handle:
         handle.write("repo\tstars\tsize_kb\tdescription\n")
@@ -227,7 +322,14 @@ def main() -> int:
         repo = row["repo"]
         if repo in completed:
             continue
-        result = run_repo(root, output_dir, repo, args.timeout)
+        result = run_repo(
+            root,
+            output_dir,
+            repo,
+            args.timeout,
+            args.retry_max_source_files,
+            args.retry_max_methods,
+        )
         append_tsv(results_path, result)
         print(
             f"{index}/{len(selected)} {repo} {result.get('status')} "
