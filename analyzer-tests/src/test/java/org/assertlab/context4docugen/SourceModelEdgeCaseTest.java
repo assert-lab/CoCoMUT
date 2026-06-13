@@ -110,6 +110,45 @@ public class SourceModelEdgeCaseTest {
         }
     }
 
+    @Test
+    public void spoonBackendDeduplicatesOverlappingSourceRoots() throws Exception {
+        Path project = Files.createTempDirectory("c4dg-overlapping-source-roots");
+        try {
+            write(project.resolve("src/main/java/demo/DuplicateRoot.java"), """
+                    package demo;
+
+                    public class DuplicateRoot {
+                        public String value(String input) {
+                            return input;
+                        }
+                    }
+                    """);
+
+            ProjectMetadata metadata = new ProjectMetadata.Builder()
+                    .projectName("overlapping-source-roots")
+                    .projectPath(project)
+                    .buildSystem("none")
+                    .javaVersion("17")
+                    .sourceRoot(project)
+                    .classpath(List.of())
+                    .compiles(false)
+                    .compileStatus("BUILD NOT ATTEMPTED")
+                    .build();
+
+            ProjectModel model = ProjectModel.from(metadata);
+            List<SourceMethod> methods = SourceBackends.spoon().findMethods(model);
+            long matching = methods.stream()
+                    .filter(m -> m.className().equals("demo.DuplicateRoot"))
+                    .filter(m -> m.methodName().equals("value"))
+                    .count();
+
+            assertEquals("Overlapping project and src/main/java roots should not duplicate method URIs",
+                    1, matching);
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
     private static void write(Path path, String text) throws Exception {
         Files.createDirectories(path.getParent());
         Files.writeString(path, text, StandardCharsets.UTF_8);

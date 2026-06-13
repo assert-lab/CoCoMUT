@@ -105,6 +105,17 @@ The field-test follow-up hardens Spoon parsing and records the 20-repository sou
 
 The current group adds scoped source-model caching, low-memory source-file limits, stricter validation, selected/context failure artifacts, and focused regression tests.
 
+- `5dd63b7 fix: cap source context for large field tests`
+  - Caps class/sibling source context to avoid runaway memory use.
+  - Adds a resume-safe summarizer for field-test TSV output.
+
+The current group hardens the expanded field-test baseline.
+
+- Deduplicates Spoon-discovered methods by URI before writing `methods.csv`.
+- Records per-method JSONL generation results so CSV enrichment marks JSONL rows as `SUCCESS`.
+- Guards optional Spoon context extraction against no-classpath generic `StackOverflowError` cases.
+- Adds regression tests for overlapping source roots and JSONL per-method result tracking.
+
 ## Verification
 
 Current local verification:
@@ -125,7 +136,8 @@ External smoke tests are recorded in `FIELD_TEST_RESULTS.md`.
 
 Latest external baseline:
 
-- 100 filtered public Java repositories in source-only JSONL mode;
-- 98 repositories completed, 87 clean and 11 degraded;
-- 506382 methods identified and 475792 JSONL rows generated;
+- 541 filtered public Java repositories in source-only JSONL mode;
+- 541 repositories completed cleanly;
+- 2686556 methods identified and 2686556 JSONL rows generated;
+- 10 repositories required bounded retry controls;
 - `CHA` and `RTA` call-graph smoke tests passed on three compiled Maven repositories.

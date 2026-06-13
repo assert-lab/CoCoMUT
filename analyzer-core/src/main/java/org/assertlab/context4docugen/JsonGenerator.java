@@ -90,6 +90,7 @@ public class JsonGenerator {
                     ObjectNode json = buildJsonFromContext(context);
                     writer.write(objectMapper.writeValueAsString(json));
                     writer.newLine();
+                    generationResults.put(context.getMethodId(), "SUCCESS:" + jsonlPath);
                     rows++;
                 }
             }

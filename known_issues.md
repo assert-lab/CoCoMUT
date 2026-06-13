@@ -6,7 +6,7 @@ Context4DocuGen is intentionally static-analysis only. The issues below are know
 
 Method identity and source context now use Spoon in no-classpath mode. This is much stronger than the previous regex parser, but unresolved symbols remain possible when dependency jars or sibling modules are missing. JSON provenance records `source_backend=spoon`, `source_backend_mode=noclasspath`, and hierarchy/type-resolution confidence.
 
-Spoon parsing degrades from whole-project parsing to source-root and file-level parsing. That keeps more repositories analyzable, but it can create partial coverage: method discovery may find a method while context extraction later cannot reconstruct the matching context. The 100-repository field test found 11 degraded successes with `CONTEXT_EXTRACTION_FAILED`.
+Spoon parsing degrades from whole-project parsing to source-root and file-level parsing. That keeps more repositories analyzable. The expanded 541-repository source-only sweep completed with one JSONL row per selected method, but very large repositories can still require bounded extraction controls.
 
 Current builds write per-method failure artifacts when this happens:
 
@@ -29,10 +29,11 @@ Call graph quality depends on the analyzed project compiling and on class direct
 
 Build-tool compilation is opt-in via `--compile`. Without it, C4DG reuses existing class files if present and otherwise continues in source-only mode when source files are available.
 
-Very large repositories can exhaust the Maven exec JVM during source modeling.
-In the 100-repository field test, `kubernetes-client/java` and `besu-eth/besu`
-failed with `Java heap space`. The source-file cap mitigates smoke tests on
-such repositories, but full extraction may still require a larger JVM heap.
+Very large repositories can be slow or memory-heavy during source modeling. Use
+`--max-source-files N` and optionally `--max-methods N` for resource-safe smoke
+runs. In the expanded field test, `lakesoul-io/LakeSoul`,
+`kubernetes-client/java`, and `apache/incubator-seata` needed both caps to
+complete as bounded 5,000-method runs.
 
 ## Dynamic Java Features
 
@@ -60,8 +61,9 @@ See `FIELD_TEST_RESULTS.md`.
 
 Current baseline:
 
-- 100 English, non-tutorial public Java repositories in source-only JSONL mode;
-- 98 successful repositories, including 11 degraded successes;
-- 506382 identified methods and 475792 generated JSONL rows;
-- 93.96% overall method-to-context coverage;
+- 541 English, non-tutorial public Java repositories in source-only JSONL mode;
+- 541 successful repositories;
+- 2686556 identified methods and 2686556 generated JSONL rows;
+- 100.00% method-to-context coverage for the selected run;
+- 10 bounded retry runs, including 3 strict `--max-source-files 1500 --max-methods 5000` runs;
 - bounded call-graph smoke test passed for both `CHA` and `RTA` on three compiled Maven repositories.

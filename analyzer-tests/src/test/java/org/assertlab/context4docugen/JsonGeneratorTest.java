@@ -231,6 +231,31 @@ public class JsonGeneratorTest {
     }
 
     @Test
+    public void testJsonLinesRegistersPerMethodResults() throws Exception {
+        Map<String, MethodContext> contexts = new HashMap<>();
+        contexts.put("1", new MethodContext.Builder()
+                .methodId("1")
+                .methodName("method1")
+                .classname("com.example.MyClass")
+                .build());
+        contexts.put("2", new MethodContext.Builder()
+                .methodId("2")
+                .methodName("method2")
+                .classname("com.example.MyClass")
+                .build());
+
+        Path jsonlPath = testOutputDir.resolve("method_contexts.jsonl");
+        int rows = generator.generateJsonLinesFile(contexts, jsonlPath);
+
+        assertEquals("Should write one JSONL row per context", 2, rows);
+        assertTrue("JSONL file should exist", Files.exists(jsonlPath));
+        assertTrue("Should record method 1 as generated", generator.getGenerationResult("1").startsWith("SUCCESS:"));
+        assertTrue("Should record method 2 as generated", generator.getGenerationResult("2").startsWith("SUCCESS:"));
+        assertEquals("Method result should point to JSONL file", "SUCCESS:" + jsonlPath,
+                generator.getGenerationResult("1"));
+    }
+
+    @Test
     public void testClearResults() {
         MethodContext context = new MethodContext.Builder()
                 .methodId("1")

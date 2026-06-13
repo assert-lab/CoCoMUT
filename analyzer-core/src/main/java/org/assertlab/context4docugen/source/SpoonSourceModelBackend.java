@@ -155,6 +155,9 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             Optional<SourceMethod> method = toSourceMethod(project, executable);
             if (method.isPresent()) {
                 SourceMethod sourceMethod = method.get();
+                if (methodsByUri.containsKey(sourceMethod.methodUri())) {
+                    continue;
+                }
                 methods.add(sourceMethod);
                 methodsByUri.put(sourceMethod.methodUri(), sourceMethod);
                 executablesByUri.put(sourceMethod.methodUri(), executable);
@@ -382,12 +385,12 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                     .anyMatch(ref -> {
                         try {
                             return ref.getDeclaration() == null;
-                        } catch (Exception e) {
+                        } catch (Exception | StackOverflowError e) {
                             return true;
                         }
                     });
             return unresolvedSuperclass || unresolvedInterface ? "partial" : "resolved";
-        } catch (Exception e) {
+        } catch (Exception | StackOverflowError e) {
             return "partial";
         }
     }
@@ -411,9 +414,14 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 .filter(CtExecutable.class::isInstance)
                 .map(CtExecutable.class::cast)
                 .toList()) {
-            String name = executable instanceof CtConstructor<?> ? type.getSimpleName() : executable.getSimpleName();
-            String signature = name + "(" + parameterSignature(parameters(executable)) + ")";
-            methods.put(signature, signature);
+            try {
+                String name = executable instanceof CtConstructor<?> ? type.getSimpleName() : executable.getSimpleName();
+                String signature = name + "(" + parameterSignature(parameters(executable)) + ")";
+                methods.put(signature, signature);
+            } catch (Exception | StackOverflowError ignored) {
+                // Some no-classpath generic declarations can recurse inside Spoon resolution.
+                // Class/sibling method context is optional, so keep the focal method.
+            }
             if (methods.size() >= MAX_CLASS_METHOD_CONTEXT) {
                 break;
             }
@@ -465,7 +473,12 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
         for (CtInvocation<?> invocation : executable.getElements(new TypeFilter<>(CtInvocation.class))) {
             CtExecutableReference<?> ref = invocation.getExecutable();
-            String qualified = ref != null ? ref.toString() : "";
+            String qualified = "";
+            try {
+                qualified = ref != null ? ref.toString() : "";
+            } catch (Exception | StackOverflowError ignored) {
+                // Optional dynamic hint extraction should not fail the method.
+            }
             if (qualified.contains("Class.forName")) {
                 features.add("reflection");
             }
@@ -539,7 +552,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                     && !method.getTopDefinitions().isEmpty()) {
                 return "resolved_candidate";
             }
-        } catch (Exception ignored) {
+        } catch (Exception | StackOverflowError ignored) {
             return "unresolved";
         }
         return "unresolved";
@@ -560,7 +573,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                     break;
                 }
             }
-        } catch (Exception ignored) {
+        } catch (Exception | StackOverflowError ignored) {
             return List.of();
         }
         return candidates;
@@ -668,7 +681,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         try {
             String qualified = ref.getQualifiedName();
             return qualified != null && !qualified.isBlank() ? qualified : ref.getSimpleName();
-        } catch (Exception e) {
+        } catch (Exception | StackOverflowError e) {
             return ref.toString();
         }
     }
