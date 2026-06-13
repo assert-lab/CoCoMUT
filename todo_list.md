@@ -4,7 +4,7 @@ This document is a roadmap for turning Context4DocuGen from a research artifact 
 
 ## Current Branch Status
 
-The `refactor/minimization` branch has applied the main productization pass:
+The current product branch has applied the main productization pass:
 
 - stable public Java namespace: `org.assertlab.context4docugen`;
 - Maven wrapper and GitHub Actions CI;
@@ -32,18 +32,18 @@ Context4DocuGen already has a useful core idea:
 - include source context, class context, call graph context, and documentation text;
 - export structured JSON that can be used for documentation-generation or empirical software-engineering studies.
 
-The problem is repository shape. The repo currently looks like a research bundle rather than a reusable Java library.
+The original problem was repository shape. Before productization, the repo looked like a research bundle rather than a reusable Java library.
 
-Measured locally:
+Historical baseline before productization:
 
 | Area | Size | Interpretation |
 | --- | ---: | --- |
-| `Context4DocuGen/` | 530 MB | Too large for a normal public Java tool repository. |
-| `Datasets/` | 381 MB | Main size problem. This is OE-25/project data, not core library code. |
-| `docstring_generation/` | 79 MB | LLM experiment layer; valuable research code, but not the core tool. |
-| `.git/` | 70 MB | History size. This may shrink only with repository/history cleanup. |
-| `analyzer-core/` | 1.3 MB | The actual Java analysis implementation is small. |
-| `analyzer-tests/` | 652 KB | Tests are small and should be preserved/improved. |
+| Original research snapshot | ~530 MB | Too large for a normal public Java tool repository. |
+| Bundled datasets | hundreds of MB | OE-25/project data, not core library code. |
+| Docstring-generation experiments | tens of MB | Valuable research layer, but not the core extractor. |
+| Current product repo | small Maven multi-module project | Core library, CLI, tests, docs, fixtures, and schemas only. |
+| `analyzer-core/` | core module | The reusable Java analysis implementation. |
+| `analyzer-tests/` | test module | Tests and small fixture projects. |
 
 The important finding is that the product is not intrinsically huge. The reusable tool is probably below 10-20 MB once datasets, generated outputs, and research experiments are separated.
 
@@ -53,14 +53,14 @@ The local comparison repos are under `/home/ale/repos/reusable_wheels/`: JavaPar
 
 | Dimension | JavaParser | Spoon | SootUp | WALA | Current C4DG |
 | --- | --- | --- | --- | --- | --- |
-| Main identity | Java parsing library | Java program analysis/transformation library | Static-analysis framework | Static-analysis framework | Research pipeline for OE-25/context extraction |
-| Primary usage | Maven/Gradle dependency | Maven/Gradle dependency | Maven modules | Gradle modules | Shell scripts and project-specific pipeline |
-| Public API | Clear modules: `javaparser-core`, symbol solver | Clear API around `Launcher`, `CtModel`, processors | Domain modules like `sootup.core`, `sootup.callgraph` | Modular framework packages | Generic `analyzer` packages, not yet stable public API |
-| CLI | Secondary or absent | Secondary; API is central | Examples/docs, not script-first | Build/tooling scripts exist, but framework-first | `method-context.sh`, `run_all_projects.sh`, `setup.sh` are prominent |
-| Data in repo | No large benchmark datasets | No large benchmark datasets | No large benchmark datasets in core repo | No bundled huge target datasets | 25 OE-25 project snapshots and outputs are tracked |
-| Docs | README, contribution docs, changelog/features | README, citation, security, roadmap, docs | README, docs site, citation, security | README, Gradle guide, release notes | Many overlapping docs and summaries |
-| Release readiness | Maven Central style | Maven Central/JReleaser style | Maven multi-module style | Gradle release style | Not yet shaped as a released dependency |
-| Tests | Library tests and fixtures | Library tests and fixtures | Analysis tests/examples | Framework tests | Tests exist, but mixed with research-specific assumptions |
+| Main identity | Java parsing library | Java program analysis/transformation library | Static-analysis framework | Static-analysis framework | Method-context extraction library and CLI |
+| Primary usage | Maven/Gradle dependency | Maven/Gradle dependency | Maven modules | Gradle modules | Maven module, Java API, CLI, and executable jar |
+| Public API | Clear modules: `javaparser-core`, symbol solver | Clear API around `Launcher`, `CtModel`, processors | Domain modules like `sootup.core`, `sootup.callgraph` | Modular framework packages | Stable `org.assertlab.context4docugen` API namespace, still pre-release |
+| CLI | Secondary or absent | Secondary; API is central | Examples/docs, not script-first | Build/tooling scripts exist, but framework-first | Picocli CLI plus compatibility wrappers |
+| Data in repo | No large benchmark datasets | No large benchmark datasets | No large benchmark datasets in core repo | No bundled huge target datasets | No bundled target-repository snapshots in the product repo |
+| Docs | README, contribution docs, changelog/features | README, citation, security, roadmap, docs | README, docs site, citation, security | README, Gradle guide, release notes | README, schema, changelog, field-test report, known issues, contributor docs |
+| Release readiness | Maven Central style | Maven Central/JReleaser style | Maven multi-module style | Gradle release style | Pre-release Maven multi-module project with shaded CLI jar |
+| Tests | Library tests and fixtures | Library tests and fixtures | Analysis tests/examples | Framework tests | Unit tests, fixture projects, API/CLI/schema checks, and field-test scripts |
 
 The main difference is not code quality alone. It is product boundary. JavaParser/Spoon/SootUp/WALA separate:
 
@@ -70,7 +70,7 @@ The main difference is not code quality alone. It is product boundary. JavaParse
 - release metadata;
 - examples.
 
-Context4DocuGen currently mixes:
+The pre-productization Context4DocuGen snapshot mixed:
 
 - reusable analyzer code;
 - OE-25 benchmark snapshots;
@@ -211,15 +211,15 @@ The exact module names can be discussed, but the separation should be clear:
 
 ## Package Naming
 
-Current packages such as `analyzer`, `core`, `csv`, and `extraction` are too generic for a public library.
+Earlier packages such as `analyzer`, `core`, `csv`, and `extraction` were too generic for a public library.
 
-Use a stable namespace, for example:
+The current product branch uses a stable namespace:
 
 ```text
 org.assertlab.context4docugen
 org.assertlab.context4docugen.api
 org.assertlab.context4docugen.model
-org.assertlab.context4docugen.extract
+org.assertlab.context4docugen.extraction
 org.assertlab.context4docugen.callgraph
 org.assertlab.context4docugen.cli
 ```
@@ -250,11 +250,11 @@ Action:
 
 ### Archive Or Delete Duplicate Docs
 
-The root currently has many historical docs and verification summaries:
+The original root had many historical docs and verification summaries:
 
 - `CLEANUP_SUMMARY.md`
 - `COMBINED_VERIFICATION_TABLE.md`
-- `GENERATED_100_SUMMARY.md`
+- generated field-test summaries such as `GENERATED_*_SUMMARY.md`
 - `METHOD_CONTEXT_AUTOMATION_SKILL.md`
 - `PIPELINE_OUTPUTS_GUIDE.md`
 - `TESTING_AND_ORGANIZATION_RESULTS.md`
@@ -264,7 +264,7 @@ The root currently has many historical docs and verification summaries:
 - `QUICKSTART.md`
 - `FRAMEWORK_README.md`
 
-Action:
+Productization action:
 
 - keep one `README.md`;
 - keep one `docs/architecture.md`;
@@ -571,8 +571,8 @@ Keep:
 
 Expected result:
 
-- repository should drop from roughly 530 MB to probably below 50 MB in a fresh clone;
-- actual source modules should remain only a few MB.
+- repository should stay small enough for a normal source checkout;
+- generated outputs, downloaded repositories, and field-test workspaces should remain ignored or external.
 
 ### Phase 3: Collapse Docs
 
@@ -621,7 +621,7 @@ This order matters because bad method identity corrupts every later context bloc
 
 ## Concrete TODO Checklist
 
-### Implemented On `refactor/minimization`
+### Implemented On Product Branch
 
 - [x] Minimized the product branch by removing bundled research datasets and generated outputs.
 - [x] Added a minimal public API entry point through `AnalyzerFacade` and `AnalysisOptions`.
@@ -635,15 +635,17 @@ This order matters because bad method identity corrupts every later context bloc
 - [x] Added Javadoc metadata extraction for `@since`, `@see`, inline links, deprecation, and `{@inheritDoc}` use.
 - [x] Added report-level failure taxonomy through `FailureCode`.
 - [x] Configured normal, sources, and Javadocs jars for Maven packaging.
-- [x] Added a reproducible 100-repository field-test runner.
-- [x] Ran source-only field testing on 100 English, non-tutorial Java repositories.
+- [x] Added a reproducible expanded field-test runner.
+- [x] Ran source-only field testing on 541 English, non-tutorial Java repositories, including Android repositories.
 - [x] Ran bounded CHA/RTA call-graph field tests on compiled Maven repositories.
 
 Remaining high-priority gaps from that work:
 
-- [ ] Add per-method failure artifacts for contexts dropped during degraded successes.
-- [ ] Reduce memory pressure for very large repositories.
-- [ ] Rename public packages from `analyzer` to a stable namespace before any real release.
+- [x] Add per-method failure artifacts for selected-method misses and context-extraction misses.
+- [x] Reduce memory pressure for very large repositories with bounded source-file/method controls and capped source context.
+- [x] Rename public packages from `analyzer` to `org.assertlab.context4docugen`.
+- [ ] Add a faster preflight size model so very large repositories can start directly in bounded mode.
+- [ ] Preserve duplicate-method discovery statistics in reports even though duplicate URIs are now deduplicated before output.
 
 ### Repository Hygiene
 
@@ -657,7 +659,7 @@ Remaining high-priority gaps from that work:
 
 ### Product API
 
-- [ ] Rename generic Java packages from `analyzer` to a stable public namespace.
+- [x] Rename generic Java packages from `analyzer` to `org.assertlab.context4docugen`.
 - [x] Introduce `ContextExtractorService`.
 - [x] Introduce `ContextRequest`.
 - [x] Introduce `MethodSelection`.
