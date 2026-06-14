@@ -167,6 +167,7 @@ public class AnalyzerFacade {
                 .setMaxMethods(options.maxMethods())
                 .setMaxSourceFiles(options.maxSourceFiles())
                 .setAttemptCompile(options.attemptCompile())
+                .setSourceResolution(options.sourceResolution())
                 .setOutputMode(options.outputMode());
     }
 }

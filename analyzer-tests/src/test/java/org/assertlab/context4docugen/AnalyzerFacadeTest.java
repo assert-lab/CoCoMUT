@@ -127,6 +127,24 @@ public class AnalyzerFacadeTest {
     }
 
     @Test
+    public void autoCallGraphUsesRtaWhenCompiledClassesExist() throws Exception {
+        ContextRequest request = ContextRequest.builder()
+                .projectRoot(fixtureRoot)
+                .methodSelection(MethodSelection.entryPoints())
+                .callGraphAlgorithm(CallGraphGenerator.Algorithm.AUTO)
+                .sourceResolution(AnalysisOptions.SourceResolution.AUTO)
+                .outputMode(AnalysisOptions.OutputMode.JSONL)
+                .maxMethods(1)
+                .build();
+
+        ExtractionReport report = ContextExtractorService.createDefault().extract(request);
+
+        assertTrue(report.successful());
+        assertEquals("AUTO", report.asMap().get("phase_3_algorithm"));
+        assertEquals("RTA", report.asMap().get("phase_3_effective_algorithm"));
+    }
+
+    @Test
     public void fullModeJsonOmitsResearchFields() throws Exception {
         // FULL mode has no CSV-origin metadata → research fields must be absent
         AnalyzerFacade.analyze(fixtureRoot);

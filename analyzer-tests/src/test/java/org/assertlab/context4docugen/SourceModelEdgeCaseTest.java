@@ -149,6 +149,26 @@ public class SourceModelEdgeCaseTest {
         }
     }
 
+    @Test
+    public void spoonAutoResolutionUsesClasspathWhenCompiledClassesExist() throws Exception {
+        TestFixtures.ensureMinimalMavenProjectCompiled();
+        ProjectMetadata metadata = new ProjectAnalyzer(TestFixtures.minimalMavenProjectRoot()).analyze();
+        ProjectModel model = ProjectModel.from(metadata);
+
+        SourceMethod focal = SourceBackends.spoon(AnalysisOptions.SourceResolution.AUTO)
+                .findMethods(model)
+                .stream()
+                .filter(method -> method.methodName().equals("greet"))
+                .findFirst()
+                .orElseThrow();
+
+        SourceContext context = SourceBackends.spoon(AnalysisOptions.SourceResolution.AUTO)
+                .extractContext(model, focal.methodUri())
+                .orElseThrow();
+
+        assertEquals("classpath", context.sourceBackendMode());
+    }
+
     private static void write(Path path, String text) throws Exception {
         Files.createDirectories(path.getParent());
         Files.writeString(path, text, StandardCharsets.UTF_8);

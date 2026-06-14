@@ -26,6 +26,12 @@ public final class AnalysisOptions {
         BOTH
     }
 
+    public enum SourceResolution {
+        NOCLASSPATH,
+        CLASSPATH,
+        AUTO
+    }
+
     private final Scope scope;
     private final Path selectedCsv;
     private final CallGraphGenerator.Algorithm callGraphAlgorithm;
@@ -33,6 +39,7 @@ public final class AnalysisOptions {
     private final Integer maxSourceFiles;
     private final boolean attemptCompile;
     private final OutputMode outputMode;
+    private final SourceResolution sourceResolution;
 
     private AnalysisOptions(Builder builder) {
         this.scope = Objects.requireNonNull(builder.scope, "scope cannot be null");
@@ -42,6 +49,7 @@ public final class AnalysisOptions {
         this.maxSourceFiles = builder.maxSourceFiles;
         this.attemptCompile = builder.attemptCompile;
         this.outputMode = Objects.requireNonNull(builder.outputMode, "outputMode cannot be null");
+        this.sourceResolution = Objects.requireNonNull(builder.sourceResolution, "sourceResolution cannot be null");
     }
 
     public static Builder builder() {
@@ -80,6 +88,10 @@ public final class AnalysisOptions {
         return outputMode;
     }
 
+    public SourceResolution sourceResolution() {
+        return sourceResolution;
+    }
+
     MethodSourceStrategy methodSourceStrategy() {
         return switch (scope) {
             case ALL -> new ScanAllSourcesStrategy();
@@ -96,6 +108,7 @@ public final class AnalysisOptions {
         private Integer maxSourceFiles;
         private boolean attemptCompile;
         private OutputMode outputMode = OutputMode.JSON;
+        private SourceResolution sourceResolution = SourceResolution.NOCLASSPATH;
 
         public Builder scope(Scope scope) {
             this.scope = Objects.requireNonNull(scope, "scope cannot be null");
@@ -130,6 +143,11 @@ public final class AnalysisOptions {
 
         public Builder outputMode(OutputMode outputMode) {
             this.outputMode = Objects.requireNonNull(outputMode, "outputMode cannot be null");
+            return this;
+        }
+
+        public Builder sourceResolution(SourceResolution sourceResolution) {
+            this.sourceResolution = Objects.requireNonNull(sourceResolution, "sourceResolution cannot be null");
             return this;
         }
 

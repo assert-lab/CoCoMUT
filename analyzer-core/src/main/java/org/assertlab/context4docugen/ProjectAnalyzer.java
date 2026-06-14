@@ -26,6 +26,7 @@ import java.util.regex.Pattern;
  * downstream components (MethodIdentifier, CallGraphGenerator, etc.)
  */
 public class ProjectAnalyzer {
+    private static final long DEFAULT_COMPILE_TIMEOUT_SECONDS = 120;
     private final Path projectPath;
     private final boolean autoDetectJavaVersion;
     private final String buildSystem;
@@ -370,11 +371,11 @@ public class ProjectAnalyzer {
                     .contains("win");
 
             if ("maven".equals(buildSystem)) {
-                String mvn = isWindows ? "mvn.cmd" : "mvn";
-                pb = new ProcessBuilder(mvn, "clean", "compile", "-q");
+                String mvn = executableWithWrapper("mvn", isWindows);
+                pb = new ProcessBuilder(mvn, "-q", "-DskipTests", "-Dmaven.test.skip=true", "compile");
             } else if ("gradle".equals(buildSystem)) {
-                String gradle = isWindows ? "gradle.bat" : "gradle";
-                pb = new ProcessBuilder(gradle, "build", "--build-cache", "-q");
+                String gradle = executableWithWrapper("gradle", isWindows);
+                pb = new ProcessBuilder(gradle, "--no-daemon", "classes", "-x", "test", "--build-cache", "-q");
             } else {
                 return false;
             }
@@ -383,7 +384,7 @@ public class ProjectAnalyzer {
             pb.redirectErrorStream(true);
             Process process = pb.start();
 
-            boolean completed = process.waitFor(5, java.util.concurrent.TimeUnit.MINUTES);
+            boolean completed = process.waitFor(compileTimeoutSeconds(), java.util.concurrent.TimeUnit.SECONDS);
 
             if (!completed) {
                 process.destroyForcibly();
@@ -393,6 +394,35 @@ public class ProjectAnalyzer {
             return process.exitValue() == 0;
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    private String executableWithWrapper(String tool, boolean isWindows) {
+        String wrapperName = switch (tool) {
+            case "mvn" -> isWindows ? "mvnw.cmd" : "mvnw";
+            case "gradle" -> isWindows ? "gradlew.bat" : "gradlew";
+            default -> tool;
+        };
+        Path wrapper = projectPath.resolve(wrapperName);
+        if (Files.isRegularFile(wrapper) && Files.isExecutable(wrapper)) {
+            return wrapper.toAbsolutePath().toString();
+        }
+        return isWindows ? tool + ".cmd" : tool;
+    }
+
+    private static long compileTimeoutSeconds() {
+        String configured = System.getProperty("c4dg.compileTimeoutSeconds");
+        if (configured == null || configured.isBlank()) {
+            configured = System.getenv("C4DG_COMPILE_TIMEOUT_SECONDS");
+        }
+        if (configured == null || configured.isBlank()) {
+            return DEFAULT_COMPILE_TIMEOUT_SECONDS;
+        }
+        try {
+            long value = Long.parseLong(configured.trim());
+            return value > 0 ? value : DEFAULT_COMPILE_TIMEOUT_SECONDS;
+        } catch (NumberFormatException e) {
+            return DEFAULT_COMPILE_TIMEOUT_SECONDS;
         }
     }
 

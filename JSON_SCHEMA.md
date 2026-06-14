@@ -62,7 +62,7 @@ source_context            Field reads/writes, siblings, overload group
 ```text
 metadata.schema_version           0.3.0
 metadata.source_backend           spoon
-metadata.source_backend_mode      noclasspath
+metadata.source_backend_mode      noclasspath|classpath|noclasspath_fallback|noclasspath_limited
 metadata.method_identity          uri
 metadata.type_resolution          resolved|partial|missing
 metadata.call_graph.available     true|false
@@ -77,6 +77,10 @@ provenance.javadoc_extraction     spoon
 provenance.compiled_project       true|false
 provenance.hierarchy_resolution   resolved|partial|missing
 ```
+
+`source_backend_mode=classpath` means Spoon used classpath-aware source
+modeling. `noclasspath_fallback` means classpath-aware modeling was requested
+through auto mode but Spoon fell back to no-classpath extraction.
 
 ## Documentation Metrics
 

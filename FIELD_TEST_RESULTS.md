@@ -15,6 +15,28 @@ scripts/field_test_public_repos.py \
   --output-dir target/field-tests/expanded-public-repos
 ```
 
+The next auto-resolution/autograph sweep uses the same repository-selection
+policy, but runs:
+
+```bash
+scripts/field_test_public_repos.py \
+  --limit 0 \
+  --timeout 420 \
+  --include-android \
+  --max-size-kb 300000 \
+  --resolution auto \
+  --call-graph auto \
+  --compile-timeout 120 \
+  --retry-max-source-files 1500 \
+  --retry-max-methods 5000 \
+  --output-dir target/field-tests/expanded-public-repos-auto
+```
+
+That run attempts Maven/Gradle compilation when useful, uses Spoon
+classpath-aware extraction when classpath evidence is available, falls back to
+Spoon no-classpath extraction when compilation/classpath resolution fails, and
+uses SootUp RTA only when compiled class directories exist.
+
 It writes local evidence under ignored paths:
 
 ```text
@@ -23,6 +45,7 @@ target/field-tests/expanded-public-repos/results.tsv
 target/field-tests/expanded-public-repos/expanded-summary.md
 target/field-tests/expanded-public-repos/logs/
 target/field-tests/expanded-public-repos/checkouts/
+target/field-tests/expanded-public-repos-auto/javadoc_tag_cases.csv
 ```
 
 ## Selection Policy

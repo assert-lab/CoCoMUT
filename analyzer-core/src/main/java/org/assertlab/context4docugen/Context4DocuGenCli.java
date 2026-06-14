@@ -27,8 +27,11 @@ public final class Context4DocuGenCli {
         Path selected = optionPath(args, "--selected");
         AnalysisOptions.Builder options = AnalysisOptions.builder()
                 .callGraphAlgorithm(callGraphAlgorithm(args))
+                .sourceResolution(sourceResolution(args))
                 .maxMethods(optionInt(args, "--max-methods"))
-                .attemptCompile(has(args, "--compile"))
+                .attemptCompile(has(args, "--compile")
+                        || "auto".equalsIgnoreCase(option(args, "--call-graph"))
+                        || "auto".equalsIgnoreCase(option(args, "--resolution")))
                 .outputMode(outputMode(args));
         if (selected != null) {
             options.selectedCsv(selected);
@@ -82,7 +85,21 @@ public final class Context4DocuGenCli {
             case "none" -> CallGraphGenerator.Algorithm.NONE;
             case "cha" -> CallGraphGenerator.Algorithm.CHA;
             case "rta" -> CallGraphGenerator.Algorithm.RTA;
+            case "auto" -> CallGraphGenerator.Algorithm.AUTO;
             default -> throw new IllegalArgumentException("Unsupported --call-graph: " + value);
+        };
+    }
+
+    private static AnalysisOptions.SourceResolution sourceResolution(String[] args) {
+        String value = option(args, "--resolution");
+        if (value == null || value.isBlank()) {
+            return AnalysisOptions.SourceResolution.NOCLASSPATH;
+        }
+        return switch (value.toLowerCase()) {
+            case "noclasspath", "no-classpath" -> AnalysisOptions.SourceResolution.NOCLASSPATH;
+            case "classpath" -> AnalysisOptions.SourceResolution.CLASSPATH;
+            case "auto" -> AnalysisOptions.SourceResolution.AUTO;
+            default -> throw new IllegalArgumentException("Unsupported --resolution: " + value);
         };
     }
 

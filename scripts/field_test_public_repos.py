@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import re
 import subprocess
@@ -38,10 +39,24 @@ FIELDS = [
     "clone_status",
     "status",
     "build_system",
+    "compile_attempted",
+    "compiles",
+    "compile_status",
     "source_roots",
     "test_source_roots",
+    "class_output_dirs",
+    "dependency_jars",
+    "source_resolution",
+    "source_backend_modes",
+    "call_graph_requested",
+    "call_graph_available",
+    "call_graph_effective_algorithm",
+    "call_graphs_generated",
     "methods",
     "jsonl_rows",
+    "javadoc_see_methods",
+    "javadoc_inheritdoc_methods",
+    "javadoc_inheritdoc_with_candidates",
     "duration_ms",
     "failure_codes",
     "retry_mode",
@@ -158,6 +173,8 @@ def run_extraction(
     env: dict[str, str],
     max_source_files: int | None,
     max_methods: int | None,
+    resolution: str,
+    call_graph: str,
 ) -> tuple[int | None, dict[str, str], str]:
     command = [
         str(root / "bin" / "c4dg"),
@@ -167,7 +184,9 @@ def run_extraction(
         "--scope",
         "entry-points",
         "--call-graph",
-        "none",
+        call_graph,
+        "--resolution",
+        resolution,
         "--output",
         "jsonl",
     ]
@@ -186,6 +205,10 @@ def run_repo(
     timeout: int,
     retry_max_source_files: int,
     retry_max_methods: int,
+    resolution: str,
+    call_graph: str,
+    compile_timeout: int,
+    java_home: str | None,
 ) -> dict[str, str]:
     safe = repo.replace("/", "__")
     checkout = output_dir / "checkouts" / safe
@@ -209,9 +232,14 @@ def run_repo(
     env = os.environ.copy()
     env.setdefault("MAVEN_OPTS", "-Xmx2g")
     env.setdefault("JAVA_TOOL_OPTIONS", "-Xmx2g")
+    env.setdefault("C4DG_COMPILE_TIMEOUT_SECONDS", str(compile_timeout))
+    if java_home:
+        env["JAVA_HOME"] = java_home
+        env["PATH"] = str(Path(java_home) / "bin") + os.pathsep + env.get("PATH", "")
     log_path = logs / f"{safe}.c4dg.log"
     start = time.time()
-    status, data, tail = run_extraction(root, checkout, log_path, timeout, env, None, None)
+    status, data, tail = run_extraction(root, checkout, log_path, timeout, env,
+                                        None, None, resolution, call_graph)
     retry_mode = "none"
     note = "" if status == 0 else f"exit {status}"
 
@@ -220,7 +248,8 @@ def run_repo(
         retry_mode = f"max_source_files={retry_max_source_files}"
         retry_log = logs / f"{safe}.c4dg.retry.log"
         status, data, retry_tail = run_extraction(
-            root, checkout, retry_log, timeout, env, retry_max_source_files, None)
+            root, checkout, retry_log, timeout, env, retry_max_source_files, None,
+            resolution, call_graph)
         tail = retry_tail
         note = "retry capped source files" if status == 0 else f"retry exit {status}"
 
@@ -236,6 +265,8 @@ def run_repo(
             env,
             retry_max_source_files,
             retry_max_methods,
+            resolution,
+            call_graph,
         )
         tail = retry_tail
         note = "retry capped source files and methods" if status == 0 else f"retry max-methods exit {status}"
@@ -251,19 +282,72 @@ def run_repo(
             "note": "analysis timeout",
         }
 
+    javadoc_counts = inspect_javadoc_tags(checkout)
     return {
         "repo": repo,
         "clone_status": "OK",
         "status": data.get("status", f"EXIT_{status}"),
         "build_system": data.get("phase_1_build_system", ""),
+        "compile_attempted": data.get("phase_1_compile_attempted", ""),
+        "compiles": data.get("phase_1_compiles", ""),
+        "compile_status": data.get("phase_1_compile_status", ""),
         "source_roots": data.get("phase_1_source_roots", ""),
         "test_source_roots": data.get("phase_1_test_source_roots", ""),
+        "class_output_dirs": data.get("phase_1_class_output_dirs", ""),
+        "dependency_jars": data.get("phase_1_dependency_jars", ""),
+        "source_resolution": data.get("phase_1_source_resolution_requested", resolution),
+        "source_backend_modes": javadoc_counts.get("source_backend_modes", ""),
+        "call_graph_requested": data.get("phase_3_algorithm", call_graph),
+        "call_graph_available": data.get("phase_3_available", ""),
+        "call_graph_effective_algorithm": data.get("phase_3_effective_algorithm", ""),
+        "call_graphs_generated": data.get("phase_3_call_graphs_generated", ""),
         "methods": data.get("phase_2_methods_identified", ""),
         "jsonl_rows": data.get("phase_5_jsonl_rows", ""),
+        "javadoc_see_methods": javadoc_counts.get("see_methods", ""),
+        "javadoc_inheritdoc_methods": javadoc_counts.get("inheritdoc_methods", ""),
+        "javadoc_inheritdoc_with_candidates": javadoc_counts.get("inheritdoc_with_candidates", ""),
         "duration_ms": data.get("duration_ms", elapsed_ms),
         "failure_codes": data.get("failure_codes", ""),
         "retry_mode": retry_mode,
         "note": note,
+    }
+
+
+def inspect_javadoc_tags(checkout: Path) -> dict[str, str]:
+    jsonl = checkout / "method_contexts.jsonl"
+    if not jsonl.exists():
+        return {}
+    see_methods = 0
+    inheritdoc_methods = 0
+    inheritdoc_with_candidates = 0
+    modes: set[str] = set()
+    try:
+        with jsonl.open(encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                metadata = row.get("metadata") or {}
+                mode = metadata.get("source_backend_mode")
+                if mode:
+                    modes.add(str(mode))
+                javadoc = row.get("javadoc_metadata") or {}
+                if javadoc.get("see"):
+                    see_methods += 1
+                if javadoc.get("uses_inheritdoc"):
+                    inheritdoc_methods += 1
+                    if javadoc.get("inherited_javadoc_candidates"):
+                        inheritdoc_with_candidates += 1
+    except OSError:
+        return {}
+    return {
+        "see_methods": str(see_methods),
+        "inheritdoc_methods": str(inheritdoc_methods),
+        "inheritdoc_with_candidates": str(inheritdoc_with_candidates),
+        "source_backend_modes": ",".join(sorted(modes)),
     }
 
 
@@ -285,6 +369,16 @@ def main() -> int:
                         help="Retry failed/timeout/OOM repos with a source-file cap. Use 0 to disable.")
     parser.add_argument("--retry-max-methods", type=int, default=5000,
                         help="Final retry method cap for huge repos that still fail. Use 0 to disable.")
+    parser.add_argument("--resolution", default="noclasspath",
+                        choices=["noclasspath", "classpath", "auto"],
+                        help="C4DG source resolution mode.")
+    parser.add_argument("--call-graph", default="none",
+                        choices=["none", "cha", "rta", "auto"],
+                        help="C4DG call graph mode.")
+    parser.add_argument("--compile-timeout", type=int, default=120,
+                        help="Per-repository Maven/Gradle compile timeout in seconds for auto/compile runs.")
+    parser.add_argument("--java-home", default="",
+                        help="Optional JAVA_HOME for C4DG and build-tool attempts.")
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parents[1]
@@ -329,6 +423,10 @@ def main() -> int:
             args.timeout,
             args.retry_max_source_files,
             args.retry_max_methods,
+            args.resolution,
+            args.call_graph,
+            args.compile_timeout,
+            args.java_home or None,
         )
         append_tsv(results_path, result)
         print(

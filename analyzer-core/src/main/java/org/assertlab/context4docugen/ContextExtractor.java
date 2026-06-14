@@ -156,7 +156,7 @@ public class ContextExtractor {
                 .javadocMetadata(sourceContext.javadocMetadata())
                 .documentationMetrics(sourceContext.documentationMetrics())
                 .sourceBackend(sourceBackend.name())
-                .sourceBackendMode(sourceBackend.mode())
+                .sourceBackendMode(sourceContext.sourceBackendMode())
                 .hierarchyResolution(sourceContext.hierarchyResolution())
                 .sourceSet(sourceMethod.sourceSet())
                 .build();

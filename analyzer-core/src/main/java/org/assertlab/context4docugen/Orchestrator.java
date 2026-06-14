@@ -1,6 +1,7 @@
 package org.assertlab.context4docugen;
 
 import org.assertlab.context4docugen.source.ProjectModel;
+import org.assertlab.context4docugen.source.SourceBackends;
 import org.assertlab.context4docugen.strategy.MethodSourceStrategy;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -36,6 +37,7 @@ public class Orchestrator {
     private Integer maxMethods;
     private Integer maxSourceFiles;
     private boolean attemptCompile;
+    private AnalysisOptions.SourceResolution sourceResolution = AnalysisOptions.SourceResolution.NOCLASSPATH;
     private AnalysisOptions.OutputMode outputMode = AnalysisOptions.OutputMode.JSON;
     private String previousMaxSourceFilesProperty;
     private boolean sourceFileLimitConfigured;
@@ -101,6 +103,11 @@ public class Orchestrator {
         return this;
     }
 
+    public Orchestrator setSourceResolution(AnalysisOptions.SourceResolution sourceResolution) {
+        this.sourceResolution = Objects.requireNonNull(sourceResolution, "sourceResolution cannot be null");
+        return this;
+    }
+
     public Orchestrator setOutputMode(AnalysisOptions.OutputMode outputMode) {
         this.outputMode = Objects.requireNonNull(outputMode, "outputMode cannot be null");
         return this;
@@ -139,19 +146,26 @@ public class Orchestrator {
                     ? List.of(FailureCode.NONE.toString())
                     : failureCodes.stream().map(Enum::toString).toList());
             restoreSourceFileLimit();
+            SourceBackends.clearConfiguration();
         }
     }
 
     private boolean executePhase1() {
         try {
-            ProjectAnalyzer analyzer = new ProjectAnalyzer(projectPath, true, "auto", attemptCompile);
+            boolean effectiveAttemptCompile = attemptCompile
+                    || sourceResolution == AnalysisOptions.SourceResolution.AUTO
+                    || callGraphAlgorithm == CallGraphGenerator.Algorithm.AUTO;
+            ProjectAnalyzer analyzer = new ProjectAnalyzer(projectPath, true, "auto", effectiveAttemptCompile);
             projectMetadata = analyzer.analyze();
+            SourceBackends.configure(sourceResolution);
 
             executionReport.put("phase_1_project", projectMetadata.getProjectName());
             executionReport.put("phase_1_build_system", projectMetadata.getBuildSystem());
             executionReport.put("phase_1_java_version", projectMetadata.getJavaVersion());
             executionReport.put("phase_1_compiles", projectMetadata.isCompiles());
-            executionReport.put("phase_1_compile_attempted", attemptCompile);
+            executionReport.put("phase_1_compile_status", projectMetadata.getCompileStatus());
+            executionReport.put("phase_1_compile_attempted", effectiveAttemptCompile);
+            executionReport.put("phase_1_source_resolution_requested", sourceResolution.toString());
             ProjectModel model = ProjectModel.from(projectMetadata);
             executionReport.put("phase_1_source_available", model.sourceAvailable());
             executionReport.put("phase_1_source_roots", model.sourceRoots().size());
@@ -254,12 +268,27 @@ public class Orchestrator {
                 return true;
             }
 
-            callGraphGenerator = new CallGraphGenerator(projectMetadata, callGraphAlgorithm);
+            CallGraphGenerator.Algorithm effectiveAlgorithm = effectiveCallGraphAlgorithm();
+            if (effectiveAlgorithm == CallGraphGenerator.Algorithm.NONE) {
+                callGraphGenerator = new CallGraphGenerator(projectMetadata);
+                callGraphResults = new HashMap<>();
+                failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
+                executionReport.put("phase_3_available", false);
+                executionReport.put("phase_3_algorithm", callGraphAlgorithm.toString());
+                executionReport.put("phase_3_effective_algorithm", "NONE");
+                executionReport.put("phase_3_warning",
+                        "Call graph auto disabled because compiled class directories are unavailable");
+                executionReport.put("phase_3_call_graphs_generated", 0);
+                return true;
+            }
+
+            callGraphGenerator = new CallGraphGenerator(projectMetadata, effectiveAlgorithm);
             if (!callGraphGenerator.initialize()) {
                 callGraphResults = new HashMap<>();
                 failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
                 executionReport.put("phase_3_available", false);
                 executionReport.put("phase_3_algorithm", callGraphAlgorithm.toString());
+                executionReport.put("phase_3_effective_algorithm", effectiveAlgorithm.toString());
                 executionReport.put("phase_3_warning",
                         "Call graph unavailable; continuing with source-only context");
                 executionReport.put("phase_3_call_graphs_generated", 0);
@@ -278,6 +307,7 @@ public class Orchestrator {
 
             executionReport.put("phase_3_available", true);
             executionReport.put("phase_3_algorithm", callGraphAlgorithm.toString());
+            executionReport.put("phase_3_effective_algorithm", effectiveAlgorithm.toString());
             executionReport.put("phase_3_call_graphs_generated", callGraphResults.size());
             return true;
         } catch (Exception e) {
@@ -285,6 +315,17 @@ public class Orchestrator {
             failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
             return false;
         }
+    }
+
+    private CallGraphGenerator.Algorithm effectiveCallGraphAlgorithm() {
+        if (callGraphAlgorithm != CallGraphGenerator.Algorithm.AUTO) {
+            return callGraphAlgorithm;
+        }
+        ProjectModel model = ProjectModel.from(projectMetadata);
+        if (!model.classOutputDirs().isEmpty()) {
+            return CallGraphGenerator.Algorithm.RTA;
+        }
+        return CallGraphGenerator.Algorithm.NONE;
     }
 
     /**

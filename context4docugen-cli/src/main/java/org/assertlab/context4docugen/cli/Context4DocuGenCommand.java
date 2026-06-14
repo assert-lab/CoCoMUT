@@ -63,8 +63,12 @@ public final class Context4DocuGenCommand implements Callable<Integer> {
         @Option(names = "--entry-points", description = "Shortcut for --scope entry-points.")
         private boolean entryPoints;
 
-        @Option(names = "--call-graph", defaultValue = "cha", description = "Call graph mode: none, cha, or rta.")
+        @Option(names = "--call-graph", defaultValue = "cha", description = "Call graph mode: none, cha, rta, or auto.")
         private String callGraph;
+
+        @Option(names = "--resolution", defaultValue = "noclasspath",
+                description = "Source resolution mode: noclasspath, classpath, or auto.")
+        private String resolution;
 
         @Option(names = "--output", defaultValue = "json", description = "Output mode: json, jsonl, or both.")
         private String output;
@@ -88,10 +92,11 @@ public final class Context4DocuGenCommand implements Callable<Integer> {
                     .projectRoot(project)
                     .methodSelection(selection)
                     .callGraphAlgorithm(toAlgorithm(callGraph))
+                    .sourceResolution(toSourceResolution(resolution))
                     .outputMode(toOutputMode(output))
                     .maxMethods(maxMethods)
                     .maxSourceFiles(maxSourceFiles)
-                    .attemptCompile(compile)
+                    .attemptCompile(compile || isAuto(callGraph) || isAuto(resolution))
                     .build();
 
             ExtractionReport report = ContextExtractorService.createDefault().extract(request);
@@ -368,7 +373,17 @@ public final class Context4DocuGenCommand implements Callable<Integer> {
             case "none" -> CallGraphGenerator.Algorithm.NONE;
             case "cha" -> CallGraphGenerator.Algorithm.CHA;
             case "rta" -> CallGraphGenerator.Algorithm.RTA;
+            case "auto" -> CallGraphGenerator.Algorithm.AUTO;
             default -> throw new IllegalArgumentException("Unsupported --call-graph: " + value);
+        };
+    }
+
+    private static AnalysisOptions.SourceResolution toSourceResolution(String value) {
+        return switch (normalize(value)) {
+            case "noclasspath", "no-classpath" -> AnalysisOptions.SourceResolution.NOCLASSPATH;
+            case "classpath" -> AnalysisOptions.SourceResolution.CLASSPATH;
+            case "auto" -> AnalysisOptions.SourceResolution.AUTO;
+            default -> throw new IllegalArgumentException("Unsupported --resolution: " + value);
         };
     }
 
@@ -383,5 +398,9 @@ public final class Context4DocuGenCommand implements Callable<Integer> {
 
     private static String normalize(String value) {
         return value == null ? "" : value.toLowerCase(Locale.ROOT).trim();
+    }
+
+    private static boolean isAuto(String value) {
+        return "auto".equals(normalize(value));
     }
 }

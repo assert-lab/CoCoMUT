@@ -17,7 +17,8 @@ public record SourceContext(
         List<String> overloadGroup,
         List<String> dynamicFeatures,
         Map<String, Object> javadocMetadata,
-        Map<String, Object> documentationMetrics) {
+        Map<String, Object> documentationMetrics,
+        String sourceBackendMode) {
     public SourceContext {
         classMethods = classMethods != null ? Map.copyOf(classMethods) : Map.of();
         fieldReads = fieldReads != null ? List.copyOf(fieldReads) : List.of();
@@ -27,5 +28,6 @@ public record SourceContext(
         dynamicFeatures = dynamicFeatures != null ? List.copyOf(dynamicFeatures) : List.of();
         javadocMetadata = javadocMetadata != null ? Map.copyOf(javadocMetadata) : Map.of();
         documentationMetrics = documentationMetrics != null ? Map.copyOf(documentationMetrics) : Map.of();
+        sourceBackendMode = sourceBackendMode != null ? sourceBackendMode : "";
     }
 }

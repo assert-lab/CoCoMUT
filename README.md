@@ -115,12 +115,20 @@ Useful options:
 
 ```text
 --scope all|entry-points       Method scope for source scanning
---call-graph none|cha|rta      Optional SootUp call graph mode
+--call-graph none|cha|rta|auto Optional SootUp call graph mode
+--resolution noclasspath|classpath|auto
+                                Spoon source-resolution mode
 --output json|jsonl|both       Output format
 --max-methods N                Limit methods for smoke tests
 --max-source-files N           Limit parsed Java files for low-memory smoke tests
 --compile                      Attempt Maven/Gradle compilation before analysis
 ```
+
+`--resolution auto` attempts Spoon classpath-aware extraction when compiled
+classes or dependency jars are available, then falls back to no-classpath mode
+if resolution fails. `--call-graph auto` attempts bounded compilation and uses
+SootUp RTA when class directories are available; otherwise it records the call
+graph as unavailable and continues source-only.
 
 Validation examples:
 

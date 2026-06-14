@@ -14,6 +14,7 @@ public final class ContextRequest {
     private final Integer maxMethods;
     private final Integer maxSourceFiles;
     private final boolean attemptCompile;
+    private final AnalysisOptions.SourceResolution sourceResolution;
 
     private ContextRequest(Builder builder) {
         this.projectRoot = Objects.requireNonNull(builder.projectRoot, "projectRoot cannot be null")
@@ -26,6 +27,8 @@ public final class ContextRequest {
         this.maxMethods = builder.maxMethods;
         this.maxSourceFiles = builder.maxSourceFiles;
         this.attemptCompile = builder.attemptCompile;
+        this.sourceResolution = Objects.requireNonNull(builder.sourceResolution,
+                "sourceResolution cannot be null");
     }
 
     public static Builder builder() {
@@ -60,6 +63,10 @@ public final class ContextRequest {
         return attemptCompile;
     }
 
+    public AnalysisOptions.SourceResolution sourceResolution() {
+        return sourceResolution;
+    }
+
     AnalysisOptions toAnalysisOptions() {
         AnalysisOptions.Builder builder = AnalysisOptions.builder()
                 .scope(methodSelection.toScope())
@@ -67,7 +74,8 @@ public final class ContextRequest {
                 .outputMode(outputMode)
                 .maxMethods(maxMethods)
                 .maxSourceFiles(maxSourceFiles)
-                .attemptCompile(attemptCompile);
+                .attemptCompile(attemptCompile)
+                .sourceResolution(sourceResolution);
         if (methodSelection.kind() == MethodSelection.Kind.SELECTED_CSV) {
             builder.selectedCsv(methodSelection.selectedCsv());
         }
@@ -82,6 +90,7 @@ public final class ContextRequest {
         private Integer maxMethods;
         private Integer maxSourceFiles;
         private boolean attemptCompile;
+        private AnalysisOptions.SourceResolution sourceResolution = AnalysisOptions.SourceResolution.NOCLASSPATH;
 
         public Builder projectRoot(Path projectRoot) {
             this.projectRoot = projectRoot;
@@ -115,6 +124,11 @@ public final class ContextRequest {
 
         public Builder attemptCompile(boolean attemptCompile) {
             this.attemptCompile = attemptCompile;
+            return this;
+        }
+
+        public Builder sourceResolution(AnalysisOptions.SourceResolution sourceResolution) {
+            this.sourceResolution = sourceResolution;
             return this;
         }
 
