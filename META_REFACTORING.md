@@ -109,12 +109,17 @@ The current group adds scoped source-model caching, low-memory source-file limit
   - Caps class/sibling source context to avoid runaway memory use.
   - Adds a resume-safe summarizer for field-test TSV output.
 
-The current group hardens the expanded field-test baseline.
+The current group hardens the expanded field-test baseline and adds auto-mode
+build/classpath behavior.
 
 - Deduplicates Spoon-discovered methods by URI before writing `methods.csv`.
 - Records per-method JSONL generation results so CSV enrichment marks JSONL rows as `SUCCESS`.
 - Guards optional Spoon context extraction against no-classpath generic `StackOverflowError` cases.
 - Adds regression tests for overlapping source roots and JSONL per-method result tracking.
+- Adds `--resolution auto` and `--call-graph auto`.
+- Keeps Spoon no-classpath extraction as the coverage baseline, retaining classpath-aware extraction only when it preserves enough discovered methods.
+- Uses bounded Maven/Gradle compilation attempts when auto resolution or auto call graph needs build evidence.
+- Records `@see` and `{@inheritDoc}` field-test counts and exports `javadoc_tag_cases.csv`.
 
 ## Verification
 
@@ -136,8 +141,10 @@ External smoke tests are recorded in `FIELD_TEST_RESULTS.md`.
 
 Latest external baseline:
 
-- 541 filtered public Java repositories in source-only JSONL mode;
-- 541 repositories completed cleanly;
-- 2686556 methods identified and 2686556 JSONL rows generated;
-- 10 repositories required bounded retry controls;
-- `CHA` and `RTA` call-graph smoke tests passed on three compiled Maven repositories.
+- 541 filtered public Java repositories in auto-resolution and auto-call-graph JSONL mode;
+- 534 repositories completed successfully, 5 clone-timeout skips, and 2 analysis timeouts;
+- 2373883 methods identified and 2373883 JSONL rows generated in successful runs;
+- 137 repositories compiled successfully during opportunistic build attempts;
+- 209 repositories reported call-graph availability;
+- 30826 methods with `@see`, 14856 methods with `{@inheritDoc}`, and 5386 methods with inherited-doc candidates;
+- 69 repositories required bounded retry controls.

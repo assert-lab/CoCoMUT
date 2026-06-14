@@ -124,11 +124,13 @@ Useful options:
 --compile                      Attempt Maven/Gradle compilation before analysis
 ```
 
-`--resolution auto` attempts Spoon classpath-aware extraction when compiled
-classes or dependency jars are available, then falls back to no-classpath mode
-if resolution fails. `--call-graph auto` attempts bounded compilation and uses
-SootUp RTA when class directories are available; otherwise it records the call
-graph as unavailable and continues source-only.
+`--resolution auto` attempts bounded Maven/Gradle compilation when useful,
+tries Spoon classpath-aware extraction when compiled classes or dependency jars
+are available, and falls back to no-classpath mode if resolution is incomplete
+or loses too much method coverage. `--call-graph auto` also uses bounded
+compilation and asks SootUp for RTA call graphs when class directories are
+available; otherwise it records the call graph as unavailable and continues
+source-only.
 
 Validation examples:
 
@@ -241,10 +243,10 @@ Context4DocuGen does not perform dynamic analysis. It does not execute tests, ru
 
 Current static-analysis boundaries:
 
-- source extraction uses Spoon in no-classpath mode, so methods/Javadocs can be mined even when dependencies are missing;
+- source extraction uses Spoon; auto mode keeps no-classpath extraction as the coverage baseline and uses classpath-aware extraction when it is available and coverage-preserving;
 - call graph extraction uses optional SootUp `CHA` or `RTA`;
 - call graph quality depends on compiled class directories and classpath resolution;
-- build-tool compilation is opt-in via `--compile`; without it, C4DG only reuses existing class files;
+- build-tool compilation is explicit via `--compile` or opportunistic through `--resolution auto` / `--call-graph auto`; otherwise C4DG only reuses existing class files;
 - reflection, proxies, generated code, Lombok, service loaders, and dependency injection can reduce precision, but common dynamic-feature hints are labeled in JSON;
 - generated methods from Lombok/annotation processors are not visible unless generated source or bytecode is available.
 

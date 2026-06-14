@@ -4,9 +4,9 @@ Context4DocuGen is intentionally static-analysis only. The issues below are know
 
 ## Source Model Backend
 
-Method identity and source context now use Spoon in no-classpath mode. This is much stronger than the previous regex parser, but unresolved symbols remain possible when dependency jars or sibling modules are missing. JSON provenance records `source_backend=spoon`, `source_backend_mode=noclasspath`, and hierarchy/type-resolution confidence.
+Method identity and source context now use Spoon. In `--resolution auto`, C4DG uses no-classpath extraction as the coverage baseline, tries classpath-aware extraction when classpath evidence exists, and keeps classpath-aware output only when it preserves enough method coverage. Unresolved symbols remain possible when dependency jars or sibling modules are missing. JSON provenance records `source_backend=spoon`, `source_backend_mode`, and hierarchy/type-resolution confidence.
 
-Spoon parsing degrades from whole-project parsing to source-root and file-level parsing. That keeps more repositories analyzable. The expanded 541-repository source-only sweep completed with one JSONL row per selected method, but very large repositories can still require bounded extraction controls.
+Spoon parsing degrades from whole-project parsing to source-root and file-level parsing. That keeps more repositories analyzable. The expanded 541-repository auto sweep completed 534 repositories with one JSONL row per selected method. Two repositories hit the configured analysis timeout and five repositories were skipped because cloning timed out.
 
 Current builds write per-method failure artifacts when this happens:
 
@@ -19,6 +19,12 @@ For low-memory smoke tests, use `--max-methods N` and `--max-source-files N`.
 The source-file cap is useful for quickly testing huge repositories, but it is
 a sampling/control knob, not a full-repository coverage result.
 
+`--scope entry-points` currently selects public entry points across discovered
+source roots. It labels source sets as `main`, `test`, `generated`, `example`,
+`integration_test`, or `unknown`, but it does not yet filter by source set.
+Documentation-dataset runs should post-filter `source_set=main` until a CLI/API
+source-set filter is added.
+
 ## Call Graph Precision
 
 Call graph extraction uses optional SootUp `CHA` or `RTA`. CHA is conservative and can over-approximate calls for inheritance, interfaces, callbacks, dependency injection, and framework-heavy code. RTA can reduce noise by considering instantiated classes, but it can still miss behavior created by reflection, framework wiring, or incomplete classpaths.
@@ -27,13 +33,17 @@ Call graph extraction uses optional SootUp `CHA` or `RTA`. CHA is conservative a
 
 Call graph quality depends on the analyzed project compiling and on class directories being discoverable. Multi-module Maven projects, Gradle projects, generated sources, Lombok, annotation processors, and unusual build layouts can reduce call-graph coverage.
 
-Build-tool compilation is opt-in via `--compile`. Without it, C4DG reuses existing class files if present and otherwise continues in source-only mode when source files are available.
+Build-tool compilation is opt-in through explicit compile mode or implicit in
+`--resolution auto` / `--call-graph auto`. Without compilation, C4DG reuses
+existing class files if present and otherwise continues in source-only mode when
+source files are available.
 
 Very large repositories can be slow or memory-heavy during source modeling. Use
 `--max-source-files N` and optionally `--max-methods N` for resource-safe smoke
-runs. In the expanded field test, `lakesoul-io/LakeSoul`,
-`kubernetes-client/java`, and `apache/incubator-seata` needed both caps to
-complete as bounded 5,000-method runs.
+runs. In the completed auto field test, 65 repositories needed
+`--max-source-files 1500`, four repositories completed as bounded
+`--max-source-files 1500 --max-methods 5000` runs, and
+`kubernetes-client/java` plus `eclipse-milo/milo` still timed out.
 
 ## Dynamic Java Features
 
@@ -61,9 +71,11 @@ See `FIELD_TEST_RESULTS.md`.
 
 Current baseline:
 
-- 541 English, non-tutorial public Java repositories in source-only JSONL mode;
-- 541 successful repositories;
-- 2686556 identified methods and 2686556 generated JSONL rows;
-- 100.00% method-to-context coverage for the selected run;
-- 10 bounded retry runs, including 3 strict `--max-source-files 1500 --max-methods 5000` runs;
-- bounded call-graph smoke test passed for both `CHA` and `RTA` on three compiled Maven repositories.
+- 541 English, non-tutorial public Java repositories in auto-resolution and auto-call-graph JSONL mode;
+- 534 successful repositories, 5 clone-timeout skips, and 2 analysis timeouts;
+- 2373883 identified methods and 2373883 generated JSONL rows in successful runs;
+- 100.00% method-to-context coverage for successful runs;
+- 137 repositories compiled successfully during opportunistic build attempts;
+- 209 repositories reported call-graph availability;
+- 30826 methods with `@see`, 14856 methods with `{@inheritDoc}`, and 5386 methods with inherited-doc candidates;
+- 69 bounded retry runs, including 4 strict `--max-source-files 1500 --max-methods 5000` runs.

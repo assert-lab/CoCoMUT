@@ -637,6 +637,8 @@ This order matters because bad method identity corrupts every later context bloc
 - [x] Configured normal, sources, and Javadocs jars for Maven packaging.
 - [x] Added a reproducible expanded field-test runner.
 - [x] Ran source-only field testing on 541 English, non-tutorial Java repositories, including Android repositories.
+- [x] Ran auto-resolution and auto-call-graph field testing on 541 English, non-tutorial Java repositories, including Android repositories.
+- [x] Exported `@see` and `{@inheritDoc}` case CSVs from the expanded auto run.
 - [x] Ran bounded CHA/RTA call-graph field tests on compiled Maven repositories.
 
 Remaining high-priority gaps from that work:
@@ -644,6 +646,7 @@ Remaining high-priority gaps from that work:
 - [x] Add per-method failure artifacts for selected-method misses and context-extraction misses.
 - [x] Reduce memory pressure for very large repositories with bounded source-file/method controls and capped source context.
 - [x] Rename public packages from `analyzer` to `org.assertlab.context4docugen`.
+- [ ] Add a CLI/API source-set filter so dataset runs can select `main` methods without post-processing.
 - [ ] Add a faster preflight size model so very large repositories can start directly in bounded mode.
 - [ ] Preserve duplicate-method discovery statistics in reports even though duplicate URIs are now deduplicated before output.
 
