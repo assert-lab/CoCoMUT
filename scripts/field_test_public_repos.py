@@ -202,6 +202,16 @@ def run_extraction(
     return status, parse_report(log_path), read_log_tail(log_path)
 
 
+def filtered_all_methods(data: dict[str, str]) -> bool:
+    """Return true when source-set filtering removed every discovered method."""
+    before = data.get("phase_2_source_set_filter_before")
+    after = data.get("phase_2_source_set_filter_after")
+    try:
+        return before is not None and int(before) > 0 and after is not None and int(after) == 0
+    except ValueError:
+        return False
+
+
 def run_repo(
     root: Path,
     output_dir: Path,
@@ -276,6 +286,29 @@ def run_repo(
         )
         tail = retry_tail
         note = "retry capped source files and methods" if status == 0 else f"retry max-methods exit {status}"
+
+    if source_set == "main" and status != 0 and filtered_all_methods(data):
+        fallback_source_set = "main,unknown"
+        retry_mode = f"{retry_mode};source_set={fallback_source_set}"
+        retry_log = logs / f"{safe}.c4dg.retry-source-set.log"
+        status, data, retry_tail = run_extraction(
+            root,
+            checkout,
+            retry_log,
+            timeout,
+            env,
+            retry_max_source_files,
+            retry_max_methods,
+            resolution,
+            call_graph,
+            fallback_source_set,
+        )
+        tail = retry_tail
+        note = (
+            "retry source-set main,unknown"
+            if status == 0
+            else f"retry source-set main,unknown exit {status}"
+        )
 
     elapsed_ms = str(int((time.time() - start) * 1000))
     if status is None:
