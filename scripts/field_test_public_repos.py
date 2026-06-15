@@ -160,6 +160,15 @@ def run_command(command: list[str], cwd: Path, log_path: Path, timeout: int, env
             return None
 
 
+def has_worktree_files(checkout: Path) -> bool:
+    if not checkout.exists():
+        return False
+    try:
+        return any(path.name != ".git" for path in checkout.iterdir())
+    except OSError:
+        return False
+
+
 def read_log_tail(log_path: Path, max_chars: int = 4000) -> str:
     if not log_path.exists():
         return ""
@@ -238,6 +247,9 @@ def run_repo(
     logs = output_dir / "logs"
     logs.mkdir(parents=True, exist_ok=True)
     checkout.parent.mkdir(parents=True, exist_ok=True)
+
+    if checkout.exists() and not has_worktree_files(checkout):
+        shutil.rmtree(checkout, ignore_errors=True)
 
     if not checkout.exists():
         clone_status = run_command(
