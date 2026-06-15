@@ -2,7 +2,24 @@
 
 Field tests use repositories selected from `../cleaned_mined_repos.csv`.
 
-The current evidence baseline is the completed auto-resolution and auto-call-graph sweep:
+Use the reproducible wrapper for new runs:
+
+```bash
+scripts/run_expanded_auto_field_study.sh
+```
+
+By default it writes preserved local artifacts outside Maven `target/`:
+
+```text
+experiments/expanded-public-repos-auto-main/
+```
+
+That matters because `mvn clean` deletes `target/`. The earlier 541-repository
+auto sweep wrote under `target/field-tests/expanded-public-repos-auto`, so its
+large local CSV/checkouts/logs were disposable. The numeric summary below is
+preserved in this tracked report; rerun the wrapper to regenerate full CSVs.
+
+The completed auto-resolution and auto-call-graph sweep used this command shape:
 
 ```bash
 scripts/field_test_public_repos.py \
@@ -21,16 +38,19 @@ scripts/field_test_public_repos.py \
 
 This run attempts Maven/Gradle compilation when useful, uses Spoon classpath-aware extraction only when classpath evidence is usable, falls back to Spoon no-classpath extraction when build/classpath resolution is incomplete, and asks SootUp for RTA call graphs when compiled class directories exist.
 
-Local evidence is written under ignored paths:
+The new wrapper uses the same workflow plus `--source-set main` by default and writes local evidence under:
 
 ```text
-target/field-tests/expanded-public-repos-auto/repos.tsv
-target/field-tests/expanded-public-repos-auto/results.tsv
-target/field-tests/expanded-public-repos-auto/field_test_results_auto.csv
-target/field-tests/expanded-public-repos-auto/javadoc_tag_cases.csv
-target/field-tests/expanded-public-repos-auto/javadoc_tag_cases_sample.csv
-target/field-tests/expanded-public-repos-auto/logs/
-target/field-tests/expanded-public-repos-auto/checkouts/
+experiments/expanded-public-repos-auto-main/repos.tsv
+experiments/expanded-public-repos-auto-main/results.tsv
+experiments/expanded-public-repos-auto-main/field_test_results_auto.csv
+experiments/expanded-public-repos-auto-main/summary.md
+experiments/expanded-public-repos-auto-main/summary_counts.txt
+experiments/expanded-public-repos-auto-main/javadoc_tag_cases.csv
+experiments/expanded-public-repos-auto-main/javadoc_tag_cases_sample.csv
+experiments/expanded-public-repos-auto-main/run_manifest.txt
+experiments/expanded-public-repos-auto-main/logs/
+experiments/expanded-public-repos-auto-main/checkouts/
 ```
 
 ## Selection Policy

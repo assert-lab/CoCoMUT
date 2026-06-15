@@ -268,3 +268,28 @@ Current static-analysis boundaries:
 - generated methods from Lombok/annotation processors are not visible unless generated source or bytecode is available.
 
 The JSON output schema is summarized in `JSON_SCHEMA.md`. Known limitations and field-test results are recorded in `known_issues.md` and `FIELD_TEST_RESULTS.md`.
+
+## Reproduce Field Study
+
+Run the expanded public-repository study with:
+
+```bash
+scripts/run_expanded_auto_field_study.sh
+```
+
+The wrapper builds the release jar, selects repositories from
+`../cleaned_mined_repos.csv`, runs C4DG with auto source resolution and auto
+call graph, extracts `@see` / `{@inheritDoc}` cases, and writes preserved local
+artifacts under:
+
+```text
+experiments/expanded-public-repos-auto-main/
+```
+
+The default run uses `--source-set main`, so test/example/generated methods are
+excluded before context generation. Override parameters with environment
+variables, for example:
+
+```bash
+LIMIT=20 OUTPUT_DIR=experiments/smoke-auto-main scripts/run_expanded_auto_field_study.sh
+```
