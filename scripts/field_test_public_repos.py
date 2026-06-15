@@ -276,7 +276,8 @@ def run_repo(
         tail = retry_tail
         note = "retry capped source files" if status == 0 else f"retry exit {status}"
 
-    should_retry_methods = status is None or status != 0 or "Java heap space" in tail or "OutOfMemoryError" in tail
+    timed_out_or_oom = status is None or "Java heap space" in tail or "OutOfMemoryError" in tail
+    should_retry_methods = status != 0 and not timed_out_or_oom
     if should_retry_methods and retry_max_methods > 0:
         retry_mode = f"max_source_files={retry_max_source_files};max_methods={retry_max_methods}"
         retry_log = logs / f"{safe}.c4dg.retry-max-methods.log"
