@@ -436,9 +436,9 @@ def main() -> int:
                         help="Retry failed/timeout/OOM repos with a source-file cap. Use 0 to disable.")
     parser.add_argument("--retry-max-methods", type=int, default=5000,
                         help="Final retry method cap for huge repos that still fail. Use 0 to disable.")
-    parser.add_argument("--retry-smoke-source-files", type=int, default=500,
+    parser.add_argument("--retry-smoke-source-files", type=int, default=100,
                         help="Last-resort source-file cap for timeout/OOM repos. Use 0 to disable.")
-    parser.add_argument("--retry-smoke-methods", type=int, default=1000,
+    parser.add_argument("--retry-smoke-methods", type=int, default=250,
                         help="Last-resort method cap for timeout/OOM repos. Use 0 to disable.")
     parser.add_argument("--resolution", default="noclasspath",
                         choices=["noclasspath", "classpath", "auto"],
