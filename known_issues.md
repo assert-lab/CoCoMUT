@@ -19,11 +19,10 @@ For low-memory smoke tests, use `--max-methods N` and `--max-source-files N`.
 The source-file cap is useful for quickly testing huge repositories, but it is
 a sampling/control knob, not a full-repository coverage result.
 
-`--scope entry-points` currently selects public entry points across discovered
-source roots. It labels source sets as `main`, `test`, `generated`, `example`,
-`integration_test`, or `unknown`, but it does not yet filter by source set.
-Documentation-dataset runs should post-filter `source_set=main` until a CLI/API
-source-set filter is added.
+`--scope entry-points` selects public entry points across discovered source
+roots. For documentation-dataset runs, pass `--source-set main` so methods from
+test, generated, example, integration-test, or unknown source roots are excluded
+before context generation.
 
 ## Call Graph Precision
 

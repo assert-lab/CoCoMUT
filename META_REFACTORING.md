@@ -120,6 +120,8 @@ build/classpath behavior.
 - Keeps Spoon no-classpath extraction as the coverage baseline, retaining classpath-aware extraction only when it preserves enough discovered methods.
 - Uses bounded Maven/Gradle compilation attempts when auto resolution or auto call graph needs build evidence.
 - Records `@see` and `{@inheritDoc}` field-test counts and exports `javadoc_tag_cases.csv`.
+- Adds `--source-set` filtering to CLI/API extraction so dataset runs can keep only `main` methods.
+- Fixes source-set classification so standard `src/main/...` and `src/test/...` paths win over package names such as `demo`.
 
 ## Verification
 

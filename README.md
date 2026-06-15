@@ -121,6 +121,8 @@ Useful options:
 --output json|jsonl|both       Output format
 --max-methods N                Limit methods for smoke tests
 --max-source-files N           Limit parsed Java files for low-memory smoke tests
+--source-set all|main|test|integration_test|generated|example|unknown
+                                Filter methods by source set
 --compile                      Attempt Maven/Gradle compilation before analysis
 ```
 
@@ -131,6 +133,21 @@ or loses too much method coverage. `--call-graph auto` also uses bounded
 compilation and asks SootUp for RTA call graphs when class directories are
 available; otherwise it records the call graph as unavailable and continues
 source-only.
+
+For documentation datasets, prefer:
+
+```bash
+./bin/c4dg extract \
+  --project /path/to/java/project \
+  --scope entry-points \
+  --source-set main \
+  --call-graph none \
+  --output jsonl
+```
+
+`--source-set main` excludes public methods found under test, generated,
+example, integration-test, or unknown source roots. Use `--source-set all` or
+omit the flag to preserve the default behavior.
 
 Validation examples:
 

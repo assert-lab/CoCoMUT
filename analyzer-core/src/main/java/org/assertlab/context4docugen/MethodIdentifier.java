@@ -101,6 +101,7 @@ public class MethodIdentifier {
                 .visibility(method.visibility())
                 .isStatic(method.isStatic())
                 .returnType(method.returnType())
+                .sourceSet(method.sourceSet())
                 .build();
     }
 

@@ -47,6 +47,7 @@ FIELDS = [
     "class_output_dirs",
     "dependency_jars",
     "source_resolution",
+    "source_set_filter",
     "source_backend_modes",
     "call_graph_requested",
     "call_graph_available",
@@ -175,6 +176,7 @@ def run_extraction(
     max_methods: int | None,
     resolution: str,
     call_graph: str,
+    source_set: str,
 ) -> tuple[int | None, dict[str, str], str]:
     command = [
         str(root / "bin" / "c4dg"),
@@ -190,6 +192,8 @@ def run_extraction(
         "--output",
         "jsonl",
     ]
+    if source_set and source_set != "all":
+        command.extend(["--source-set", source_set])
     if max_source_files and max_source_files > 0:
         command.extend(["--max-source-files", str(max_source_files)])
     if max_methods and max_methods > 0:
@@ -207,6 +211,7 @@ def run_repo(
     retry_max_methods: int,
     resolution: str,
     call_graph: str,
+    source_set: str,
     compile_timeout: int,
     java_home: str | None,
 ) -> dict[str, str]:
@@ -239,7 +244,7 @@ def run_repo(
     log_path = logs / f"{safe}.c4dg.log"
     start = time.time()
     status, data, tail = run_extraction(root, checkout, log_path, timeout, env,
-                                        None, None, resolution, call_graph)
+                                        None, None, resolution, call_graph, source_set)
     retry_mode = "none"
     note = "" if status == 0 else f"exit {status}"
 
@@ -249,7 +254,7 @@ def run_repo(
         retry_log = logs / f"{safe}.c4dg.retry.log"
         status, data, retry_tail = run_extraction(
             root, checkout, retry_log, timeout, env, retry_max_source_files, None,
-            resolution, call_graph)
+            resolution, call_graph, source_set)
         tail = retry_tail
         note = "retry capped source files" if status == 0 else f"retry exit {status}"
 
@@ -267,6 +272,7 @@ def run_repo(
             retry_max_methods,
             resolution,
             call_graph,
+            source_set,
         )
         tail = retry_tail
         note = "retry capped source files and methods" if status == 0 else f"retry max-methods exit {status}"
@@ -296,6 +302,7 @@ def run_repo(
         "class_output_dirs": data.get("phase_1_class_output_dirs", ""),
         "dependency_jars": data.get("phase_1_dependency_jars", ""),
         "source_resolution": data.get("phase_1_source_resolution_requested", resolution),
+        "source_set_filter": data.get("phase_2_source_set_filter", source_set),
         "source_backend_modes": javadoc_counts.get("source_backend_modes", ""),
         "call_graph_requested": data.get("phase_3_algorithm", call_graph),
         "call_graph_available": data.get("phase_3_available", ""),
@@ -375,6 +382,8 @@ def main() -> int:
     parser.add_argument("--call-graph", default="none",
                         choices=["none", "cha", "rta", "auto"],
                         help="C4DG call graph mode.")
+    parser.add_argument("--source-set", default="all",
+                        help="C4DG source-set filter: all, main, test, integration_test, generated, example, unknown.")
     parser.add_argument("--compile-timeout", type=int, default=120,
                         help="Per-repository Maven/Gradle compile timeout in seconds for auto/compile runs.")
     parser.add_argument("--java-home", default="",
@@ -425,6 +434,7 @@ def main() -> int:
             args.retry_max_methods,
             args.resolution,
             args.call_graph,
+            args.source_set,
             args.compile_timeout,
             args.java_home or None,
         )

@@ -646,7 +646,7 @@ Remaining high-priority gaps from that work:
 - [x] Add per-method failure artifacts for selected-method misses and context-extraction misses.
 - [x] Reduce memory pressure for very large repositories with bounded source-file/method controls and capped source context.
 - [x] Rename public packages from `analyzer` to `org.assertlab.context4docugen`.
-- [ ] Add a CLI/API source-set filter so dataset runs can select `main` methods without post-processing.
+- [x] Add a CLI/API source-set filter so dataset runs can select `main` methods without post-processing.
 - [ ] Add a faster preflight size model so very large repositories can start directly in bounded mode.
 - [ ] Preserve duplicate-method discovery statistics in reports even though duplicate URIs are now deduplicated before output.
 

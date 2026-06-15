@@ -42,6 +42,43 @@ public class RobustExtractionRegressionTest {
     }
 
     @Test
+    public void sourceSetFilterKeepsOnlyMainMethods() throws Exception {
+        Path project = Files.createTempDirectory("c4dg-source-set-project");
+        try {
+            write(project.resolve("module-main/src/main/java/demo/MainApi.java"),
+                    "package demo; public class MainApi { public void api() {} }");
+            write(project.resolve("module-test/src/test/java/demo/MainApiTest.java"),
+                    "package demo; public class MainApiTest { public void testApi() {} }");
+
+            ExtractionReport all = ContextExtractorService.createDefault().extract(ContextRequest.builder()
+                    .projectRoot(project)
+                    .methodSelection(MethodSelection.entryPoints())
+                    .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
+                    .outputMode(AnalysisOptions.OutputMode.JSONL)
+                    .build());
+
+            ExtractionReport mainOnly = ContextExtractorService.createDefault().extract(ContextRequest.builder()
+                    .projectRoot(project)
+                    .methodSelection(MethodSelection.entryPoints())
+                    .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
+                    .outputMode(AnalysisOptions.OutputMode.JSONL)
+                    .sourceSet("main")
+                    .build());
+
+            assertTrue(all.successful());
+            assertEquals(2, all.methodsIdentified());
+
+            assertTrue(mainOnly.successful());
+            assertEquals(1, mainOnly.methodsIdentified());
+            assertEquals("main", mainOnly.asMap().get("phase_2_source_set_filter"));
+            assertEquals(2, ((Number) mainOnly.asMap().get("phase_2_source_set_filter_before")).intValue());
+            assertEquals(1, ((Number) mainOnly.asMap().get("phase_2_source_set_filter_after")).intValue());
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void selectedModeWritesFailureArtifactForUnmatchedRows() throws Exception {
         Path project = Files.createTempDirectory("c4dg-selected-project");
         try {

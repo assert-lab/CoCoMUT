@@ -798,11 +798,11 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 || lower.contains("build/generated/")) {
             return "generated";
         }
-        if (lower.contains("example") || lower.contains("sample") || lower.contains("demo")) {
-            return "example";
-        }
         if (lower.contains("/src/main/") || lower.startsWith("src/main/")) {
             return "main";
+        }
+        if (lower.contains("example") || lower.contains("sample") || lower.contains("demo")) {
+            return "example";
         }
         return "unknown";
     }

@@ -1,7 +1,10 @@
 package org.assertlab.context4docugen;
 
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Minimal command-line entry point for static method-context extraction.
@@ -29,6 +32,7 @@ public final class Context4DocuGenCli {
                 .callGraphAlgorithm(callGraphAlgorithm(args))
                 .sourceResolution(sourceResolution(args))
                 .maxMethods(optionInt(args, "--max-methods"))
+                .sourceSets(sourceSets(args))
                 .attemptCompile(has(args, "--compile")
                         || "auto".equalsIgnoreCase(option(args, "--call-graph"))
                         || "auto".equalsIgnoreCase(option(args, "--resolution")))
@@ -116,6 +120,17 @@ public final class Context4DocuGenCli {
         };
     }
 
+    private static Set<String> sourceSets(String[] args) {
+        String value = option(args, "--source-set");
+        if (value == null || value.isBlank()) {
+            return Set.of();
+        }
+        return Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(part -> !part.isBlank())
+                .collect(LinkedHashSet::new, Set::add, Set::addAll);
+    }
+
     private static boolean has(String[] args, String option) {
         for (String arg : args) {
             if (option.equals(arg)) {
@@ -138,6 +153,8 @@ public final class Context4DocuGenCli {
                   --call-graph none|cha|rta      Optional SootUp call graph algorithm
                   --output json|jsonl|both       Output format
                   --max-methods N                Limit methods for large smoke tests
+                  --source-set all|main|test|integration_test|generated|example|unknown
+                                                 Filter methods by source set
                   --compile                      Attempt build-tool compilation before analysis
 
                 Maven exec:

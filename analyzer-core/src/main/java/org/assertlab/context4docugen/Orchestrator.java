@@ -39,6 +39,7 @@ public class Orchestrator {
     private boolean attemptCompile;
     private AnalysisOptions.SourceResolution sourceResolution = AnalysisOptions.SourceResolution.NOCLASSPATH;
     private AnalysisOptions.OutputMode outputMode = AnalysisOptions.OutputMode.JSON;
+    private Set<String> sourceSets = Set.of();
     private String previousMaxSourceFilesProperty;
     private boolean sourceFileLimitConfigured;
 
@@ -110,6 +111,11 @@ public class Orchestrator {
 
     public Orchestrator setOutputMode(AnalysisOptions.OutputMode outputMode) {
         this.outputMode = Objects.requireNonNull(outputMode, "outputMode cannot be null");
+        return this;
+    }
+
+    public Orchestrator setSourceSets(Set<String> sourceSets) {
+        this.sourceSets = sourceSets == null ? Set.of() : Set.copyOf(sourceSets);
         return this;
     }
 
@@ -198,6 +204,7 @@ public class Orchestrator {
                         : projectPath.resolve("inputs_selected.csv");
                 SelectedMethodLoader loader = new SelectedMethodLoader(projectMetadata, csv);
                 methodInfos = loader.load();
+                methodInfos = filterSourceSets(methodInfos);
                 methodInfos = limitMethods(methodInfos);
 
                 // Still write a methods.csv so Phase 6 (CsvEnricher) has something to enrich.
@@ -225,6 +232,7 @@ public class Orchestrator {
                 // Strategy override (e.g., entry-points-only): load via strategy,
                 // then still write methods.csv so Phase 6 (CsvEnricher) has input.
                 methodInfos = methodSourceStrategy.loadMethods(projectMetadata);
+                methodInfos = filterSourceSets(methodInfos);
                 methodInfos = limitMethods(methodInfos);
                 MethodIdentifier writer = new MethodIdentifier(projectMetadata,
                         MethodIdentifier.IdStrategy.SEQUENTIAL, null, projectPath);
@@ -239,6 +247,7 @@ public class Orchestrator {
                     MethodIdentifier.IdStrategy.SEQUENTIAL, null, projectPath);
 
             methodInfos = identifier.identify();
+            methodInfos = filterSourceSets(methodInfos);
             methodInfos = limitMethods(methodInfos);
             identifier.writeCsv(methodInfos, csvPath);
 
@@ -350,6 +359,20 @@ public class Orchestrator {
             failureCodes.add(FailureCode.CONTEXT_EXTRACTION_FAILED);
             return false;
         }
+    }
+
+    private List<MethodInfo> filterSourceSets(List<MethodInfo> methods) {
+        if (sourceSets == null || sourceSets.isEmpty()) {
+            executionReport.put("phase_2_source_set_filter", "all");
+            return methods;
+        }
+        List<MethodInfo> filtered = methods.stream()
+                .filter(method -> sourceSets.contains(method.getSourceSet()))
+                .toList();
+        executionReport.put("phase_2_source_set_filter", String.join(",", sourceSets));
+        executionReport.put("phase_2_source_set_filter_before", methods.size());
+        executionReport.put("phase_2_source_set_filter_after", filtered.size());
+        return filtered;
     }
 
     private void configureSourceFileLimit() {

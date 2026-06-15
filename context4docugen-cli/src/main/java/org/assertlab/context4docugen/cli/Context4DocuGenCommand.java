@@ -25,6 +25,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 
 @Command(
@@ -79,6 +80,10 @@ public final class Context4DocuGenCommand implements Callable<Integer> {
         @Option(names = "--max-source-files", description = "Limit parsed Java source files for low-memory smoke tests.")
         private Integer maxSourceFiles;
 
+        @Option(names = "--source-set", defaultValue = "all",
+                description = "Filter methods by source set: all, main, test, integration_test, generated, example, unknown. Comma-separated values are allowed.")
+        private String sourceSet;
+
         @Option(names = "--compile", description = "Attempt Maven/Gradle compilation before analysis.")
         private boolean compile;
 
@@ -96,6 +101,7 @@ public final class Context4DocuGenCommand implements Callable<Integer> {
                     .outputMode(toOutputMode(output))
                     .maxMethods(maxMethods)
                     .maxSourceFiles(maxSourceFiles)
+                    .sourceSets(toSourceSets(sourceSet))
                     .attemptCompile(compile || isAuto(callGraph) || isAuto(resolution))
                     .build();
 
@@ -394,6 +400,16 @@ public final class Context4DocuGenCommand implements Callable<Integer> {
             case "both" -> AnalysisOptions.OutputMode.BOTH;
             default -> throw new IllegalArgumentException("Unsupported --output: " + value);
         };
+    }
+
+    private static Set<String> toSourceSets(String value) {
+        if (value == null || value.isBlank() || "all".equalsIgnoreCase(value.trim())) {
+            return Set.of();
+        }
+        return java.util.Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(part -> !part.isBlank())
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
     }
 
     private static String normalize(String value) {

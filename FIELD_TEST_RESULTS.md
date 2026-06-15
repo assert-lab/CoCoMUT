@@ -188,7 +188,10 @@ Repositories with many `{@inheritDoc}` methods:
 
 ## Source Set Attention
 
-The run labels method source sets, but `--scope entry-points` currently selects public entry points across discovered source roots. It does not filter to `main` only.
+The completed auto sweep was run before source-set filtering was added, so it
+kept public entry points across discovered source roots. C4DG now supports
+`--source-set main` for dataset runs that should exclude tests, examples,
+generated code, integration tests, and unknown source roots.
 
 Whole-corpus source-set distribution:
 
@@ -201,7 +204,13 @@ Whole-corpus source-set distribution:
 | `example` | 30114 |
 | `integration_test` | 442 |
 
-For documentation-dataset construction, filter to `source_set=main` unless the study intentionally includes tests, examples, or generated sources as separate strata.
+For documentation-dataset construction, rerun extraction with:
+
+```bash
+--scope entry-points --source-set main
+```
+
+unless the study intentionally includes tests, examples, or generated sources as separate strata.
 
 ## What To Inspect Next
 
@@ -232,7 +241,7 @@ It completed 541/541 repositories in source-only mode with 2686556 generated JSO
 
 ## Remaining Follow-Up
 
-- Add a CLI/API source-set filter, for example `--source-set main|all|test|generated|example`, so documentation-mining runs can exclude tests without post-processing.
+- Rerun the expanded auto sweep with `--source-set main` when a main-code-only dataset baseline is needed.
 - Add a faster preflight size model so very large repositories can start directly in bounded mode.
 - Investigate the two analysis timeouts: `kubernetes-client/java` and `eclipse-milo/milo`.
 - Inspect `javadoc_tag_cases.csv` for `@see` target quality and `{@inheritDoc}` candidate correctness.

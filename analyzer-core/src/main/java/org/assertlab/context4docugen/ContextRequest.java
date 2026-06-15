@@ -1,6 +1,7 @@
 package org.assertlab.context4docugen;
 
 import java.nio.file.Path;
+import java.util.Set;
 import java.util.Objects;
 
 /**
@@ -15,6 +16,7 @@ public final class ContextRequest {
     private final Integer maxSourceFiles;
     private final boolean attemptCompile;
     private final AnalysisOptions.SourceResolution sourceResolution;
+    private final Set<String> sourceSets;
 
     private ContextRequest(Builder builder) {
         this.projectRoot = Objects.requireNonNull(builder.projectRoot, "projectRoot cannot be null")
@@ -29,6 +31,7 @@ public final class ContextRequest {
         this.attemptCompile = builder.attemptCompile;
         this.sourceResolution = Objects.requireNonNull(builder.sourceResolution,
                 "sourceResolution cannot be null");
+        this.sourceSets = Set.copyOf(builder.sourceSets);
     }
 
     public static Builder builder() {
@@ -67,6 +70,10 @@ public final class ContextRequest {
         return sourceResolution;
     }
 
+    public Set<String> sourceSets() {
+        return sourceSets;
+    }
+
     AnalysisOptions toAnalysisOptions() {
         AnalysisOptions.Builder builder = AnalysisOptions.builder()
                 .scope(methodSelection.toScope())
@@ -75,7 +82,8 @@ public final class ContextRequest {
                 .maxMethods(maxMethods)
                 .maxSourceFiles(maxSourceFiles)
                 .attemptCompile(attemptCompile)
-                .sourceResolution(sourceResolution);
+                .sourceResolution(sourceResolution)
+                .sourceSets(sourceSets);
         if (methodSelection.kind() == MethodSelection.Kind.SELECTED_CSV) {
             builder.selectedCsv(methodSelection.selectedCsv());
         }
@@ -91,6 +99,7 @@ public final class ContextRequest {
         private Integer maxSourceFiles;
         private boolean attemptCompile;
         private AnalysisOptions.SourceResolution sourceResolution = AnalysisOptions.SourceResolution.NOCLASSPATH;
+        private Set<String> sourceSets = Set.of();
 
         public Builder projectRoot(Path projectRoot) {
             this.projectRoot = projectRoot;
@@ -129,6 +138,16 @@ public final class ContextRequest {
 
         public Builder sourceResolution(AnalysisOptions.SourceResolution sourceResolution) {
             this.sourceResolution = sourceResolution;
+            return this;
+        }
+
+        public Builder sourceSets(Set<String> sourceSets) {
+            this.sourceSets = sourceSets == null ? Set.of() : Set.copyOf(sourceSets);
+            return this;
+        }
+
+        public Builder sourceSet(String sourceSet) {
+            this.sourceSets = sourceSet == null ? Set.of() : Set.of(sourceSet);
             return this;
         }
 
