@@ -178,6 +178,11 @@ def run_extraction(
     call_graph: str,
     source_set: str,
 ) -> tuple[int | None, dict[str, str], str]:
+    for output_name in ("method_contexts.jsonl", "methods.csv"):
+        try:
+            (checkout / output_name).unlink()
+        except FileNotFoundError:
+            pass
     command = [
         str(root / "bin" / "c4dg"),
         "extract",
@@ -316,7 +321,10 @@ def run_repo(
 
     should_smoke_retry = status is None or status != 0 or "Java heap space" in tail or "OutOfMemoryError" in tail
     if should_smoke_retry and retry_smoke_source_files > 0 and retry_smoke_methods > 0:
-        retry_mode = f"{retry_mode};smoke_max_source_files={retry_smoke_source_files};smoke_max_methods={retry_smoke_methods}"
+        retry_mode = (
+            f"{retry_mode};smoke_resolution=noclasspath;smoke_call_graph=none;"
+            f"smoke_max_source_files={retry_smoke_source_files};smoke_max_methods={retry_smoke_methods}"
+        )
         retry_log = logs / f"{safe}.c4dg.retry-smoke.log"
         status, data, retry_tail = run_extraction(
             root,
@@ -326,8 +334,8 @@ def run_repo(
             env,
             retry_smoke_source_files,
             retry_smoke_methods,
-            resolution,
-            call_graph,
+            "noclasspath",
+            "none",
             active_source_set,
         )
         tail = retry_tail
