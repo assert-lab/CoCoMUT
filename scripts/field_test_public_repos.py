@@ -12,6 +12,7 @@ import csv
 import json
 import os
 import re
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -247,8 +248,19 @@ def run_repo(
             os.environ.copy(),
         )
         if clone_status is None:
-            return {"repo": repo, "clone_status": "TIMEOUT", "status": "SKIPPED", "note": "clone timeout"}
+            shutil.rmtree(checkout, ignore_errors=True)
+            clone_status = run_command(
+                ["git", "clone", "--depth", "1", f"https://github.com/{repo}.git", str(checkout)],
+                output_dir,
+                logs / f"{safe}.clone-retry.log",
+                600,
+                os.environ.copy(),
+            )
+            if clone_status is None:
+                shutil.rmtree(checkout, ignore_errors=True)
+                return {"repo": repo, "clone_status": "TIMEOUT", "status": "SKIPPED", "note": "clone timeout after retry"}
         if clone_status != 0:
+            shutil.rmtree(checkout, ignore_errors=True)
             return {"repo": repo, "clone_status": f"FAIL_{clone_status}", "status": "SKIPPED", "note": "clone failed"}
 
     env = os.environ.copy()
