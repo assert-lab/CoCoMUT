@@ -89,8 +89,7 @@ You can also run the standalone jar directly:
 java -jar dist/context4docugen-cli.jar extract \
   --project /path/to/java/project \
   --scope entry-points \
-  --call-graph none \
-  --output jsonl
+  --call-graph none
 ```
 
 Available commands:
@@ -107,18 +106,16 @@ Run selected-method mode:
 ./bin/c4dg extract \
   --project /path/to/java/project \
   --selected /path/to/selected-methods.csv \
-  --call-graph none \
-  --output jsonl
+  --call-graph none
 ```
 
 Useful options:
 
 ```text
 --scope all|entry-points       Method scope for source scanning
-  --call-graph none|cha|rta|auto Optional SootUp call graph mode
+--call-graph none|cha|rta|auto Optional SootUp call graph mode
 --resolution noclasspath|classpath|auto
                                 Spoon source-resolution mode
---output json|jsonl|both       Output format
 --output-dir DIR               Directory for generated artifacts
 --max-methods N                Limit methods for smoke tests
 --max-source-files N           Limit parsed Java files for low-memory smoke tests
@@ -149,8 +146,7 @@ For documentation datasets, prefer:
   --project /path/to/java/project \
   --scope entry-points \
   --source-set main \
-  --call-graph none \
-  --output jsonl
+  --call-graph none
 ```
 
 `--source-set main` excludes public methods found under test, generated,
@@ -167,8 +163,7 @@ Layered selection is available when you do not want the whole repository:
   --method parse \
   --visibility public \
   --include-path 'src/main/java/**/*.java' \
-  --exclude-path '**/generated/**' \
-  --output jsonl
+  --exclude-path '**/generated/**'
 ```
 
 Repository-wide extraction writes `method_contexts.jsonl`. Package, class, or
@@ -181,7 +176,6 @@ Validation examples:
 ```bash
 ./bin/c4dg validate --project /path/to/java/project
 ./bin/c4dg validate --selected selected-methods.csv
-./bin/c4dg validate --json method_context_json/example.json
 ./bin/c4dg validate --jsonl method_contexts.jsonl
 ```
 
@@ -197,9 +191,9 @@ By default, generated artifacts are written outside the analyzed project:
 ```text
 ./c4dg_output/<project-name>/
   method_contexts.jsonl
-  method_context_json/*.json   when --output json|both
-  Output_CallGraph_CHA.txt     when CHA is used
-  Output_CallGraph_RTA.txt     when RTA is used
+  extraction_report.json
+  Output_CallGraph_CHA.txt     when CHA is effectively used
+  Output_CallGraph_RTA.txt     when RTA is effectively used
   selected_method_failures.jsonl
   method_context_failures.jsonl
 ```

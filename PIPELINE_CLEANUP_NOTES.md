@@ -22,22 +22,14 @@ product pipeline.
 - Added package, class, method, visibility, include-path, and exclude-path
   filters.
 
-## Remaining Product Questions
+## Applied Product Decisions
 
-- `CallGraphGenerator.Algorithm.SPARK` exists in the enum but is not wired to a
-  real implementation. It should either be implemented or removed before a
-  stable release.
-- The older `Context4DocuGenCli` class overlaps with the Picocli CLI module.
-  Keep one public CLI entry point and document the other, if retained, as a
-  compatibility entry point.
-- The default `--call-graph` is still `cha` in the Picocli CLI. For large public
-  repository mining, `none` or `auto` may be a safer default. This is a product
-  policy decision.
-- Per-method JSON files remain useful for manual inspection but should stay
-  secondary to JSONL for dataset-scale extraction.
-- The extraction report is currently printed as key-value lines. A structured
-  `extraction_report.json` in the output directory would be useful for
-  repeatable field studies.
-- The source-position slice still includes leading Javadoc in `MUT.code` for
-  some Spoon positions. For doc-generation datasets, consider splitting
-  `code_with_javadoc` from `code_without_javadoc` to avoid target leakage.
+- Removed the unused `SPARK` call-graph enum value.
+- Removed the older hand-written `Context4DocuGenCli`; Picocli `c4dg` is the
+  only public CLI entry point.
+- Changed the Picocli default to `--call-graph auto`.
+- Made extraction JSONL-only, including package/class/method-filtered runs.
+- Kept the terminal key-value report and also write `extraction_report.json`.
+- Kept Javadoc and method source separate: `MUT.javadoc` contains documentation,
+  while `MUT.code` contains annotations plus method declaration/body without the
+  leading Javadoc block.
