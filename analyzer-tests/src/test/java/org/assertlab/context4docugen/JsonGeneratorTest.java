@@ -1,42 +1,44 @@
 package org.assertlab.context4docugen;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
-
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.After;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
 /**
- * Test suite for JsonGenerator Phase 5 component
+ * Tests for the JSONL-only Phase 5 generator.
  */
 public class JsonGeneratorTest {
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     private Path testOutputDir;
     private JsonGenerator generator;
 
     @Before
     public void setUp() throws Exception {
-        // Create temporary test directory
         testOutputDir = Files.createTempDirectory("json_gen_test_");
         generator = new JsonGenerator(testOutputDir);
     }
 
     @After
     public void tearDown() throws Exception {
-        // Clean up test directory
         if (Files.exists(testOutputDir)) {
             Files.walk(testOutputDir)
                     .sorted((a, b) -> b.compareTo(a))
                     .forEach(path -> {
                         try {
                             Files.delete(path);
-                        } catch (Exception e) {
-                            // Ignore
+                        } catch (Exception ignored) {
                         }
                     });
         }
@@ -55,108 +57,35 @@ public class JsonGeneratorTest {
     }
 
     @Test
-    public void testGenerateJsonFileForSingleMethod() throws Exception {
+    public void testGenerateJsonLinesFileForSingleMethod() throws Exception {
         MethodContext context = new MethodContext.Builder()
                 .methodId("1")
                 .methodName("testMethod")
                 .classname("com.example.MyClass")
-                .methodBody("public void testMethod() { }")
-                .javadoc("/** Test method */")
+                .methodBody("@Override\npublic void testMethod() { }")
+                .javadoc("Test method")
                 .classHierarchy("MyClass extends BaseClass")
                 .addClassMethod("otherMethod", "void")
-                .linesOfCode(10)
-                .cyclomatic(1)
-                .build();
-
-        boolean success = generator.generateJsonFile(context);
-        
-        assertTrue("Should generate JSON file successfully", success);
-        
-        // Verify file was created
-        Path expectedFile = onlyJsonFile();
-        assertTrue("JSON file should exist", Files.exists(expectedFile));
-    }
-
-    @Test
-    public void testJsonFileNameGeneration() throws Exception {
-        MethodContext context1 = new MethodContext.Builder()
-                .methodId("1")
-                .methodName("myMethod")
-                .classname("com.example.MyClass")
-                .build();
-
-        MethodContext context2 = new MethodContext.Builder()
-                .methodId("2")
-                .methodName("get<T>Value")
-                .classname("com.example.MyClass")
-                .build();
-
-        generator.generateJsonFile(context1);
-        generator.generateJsonFile(context2);
-
-        try (var files = Files.list(testOutputDir)) {
-            assertEquals("Should create two JSON files", 2,
-                    files.filter(p -> p.toString().endsWith(".json")).count());
-        }
-        try (var files = Files.list(testOutputDir)) {
-            assertTrue("Should sanitize special characters in filename",
-                    files.anyMatch(p -> p.getFileName().toString().endsWith("__get_T_Value.json")));
-        }
-    }
-
-    @Test
-    public void testGenerateJsonFilesForMultipleMethods() {
-        Map<String, MethodContext> contexts = new HashMap<>();
-        
-        contexts.put("1", new MethodContext.Builder()
-                .methodId("1")
-                .methodName("method1")
-                .classname("com.example.MyClass")
-                .build());
-        
-        contexts.put("2", new MethodContext.Builder()
-                .methodId("2")
-                .methodName("method2")
-                .classname("com.example.MyClass")
-                .build());
-
-        int generated = generator.generateJsonFiles(contexts);
-        
-        assertEquals("Should generate 2 files", 2, generated);
-        assertEquals("Statistics should show 2 generated", 2, generator.getGenerationStats().get("total_generated").intValue());
-    }
-
-    @Test
-    public void testJsonFileContent() throws Exception {
-        MethodContext context = new MethodContext.Builder()
-                .methodId("1")
-                .methodName("testMethod")
-                .classname("com.example.MyClass")
-                .methodBody("public void testMethod() { System.out.println(\"test\"); }")
-                .javadoc("/** Test method */")
-                .classHierarchy("MyClass extends BaseClass")
                 .linesOfCode(2)
                 .cyclomatic(1)
                 .build();
 
-        generator.generateJsonFile(context);
+        Path jsonl = testOutputDir.resolve("method_contexts.jsonl");
+        int rows = generator.generateJsonLinesFile(Map.of("1", context), jsonl);
 
-        // Read and verify file content
-        Path jsonFile = onlyJsonFile();
-        String content = new String(Files.readAllBytes(jsonFile));
-        
-        // JSON schema wraps method info inside an "MUT" object with snake_case keys
-        assertTrue("Should contain method URI/key", content.contains("\"method_uri\""));
-        assertTrue("Should contain method name", content.contains("\"method_name\" : \"testMethod\""));
-        assertTrue("Should contain class name (via qualified_name)",
-                content.contains("\"qualified_name\" : \"com.example.MyClass.testMethod\""));
-        assertTrue("Should contain method body", content.contains("System.out.println"));
-        assertTrue("Should contain javadoc", content.contains("Test method"));
+        assertEquals("Should write one JSONL row", 1, rows);
+        assertTrue("JSONL file should exist", Files.exists(jsonl));
+
+        JsonNode root = MAPPER.readTree(Files.readString(jsonl));
+        assertEquals("testMethod", root.path("MUT").path("method_name").asText());
+        assertEquals("Test method", root.path("MUT").path("javadoc").asText());
+        assertTrue("Method code should include annotations/body", root.path("MUT").path("code").asText().contains("@Override"));
+        assertTrue("Method code should include body", root.path("MUT").path("code").asText().contains("testMethod()"));
     }
 
     @Test
-    public void testGenerationStats() {
-        Map<String, MethodContext> contexts = new HashMap<>();
+    public void testGenerateJsonLinesFileForMultipleMethods() throws Exception {
+        Map<String, MethodContext> contexts = new LinkedHashMap<>();
         contexts.put("1", new MethodContext.Builder()
                 .methodId("1")
                 .methodName("method1")
@@ -168,91 +97,44 @@ public class JsonGeneratorTest {
                 .classname("com.example.MyClass")
                 .build());
 
-        generator.generateJsonFiles(contexts);
+        Path jsonl = testOutputDir.resolve("method_contexts.jsonl");
+        int rows = generator.generateJsonLinesFile(contexts, jsonl);
 
-        Map<String, Integer> stats = generator.getGenerationStats();
-        assertEquals("Should have 2 total", 2, stats.get("total_generated").intValue());
-        assertEquals("Should have 2 successful", 2, stats.get("successful").intValue());
-        assertEquals("Should have 0 failed", 0, stats.get("failed").intValue());
+        assertEquals("Should write one row per context", 2, rows);
+        assertEquals("Statistics should show 2 generated", 2,
+                generator.getGenerationStats().get("total_generated").intValue());
+        assertEquals("JSONL should contain 2 physical lines", 2, Files.readAllLines(jsonl).size());
     }
 
     @Test
-    public void testGenerationResults() {
+    public void testGenerationResultsPointToJsonlFile() {
         MethodContext context = new MethodContext.Builder()
                 .methodId("1")
                 .methodName("testMethod")
                 .classname("com.example.MyClass")
                 .build();
 
-        generator.generateJsonFile(context);
+        Path jsonl = testOutputDir.resolve("method_contexts.jsonl");
+        generator.generateJsonLinesFile(Map.of("1", context), jsonl);
 
         String result = generator.getGenerationResult("1");
         assertNotNull("Should have result", result);
-        assertTrue("Result should indicate success", result.startsWith("SUCCESS:"));
-        assertTrue("Result should contain URI-hash JSON file path", result.contains("method_"));
-        assertTrue("Result should contain method name in file path", result.contains("__testMethod.json"));
+        assertEquals("SUCCESS:" + jsonl, result);
     }
 
     @Test
-    public void testVerifyJsonFiles() {
+    public void testVerifyGeneratedJsonlPath() {
         MethodContext context = new MethodContext.Builder()
                 .methodId("1")
                 .methodName("testMethod")
                 .classname("com.example.MyClass")
                 .build();
 
-        generator.generateJsonFile(context);
+        generator.generateJsonLinesFile(Map.of("1", context), testOutputDir.resolve("method_contexts.jsonl"));
 
         Map<String, Boolean> verification = generator.verifyJsonFiles();
         assertNotNull("Should have verification results", verification);
-        assertTrue("File should exist and be verified", verification.get("1"));
-    }
-
-    @Test
-    public void testGetAllGenerationResults() {
-        Map<String, MethodContext> contexts = new HashMap<>();
-        contexts.put("1", new MethodContext.Builder()
-                .methodId("1")
-                .methodName("method1")
-                .classname("com.example.MyClass")
-                .build());
-        contexts.put("2", new MethodContext.Builder()
-                .methodId("2")
-                .methodName("method2")
-                .classname("com.example.MyClass")
-                .build());
-
-        generator.generateJsonFiles(contexts);
-
-        Map<String, String> allResults = generator.getAllGenerationResults();
-        assertEquals("Should have 2 results", 2, allResults.size());
-        assertTrue("Should contain result for method 1", allResults.containsKey("1"));
-        assertTrue("Should contain result for method 2", allResults.containsKey("2"));
-    }
-
-    @Test
-    public void testJsonLinesRegistersPerMethodResults() throws Exception {
-        Map<String, MethodContext> contexts = new HashMap<>();
-        contexts.put("1", new MethodContext.Builder()
-                .methodId("1")
-                .methodName("method1")
-                .classname("com.example.MyClass")
-                .build());
-        contexts.put("2", new MethodContext.Builder()
-                .methodId("2")
-                .methodName("method2")
-                .classname("com.example.MyClass")
-                .build());
-
-        Path jsonlPath = testOutputDir.resolve("method_contexts.jsonl");
-        int rows = generator.generateJsonLinesFile(contexts, jsonlPath);
-
-        assertEquals("Should write one JSONL row per context", 2, rows);
-        assertTrue("JSONL file should exist", Files.exists(jsonlPath));
-        assertTrue("Should record method 1 as generated", generator.getGenerationResult("1").startsWith("SUCCESS:"));
-        assertTrue("Should record method 2 as generated", generator.getGenerationResult("2").startsWith("SUCCESS:"));
-        assertEquals("Method result should point to JSONL file", "SUCCESS:" + jsonlPath,
-                generator.getGenerationResult("1"));
+        assertTrue("JSONL path should exist and be verified", verification.get("1"));
     }
 
     @Test
@@ -263,17 +145,17 @@ public class JsonGeneratorTest {
                 .classname("com.example.MyClass")
                 .build();
 
-        generator.generateJsonFile(context);
-        
-        assertEquals("Should have 1 result before clear", 1, generator.getAllGenerationResults().size());
-        
+        generator.generateJsonLinesFile(Map.of("1", context), testOutputDir.resolve("method_contexts.jsonl"));
+        assertEquals("Should have method and JSONL aggregate results before clear", 2,
+                generator.getAllGenerationResults().size());
+
         generator.clearResults();
-        
+
         assertEquals("Should have 0 results after clear", 0, generator.getAllGenerationResults().size());
     }
 
     @Test
-    public void testJsonFileWithCallGraph() throws Exception {
+    public void testJsonLinesWithCallGraph() throws Exception {
         CallGraphResult callGraph = new CallGraphResult.Builder()
                 .methodId("1")
                 .methodName("testMethod")
@@ -290,44 +172,12 @@ public class JsonGeneratorTest {
                 .callGraph(callGraph)
                 .build();
 
-        generator.generateJsonFile(context);
+        Path jsonl = testOutputDir.resolve("method_contexts.jsonl");
+        generator.generateJsonLinesFile(Map.of("1", context), jsonl);
 
-        Path jsonFile = onlyJsonFile();
-        String content = new String(Files.readAllBytes(jsonFile));
-        
-        // New schema: callers and callees are top-level arrays; algorithm captured in metadata
+        String content = Files.readString(jsonl);
         assertTrue("Should contain callers", content.contains("\"callers\""));
         assertTrue("Should contain callees", content.contains("\"callees\""));
-    }
-
-    @Test
-    public void testJsonFileWithoutOptionalFields() throws Exception {
-        MethodContext context = new MethodContext.Builder()
-                .methodId("1")
-                .methodName("simpleMethod")
-                .classname("com.example.MyClass")
-                .build();
-
-        generator.generateJsonFile(context);
-
-        Path jsonFile = onlyJsonFile();
-        String content = new String(Files.readAllBytes(jsonFile));
-        
-        // New schema wraps fields in an "MUT" object; required fields use snake_case
-        assertTrue("Should contain MUT root", content.contains("\"MUT\""));
-        assertTrue("Should contain method name", content.contains("\"method_name\""));
-        assertTrue("Should contain qualified name (carries class)",
-                content.contains("\"qualified_name\""));
-
-        // Optional fields like javadoc shouldn't appear if empty
-        // This is fine as-is; JSON will just not have the field
-    }
-
-    private Path onlyJsonFile() throws Exception {
-        try (var files = Files.list(testOutputDir)) {
-            return files.filter(p -> p.getFileName().toString().endsWith(".json"))
-                    .findFirst()
-                    .orElseThrow(() -> new AssertionError("No JSON file generated in " + testOutputDir));
-        }
+        assertTrue("Should contain call graph algorithm", content.contains("\"CHA\""));
     }
 }

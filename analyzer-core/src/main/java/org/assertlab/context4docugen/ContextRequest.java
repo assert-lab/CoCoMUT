@@ -120,7 +120,7 @@ public final class ContextRequest {
     public static final class Builder {
         private Path projectRoot;
         private MethodSelection methodSelection = MethodSelection.all();
-        private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.CHA;
+        private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.AUTO;
         private AnalysisOptions.OutputMode outputMode = AnalysisOptions.OutputMode.JSONL;
         private Integer maxMethods;
         private Integer maxSourceFiles;

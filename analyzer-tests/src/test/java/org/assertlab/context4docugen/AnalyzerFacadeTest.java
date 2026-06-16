@@ -68,16 +68,13 @@ public class AnalyzerFacadeTest {
 
         Orchestrator orch = new Orchestrator(fixtureRoot, Orchestrator.ExecutionMode.SELECTED)
                 .setInputCsvPath(tempCsv)
-                .setOutputMode(AnalysisOptions.OutputMode.JSON)
+                .setOutputMode(AnalysisOptions.OutputMode.JSONL)
                 .setOutputDirectory(Files.createTempDirectory("c4dg-selected-json"));
         boolean ok = orch.execute();
 
         assertTrue("SELECTED-mode pipeline should succeed", ok);
 
-        Path jsonFile = findJsonForMethod(Path.of(String.valueOf(orch.getExecutionReport().get("phase_5_output_directory"))), "greet");
-        assertTrue("Expected JSON output at " + jsonFile, Files.exists(jsonFile));
-
-        JsonNode json = new ObjectMapper().readTree(jsonFile.toFile());
+        JsonNode json = findJsonlRowForMethod(Path.of(String.valueOf(orch.getExecutionReport().get("phase_5_jsonl_file"))), "greet");
 
         assertTrue("JSON must contain original_docstring", json.has("original_docstring"));
         assertEquals("Greets a person by their name.",
@@ -92,7 +89,6 @@ public class AnalyzerFacadeTest {
         assertEquals("greet", json.get("MUT").get("method_name").asText());
 
         Files.deleteIfExists(tempCsv);
-        Files.deleteIfExists(jsonFile);  // cleanup so we don't pollute the fixture
     }
 
     @Test
@@ -151,29 +147,26 @@ public class AnalyzerFacadeTest {
         // FULL mode has no CSV-origin metadata → research fields must be absent
         Path output = Files.createTempDirectory("c4dg-full-json");
         AnalyzerFacade.analyze(fixtureRoot, AnalysisOptions.builder()
-                .outputMode(AnalysisOptions.OutputMode.JSON)
+                .outputMode(AnalysisOptions.OutputMode.JSONL)
                 .outputDirectory(output)
                 .build());
 
-        Path greetJson = findJsonForMethod(output.resolve("method_context_json"), "greet");
-        assertTrue("FULL-mode greet JSON should exist", Files.exists(greetJson));
-
-        JsonNode json = new ObjectMapper().readTree(greetJson.toFile());
+        JsonNode json = findJsonlRowForMethod(output.resolve("method_contexts.jsonl"), "greet");
         assertFalse("FULL-mode JSON must NOT contain original_docstring",
                 json.has("original_docstring"));
         assertFalse("FULL-mode JSON must NOT contain test_prefix",
                 json.has("test_prefix"));
     }
 
-    private Path findJsonForMethod(Path jsonDir, String methodName) throws Exception {
-        try (var files = Files.list(jsonDir)) {
-            for (Path file : files.filter(p -> p.getFileName().toString().endsWith(".json")).toList()) {
-                JsonNode json = new ObjectMapper().readTree(file.toFile());
-                if (methodName.equals(json.path("MUT").path("method_name").asText())) {
-                    return file;
-                }
+    private JsonNode findJsonlRowForMethod(Path jsonl, String methodName) throws Exception {
+        assertTrue("Expected JSONL output at " + jsonl, Files.exists(jsonl));
+        ObjectMapper mapper = new ObjectMapper();
+        for (String line : Files.readAllLines(jsonl)) {
+            JsonNode json = mapper.readTree(line);
+            if (methodName.equals(json.path("MUT").path("method_name").asText())) {
+                return json;
             }
         }
-        throw new AssertionError("No JSON file found for method " + methodName + " in " + jsonDir);
+        throw new AssertionError("No JSONL row found for method " + methodName + " in " + jsonl);
     }
 }

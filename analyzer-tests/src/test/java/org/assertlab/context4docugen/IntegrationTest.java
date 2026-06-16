@@ -32,14 +32,13 @@ public class IntegrationTest {
 
     @After
     public void tearDown() {
-        Path jsonDir = testProjectPath.resolve("method_context_json");
-        Path csv = testProjectPath.resolve("methods.csv");
-        Path csvBackup = testProjectPath.resolve("methods.csv.backup");
-        Path callGraphTxt = testProjectPath.resolve("Output_CallGraph_CHA.txt");
+        Path outputDir = Path.of(System.getProperty("user.dir"))
+                .resolve("c4dg_output")
+                .resolve(testProjectPath.getFileName().toString());
 
         try {
-            if (Files.exists(jsonDir)) {
-                Files.walk(jsonDir)
+            if (Files.exists(outputDir)) {
+                Files.walk(outputDir)
                         .sorted((a, b) -> b.compareTo(a))
                         .forEach(path -> {
                             try {
@@ -48,15 +47,6 @@ public class IntegrationTest {
                                 // Ignore
                             }
                         });
-            }
-            if (Files.exists(csv)) {
-                Files.delete(csv);
-            }
-            if (Files.exists(csvBackup)) {
-                Files.delete(csvBackup);
-            }
-            if (Files.exists(callGraphTxt)) {
-                Files.delete(callGraphTxt);
             }
         } catch (Exception e) {
             // Ignore cleanup errors

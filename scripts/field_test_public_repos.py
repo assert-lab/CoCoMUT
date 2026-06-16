@@ -202,8 +202,6 @@ def run_extraction(
         call_graph,
         "--resolution",
         resolution,
-        "--output",
-        "jsonl",
         "--output-dir",
         str(artifact_dir),
     ]

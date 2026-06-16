@@ -434,12 +434,27 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             int start = Math.max(0, position.getSourceStart());
             int end = Math.min(source.length(), position.getSourceEnd() + 1);
             if (end > start) {
-                return source.substring(start, end);
+                return stripLeadingJavadoc(source.substring(start, end));
             }
         } catch (Exception ignored) {
             // Source slices are optional context; missing text should not drop the method.
         }
         return "";
+    }
+
+    private static String stripLeadingJavadoc(String source) {
+        int first = 0;
+        while (first < source.length() && Character.isWhitespace(source.charAt(first))) {
+            first++;
+        }
+        if (!source.startsWith("/**", first)) {
+            return source;
+        }
+        int end = source.indexOf("*/", first + 3);
+        if (end < 0) {
+            return source;
+        }
+        return source.substring(end + 2).stripLeading();
     }
 
     private static String docComment(CtElement element) {

@@ -25,9 +25,7 @@ public final class AnalysisOptions {
     }
 
     public enum OutputMode {
-        JSON,
-        JSONL,
-        BOTH
+        JSONL
     }
 
     public enum SourceResolution {
@@ -159,7 +157,7 @@ public final class AnalysisOptions {
     public static final class Builder {
         private Scope scope = Scope.ALL;
         private Path selectedCsv;
-        private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.CHA;
+        private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.AUTO;
         private Integer maxMethods;
         private Integer maxSourceFiles;
         private boolean attemptCompile;

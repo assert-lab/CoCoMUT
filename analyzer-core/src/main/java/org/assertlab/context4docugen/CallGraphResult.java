@@ -12,7 +12,7 @@ public class CallGraphResult {
     private final String classname;
     private final Set<String> callers;    // Methods that call this method
     private final Set<String> callees;    // Methods this method calls
-    private final String algorithm;        // CHA, RTA, SPARK, etc.
+    private final String algorithm;        // CHA, RTA, etc.
     private final long generationTime;
 
     private CallGraphResult(Builder builder) {

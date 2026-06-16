@@ -58,16 +58,14 @@ public class UndergradIssuesRegressionTest {
         Orchestrator orchestrator = new Orchestrator(
                 fixtureProject,
                 Orchestrator.ExecutionMode.SELECTED)
-                .setOutputMode(AnalysisOptions.OutputMode.JSON)
+                .setOutputMode(AnalysisOptions.OutputMode.JSONL)
                 .setOutputDirectory(output);
         orchestrator.execute();
         return orchestrator;
     }
 
     private void cleanGeneratedOutputs(Path fixtureProject) throws IOException {
-        deleteIfExists(fixtureProject.resolve("method_context_json"));
         Files.deleteIfExists(fixtureProject.resolve("methods.csv"));
-        Files.deleteIfExists(fixtureProject.resolve("Output_CallGraph_CHA.txt"));
     }
 
     private void deleteIfExists(Path path) throws IOException {
@@ -87,10 +85,7 @@ public class UndergradIssuesRegressionTest {
         assertEquals("The fixture has one selected method", 1,
                 ((Number) orchestrator.getExecutionReport().get("phase_2_methods_loaded")).intValue());
 
-        Path jsonFile = findJsonForMethod(orchestrator, "choose");
-        assertTrue("Expected JSON output for generic_choose", Files.exists(jsonFile));
-
-        JsonNode root = MAPPER.readTree(jsonFile.toFile());
+        JsonNode root = findJsonForMethod(orchestrator, "choose");
         JsonNode params = root.path("MUT").path("parameters");
 
         assertTrue("MUT.parameters should be an array", params.isArray());
@@ -116,10 +111,7 @@ public class UndergradIssuesRegressionTest {
         Path project = fixture("fixture-parameter-provenance-project");
         Orchestrator orchestrator = runSelectedFixture(project);
 
-        Path jsonFile = findJsonForMethod(orchestrator, "choose");
-        assertTrue("Expected JSON output for generic_choose", Files.exists(jsonFile));
-
-        JsonNode root = MAPPER.readTree(jsonFile.toFile());
+        JsonNode root = findJsonForMethod(orchestrator, "choose");
         JsonNode provenance = root.path("provenance");
 
         assertTrue(
@@ -149,7 +141,7 @@ public class UndergradIssuesRegressionTest {
         String status = String.valueOf(report.get("status"));
 
         boolean sanitizedAndGenerated = filesGenerated == 1
-                && hasAnyJsonFile(Path.of(String.valueOf(report.get("phase_5_output_directory"))));
+                && Files.exists(Path.of(String.valueOf(report.get("phase_5_jsonl_file"))));
         boolean clearlyReportedFailure = !"SUCCESS".equals(status)
                 || report.containsKey("phase_5_files_failed")
                 || report.containsKey("phase_5_generation_failures");
@@ -160,27 +152,17 @@ public class UndergradIssuesRegressionTest {
                 sanitizedAndGenerated || clearlyReportedFailure);
     }
 
-    private boolean hasAnyJsonFile(Path dir) throws IOException {
-        if (!Files.exists(dir)) return false;
-        try (Stream<Path> files = Files.list(dir)) {
-            return files.anyMatch(p -> p.getFileName().toString().endsWith(".json"));
+    private JsonNode findJsonForMethod(Orchestrator orchestrator, String methodName) throws IOException {
+        Path jsonl = Path.of(String.valueOf(orchestrator.getExecutionReport().get("phase_5_jsonl_file")));
+        if (!Files.exists(jsonl)) {
+            throw new AssertionError("No JSONL output generated at " + jsonl);
         }
-    }
-
-    private Path findJsonForMethod(Orchestrator orchestrator, String methodName) throws IOException {
-        Path dir = Path.of(String.valueOf(orchestrator.getExecutionReport().get("phase_5_output_directory")));
-        if (!Files.exists(dir)) {
-            return dir.resolve("__missing__.json");
-        }
-        try (Stream<Path> files = Files.list(dir)) {
-            for (Path file : files.filter(p -> p.getFileName().toString().endsWith(".json"))
-                    .collect(Collectors.toList())) {
-                JsonNode json = MAPPER.readTree(file.toFile());
-                if (methodName.equals(json.path("MUT").path("method_name").asText())) {
-                    return file;
-                }
+        for (String line : Files.readAllLines(jsonl)) {
+            JsonNode json = MAPPER.readTree(line);
+            if (methodName.equals(json.path("MUT").path("method_name").asText())) {
+                return json;
             }
         }
-        return dir.resolve("__missing__.json");
+        throw new AssertionError("No JSONL row found for method " + methodName + " in " + jsonl);
     }
 }

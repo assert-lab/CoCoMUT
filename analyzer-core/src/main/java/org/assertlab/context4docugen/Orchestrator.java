@@ -20,10 +20,10 @@ import java.util.*;
  * Phase 2: MethodIdentifier - Scan Java files, extract methods, generate URI identities
  * Phase 3: CallGraphGenerator - Generate call graphs for methods when configured
  * Phase 4: ContextExtractor - Extract method bodies, javadocs, class hierarchy
- * Phase 5: JsonGenerator - Generate JSON/JSONL outputs
+ * Phase 5: JsonGenerator - Generate JSONL output
  *
  * Input: Project root path
- * Output: JSON/JSONL method contexts and execution report
+ * Output: JSONL method contexts and execution report
  */
 public class Orchestrator {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
@@ -33,7 +33,7 @@ public class Orchestrator {
     private final Map<String, Object> executionReport;
     private Path inputCsvPath;  // SELECTED mode: override default inputs_selected.csv location
     private MethodSourceStrategy methodSourceStrategy;  // optional Phase 2 override (FULL mode)
-    private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.CHA;
+    private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.AUTO;
     private Integer maxMethods;
     private Integer maxSourceFiles;
     private boolean attemptCompile;
@@ -191,6 +191,7 @@ public class Orchestrator {
             executionReport.put("failure_codes", failureCodes.isEmpty()
                     ? List.of(FailureCode.NONE.toString())
                     : failureCodes.stream().map(Enum::toString).toList());
+            writeExecutionReportIfPossible();
             restoreSourceFileLimit();
             SourceBackends.clearConfiguration();
         }
@@ -441,7 +442,7 @@ public class Orchestrator {
     }
 
     /**
-     * Phase 5: Generate JSON for ALL methods (no sampling) and collect file paths.
+     * Phase 5: Generate JSONL for ALL methods (no sampling) and collect file paths.
      */
     private boolean executePhase5() {
         try {
@@ -455,31 +456,15 @@ public class Orchestrator {
             Files.createDirectories(root);
             executionReport.put("output_directory", root.toString());
 
-            Path jsonDir = root.resolve("method_context_json");
-            JsonGenerator jsonGen = new JsonGenerator(jsonDir, methodContexts, callGraphGenerator);
-            int filesGenerated = 0;
-            if (outputMode == AnalysisOptions.OutputMode.JSON || outputMode == AnalysisOptions.OutputMode.BOTH) {
-                Files.createDirectories(jsonDir);
-                filesGenerated = jsonGen.generateJsonFiles(methodContexts);
-            }
-
+            JsonGenerator jsonGen = new JsonGenerator(root, methodContexts, callGraphGenerator);
             Path jsonlPath = root.resolve(outputJsonlFilename());
-            int jsonlRows = 0;
-            if (outputMode == AnalysisOptions.OutputMode.JSONL || outputMode == AnalysisOptions.OutputMode.BOTH) {
-                jsonlRows = jsonGen.generateJsonLinesFile(methodContexts, jsonlPath);
-            }
+            int jsonlRows = jsonGen.generateJsonLinesFile(methodContexts, jsonlPath);
 
-            executionReport.put("phase_5_output_mode", outputMode.toString());
-            if (outputMode == AnalysisOptions.OutputMode.JSON || outputMode == AnalysisOptions.OutputMode.BOTH) {
-                executionReport.put("phase_5_output_directory", jsonDir.toString());
-            }
-            if (outputMode == AnalysisOptions.OutputMode.JSONL || outputMode == AnalysisOptions.OutputMode.BOTH) {
-                executionReport.put("phase_5_jsonl_file", jsonlPath.toString());
-                executionReport.put("phase_5_jsonl_rows", jsonlRows);
-            }
-            executionReport.put("phase_5_files_generated", filesGenerated);
-            if ((outputMode == AnalysisOptions.OutputMode.JSON || outputMode == AnalysisOptions.OutputMode.BOTH)
-                    && filesGenerated < methodContexts.size()) {
+            executionReport.put("phase_5_output_mode", "JSONL");
+            executionReport.put("phase_5_jsonl_file", jsonlPath.toString());
+            executionReport.put("phase_5_jsonl_rows", jsonlRows);
+            executionReport.put("phase_5_files_generated", jsonlRows);
+            if (jsonlRows < methodContexts.size()) {
                 failureCodes.add(FailureCode.JSON_GENERATION_FAILED);
             }
             return true;
@@ -577,6 +562,17 @@ public class Orchestrator {
             }
         }
         return output;
+    }
+
+    private void writeExecutionReportIfPossible() {
+        try {
+            Path reportPath = outputRoot().resolve("extraction_report.json");
+            Files.createDirectories(reportPath.getParent());
+            executionReport.put("extraction_report_file", reportPath.toString());
+            OBJECT_MAPPER.writerWithDefaultPrettyPrinter().writeValue(reportPath.toFile(), executionReport);
+        } catch (Exception e) {
+            executionReport.put("extraction_report_error", e.getMessage());
+        }
     }
 
     private static boolean hasJavaSources(Path sourceRoot) {

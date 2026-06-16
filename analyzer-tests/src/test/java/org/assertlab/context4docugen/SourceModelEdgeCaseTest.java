@@ -105,6 +105,10 @@ public class SourceModelEdgeCaseTest {
             assertEquals("resolved_candidate", context.javadocMetadata().get("inheritdoc_resolution"));
             assertTrue(context.javadocMetadata().containsKey("inherited_javadoc_candidates"));
             assertFalse(context.methodBody().isBlank());
+            assertEquals("{@inheritDoc}", context.javadoc().replaceAll("\\s+", ""));
+            assertTrue("Method source should keep annotations", context.methodBody().startsWith("@Deprecated"));
+            assertFalse("Method source must not include leading Javadoc",
+                    context.methodBody().contains("/**"));
         } finally {
             deleteRecursively(project);
         }

@@ -64,15 +64,12 @@ public final class Context4DocuGenCommand implements Callable<Integer> {
         @Option(names = "--entry-points", description = "Shortcut for --scope entry-points.")
         private boolean entryPoints;
 
-        @Option(names = "--call-graph", defaultValue = "cha", description = "Call graph mode: none, cha, rta, or auto.")
+        @Option(names = "--call-graph", defaultValue = "auto", description = "Call graph mode: none, cha, rta, or auto.")
         private String callGraph;
 
         @Option(names = "--resolution", defaultValue = "noclasspath",
                 description = "Source resolution mode: noclasspath, classpath, or auto.")
         private String resolution;
-
-        @Option(names = "--output", defaultValue = "jsonl", description = "Output mode: json, jsonl, or both.")
-        private String output;
 
         @Option(names = "--output-dir", description = "Directory for generated artifacts. Defaults to ./c4dg_output/<project-name>.")
         private Path outputDir;
@@ -119,7 +116,7 @@ public final class Context4DocuGenCommand implements Callable<Integer> {
                     .methodSelection(selection)
                     .callGraphAlgorithm(toAlgorithm(callGraph))
                     .sourceResolution(toSourceResolution(resolution))
-                    .outputMode(toOutputMode(output))
+                    .outputMode(AnalysisOptions.OutputMode.JSONL)
                     .maxMethods(maxMethods)
                     .maxSourceFiles(maxSourceFiles)
                     .sourceSets(toSourceSets(sourceSet))
@@ -418,15 +415,6 @@ public final class Context4DocuGenCommand implements Callable<Integer> {
             case "classpath" -> AnalysisOptions.SourceResolution.CLASSPATH;
             case "auto" -> AnalysisOptions.SourceResolution.AUTO;
             default -> throw new IllegalArgumentException("Unsupported --resolution: " + value);
-        };
-    }
-
-    private static AnalysisOptions.OutputMode toOutputMode(String value) {
-        return switch (normalize(value)) {
-            case "json" -> AnalysisOptions.OutputMode.JSON;
-            case "jsonl" -> AnalysisOptions.OutputMode.JSONL;
-            case "both" -> AnalysisOptions.OutputMode.BOTH;
-            default -> throw new IllegalArgumentException("Unsupported --output: " + value);
         };
     }
 

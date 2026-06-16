@@ -52,22 +52,15 @@ public class FullIntegrationTest {
 
     private void cleanupPath(Path root) {
         try {
-            Path jsonDir = root.resolve("method_context_json");
-            Path csv = root.resolve("methods.csv");
-            Path csvBackup = root.resolve("methods.csv.backup");
-            Path callGraph = root.resolve("Output_CallGraph_CHA.txt");
+            Path outputDir = Path.of(System.getProperty("user.dir")).resolve("c4dg_output");
 
-            if (Files.exists(jsonDir)) {
-                Files.walk(jsonDir)
+            if (Files.exists(outputDir)) {
+                Files.walk(outputDir)
                         .sorted((a, b) -> b.compareTo(a))
                         .forEach(path -> {
                             try { Files.delete(path); } catch (Exception ignored) {}
                         });
             }
-            
-            Files.deleteIfExists(csv);
-            Files.deleteIfExists(csvBackup);
-            Files.deleteIfExists(callGraph);
         } catch (Exception e) {
             System.err.println("Cleanup warning: " + e.getMessage());
         }
