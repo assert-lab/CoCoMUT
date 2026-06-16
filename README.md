@@ -115,14 +115,22 @@ Useful options:
 
 ```text
 --scope all|entry-points       Method scope for source scanning
---call-graph none|cha|rta|auto Optional SootUp call graph mode
+  --call-graph none|cha|rta|auto Optional SootUp call graph mode
 --resolution noclasspath|classpath|auto
                                 Spoon source-resolution mode
 --output json|jsonl|both       Output format
+--output-dir DIR               Directory for generated artifacts
 --max-methods N                Limit methods for smoke tests
 --max-source-files N           Limit parsed Java files for low-memory smoke tests
 --source-set all|main|test|integration_test|generated|example|unknown
                                 Filter methods by source set
+--package NAME                 Include package prefix, repeatable/comma-separated
+--class NAME                   Include fully qualified or simple class name
+--method NAME                  Include method name or method URI substring
+--visibility public|protected|package-private|private
+                                Include methods with matching visibility
+--include-path GLOB            Include source path glob relative to project root
+--exclude-path GLOB            Exclude source path glob relative to project root
 --compile                      Attempt Maven/Gradle compilation before analysis
 ```
 
@@ -149,6 +157,25 @@ For documentation datasets, prefer:
 example, integration-test, or unknown source roots. Use `--source-set all` or
 omit the flag to preserve the default behavior.
 
+Layered selection is available when you do not want the whole repository:
+
+```bash
+./bin/c4dg extract \
+  --project /path/to/java/project \
+  --package org.example.api \
+  --class PublicApi \
+  --method parse \
+  --visibility public \
+  --include-path 'src/main/java/**/*.java' \
+  --exclude-path '**/generated/**' \
+  --output jsonl
+```
+
+Repository-wide extraction writes `method_contexts.jsonl`. Package, class, or
+method-filtered extraction writes a distinguishable JSONL filename based on the
+selected thing, for example `package__org.example.api.jsonl`,
+`class__org.example.PublicApi.jsonl`, or `method__parse.jsonl`.
+
 Validation examples:
 
 ```bash
@@ -165,13 +192,27 @@ Schema examples:
 ./bin/c4dg schema selected-methods --output selected-methods.schema.json
 ```
 
-Outputs are written into the analyzed project:
+By default, generated artifacts are written outside the analyzed project:
 
 ```text
-methods.csv
-method_context_json/*.json
-method_contexts.jsonl          when --output jsonl|both
-Output_CallGraph_CHA.txt
+./c4dg_output/<project-name>/
+  method_contexts.jsonl
+  method_context_json/*.json   when --output json|both
+  Output_CallGraph_CHA.txt     when CHA is used
+  Output_CallGraph_RTA.txt     when RTA is used
+  selected_method_failures.jsonl
+  method_context_failures.jsonl
+```
+
+Use `--output-dir` to choose an explicit destination:
+
+```bash
+./bin/c4dg extract --project /path/to/java/project --output-dir ./results/project-name
+```
+
+Failure artifacts are written next to the normal outputs:
+
+```text
 selected_method_failures.jsonl when selected CSV rows cannot be matched
 method_context_failures.jsonl  when a discovered method cannot be contextualized
 ```

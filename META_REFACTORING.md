@@ -112,8 +112,11 @@ The current group adds scoped source-model caching, low-memory source-file limit
 The current group hardens the expanded field-test baseline and adds auto-mode
 build/classpath behavior.
 
-- Deduplicates Spoon-discovered methods by URI before writing `methods.csv`.
-- Records per-method JSONL generation results so CSV enrichment marks JSONL rows as `SUCCESS`.
+- Uses Spoon's erased/semantic executable signature for method URI identity while keeping the source-level display signature in JSON.
+- Removes default `methods.csv` generation and the CSV enrichment phase.
+- Writes generated artifacts outside the analyzed repository by default under `./c4dg_output/<project-name>/`.
+- Names human-readable call graph dumps by the effective algorithm: `Output_CallGraph_CHA.txt` or `Output_CallGraph_RTA.txt`.
+- Adds layered method selection filters for package, class, method, visibility, and include/exclude source path globs.
 - Guards optional Spoon context extraction against no-classpath generic `StackOverflowError` cases.
 - Adds regression tests for overlapping source roots and JSONL per-method result tracking.
 - Adds `--resolution auto` and `--call-graph auto`.

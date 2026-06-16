@@ -15,6 +15,11 @@ selected_method_failures.jsonl
 method_context_failures.jsonl
 ```
 
+Generated artifacts are written under `./c4dg_output/<project-name>/` by
+default, or under `--output-dir` when supplied. C4DG should not write generated
+analysis artifacts into the analyzed repository unless the user explicitly sets
+the output directory to that repository.
+
 For low-memory smoke tests, use `--max-methods N` and `--max-source-files N`.
 The source-file cap is useful for quickly testing huge repositories, but it is
 a sampling/control knob, not a full-repository coverage result.
@@ -23,6 +28,10 @@ a sampling/control knob, not a full-repository coverage result.
 roots. For documentation-dataset runs, pass `--source-set main` so methods from
 test, generated, example, integration-test, or unknown source roots are excluded
 before context generation.
+
+Additional filters can restrict extraction to packages, classes, methods,
+visibilities, and source path globs. These filters are syntactic/source-level
+filters; they are not semantic reachability queries.
 
 ## Call Graph Precision
 

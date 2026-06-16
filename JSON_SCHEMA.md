@@ -39,13 +39,13 @@ partial C4DG records early.
 ## MUT
 
 ```text
-method_uri                Stable method URI: path#qualified.Class.method(signature)
+method_uri                Stable method URI: path#qualified.Class.method(erased-parameter-signature)
 method_name               Simple method or constructor name
 source_set                main|test|integration_test|generated|example|unknown
-signature                 Qualified method signature
+signature                 Qualified human-readable source signature
 qualified_name            qualified class + method name
 line_number               Source line
-parameters                Objects with name, type, modifiers, annotations
+parameters                Objects with name, source type, erased_type, modifiers, annotations
 annotations               Method annotations
 throws                    Declared thrown exception types
 lines_of_code             Source LOC heuristic
