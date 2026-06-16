@@ -14,10 +14,10 @@ By default it writes preserved local artifacts outside Maven `target/`:
 experiments/expanded-public-repos-auto-main/
 ```
 
-That matters because `mvn clean` deletes `target/`. The earlier 541-repository
-auto sweep wrote under `target/field-tests/expanded-public-repos-auto`, so its
-large local CSV/checkouts/logs were disposable. The numeric summary below is
-preserved in this tracked report; rerun the wrapper to regenerate full CSVs.
+That matters because `mvn clean` deletes `target/`. The current 541-repository
+auto sweep is preserved under `experiments/expanded-public-repos-auto-main/`.
+The directory is ignored by Git because it contains large checkouts, logs, and
+generated JSONL files.
 
 The completed auto-resolution and auto-call-graph sweep used this command shape:
 
@@ -32,8 +32,10 @@ scripts/field_test_public_repos.py \
   --compile-timeout 60 \
   --retry-max-source-files 1500 \
   --retry-max-methods 5000 \
+  --retry-smoke-source-files 100 \
+  --retry-smoke-methods 250 \
   --java-home /usr/lib/jvm/java-17-openjdk \
-  --output-dir target/field-tests/expanded-public-repos-auto
+  --output-dir experiments/expanded-public-repos-auto-main
 ```
 
 This run attempts Maven/Gradle compilation when useful, uses Spoon classpath-aware extraction only when classpath evidence is usable, falls back to Spoon no-classpath extraction when build/classpath resolution is incomplete, and asks SootUp for RTA call graphs when compiled class directories exist.
@@ -71,36 +73,30 @@ Final summary:
 
 ```text
 repositories selected: 541
-successes: 534
-clone-timeout skips: 5
-analysis timeouts: 2
-identified methods in successful runs: 2373883
-generated JSONL rows in successful runs: 2373883
+successes: 541
+clone-timeout skips: 0
+analysis timeouts: 0
+identified methods in successful runs: 1913981
+generated JSONL rows in successful runs: 1913981
 method-to-context coverage in successful runs: 100.00%
-compile-success repositories: 137
-call-graph-available repositories: 209
-capped retry runs: 69
+compile-success repositories: 169
+call-graph-available repositories: 231
+capped retry runs: 106
 ```
 
 Status breakdown:
 
 | Status | Count | Meaning |
 | --- | ---: | --- |
-| Success | 534 | C4DG completed and emitted one JSONL row per selected method. |
-| Skipped | 5 | Git clone timed out before C4DG analysis started. |
-| Timeout | 2 | C4DG analysis exceeded the configured per-repository timeout. |
+| Success | 541 | C4DG completed and emitted one JSONL row per selected method. |
+| Skipped | 0 | Git clone timed out before C4DG analysis started. |
+| Timeout | 0 | C4DG analysis exceeded the configured per-repository timeout. |
 
 Non-success repositories:
 
 | Repository | Status | Note |
 | --- | --- | --- |
-| `kubernetes-client/java` | `TIMEOUT` | analysis timeout |
-| `eclipse-milo/milo` | `TIMEOUT` | analysis timeout |
-| `tlaplus/tlaplus` | `SKIPPED` | clone timeout |
-| `airbnb/epoxy` | `SKIPPED` | clone timeout |
-| `javamelody/javamelody` | `SKIPPED` | clone timeout |
-| `apache/zeppelin` | `SKIPPED` | clone timeout |
-| `tronprotocol/java-tron` | `SKIPPED` | clone timeout |
+| - | - | - |
 
 ## Auto Behavior
 
@@ -108,19 +104,19 @@ The sweep did not require repositories to compile. Compilation is opportunistic:
 
 | Signal | Count |
 | --- | ---: |
-| Compile succeeded | 137 repositories |
-| Compile failed or was unavailable | 397 repositories |
-| Call graph available | 209 repositories |
-| Call graph unavailable | 325 repositories |
+| Compile succeeded | 169 repositories |
+| Compile failed or was unavailable | 372 repositories |
+| Call graph available | 231 repositories |
+| Call graph unavailable | 310 repositories |
 
 Source backend mode distribution over generated method contexts:
 
 | Source backend mode | Method contexts |
 | --- | ---: |
-| `noclasspath_fallback` | 1526361 |
-| `noclasspath_limited` | 627414 |
-| `noclasspath` | 174046 |
-| `classpath` | 46062 |
+| `noclasspath_fallback` | 1186464 |
+| `noclasspath_limited` | 595000 |
+| `noclasspath` | 90063 |
+| `classpath` | 42454 |
 
 Interpretation:
 
@@ -135,20 +131,22 @@ Retry distribution:
 
 | Retry mode | Count | Meaning |
 | --- | ---: | --- |
-| `none` | 467 | Completed without field-test caps. |
-| `max_source_files=1500` | 65 | Completed after limiting parsed source files. |
-| `max_source_files=1500;max_methods=5000` | 4 | Completed as a bounded 5,000-method run. |
+| `none` | 435 | Completed without field-test caps. |
+| `max_source_files=1500` | 85 | Completed after limiting parsed source files. |
+| `max_source_files=1500;max_methods=5000;source_set=main,unknown` | 17 | Completed as a bounded 5,000-method run after allowing unknown source roots for nonstandard layouts. |
+| `max_source_files=1500;smoke_resolution=noclasspath;smoke_call_graph=none;smoke_max_source_files=100;smoke_max_methods=250` | 4 | Completed as last-resort source-only smoke runs for very large/slow repositories. |
 
 Large successful examples include:
 
 - `turms-im/turms`: 35724 method contexts.
 - `infinispan/infinispan`: 35412 method contexts.
-- `google/j2cl`: 30089 method contexts.
-- `AOL-archive/cyclops`: 28404 method contexts.
-- `apache/tomcat`: 27963 method contexts.
-- `microsoft/typespec`: 26597 method contexts.
-- `aeron-io/aeron`: 19724 method contexts, clean auto result after capped source parsing.
-- `apache/pdfbox`: 7874 method contexts, clean auto result.
+- `orientechnologies/orientdb`: 26231 method contexts.
+- `microsoft/typespec`: 25736 method contexts.
+- `TGX-Android/Telegram-X`: 22778 method contexts, capped source parsing.
+- `apache/paimon`: 20799 method contexts.
+- `theonedev/onedev`: 20515 method contexts after stale partial checkout cleanup.
+- `netty/netty`: 20086 method contexts.
+- `apache/pdfbox`: 7874 method contexts.
 - `apache/commons-lang`: 3764 method contexts, clean auto result.
 
 ## Javadoc Tag Cases
@@ -157,24 +155,24 @@ The field-test runner counts Javadoc tag patterns from generated JSONL. The post
 
 ```bash
 python scripts/extract_javadoc_tag_cases.py \
-  --output-dir target/field-tests/expanded-public-repos-auto
+  --output-dir experiments/expanded-public-repos-auto-main
 ```
 
 produced:
 
 ```text
-javadoc_tag_cases.csv rows: 45468
-methods with @see tags: 30826
-methods with {@inheritDoc}: 14856
-methods with inherited-doc candidates: 5386
+javadoc_tag_cases.csv rows: 43006
+methods with @see tags: 28903
+methods with {@inheritDoc}: 14317
+methods with inherited-doc candidates: 4193
 ```
 
 `{@inheritDoc}` resolution in the extracted case CSV:
 
 | Resolution | Count |
 | --- | ---: |
-| `resolved_candidate` | 8637 |
-| `unresolved` | 6219 |
+| `resolved_candidate` | 7375 |
+| `unresolved` | 6942 |
 
 Repositories with many `@see` methods:
 
@@ -185,44 +183,34 @@ Repositories with many `@see` methods:
 | `apache/groovy` | 991 | 1754 | 68 |
 | `redis/lettuce` | 973 | 0 | 0 |
 | `spring-projects/spring-framework` | 851 | 19 | 0 |
-| `discord-jda/JDA` | 846 | 7 | 7 |
+| `discord-jda/JDA` | 847 | 7 | 7 |
 | `aeron-io/aeron` | 843 | 505 | 0 |
-| `helidon-io/helidon` | 816 | 14 | 14 |
 | `docker-java/docker-java` | 813 | 3 | 3 |
-| `apache/commons-lang` | 440 | 142 | 92 |
+| `helidon-io/helidon` | 808 | 14 | 14 |
+| `Jaspersoft/jasperreports` | 804 | 0 | 0 |
 
 Repositories with many `{@inheritDoc}` methods:
 
 | Repository | `{@inheritDoc}` methods | Candidates |
 | --- | ---: | ---: |
-| `microsoft/typespec` | 2407 | 92 |
+| `microsoft/typespec` | 2406 | 92 |
 | `apache/groovy` | 1754 | 68 |
 | `ff4j/ff4j` | 1142 | 937 |
-| `apache/jmeter` | 795 | 469 |
+| `apache/jmeter` | 794 | 0 |
 | `aeron-io/agrona` | 726 | 293 |
 | `jtablesaw/tablesaw` | 626 | 515 |
-| `Netflix/metacat` | 525 | 374 |
+| `Netflix/metacat` | 525 | 0 |
 | `aeron-io/aeron` | 505 | 0 |
 | `openrewrite/rewrite` | 450 | 0 |
-| `apache/pdfbox` | 191 | 112 |
+| `Netflix/genie` | 403 | 275 |
 
 ## Source Set Attention
 
-The completed auto sweep was run before source-set filtering was added, so it
-kept public entry points across discovered source roots. C4DG now supports
-`--source-set main` for dataset runs that should exclude tests, examples,
-generated code, integration tests, and unknown source roots.
-
-Whole-corpus source-set distribution:
-
-| Source set | Method contexts |
-| --- | ---: |
-| `main` | 1887224 |
-| `unknown` | 200905 |
-| `test` | 151131 |
-| `generated` | 104067 |
-| `example` | 30114 |
-| `integration_test` | 442 |
+The completed auto sweep used `--source-set main` by default. That excludes
+test, example, generated, and integration-test source roots for normal layouts.
+Some repositories use nonstandard layouts where valid production code is
+classified as `unknown`; the field-test runner retries those cases with
+`main,unknown` and records that retry mode explicitly.
 
 For documentation-dataset construction, rerun extraction with:
 
@@ -240,7 +228,7 @@ High-value manual inspection targets:
 - `jfree/jfreechart`, `ReactiveX/RxJava`, `spring-projects/spring-framework`: dense `@see` usage.
 - `ff4j/ff4j`, `apache/jmeter`, `jtablesaw/tablesaw`: many resolvable `{@inheritDoc}` candidates.
 - `aeron-io/aeron`, `aeron-io/agrona`, `classgraph/classgraph`: clean auto-mode library/tool cases.
-- `kubernetes-client/java`, `eclipse-milo/milo`: remaining analysis-timeout cases.
+- `kubernetes-client/java`, `lakesoul-io/LakeSoul`, `apache/incubator-seata`, `eclipse-milo/milo`: last-resort source-only smoke cases.
 
 ## Historical Source-Only Sweep
 
@@ -261,8 +249,8 @@ It completed 541/541 repositories in source-only mode with 2686556 generated JSO
 
 ## Remaining Follow-Up
 
-- Rerun the expanded auto sweep with `--source-set main` when a main-code-only dataset baseline is needed.
 - Add a faster preflight size model so very large repositories can start directly in bounded mode.
-- Investigate the two analysis timeouts: `kubernetes-client/java` and `eclipse-milo/milo`.
+- Add per-method `source_set` to JSONL metadata so source-set distributions can be audited without re-running extraction.
+- Investigate whether the four smoke-fallback repositories can be handled with a better preflight size model.
 - Inspect `javadoc_tag_cases.csv` for `@see` target quality and `{@inheritDoc}` candidate correctness.
 - Continue adding small regression fixtures for `@see`, `{@inheritDoc}`, source-set filtering, classpath-aware fallback, and capped extraction.

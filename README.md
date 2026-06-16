@@ -293,3 +293,9 @@ variables, for example:
 ```bash
 LIMIT=20 OUTPUT_DIR=experiments/smoke-auto-main scripts/run_expanded_auto_field_study.sh
 ```
+
+For broad corpus runs, the wrapper is resume-safe and uses bounded retries:
+source-file caps for large repositories, `main,unknown` for nonstandard source
+layouts, and a final source-only smoke cap for repositories that would otherwise
+timeout under auto build/call-graph mode. Exact retry modes are recorded in the
+generated `results.tsv` and `summary_counts.txt`.
