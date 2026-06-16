@@ -179,6 +179,7 @@ def read_log_tail(log_path: Path, max_chars: int = 4000) -> str:
 def run_extraction(
     root: Path,
     checkout: Path,
+    artifact_dir: Path,
     log_path: Path,
     timeout: int,
     env: dict[str, str],
@@ -188,11 +189,8 @@ def run_extraction(
     call_graph: str,
     source_set: str,
 ) -> tuple[int | None, dict[str, str], str]:
-    for output_name in ("method_contexts.jsonl", "methods.csv"):
-        try:
-            (checkout / output_name).unlink()
-        except FileNotFoundError:
-            pass
+    shutil.rmtree(artifact_dir, ignore_errors=True)
+    artifact_dir.mkdir(parents=True, exist_ok=True)
     command = [
         str(root / "bin" / "c4dg"),
         "extract",
@@ -206,6 +204,8 @@ def run_extraction(
         resolution,
         "--output",
         "jsonl",
+        "--output-dir",
+        str(artifact_dir),
     ]
     if source_set and source_set != "all":
         command.extend(["--source-set", source_set])
@@ -244,6 +244,7 @@ def run_repo(
 ) -> dict[str, str]:
     safe = repo.replace("/", "__")
     checkout = output_dir / "checkouts" / safe
+    artifact_dir = output_dir / "outputs" / safe
     logs = output_dir / "logs"
     logs.mkdir(parents=True, exist_ok=True)
     checkout.parent.mkdir(parents=True, exist_ok=True)
@@ -284,7 +285,7 @@ def run_repo(
         env["PATH"] = str(Path(java_home) / "bin") + os.pathsep + env.get("PATH", "")
     log_path = logs / f"{safe}.c4dg.log"
     start = time.time()
-    status, data, tail = run_extraction(root, checkout, log_path, timeout, env,
+    status, data, tail = run_extraction(root, checkout, artifact_dir, log_path, timeout, env,
                                         None, None, resolution, call_graph, source_set)
     retry_mode = "none"
     active_source_set = source_set
@@ -295,7 +296,7 @@ def run_repo(
         retry_mode = f"max_source_files={retry_max_source_files}"
         retry_log = logs / f"{safe}.c4dg.retry.log"
         status, data, retry_tail = run_extraction(
-            root, checkout, retry_log, timeout, env, retry_max_source_files, None,
+            root, checkout, artifact_dir, retry_log, timeout, env, retry_max_source_files, None,
             resolution, call_graph, source_set)
         tail = retry_tail
         note = "retry capped source files" if status == 0 else f"retry exit {status}"
@@ -308,6 +309,7 @@ def run_repo(
         status, data, retry_tail = run_extraction(
             root,
             checkout,
+            artifact_dir,
             retry_log,
             timeout,
             env,
@@ -328,6 +330,7 @@ def run_repo(
         status, data, retry_tail = run_extraction(
             root,
             checkout,
+            artifact_dir,
             retry_log,
             timeout,
             env,
@@ -354,6 +357,7 @@ def run_repo(
         status, data, retry_tail = run_extraction(
             root,
             checkout,
+            artifact_dir,
             retry_log,
             timeout,
             env,
@@ -381,7 +385,7 @@ def run_repo(
             "note": "analysis timeout",
         }
 
-    javadoc_counts = inspect_javadoc_tags(checkout)
+    javadoc_counts = inspect_javadoc_tags(artifact_dir)
     return {
         "repo": repo,
         "clone_status": "OK",
@@ -413,10 +417,11 @@ def run_repo(
     }
 
 
-def inspect_javadoc_tags(checkout: Path) -> dict[str, str]:
-    jsonl = checkout / "method_contexts.jsonl"
-    if not jsonl.exists():
+def inspect_javadoc_tags(artifact_dir: Path) -> dict[str, str]:
+    jsonl_files = sorted(artifact_dir.glob("*.jsonl"))
+    if not jsonl_files:
         return {}
+    jsonl = jsonl_files[0]
     see_methods = 0
     inheritdoc_methods = 0
     inheritdoc_with_candidates = 0

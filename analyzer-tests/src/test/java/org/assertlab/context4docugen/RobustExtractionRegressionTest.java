@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -79,6 +80,44 @@ public class RobustExtractionRegressionTest {
     }
 
     @Test
+    public void extractionWritesOutsideProjectAndSupportsLayeredFilters() throws Exception {
+        Path project = Files.createTempDirectory("c4dg-filter-project");
+        Path output = Files.createTempDirectory("c4dg-filter-output");
+        try {
+            write(project.resolve("src/main/java/demo/api/PublicApi.java"),
+                    "package demo.api; public class PublicApi { public void keep() {} private void hidden() {} }");
+            write(project.resolve("src/main/java/demo/internal/InternalApi.java"),
+                    "package demo.internal; public class InternalApi { public void drop() {} }");
+
+            ExtractionReport report = ContextExtractorService.createDefault().extract(ContextRequest.builder()
+                    .projectRoot(project)
+                    .methodSelection(MethodSelection.all())
+                    .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
+                    .outputMode(AnalysisOptions.OutputMode.JSONL)
+                    .outputDirectory(output)
+                    .packages(Set.of("demo.api"))
+                    .classes(Set.of("PublicApi"))
+                    .methods(Set.of("keep"))
+                    .visibilities(Set.of("public"))
+                    .includePathGlobs(Set.of("src/main/java/**/*.java"))
+                    .excludePathGlobs(Set.of("**/internal/**"))
+                    .build());
+
+            Path jsonl = output.resolve("method__keep.jsonl");
+            assertTrue(report.successful());
+            assertTrue("Filtered JSONL should be written under explicit output dir", Files.isRegularFile(jsonl));
+            assertTrue("Project root should not receive default JSONL artifact",
+                    Files.notExists(project.resolve("method_contexts.jsonl")));
+            List<String> rows = Files.readAllLines(jsonl);
+            assertEquals(1, rows.size());
+            assertTrue(rows.get(0).contains("demo.api.PublicApi.keep"));
+        } finally {
+            deleteRecursively(project);
+            deleteRecursively(output);
+        }
+    }
+
+    @Test
     public void selectedModeWritesFailureArtifactForUnmatchedRows() throws Exception {
         Path project = Files.createTempDirectory("c4dg-selected-project");
         try {
@@ -101,7 +140,10 @@ public class RobustExtractionRegressionTest {
                     .outputMode(AnalysisOptions.OutputMode.JSONL)
                     .build());
 
-            Path failures = project.resolve("selected_method_failures.jsonl");
+            Path failures = Path.of(System.getProperty("user.dir"))
+                    .resolve("c4dg_output")
+                    .resolve(project.getFileName().toString())
+                    .resolve("selected_method_failures.jsonl");
             assertTrue(report.successful());
             assertTrue(Files.isRegularFile(failures));
             List<String> lines = Files.readAllLines(failures);

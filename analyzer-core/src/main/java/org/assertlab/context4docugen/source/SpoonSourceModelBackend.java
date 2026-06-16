@@ -359,14 +359,15 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         String className = owner.getQualifiedName();
         String methodName = methodName(executable, owner);
         List<SourceParameter> parameters = parameters(executable);
-        String signature = methodName + "(" + parameterSignature(parameters) + ")";
-        String uri = methodUri(project.projectPath(), sourceFile, className, signature);
+        String displaySignature = methodName + "(" + parameterSignature(parameters, false) + ")";
+        String identitySignature = identitySignature(executable, methodName, parameters);
+        String uri = methodUri(project.projectPath(), sourceFile, className, identitySignature);
 
         return Optional.of(new SourceMethod(
                 uri,
                 className,
                 methodName,
-                signature,
+                displaySignature,
                 sourceFile,
                 position.getLine(),
                 Math.max(0, position.getColumn()),
@@ -390,20 +391,37 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     private static List<SourceParameter> parameters(CtExecutable<?> executable) {
         List<SourceParameter> parameters = new ArrayList<>();
         for (CtParameter<?> parameter : executable.getParameters()) {
+            String sourceType = typeName(parameter.getType());
             parameters.add(new SourceParameter(
                     parameter.getSimpleName(),
-                    typeName(parameter.getType()),
+                    sourceType,
+                    erasedType(parameter.getType(), sourceType),
                     modifiers(parameter),
                     annotations(parameter)));
         }
         return parameters;
     }
 
-    private static String parameterSignature(List<SourceParameter> parameters) {
+    private static String parameterSignature(List<SourceParameter> parameters, boolean erased) {
         return parameters.stream()
-                .map(p -> (p.type() + " " + p.name()).trim())
+                .map(p -> ((erased ? p.erasedType() : p.type()) + " " + p.name()).trim())
                 .reduce((a, b) -> a + ", " + b)
                 .orElse("");
+    }
+
+    private static String identitySignature(CtExecutable<?> executable, String methodName,
+                                            List<SourceParameter> parameters) {
+        if (executable instanceof CtMethod<?> method) {
+            try {
+                String signature = method.getSignature();
+                if (signature != null && !signature.isBlank()) {
+                    return signature.replaceAll("\\s+", " ").trim();
+                }
+            } catch (Exception | StackOverflowError ignored) {
+                // Fall back to the locally computed erased signature.
+            }
+        }
+        return methodName + "(" + parameterSignature(parameters, true) + ")";
     }
 
     private static String sourceSlice(CtElement element) {
@@ -492,7 +510,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 .toList()) {
             try {
                 String name = executable instanceof CtConstructor<?> ? type.getSimpleName() : executable.getSimpleName();
-                String signature = name + "(" + parameterSignature(parameters(executable)) + ")";
+                String signature = name + "(" + parameterSignature(parameters(executable), false) + ")";
                 methods.put(signature, signature);
             } catch (Exception | StackOverflowError ignored) {
                 // Some no-classpath generic declarations can recurse inside Spoon resolution.
@@ -759,6 +777,19 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return qualified != null && !qualified.isBlank() ? qualified : ref.getSimpleName();
         } catch (Exception | StackOverflowError e) {
             return ref.toString();
+        }
+    }
+
+    private static String erasedType(CtTypeReference<?> ref, String fallback) {
+        if (ref == null) {
+            return fallback;
+        }
+        try {
+            CtTypeReference<?> erasure = ref.getTypeErasure();
+            String name = typeName(erasure);
+            return name == null || name.isBlank() ? fallback : name;
+        } catch (Exception | StackOverflowError e) {
+            return fallback;
         }
     }
 

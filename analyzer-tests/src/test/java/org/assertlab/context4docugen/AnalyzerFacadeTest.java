@@ -67,12 +67,14 @@ public class AnalyzerFacadeTest {
                         + focal + "|" + testPrefix + "|" + docstring + "|" + id + "\n");
 
         Orchestrator orch = new Orchestrator(fixtureRoot, Orchestrator.ExecutionMode.SELECTED)
-                .setInputCsvPath(tempCsv);
+                .setInputCsvPath(tempCsv)
+                .setOutputMode(AnalysisOptions.OutputMode.JSON)
+                .setOutputDirectory(Files.createTempDirectory("c4dg-selected-json"));
         boolean ok = orch.execute();
 
         assertTrue("SELECTED-mode pipeline should succeed", ok);
 
-        Path jsonFile = findJsonForMethod("greet");
+        Path jsonFile = findJsonForMethod(Path.of(String.valueOf(orch.getExecutionReport().get("phase_5_output_directory"))), "greet");
         assertTrue("Expected JSON output at " + jsonFile, Files.exists(jsonFile));
 
         JsonNode json = new ObjectMapper().readTree(jsonFile.toFile());
@@ -147,9 +149,13 @@ public class AnalyzerFacadeTest {
     @Test
     public void fullModeJsonOmitsResearchFields() throws Exception {
         // FULL mode has no CSV-origin metadata → research fields must be absent
-        AnalyzerFacade.analyze(fixtureRoot);
+        Path output = Files.createTempDirectory("c4dg-full-json");
+        AnalyzerFacade.analyze(fixtureRoot, AnalysisOptions.builder()
+                .outputMode(AnalysisOptions.OutputMode.JSON)
+                .outputDirectory(output)
+                .build());
 
-        Path greetJson = findJsonForMethod("greet");
+        Path greetJson = findJsonForMethod(output.resolve("method_context_json"), "greet");
         assertTrue("FULL-mode greet JSON should exist", Files.exists(greetJson));
 
         JsonNode json = new ObjectMapper().readTree(greetJson.toFile());
@@ -159,8 +165,7 @@ public class AnalyzerFacadeTest {
                 json.has("test_prefix"));
     }
 
-    private Path findJsonForMethod(String methodName) throws Exception {
-        Path jsonDir = fixtureRoot.resolve("method_context_json");
+    private Path findJsonForMethod(Path jsonDir, String methodName) throws Exception {
         try (var files = Files.list(jsonDir)) {
             for (Path file : files.filter(p -> p.getFileName().toString().endsWith(".json")).toList()) {
                 JsonNode json = new ObjectMapper().readTree(file.toFile());

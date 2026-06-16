@@ -71,8 +71,11 @@ public final class Context4DocuGenCommand implements Callable<Integer> {
                 description = "Source resolution mode: noclasspath, classpath, or auto.")
         private String resolution;
 
-        @Option(names = "--output", defaultValue = "json", description = "Output mode: json, jsonl, or both.")
+        @Option(names = "--output", defaultValue = "jsonl", description = "Output mode: json, jsonl, or both.")
         private String output;
+
+        @Option(names = "--output-dir", description = "Directory for generated artifacts. Defaults to ./c4dg_output/<project-name>.")
+        private Path outputDir;
 
         @Option(names = "--max-methods", description = "Limit methods for smoke tests.")
         private Integer maxMethods;
@@ -83,6 +86,24 @@ public final class Context4DocuGenCommand implements Callable<Integer> {
         @Option(names = "--source-set", defaultValue = "all",
                 description = "Filter methods by source set: all, main, test, integration_test, generated, example, unknown. Comma-separated values are allowed.")
         private String sourceSet;
+
+        @Option(names = "--package", split = ",", description = "Include package prefix, for example org.example.api.")
+        private Set<String> packages;
+
+        @Option(names = "--class", split = ",", description = "Include fully qualified or simple class name.")
+        private Set<String> classes;
+
+        @Option(names = "--method", split = ",", description = "Include method name or method URI substring.")
+        private Set<String> methods;
+
+        @Option(names = "--visibility", split = ",", description = "Include visibility: public, protected, package-private, private.")
+        private Set<String> visibilities;
+
+        @Option(names = "--include-path", split = ",", description = "Include source path glob relative to project root.")
+        private Set<String> includePaths;
+
+        @Option(names = "--exclude-path", split = ",", description = "Exclude source path glob relative to project root.")
+        private Set<String> excludePaths;
 
         @Option(names = "--compile", description = "Attempt Maven/Gradle compilation before analysis.")
         private boolean compile;
@@ -102,6 +123,13 @@ public final class Context4DocuGenCommand implements Callable<Integer> {
                     .maxMethods(maxMethods)
                     .maxSourceFiles(maxSourceFiles)
                     .sourceSets(toSourceSets(sourceSet))
+                    .packages(emptyIfNull(packages))
+                    .classes(emptyIfNull(classes))
+                    .methods(emptyIfNull(methods))
+                    .visibilities(emptyIfNull(visibilities))
+                    .includePathGlobs(emptyIfNull(includePaths))
+                    .excludePathGlobs(emptyIfNull(excludePaths))
+                    .outputDirectory(outputDir)
                     .attemptCompile(compile || isAuto(callGraph) || isAuto(resolution))
                     .build();
 
@@ -410,6 +438,10 @@ public final class Context4DocuGenCommand implements Callable<Integer> {
                 .map(String::trim)
                 .filter(part -> !part.isBlank())
                 .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+    }
+
+    private static Set<String> emptyIfNull(Set<String> values) {
+        return values == null ? Set.of() : values;
     }
 
     private static String normalize(String value) {

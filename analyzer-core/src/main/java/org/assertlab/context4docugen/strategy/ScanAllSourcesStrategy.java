@@ -32,11 +32,7 @@ public class ScanAllSourcesStrategy implements MethodSourceStrategy {
 
     @Override
     public List<MethodInfo> loadMethods(ProjectMetadata meta) throws IOException {
-        MethodIdentifier identifier = new MethodIdentifier(
-                meta,
-                MethodIdentifier.IdStrategy.SEQUENTIAL,
-                null,                         // no sampling limit
-                meta.getProjectPath());
+        MethodIdentifier identifier = new MethodIdentifier(meta);
         return identifier.identify();
     }
 }

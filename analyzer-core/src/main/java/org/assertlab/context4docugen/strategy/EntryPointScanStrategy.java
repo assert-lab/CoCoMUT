@@ -48,11 +48,7 @@ public class EntryPointScanStrategy implements MethodSourceStrategy {
 
     @Override
     public List<MethodInfo> loadMethods(ProjectMetadata meta) throws IOException {
-        MethodIdentifier identifier = new MethodIdentifier(
-                meta,
-                MethodIdentifier.IdStrategy.SEQUENTIAL,
-                null,
-                meta.getProjectPath());
+        MethodIdentifier identifier = new MethodIdentifier(meta);
 
         List<MethodInfo> all = identifier.identify();
         List<MethodInfo> entryPoints = all.stream()

@@ -54,9 +54,12 @@ public class UndergradIssuesRegressionTest {
 
     private Orchestrator runSelectedFixture(Path fixtureProject) throws Exception {
         cleanGeneratedOutputs(fixtureProject);
+        Path output = Files.createTempDirectory("c4dg-undergrad-output");
         Orchestrator orchestrator = new Orchestrator(
                 fixtureProject,
-                Orchestrator.ExecutionMode.SELECTED);
+                Orchestrator.ExecutionMode.SELECTED)
+                .setOutputMode(AnalysisOptions.OutputMode.JSON)
+                .setOutputDirectory(output);
         orchestrator.execute();
         return orchestrator;
     }
@@ -84,7 +87,7 @@ public class UndergradIssuesRegressionTest {
         assertEquals("The fixture has one selected method", 1,
                 ((Number) orchestrator.getExecutionReport().get("phase_2_methods_loaded")).intValue());
 
-        Path jsonFile = findJsonForMethod(project, "choose");
+        Path jsonFile = findJsonForMethod(orchestrator, "choose");
         assertTrue("Expected JSON output for generic_choose", Files.exists(jsonFile));
 
         JsonNode root = MAPPER.readTree(jsonFile.toFile());
@@ -111,9 +114,9 @@ public class UndergradIssuesRegressionTest {
     @Test
     public void u2EveryJsonContainsProvenanceMetadata() throws Exception {
         Path project = fixture("fixture-parameter-provenance-project");
-        runSelectedFixture(project);
+        Orchestrator orchestrator = runSelectedFixture(project);
 
-        Path jsonFile = findJsonForMethod(project, "choose");
+        Path jsonFile = findJsonForMethod(orchestrator, "choose");
         assertTrue("Expected JSON output for generic_choose", Files.exists(jsonFile));
 
         JsonNode root = MAPPER.readTree(jsonFile.toFile());
@@ -145,7 +148,8 @@ public class UndergradIssuesRegressionTest {
         int filesGenerated = ((Number) report.getOrDefault("phase_5_files_generated", -1)).intValue();
         String status = String.valueOf(report.get("status"));
 
-        boolean sanitizedAndGenerated = filesGenerated == 1 && hasAnyJsonFile(project.resolve("method_context_json"));
+        boolean sanitizedAndGenerated = filesGenerated == 1
+                && hasAnyJsonFile(Path.of(String.valueOf(report.get("phase_5_output_directory"))));
         boolean clearlyReportedFailure = !"SUCCESS".equals(status)
                 || report.containsKey("phase_5_files_failed")
                 || report.containsKey("phase_5_generation_failures");
@@ -163,8 +167,8 @@ public class UndergradIssuesRegressionTest {
         }
     }
 
-    private Path findJsonForMethod(Path project, String methodName) throws IOException {
-        Path dir = project.resolve("method_context_json");
+    private Path findJsonForMethod(Orchestrator orchestrator, String methodName) throws IOException {
+        Path dir = Path.of(String.valueOf(orchestrator.getExecutionReport().get("phase_5_output_directory")));
         if (!Files.exists(dir)) {
             return dir.resolve("__missing__.json");
         }

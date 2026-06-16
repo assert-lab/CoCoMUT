@@ -95,14 +95,6 @@ public class MethodInfo {
         return testPrefix;
     }
 
-    /**
-     * Get as CSV row: method_uri|classname|methodname|filepath|line_number|signature
-     */
-    public String toCsvRow() {
-        return String.format("%s|%s|%s|%s|%d|%s",
-                id, classname, methodName, sourceFile, lineNumber, methodSignature);
-    }
-
     @Override
     public String toString() {
         return "MethodInfo{" +

@@ -28,11 +28,19 @@ public final class Context4DocuGenCli {
         }
 
         Path selected = optionPath(args, "--selected");
+        Path outputDir = optionPath(args, "--output-dir");
         AnalysisOptions.Builder options = AnalysisOptions.builder()
                 .callGraphAlgorithm(callGraphAlgorithm(args))
                 .sourceResolution(sourceResolution(args))
                 .maxMethods(optionInt(args, "--max-methods"))
                 .sourceSets(sourceSets(args))
+                .packages(optionSet(args, "--package"))
+                .classes(optionSet(args, "--class"))
+                .methods(optionSet(args, "--method"))
+                .visibilities(optionSet(args, "--visibility"))
+                .includePathGlobs(optionSet(args, "--include-path"))
+                .excludePathGlobs(optionSet(args, "--exclude-path"))
+                .outputDirectory(outputDir)
                 .attemptCompile(has(args, "--compile")
                         || "auto".equalsIgnoreCase(option(args, "--call-graph"))
                         || "auto".equalsIgnoreCase(option(args, "--resolution")))
@@ -110,7 +118,7 @@ public final class Context4DocuGenCli {
     private static AnalysisOptions.OutputMode outputMode(String[] args) {
         String value = option(args, "--output");
         if (value == null || value.isBlank()) {
-            return AnalysisOptions.OutputMode.JSON;
+            return AnalysisOptions.OutputMode.JSONL;
         }
         return switch (value.toLowerCase()) {
             case "json" -> AnalysisOptions.OutputMode.JSON;
@@ -122,6 +130,17 @@ public final class Context4DocuGenCli {
 
     private static Set<String> sourceSets(String[] args) {
         String value = option(args, "--source-set");
+        if (value == null || value.isBlank()) {
+            return Set.of();
+        }
+        return Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(part -> !part.isBlank())
+                .collect(LinkedHashSet::new, Set::add, Set::addAll);
+    }
+
+    private static Set<String> optionSet(String[] args, String name) {
+        String value = option(args, name);
         if (value == null || value.isBlank()) {
             return Set.of();
         }
@@ -152,9 +171,16 @@ public final class Context4DocuGenCli {
                   --scope all|entry-points       Method scope for source scanning
                   --call-graph none|cha|rta      Optional SootUp call graph algorithm
                   --output json|jsonl|both       Output format
+                  --output-dir DIR               Generated artifact directory
                   --max-methods N                Limit methods for large smoke tests
                   --source-set all|main|test|integration_test|generated|example|unknown
                                                  Filter methods by source set
+                  --package NAME                 Include package prefix
+                  --class NAME                   Include fully qualified or simple class name
+                  --method NAME                  Include method name or URI substring
+                  --visibility public|protected|package-private|private
+                  --include-path GLOB            Include source path glob
+                  --exclude-path GLOB            Exclude source path glob
                   --compile                      Attempt build-tool compilation before analysis
 
                 Maven exec:
@@ -163,9 +189,8 @@ public final class Context4DocuGenCli {
                     -Dexec.args="extract --project /path/to/java/project --scope entry-points --call-graph none"
 
                 Output:
-                  <project>/methods.csv
-                  <project>/method_context_json/*.json
-                  <project>/method_contexts.jsonl when --output jsonl|both
+                  ./c4dg_output/<project-name>/method_context_json/*.json
+                  ./c4dg_output/<project-name>/method_contexts.jsonl when --output jsonl|both
 
                 Notes:
                   Context4DocuGen performs static source/bytecode analysis only.

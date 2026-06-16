@@ -150,6 +150,44 @@ public class SourceModelEdgeCaseTest {
     }
 
     @Test
+    public void methodUriUsesErasedSignatureForGenericOverloadIdentity() throws Exception {
+        Path project = Files.createTempDirectory("c4dg-generic-erasure-overloads");
+        try {
+            write(project.resolve("src/main/java/demo/GenericOverloads.java"), """
+                    package demo;
+
+                    public class GenericOverloads {
+                        /** Object-bounded overload. */
+                        public static <T> T throwUnchecked(final T throwable) {
+                            return throwable;
+                        }
+
+                        /** Throwable-bounded overload. */
+                        public static <T extends Throwable> T throwUnchecked(final T throwable) {
+                            return throwable;
+                        }
+                    }
+                    """);
+
+            ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
+            List<SourceMethod> methods = SourceBackends.spoon().findMethods(model).stream()
+                    .filter(method -> method.className().equals("demo.GenericOverloads"))
+                    .filter(method -> method.methodName().equals("throwUnchecked"))
+                    .toList();
+
+            assertEquals("Both generic overloads should be discoverable", 2, methods.size());
+            assertEquals("Their URI identities should remain distinct", 2,
+                    methods.stream().map(SourceMethod::methodUri).distinct().count());
+            assertTrue(methods.stream().anyMatch(method -> method.methodUri().contains("java.lang.Object")));
+            assertTrue(methods.stream().anyMatch(method -> method.methodUri().contains("java.lang.Throwable")));
+            assertTrue(methods.stream().anyMatch(method -> method.parameters().get(0).erasedType().equals("java.lang.Object")));
+            assertTrue(methods.stream().anyMatch(method -> method.parameters().get(0).erasedType().equals("java.lang.Throwable")));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void spoonAutoResolutionUsesClasspathWhenCompiledClassesExist() throws Exception {
         TestFixtures.ensureMinimalMavenProjectCompiled();
         ProjectMetadata metadata = new ProjectAnalyzer(TestFixtures.minimalMavenProjectRoot()).analyze();
