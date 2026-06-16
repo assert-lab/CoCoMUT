@@ -192,6 +192,48 @@ public class SourceModelEdgeCaseTest {
     }
 
     @Test
+    public void methodSourceDropsJavadocEvenWhenSpoonSliceStartsAtPreviousComment() throws Exception {
+        Path project = Files.createTempDirectory("c4dg-comment-before-javadoc");
+        try {
+            write(project.resolve("src/main/java/demo/CommentBeforeJavadoc.java"), """
+                    package demo;
+
+                    public class CommentBeforeJavadoc {
+                        // @formatter:on
+
+                        /**
+                         * Returns a {@code value()} value.
+                         *
+                         * @return value
+                         */
+                        @Deprecated
+                        public String value() {
+                            return "x";
+                        }
+                    }
+                    """);
+
+            ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
+            SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
+                    .filter(method -> method.methodName().equals("value"))
+                    .findFirst()
+                    .orElseThrow();
+            SourceContext context = SourceBackends.spoon()
+                    .extractContext(model, focal.methodUri())
+                    .orElseThrow();
+
+            assertEquals("Returns a {@code value()} value.\n\n@return value", context.javadoc());
+            assertTrue("Method source should keep annotations", context.methodBody().startsWith("@Deprecated"));
+            assertFalse("Method source must not include previous formatter comments",
+                    context.methodBody().contains("@formatter:on"));
+            assertFalse("Method source must not include leading Javadoc",
+                    context.methodBody().contains("/**"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void spoonAutoResolutionUsesClasspathWhenCompiledClassesExist() throws Exception {
         TestFixtures.ensureMinimalMavenProjectCompiled();
         ProjectMetadata metadata = new ProjectAnalyzer(TestFixtures.minimalMavenProjectRoot()).analyze();

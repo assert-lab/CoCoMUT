@@ -434,7 +434,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             int start = Math.max(0, position.getSourceStart());
             int end = Math.min(source.length(), position.getSourceEnd() + 1);
             if (end > start) {
-                return stripLeadingJavadoc(source.substring(start, end));
+                return stripLeadingJavadoc(source.substring(start, end), element);
             }
         } catch (Exception ignored) {
             // Source slices are optional context; missing text should not drop the method.
@@ -442,19 +442,52 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return "";
     }
 
-    private static String stripLeadingJavadoc(String source) {
+    private static String stripLeadingJavadoc(String source, CtElement element) {
         int first = 0;
         while (first < source.length() && Character.isWhitespace(source.charAt(first))) {
             first++;
         }
         if (!source.startsWith("/**", first)) {
-            return source;
+            int declaration = declarationNameIndex(source, element);
+            if (declaration < 0) {
+                return source;
+            }
+            int javadocStart = source.lastIndexOf("/**", declaration);
+            if (javadocStart < 0) {
+                return source;
+            }
+            int javadocEnd = source.indexOf("*/", javadocStart + 3);
+            if (javadocEnd < 0 || javadocEnd > declaration) {
+                return source;
+            }
+            return source.substring(javadocEnd + 2).stripLeading();
         }
         int end = source.indexOf("*/", first + 3);
         if (end < 0) {
             return source;
         }
         return source.substring(end + 2).stripLeading();
+    }
+
+    private static int declarationNameIndex(String source, CtElement element) {
+        if (!(element instanceof CtExecutable<?> executable)) {
+            return -1;
+        }
+        CtType<?> owner = executable.getParent(CtType.class);
+        if (owner == null) {
+            return -1;
+        }
+        String name = methodName(executable, owner);
+        Pattern declarationName = Pattern.compile("\\b" + Pattern.quote(name) + "\\s*\\(");
+        Matcher matcher = declarationName.matcher(source);
+        int result = -1;
+        while (matcher.find()) {
+            result = matcher.start();
+        }
+        if (result < 0) {
+            return -1;
+        }
+        return result;
     }
 
     private static String docComment(CtElement element) {
