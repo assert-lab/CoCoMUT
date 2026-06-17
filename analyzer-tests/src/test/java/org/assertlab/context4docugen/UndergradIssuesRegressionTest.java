@@ -8,7 +8,6 @@ import org.junit.experimental.categories.Category;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Comparator;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -17,39 +16,21 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Regression tests / PoCs for undergrad-scoped issues U1, U2, and U3.
- *
- * Copy this file to:
- *   Context4DocuGen/analyzer-tests/src/test/java/analyzer/UndergradIssuesRegressionTest.java
- *
- * The tests expect this PoC directory at:
- *   ../pocs/context4docugen-undergrad-pocs/
- *
- * from the Context4DocuGen repository root.
+ * Regression tests for undergrad-scoped issues U1, U2, and U3.
  */
 @Category(FastTests.class)
 public class UndergradIssuesRegressionTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    private Path pocRoot() {
-        Path[] candidates = new Path[] {
-                Path.of("../pocs/context4docugen-undergrad-pocs").toAbsolutePath().normalize(),
-                Path.of("../../pocs/context4docugen-undergrad-pocs").toAbsolutePath().normalize(),
-                Path.of("pocs/context4docugen-undergrad-pocs").toAbsolutePath().normalize()
-        };
-
-        for (Path candidate : candidates) {
-            if (java.nio.file.Files.exists(candidate)) {
-                return candidate;
-            }
-        }
-
-        throw new AssertionError("Could not find context4docugen-undergrad-pocs. Tried: "
-                + java.util.Arrays.toString(candidates));
-    }
-
     private Path fixture(String fixtureName) {
-        return pocRoot().resolve(fixtureName);
+        Path fixture = Path.of("src/test/resources/fixtures")
+                .resolve(fixtureName)
+                .toAbsolutePath()
+                .normalize();
+        if (Files.exists(fixture.resolve("inputs_selected.csv"))) {
+            return fixture;
+        }
+        throw new AssertionError("Could not find fixture project at " + fixture);
     }
 
     private Orchestrator runSelectedFixture(Path fixtureProject) throws Exception {
@@ -68,18 +49,9 @@ public class UndergradIssuesRegressionTest {
         Files.deleteIfExists(fixtureProject.resolve("methods.csv"));
     }
 
-    private void deleteIfExists(Path path) throws IOException {
-        if (!Files.exists(path)) return;
-        try (Stream<Path> walk = Files.walk(path)) {
-            for (Path p : walk.sorted(Comparator.reverseOrder()).collect(Collectors.toList())) {
-                Files.deleteIfExists(p);
-            }
-        }
-    }
-
     @Test
     public void u1ParametersIncludeNamesTypesAndModifiers() throws Exception {
-        Path project = fixture("fixture-parameter-provenance-project");
+        Path project = fixture("parameter-provenance-project");
         Orchestrator orchestrator = runSelectedFixture(project);
 
         assertEquals("The fixture has one selected method", 1,
@@ -108,7 +80,7 @@ public class UndergradIssuesRegressionTest {
 
     @Test
     public void u2EveryJsonContainsProvenanceMetadata() throws Exception {
-        Path project = fixture("fixture-parameter-provenance-project");
+        Path project = fixture("parameter-provenance-project");
         Orchestrator orchestrator = runSelectedFixture(project);
 
         JsonNode root = findJsonForMethod(orchestrator, "choose");
@@ -133,7 +105,7 @@ public class UndergradIssuesRegressionTest {
 
     @Test
     public void u3UnsafeIdsDoNotSilentlyBreakJsonGeneration() throws Exception {
-        Path project = fixture("fixture-unsafe-id-project");
+        Path project = fixture("unsafe-id-project");
         Orchestrator orchestrator = runSelectedFixture(project);
         Map<String, Object> report = orchestrator.getExecutionReport();
 
