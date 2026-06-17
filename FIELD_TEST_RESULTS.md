@@ -250,7 +250,7 @@ It completed 541/541 repositories in source-only mode with 2686556 generated JSO
 ## Remaining Follow-Up
 
 - Add a faster preflight size model so very large repositories can start directly in bounded mode.
-- Add per-method `source_set` to JSONL metadata so source-set distributions can be audited without re-running extraction.
+- Continue auditing per-method `source_set` distributions from generated JSONL records.
 - Investigate whether the four smoke-fallback repositories can be handled with a better preflight size model.
 - Inspect `javadoc_tag_cases.csv` for `@see` target quality and `{@inheritDoc}` candidate correctness.
 - Continue adding small regression fixtures for `@see`, `{@inheritDoc}`, source-set filtering, classpath-aware fallback, and capped extraction.

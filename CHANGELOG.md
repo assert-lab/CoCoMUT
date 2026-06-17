@@ -10,11 +10,11 @@
 - Added machine-readable schema drafts and validation/schema CLI commands.
 - Added public-repository field-test evidence for 541 filtered Java repositories.
 - Moved Java packages to `org.assertlab.context4docugen`.
-- Added Maven wrapper, GitHub Actions CI, contributor docs, security policy, and citation metadata.
+- Added Maven wrapper, GitHub Actions CI, contributor docs, and citation metadata.
 - Added `--max-source-files` for low-memory smoke runs.
 - Added `--max-methods` and bounded retry guidance for very large repositories.
 - Deduplicated Spoon-discovered methods by stable method URI.
 - Hardened optional Spoon context extraction against recursive generic type-resolution failures.
 - Added JSONL failure artifacts for selected-method and context-extraction misses.
-- Fixed JSONL mode so per-method generation results enrich `methods.csv` correctly.
-- Tightened generated context JSON/JSONL validation.
+- Removed `methods.csv` generation from the product extraction path.
+- Tightened generated context JSONL validation.

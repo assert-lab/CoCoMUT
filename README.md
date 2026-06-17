@@ -2,7 +2,7 @@
 
 Context4DocuGen is a static Java analysis tool for extracting method-level context for documentation research and documentation-generation systems.
 
-For each method, it can write JSON containing:
+For each method, it writes one JSONL record containing:
 
 - method URI, name, signature, source code, Javadoc, class Javadoc, and class hierarchy;
 - structured parameters, annotations, thrown exceptions, field usage, overload groups, dynamic-feature hints, and documentation metrics;
@@ -18,9 +18,8 @@ analyzer-core/   Java library and extraction API
 context4docugen-cli/ Standalone Picocli command-line application
 analyzer-tests/  unit and integration tests with tiny fixtures
 examples/        small API usage example
-schemas/         machine-readable schema drafts
+schemas/         machine-readable schema drafts and schema documentation
 scripts/         release/field-test helper scripts
-todo_list.md     productization roadmap and design notes
 ```
 
 Large research artifacts, OE-25 project snapshots, generated model outputs, and shell-first research scripts were removed from the minimal product branch.
@@ -96,7 +95,7 @@ Available commands:
 
 ```text
 c4dg extract   Extract method contexts
-c4dg validate  Validate project detection, selected CSVs, JSON, or JSONL
+c4dg validate  Validate project detection, selected CSVs, JSONL, or a schema row
 c4dg schema    Print or write bundled schemas
 ```
 
@@ -302,7 +301,7 @@ Current static-analysis boundaries:
 - reflection, proxies, generated code, Lombok, service loaders, and dependency injection can reduce precision, but common dynamic-feature hints are labeled in JSON;
 - generated methods from Lombok/annotation processors are not visible unless generated source or bytecode is available.
 
-The JSON output schema is summarized in `JSON_SCHEMA.md`. Known limitations and field-test results are recorded in `known_issues.md` and `FIELD_TEST_RESULTS.md`.
+The JSONL output schema is summarized in `schemas/README.md`. Field-test results and current static-analysis limitations are recorded in `FIELD_TEST_RESULTS.md`.
 
 ## Reproduce Field Study
 
