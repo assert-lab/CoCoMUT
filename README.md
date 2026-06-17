@@ -2,7 +2,7 @@
 
 Context4DocuGen is a static Java analysis tool for extracting method-level context for documentation research and documentation-generation systems.
 
-For each method, it can write JSON containing:
+For each method, it writes one JSONL record containing:
 
 - method URI, name, signature, source code, Javadoc, class Javadoc, and class hierarchy;
 - structured parameters, annotations, thrown exceptions, field usage, overload groups, dynamic-feature hints, and documentation metrics;
@@ -18,12 +18,10 @@ analyzer-core/   Java library and extraction API
 context4docugen-cli/ Standalone Picocli command-line application
 analyzer-tests/  unit and integration tests with tiny fixtures
 examples/        small API usage example
-schemas/         machine-readable schema drafts
+schemas/         machine-readable schema drafts and schema documentation
 scripts/         release/field-test helper scripts
-todo_list.md     productization roadmap and design notes
 ```
 
-Large research artifacts, OE-25 project snapshots, generated model outputs, and shell-first research scripts were removed from the minimal product branch.
 
 ## Build
 
@@ -53,7 +51,7 @@ dist/context4docugen-cli.jar
 
 ## Method Identity
 
-Context4DocuGen identifies methods by URI, not by arbitrary row IDs.
+Context4DocuGen identifies methods by URI.
 
 Format:
 
@@ -96,7 +94,7 @@ Available commands:
 
 ```text
 c4dg extract   Extract method contexts
-c4dg validate  Validate project detection, selected CSVs, JSON, or JSONL
+c4dg validate  Validate project detection, selected CSVs, JSONL, or a schema row
 c4dg schema    Print or write bundled schemas
 ```
 
@@ -302,35 +300,6 @@ Current static-analysis boundaries:
 - reflection, proxies, generated code, Lombok, service loaders, and dependency injection can reduce precision, but common dynamic-feature hints are labeled in JSON;
 - generated methods from Lombok/annotation processors are not visible unless generated source or bytecode is available.
 
-The JSON output schema is summarized in `JSON_SCHEMA.md`. Known limitations and field-test results are recorded in `known_issues.md` and `FIELD_TEST_RESULTS.md`.
+The JSONL output schema is summarized in `schemas/README.md`. Field-test results and current static-analysis limitations are recorded in `FIELD_TEST_RESULTS.md`.
 
-## Reproduce Field Study
 
-Run the expanded public-repository study with:
-
-```bash
-scripts/run_expanded_auto_field_study.sh
-```
-
-The wrapper builds the release jar, selects repositories from
-`../cleaned_mined_repos.csv`, runs C4DG with auto source resolution and auto
-call graph, extracts `@see` / `{@inheritDoc}` cases, and writes preserved local
-artifacts under:
-
-```text
-experiments/expanded-public-repos-auto-main/
-```
-
-The default run uses `--source-set main`, so test/example/generated methods are
-excluded before context generation. Override parameters with environment
-variables, for example:
-
-```bash
-LIMIT=20 OUTPUT_DIR=experiments/smoke-auto-main scripts/run_expanded_auto_field_study.sh
-```
-
-For broad corpus runs, the wrapper is resume-safe and uses bounded retries:
-source-file caps for large repositories, `main,unknown` for nonstandard source
-layouts, and a final source-only smoke cap for repositories that would otherwise
-timeout under auto build/call-graph mode. Exact retry modes are recorded in the
-generated `results.tsv` and `summary_counts.txt`.

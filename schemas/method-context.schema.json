@@ -31,8 +31,14 @@
         "throws": {"type": "array"},
         "lines_of_code": {"type": "integer"},
         "cyclomatic_complexity": {"type": "integer"},
-        "code": {"type": "string"},
-        "javadoc": {"type": "string"},
+        "code": {
+          "type": "string",
+          "description": "Method or constructor source without leading Javadoc. Method annotations are kept."
+        },
+        "javadoc": {
+          "type": "string",
+          "description": "Method Javadoc stored separately from method source."
+        },
         "class_hierarchy": {"type": "object"},
         "source_context": {"type": "object"},
         "class_javadoc": {"type": "string"}
