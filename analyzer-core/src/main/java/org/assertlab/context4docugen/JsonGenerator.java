@@ -18,7 +18,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  *
  * Generates JSONL rows for methods using real data from the pipeline:
  * - MUT node with signature, line_number, parameters, code, javadoc, class hierarchy
- * - Callers array: full context objects for project methods, flat strings for library calls
+ * - Callers array: normalized call-edge objects with method_uri for resolved project methods
  * - Callees array: same structure as callers
  * - Metadata: tool, algorithm, counts, generation time
  *
@@ -85,7 +85,8 @@ public class JsonGenerator {
         }
         json.set("MUT", mutNode);
 
-        // Callers/Callees — rich objects for project methods, flat strings for library
+        // Callers/Callees: normalized call-edge objects. Resolved project edges
+        // use method_uri as identity; raw SootUp signatures are provenance only.
         CallGraphResult cg = context.getCallGraph();
         json.set("callers", buildCallerCalleeArray(cg != null ? cg.getCallers() : Set.of()));
         json.set("callees", buildCallerCalleeArray(cg != null ? cg.getCallees() : Set.of()));
@@ -152,6 +153,8 @@ public class JsonGenerator {
         node.put("method_name", context.getMethodName());
         node.put("source_set", context.getSourceSet());
         node.put("signature", context.getSignature());
+        node.put("return_type", context.getReturnType());
+        node.put("erased_return_type", context.getErasedReturnType());
         node.put("qualified_name", context.getClassname() + "." + context.getMethodName());
         node.put("line_number", context.getLineNumber());
 
@@ -190,20 +193,22 @@ public class JsonGenerator {
         return node;
     }
 
-    private ArrayNode buildCallerCalleeArray(Set<String> signatures) {
+    private ArrayNode buildCallerCalleeArray(Set<CallGraphEdge> edges) {
         ArrayNode array = objectMapper.createArrayNode();
-        for (String sig : signatures) {
-            if (callGraphGenerator == null || allContexts.isEmpty()) {
-                array.add(sig);
-                continue;
-            }
-            String methodId = callGraphGenerator.resolveSignatureToMethodId(sig);
-            MethodContext ctx = (methodId != null) ? allContexts.get(methodId) : null;
+        for (CallGraphEdge edge : edges) {
+            ObjectNode edgeNode = objectMapper.createObjectNode();
+            edgeNode.put("kind", edge.kind());
+            edgeNode.put("method_uri", edge.methodUri());
+            edgeNode.put("raw_signature", edge.rawSignature());
+            edgeNode.put("declaring_class", edge.declaringClass());
+            edgeNode.put("method_name", edge.methodName());
+            edgeNode.put("resolution", edge.resolution());
+
+            MethodContext ctx = edge.resolved() ? allContexts.get(edge.methodUri()) : null;
             if (ctx != null) {
-                array.add(buildMethodNode(ctx));
-            } else {
-                array.add(sig);
+                edgeNode.set("context", buildMethodNode(ctx));
             }
+            array.add(edgeNode);
         }
         return array;
     }

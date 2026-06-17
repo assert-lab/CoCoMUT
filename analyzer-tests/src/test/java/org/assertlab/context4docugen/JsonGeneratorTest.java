@@ -160,8 +160,15 @@ public class JsonGeneratorTest {
                 .methodId("1")
                 .methodName("testMethod")
                 .classname("com.example.MyClass")
-                .addCaller("com.example.Main.main(String[])")
-                .addCallee("java.lang.System.out")
+                .addCaller(CallGraphEdge.resolved(
+                        "src/main/java/com/example/Main.java#com.example.Main.main(java.lang.String[]):void",
+                        "<com.example.Main: void main(java.lang.String[])>",
+                        "com.example.Main",
+                        "main"))
+                .addCallee(CallGraphEdge.unresolved(
+                        "<java.io.PrintStream: void println(java.lang.String)>",
+                        "java.io.PrintStream",
+                        "println"))
                 .algorithm("CHA")
                 .build();
 
@@ -178,6 +185,8 @@ public class JsonGeneratorTest {
         String content = Files.readString(jsonl);
         assertTrue("Should contain callers", content.contains("\"callers\""));
         assertTrue("Should contain callees", content.contains("\"callees\""));
+        assertTrue("Resolved call edge should expose method URI", content.contains("\"method_uri\""));
+        assertTrue("Unresolved call edge should expose raw signature as provenance", content.contains("\"raw_signature\""));
         assertTrue("Should contain call graph algorithm", content.contains("\"CHA\""));
     }
 }

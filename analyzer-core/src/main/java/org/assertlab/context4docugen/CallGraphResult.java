@@ -10,8 +10,8 @@ public class CallGraphResult {
     private final String methodId;
     private final String methodName;
     private final String classname;
-    private final Set<String> callers;    // Methods that call this method
-    private final Set<String> callees;    // Methods this method calls
+    private final Set<CallGraphEdge> callers;    // Methods that call this method
+    private final Set<CallGraphEdge> callees;    // Methods this method calls
     private final String algorithm;        // CHA, RTA, etc.
     private final long generationTime;
 
@@ -38,11 +38,11 @@ public class CallGraphResult {
         return classname;
     }
 
-    public Set<String> getCallers() {
+    public Set<CallGraphEdge> getCallers() {
         return callers;
     }
 
-    public Set<String> getCallees() {
+    public Set<CallGraphEdge> getCallees() {
         return callees;
     }
 
@@ -81,8 +81,8 @@ public class CallGraphResult {
         private String methodId;
         private String methodName;
         private String classname;
-        private Set<String> callers = new HashSet<>();
-        private Set<String> callees = new HashSet<>();
+        private Set<CallGraphEdge> callers = new HashSet<>();
+        private Set<CallGraphEdge> callees = new HashSet<>();
         private String algorithm = "CHA";
         private long generationTime = 0;
 
@@ -101,22 +101,22 @@ public class CallGraphResult {
             return this;
         }
 
-        public Builder callers(Set<String> callers) {
+        public Builder callers(Set<CallGraphEdge> callers) {
             this.callers = new HashSet<>(callers);
             return this;
         }
 
-        public Builder addCaller(String caller) {
+        public Builder addCaller(CallGraphEdge caller) {
             this.callers.add(caller);
             return this;
         }
 
-        public Builder callees(Set<String> callees) {
+        public Builder callees(Set<CallGraphEdge> callees) {
             this.callees = new HashSet<>(callees);
             return this;
         }
 
-        public Builder addCallee(String callee) {
+        public Builder addCallee(CallGraphEdge callee) {
             this.callees.add(callee);
             return this;
         }

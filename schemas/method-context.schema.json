@@ -12,6 +12,8 @@
         "method_name",
         "source_set",
         "signature",
+        "return_type",
+        "erased_return_type",
         "qualified_name",
         "parameters",
         "code",
@@ -20,10 +22,15 @@
         "source_context"
       ],
       "properties": {
-        "method_uri": {"type": "string"},
+        "method_uri": {
+          "type": "string",
+          "description": "Canonical C4DG method URI: relative/path.java#qualified.Class.method(erasedParamTypes):erasedReturnType"
+        },
         "method_name": {"type": "string"},
         "source_set": {"type": "string"},
         "signature": {"type": "string"},
+        "return_type": {"type": "string"},
+        "erased_return_type": {"type": "string"},
         "qualified_name": {"type": "string"},
         "line_number": {"type": "integer"},
         "parameters": {"type": "array"},
@@ -45,8 +52,14 @@
       },
       "additionalProperties": true
     },
-    "callers": {"type": "array"},
-    "callees": {"type": "array"},
+    "callers": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/callGraphEdge"}
+    },
+    "callees": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/callGraphEdge"}
+    },
     "metadata": {
       "type": "object",
       "required": [
@@ -81,6 +94,22 @@
     "documentation_metrics": {"type": "object"},
     "javadoc_metadata": {"type": "object"},
     "dynamic_features": {"type": "array"}
+  },
+  "$defs": {
+    "callGraphEdge": {
+      "type": "object",
+      "required": ["kind", "method_uri", "raw_signature", "declaring_class", "method_name", "resolution"],
+      "properties": {
+        "kind": {"type": "string"},
+        "method_uri": {"type": "string"},
+        "raw_signature": {"type": "string"},
+        "declaring_class": {"type": "string"},
+        "method_name": {"type": "string"},
+        "resolution": {"type": "string"},
+        "context": {"type": "object"}
+      },
+      "additionalProperties": true
+    }
   },
   "additionalProperties": true
 }

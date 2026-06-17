@@ -245,8 +245,15 @@ public class CallGraphGeneratorTest {
                 .methodId("1")
                 .methodName("testMethod")
                 .classname("com.example.MyClass")
-                .addCaller("com.example.Main.main(String[])")
-                .addCallee("java.lang.System.out")
+                .addCaller(CallGraphEdge.resolved(
+                        "src/main/java/com/example/Main.java#com.example.Main.main(java.lang.String[]):void",
+                        "<com.example.Main: void main(java.lang.String[])>",
+                        "com.example.Main",
+                        "main"))
+                .addCallee(CallGraphEdge.unresolved(
+                        "<java.io.PrintStream: void println(java.lang.String)>",
+                        "java.io.PrintStream",
+                        "println"))
                 .algorithm("CHA")
                 .generationTime(100)
                 .build();

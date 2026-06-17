@@ -145,7 +145,7 @@ public class SelectedMethodLoader {
         if (!methodUri.isBlank()) {
             parsed = javaFiles.stream()
                     .flatMap(f -> f.methods().stream())
-                    .filter(m -> m.methodUri().equals(methodUri))
+                    .filter(m -> sameMethodUri(m.methodUri(), methodUri))
                     .findFirst()
                     .orElse(null);
         }
@@ -168,9 +168,27 @@ public class SelectedMethodLoader {
                 .visibility(parsed.visibility())
                 .isStatic(parsed.isStatic())
                 .returnType(parsed.returnType())
+                .erasedReturnType(parsed.erasedReturnType())
+                .sourceSet(parsed.sourceSet())
                 .originalDocstring(docstring)
                 .testPrefix(testPrefix)
                 .build();
+    }
+
+    private static boolean sameMethodUri(String currentUri, String requestedUri) {
+        if (currentUri.equals(requestedUri)) {
+            return true;
+        }
+        return stripReturnSuffix(currentUri).equals(stripReturnSuffix(requestedUri));
+    }
+
+    private static String stripReturnSuffix(String uri) {
+        int hash = uri.indexOf('#');
+        int close = uri.lastIndexOf(')');
+        if (hash < 0 || close < hash || close + 1 >= uri.length() || uri.charAt(close + 1) != ':') {
+            return uri;
+        }
+        return uri.substring(0, close + 1);
     }
 
     private SourceMethod matchFocalMethod(

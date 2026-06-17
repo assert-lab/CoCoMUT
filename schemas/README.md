@@ -43,10 +43,12 @@ test_prefix               Selected-CSV metadata, only when supplied
 Important `MUT` fields:
 
 ```text
-method_uri                Stable method identity
+method_uri                Stable method identity: path#qualified.Class.method(erasedParamTypes):erasedReturnType
 method_name               Simple method or constructor name
 source_set                main|test|integration_test|generated|example|unknown
 signature                 Human-readable source signature
+return_type               Source return type
+erased_return_type        Erased return type used in method_uri
 qualified_name            Qualified class plus method name
 parameters                Parameter objects with name, source type, erased_type, modifiers, annotations
 annotations               Method annotations
@@ -56,6 +58,31 @@ javadoc                   Method Javadoc, stored separately from code
 class_javadoc             Declaring class Javadoc when available
 class_hierarchy           Source hierarchy and resolution confidence
 source_context            Field reads/writes, overload group, sibling methods
+```
+
+Important `javadoc_metadata` fields:
+
+```text
+see                       Raw @see targets
+inline_links              Raw inline {@link ...}/{@linkplain ...} targets
+javadoc_references        Resolved reference objects for @see/link/linkplain targets
+file_references           Referenced doc-files/images/html/text/sample-source paths when present
+structured_tags           Parsed param/return/throws/since/apiNote/implSpec/implNote/deprecated text
+inheritdoc_resolution     not_used|resolved_candidate|unresolved
+inherited_javadoc_candidates
+                          Candidate inherited Javadoc snippets for {@inheritDoc}
+```
+
+Call graph arrays are normalized edge objects, not raw strings:
+
+```text
+kind                      project_method|unresolved_method|synthetic_or_compiler_method
+method_uri                C4DG method URI when the edge resolves to a project method
+raw_signature             SootUp bytecode signature retained as provenance
+declaring_class           Declaring class reported by SootUp
+method_name               Method name reported by SootUp
+resolution                resolved|unresolved|synthetic_or_compiler_generated
+context                   Optional method node when method_uri resolves to an extracted context
 ```
 
 ## Selected Methods
@@ -78,7 +105,7 @@ Preferred example:
 
 ```csv
 method_uri|docstring|test_prefix
-src/main/java/com/example/Hello.java#com.example.Hello.greet(java.lang.String)|Greets a person.|new Hello().greet("x")
+src/main/java/com/example/Hello.java#com.example.Hello.greet(java.lang.String):java.lang.String|Greets a person.|new Hello().greet("x")
 ```
 
 Legacy PoC CSVs with `focal_method|test_prefix|docstring|id` are still accepted

@@ -33,6 +33,7 @@ public class MethodIdentifierTest {
         for (MethodInfo method : methods) {
             assertTrue("ID should be a method URI", method.getId().contains("#"));
             assertTrue("Method URI should include signature", method.getId().contains("("));
+            assertTrue("Method URI should include erased return type", method.getId().contains("):"));
         }
     }
 
@@ -54,7 +55,7 @@ public class MethodIdentifierTest {
     @Test
     public void methodInfoEqualityUsesUriIdentity() {
         MethodInfo method1 = new MethodInfo.Builder()
-                .id("src/main/java/Test.java#Test.test()")
+                .id("src/main/java/Test.java#Test.test():void")
                 .classname("TestClass")
                 .methodName("test")
                 .methodSignature("test()")
@@ -63,7 +64,7 @@ public class MethodIdentifierTest {
                 .build();
 
         MethodInfo method2 = new MethodInfo.Builder()
-                .id("src/main/java/Test.java#Test.test()")
+                .id("src/main/java/Test.java#Test.test():void")
                 .classname("TestClass")
                 .methodName("test")
                 .methodSignature("test()")

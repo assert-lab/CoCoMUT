@@ -56,20 +56,21 @@ Context4DocuGen identifies methods by URI.
 Format:
 
 ```text
-relative/path/ToFile.java#qualified.DeclaringClass.method(signature)
+relative/path/ToFile.java#qualified.DeclaringClass.method(erasedParamTypes):erasedReturnType
 ```
 
 Example:
 
 ```text
-src/main/java/com/example/Hello.java#com.example.Hello.greet(String name)
+src/main/java/com/example/Hello.java#com.example.Hello.greet(java.lang.String):java.lang.String
 ```
 
 This is important because overloaded methods need more than a method name. A reliable locator needs:
 
 - the `.java` source path;
 - the declaring class and method/constructor name;
-- the method signature.
+- the erased parameter types;
+- the erased return type.
 
 ## CLI Usage
 
@@ -300,6 +301,7 @@ Current static-analysis boundaries:
 - reflection, proxies, generated code, Lombok, service loaders, and dependency injection can reduce precision, but common dynamic-feature hints are labeled in JSON;
 - generated methods from Lombok/annotation processors are not visible unless generated source or bytecode is available.
 
-The JSONL output schema is summarized in `schemas/README.md`. Field-test results and current static-analysis limitations are recorded in `FIELD_TEST_RESULTS.md`.
-
-
+The JSONL output schema is summarized in `schemas/README.md`. Field-test
+results and current static-analysis limitations are recorded in
+`FIELD_TEST_RESULTS.md`. Documentation-context retrieval notes are recorded in
+`DOC_CONTEXT_RETRIEVAL_NOTES.md`.

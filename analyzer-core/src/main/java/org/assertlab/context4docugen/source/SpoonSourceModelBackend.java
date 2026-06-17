@@ -52,6 +52,14 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     private static final Pattern SINCE_TAG = Pattern.compile("(?m)^\\s*\\*?\\s*@since\\s+(.+)$");
     private static final Pattern SEE_TAG = Pattern.compile("(?m)^\\s*\\*?\\s*@see\\s+(.+)$");
     private static final Pattern INLINE_LINK = Pattern.compile("\\{@(?:link|linkplain)\\s+([^}\\s]+)");
+    private static final Pattern INLINE_LINK_FULL = Pattern.compile("\\{@(link|linkplain)\\s+([^}\\s]+)(?:\\s+([^}]+))?}");
+    private static final Pattern ANCHOR_HREF = Pattern.compile("<a\\s+[^>]*href\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>(.*?)</a>",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    private static final Pattern BLOCK_TAG = Pattern.compile(
+            "(?ms)(?:^|\\R)\\s*\\*?\\s*@(param|return|throws|exception|since|deprecated|see|apiNote|implSpec|implNote)\\s*(.*?)(?=\\R\\s*\\*?\\s*@|\\z)");
+    private static final Pattern JAVADOC_FILE_REFERENCE = Pattern.compile(
+            "(?:\\{@docRoot}/)?(?:[\\w.$-]+/)*(?:doc-files/)?[\\w.$-]+\\.(?:png|svg|gif|jpg|jpeg|html|htm|txt|java)",
+            Pattern.CASE_INSENSITIVE);
     private static final String MAX_SOURCE_FILES_PROPERTY = "c4dg.maxSourceFiles";
     private static final String MAX_SOURCE_FILES_ENV = "C4DG_MAX_SOURCE_FILES";
     private static final int MAX_CLASS_METHOD_CONTEXT = 500;
@@ -119,7 +127,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 classContext.siblingMethods(),
                 classContext.overloadGroup(),
                 dynamicFeatures(executable),
-                javadocMetadata(executable, javadoc),
+                javadocMetadata(parsed, owner, executable, method, javadoc),
                 documentationMetrics(method, javadoc),
                 parsed.mode()));
     }
@@ -181,9 +189,17 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         List<SourceMethod> methods = new ArrayList<>();
         Map<String, SourceMethod> methodsByUri = new LinkedHashMap<>();
         Map<String, CtExecutable<?>> executablesByUri = new LinkedHashMap<>();
+        Map<String, CtType<?>> typesByQualifiedName = new LinkedHashMap<>();
+        Map<String, List<SourceMethod>> methodsByClassName = new LinkedHashMap<>();
 
         List<CtExecutable<?>> executables = new ArrayList<>();
         for (CtModel model : parsedModels.models()) {
+            for (CtType<?> type : model.getElements(new TypeFilter<>(CtType.class))) {
+                String qualifiedName = type.getQualifiedName();
+                if (qualifiedName != null && !qualifiedName.isBlank()) {
+                    typesByQualifiedName.putIfAbsent(qualifiedName, type);
+                }
+            }
             for (CtExecutable<?> executable : model.getElements(new TypeFilter<>(CtExecutable.class))) {
                 if ((executable instanceof CtMethod<?> || executable instanceof CtConstructor<?>)
                         && executable.getPosition() != null
@@ -204,11 +220,13 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 methods.add(sourceMethod);
                 methodsByUri.put(sourceMethod.methodUri(), sourceMethod);
                 executablesByUri.put(sourceMethod.methodUri(), executable);
+                methodsByClassName.computeIfAbsent(sourceMethod.className(), ignored -> new ArrayList<>())
+                        .add(sourceMethod);
             }
         }
 
         return new ParsedProject(methods, methodsByUri, executablesByUri,
-                new ConcurrentHashMap<>(), parsedModels.mode());
+                typesByQualifiedName, methodsByClassName, new ConcurrentHashMap<>(), parsedModels.mode());
     }
 
     private ParsedModels parseModels(ProjectModel project) throws IOException {
@@ -360,7 +378,9 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         String methodName = methodName(executable, owner);
         List<SourceParameter> parameters = parameters(executable);
         String displaySignature = methodName + "(" + parameterSignature(parameters, false) + ")";
-        String identitySignature = identitySignature(executable, methodName, parameters);
+        String returnType = returnType(executable);
+        String erasedReturnType = erasedReturnType(executable, returnType);
+        String identitySignature = identitySignature(methodName, parameters, erasedReturnType);
         String uri = methodUri(project.projectPath(), sourceFile, className, identitySignature);
 
         return Optional.of(new SourceMethod(
@@ -373,7 +393,8 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 Math.max(0, position.getColumn()),
                 visibility(executable),
                 isStatic(executable),
-                returnType(executable),
+                returnType,
+                erasedReturnType,
                 parameters,
                 annotations(executable),
                 thrownExceptions(executable),
@@ -409,19 +430,18 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 .orElse("");
     }
 
-    private static String identitySignature(CtExecutable<?> executable, String methodName,
-                                            List<SourceParameter> parameters) {
-        if (executable instanceof CtMethod<?> method) {
-            try {
-                String signature = method.getSignature();
-                if (signature != null && !signature.isBlank()) {
-                    return signature.replaceAll("\\s+", " ").trim();
-                }
-            } catch (Exception | StackOverflowError ignored) {
-                // Fall back to the locally computed erased signature.
-            }
-        }
-        return methodName + "(" + parameterSignature(parameters, true) + ")";
+    private static String erasedParameterSignature(List<SourceParameter> parameters) {
+        return parameters.stream()
+                .map(SourceParameter::erasedType)
+                .map(String::trim)
+                .reduce((a, b) -> a + "," + b)
+                .orElse("");
+    }
+
+    private static String identitySignature(String methodName, List<SourceParameter> parameters,
+                                            String erasedReturnType) {
+        String returnType = erasedReturnType == null || erasedReturnType.isBlank() ? "void" : erasedReturnType;
+        return methodName + "(" + erasedParameterSignature(parameters) + "):" + returnType;
     }
 
     private static String sourceSlice(CtElement element) {
@@ -658,18 +678,369 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return metrics;
     }
 
-    private static Map<String, Object> javadocMetadata(CtExecutable<?> executable, String javadoc) {
+    private static Map<String, Object> javadocMetadata(ParsedProject parsed, CtType<?> owner,
+                                                       CtExecutable<?> executable, SourceMethod method,
+                                                       String javadoc) {
         Map<String, Object> metadata = new LinkedHashMap<>();
         String normalized = javadoc == null ? "" : javadoc.strip();
         metadata.put("since", matches(SINCE_TAG, normalized, 1));
         metadata.put("see", matches(SEE_TAG, normalized, 1));
         metadata.put("inline_links", matches(INLINE_LINK, normalized, 1));
+        metadata.put("javadoc_references", javadocReferences(parsed, owner, normalized));
+        metadata.put("file_references", fileReferences(method, normalized));
+        metadata.put("structured_tags", structuredTags(normalized));
         metadata.put("uses_inheritdoc", normalized.contains("{@inheritDoc}") || normalized.contains("@inheritDoc"));
         metadata.put("deprecated", isDeprecated(executable, normalized));
         metadata.put("deprecation_text", deprecationText(normalized));
         metadata.put("inheritdoc_resolution", inheritdocResolution(executable, normalized));
         metadata.put("inherited_javadoc_candidates", inheritedJavadocCandidates(executable));
         return metadata;
+    }
+
+    private static List<Map<String, Object>> fileReferences(SourceMethod method, String javadoc) {
+        if (javadoc == null || javadoc.isBlank()) {
+            return List.of();
+        }
+        List<Map<String, Object>> references = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        Matcher matcher = JAVADOC_FILE_REFERENCE.matcher(javadoc);
+        while (matcher.find()) {
+            String raw = matcher.group();
+            if (raw.startsWith("http://") || raw.startsWith("https://")) {
+                continue;
+            }
+            String normalized = raw.replace("{@docRoot}/", "");
+            if (!seen.add(normalized)) {
+                continue;
+            }
+            Path resolved = resolveJavadocFile(method.sourceFile(), normalized);
+            Map<String, Object> ref = new LinkedHashMap<>();
+            ref.put("raw", raw);
+            ref.put("path", normalized);
+            ref.put("kind", fileReferenceKind(normalized));
+            ref.put("resolved_path", resolved != null ? resolved.toString() : "");
+            ref.put("exists", resolved != null && Files.exists(resolved));
+            if (resolved != null && Files.exists(resolved) && isTextLike(normalized)) {
+                ref.put("excerpt", excerpt(readSmallFile(resolved)));
+            }
+            references.add(ref);
+            if (references.size() >= 20) {
+                break;
+            }
+        }
+        return references;
+    }
+
+    private static Path resolveJavadocFile(Path sourceFile, String rawPath) {
+        if (sourceFile == null || rawPath == null || rawPath.isBlank()) {
+            return null;
+        }
+        Path sourceDir = sourceFile.toAbsolutePath().normalize().getParent();
+        if (sourceDir == null) {
+            return null;
+        }
+        Path direct = sourceDir.resolve(rawPath).normalize();
+        if (Files.exists(direct)) {
+            return direct;
+        }
+        int docFiles = rawPath.indexOf("doc-files/");
+        if (docFiles >= 0) {
+            Path docFile = sourceDir.resolve(rawPath.substring(docFiles)).normalize();
+            if (Files.exists(docFile)) {
+                return docFile;
+            }
+        }
+        return direct;
+    }
+
+    private static String fileReferenceKind(String path) {
+        String lower = path.toLowerCase(Locale.ROOT);
+        if (lower.endsWith(".png") || lower.endsWith(".svg") || lower.endsWith(".gif")
+                || lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+            return "image";
+        }
+        if (lower.endsWith(".html") || lower.endsWith(".htm")) {
+            return "html";
+        }
+        if (lower.endsWith(".java")) {
+            return "sample_source";
+        }
+        return "text";
+    }
+
+    private static boolean isTextLike(String path) {
+        String lower = path.toLowerCase(Locale.ROOT);
+        return lower.endsWith(".html") || lower.endsWith(".htm")
+                || lower.endsWith(".txt") || lower.endsWith(".java");
+    }
+
+    private static String readSmallFile(Path path) {
+        try {
+            if (Files.size(path) > 32_768) {
+                return "";
+            }
+            return Files.readString(path, StandardCharsets.UTF_8);
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private static Map<String, Object> structuredTags(String javadoc) {
+        Map<String, Object> tags = new LinkedHashMap<>();
+        List<Map<String, String>> params = new ArrayList<>();
+        List<Map<String, String>> throwsTags = new ArrayList<>();
+        List<String> returns = new ArrayList<>();
+        List<String> since = new ArrayList<>();
+        List<String> apiNotes = new ArrayList<>();
+        List<String> implSpecs = new ArrayList<>();
+        List<String> implNotes = new ArrayList<>();
+        List<String> deprecated = new ArrayList<>();
+
+        Matcher matcher = BLOCK_TAG.matcher(javadoc == null ? "" : javadoc);
+        while (matcher.find()) {
+            String tag = matcher.group(1);
+            String body = matcher.group(2).replaceAll("\\s+", " ").trim();
+            switch (tag) {
+                case "param" -> {
+                    String[] parts = body.split("\\s+", 2);
+                    Map<String, String> param = new LinkedHashMap<>();
+                    param.put("name", parts.length > 0 ? parts[0] : "");
+                    param.put("text", parts.length > 1 ? parts[1] : "");
+                    params.add(param);
+                }
+                case "return" -> returns.add(body);
+                case "throws", "exception" -> {
+                    String[] parts = body.split("\\s+", 2);
+                    Map<String, String> thrown = new LinkedHashMap<>();
+                    thrown.put("type", parts.length > 0 ? parts[0] : "");
+                    thrown.put("text", parts.length > 1 ? parts[1] : "");
+                    throwsTags.add(thrown);
+                }
+                case "since" -> since.add(body);
+                case "apiNote" -> apiNotes.add(body);
+                case "implSpec" -> implSpecs.add(body);
+                case "implNote" -> implNotes.add(body);
+                case "deprecated" -> deprecated.add(body);
+                default -> {
+                    // Keep the switch exhaustive for known tags above.
+                }
+            }
+        }
+
+        tags.put("params", params);
+        tags.put("return", returns);
+        tags.put("throws", throwsTags);
+        tags.put("since", since);
+        tags.put("api_notes", apiNotes);
+        tags.put("impl_specs", implSpecs);
+        tags.put("impl_notes", implNotes);
+        tags.put("deprecated", deprecated);
+        return tags;
+    }
+
+    private static List<Map<String, Object>> javadocReferences(ParsedProject parsed, CtType<?> owner, String javadoc) {
+        if (javadoc == null || javadoc.isBlank()) {
+            return List.of();
+        }
+        List<Map<String, Object>> references = new ArrayList<>();
+
+        Matcher seeMatcher = SEE_TAG.matcher(javadoc);
+        while (seeMatcher.find()) {
+            String raw = seeMatcher.group(1).trim();
+            String[] targetAndLabel = splitReferenceTargetAndLabel(raw);
+            references.add(resolveJavadocReference(parsed, owner, "see", raw, targetAndLabel[0], targetAndLabel[1]));
+        }
+
+        Matcher inlineMatcher = INLINE_LINK_FULL.matcher(javadoc);
+        while (inlineMatcher.find()) {
+            String tag = inlineMatcher.group(1);
+            String target = inlineMatcher.group(2).trim();
+            String label = inlineMatcher.group(3) != null ? inlineMatcher.group(3).trim() : "";
+            references.add(resolveJavadocReference(parsed, owner, tag, inlineMatcher.group(0), target, label));
+        }
+
+        return references;
+    }
+
+    private static String[] splitReferenceTargetAndLabel(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return new String[]{"", ""};
+        }
+        String trimmed = raw.trim();
+        if (trimmed.startsWith("<a ") || trimmed.startsWith("<A ")
+                || trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+            return new String[]{trimmed, ""};
+        }
+        int firstWhitespace = -1;
+        for (int i = 0; i < trimmed.length(); i++) {
+            if (Character.isWhitespace(trimmed.charAt(i))) {
+                firstWhitespace = i;
+                break;
+            }
+        }
+        if (firstWhitespace < 0) {
+            return new String[]{trimmed, ""};
+        }
+        return new String[]{
+                trimmed.substring(0, firstWhitespace),
+                trimmed.substring(firstWhitespace + 1).trim()
+        };
+    }
+
+    private static Map<String, Object> resolveJavadocReference(ParsedProject parsed, CtType<?> owner,
+                                                               String tag, String raw, String target,
+                                                               String label) {
+        Map<String, Object> ref = new LinkedHashMap<>();
+        ref.put("tag", tag);
+        ref.put("raw", raw);
+        ref.put("target", target);
+        ref.put("label", label == null ? "" : label);
+
+        Matcher anchor = ANCHOR_HREF.matcher(target);
+        if (anchor.find()) {
+            ref.put("kind", "external_url");
+            ref.put("url", anchor.group(1).trim());
+            ref.put("label", anchor.group(2).replaceAll("\\s+", " ").trim());
+            ref.put("resolution", "external");
+            return ref;
+        }
+
+        if (target.startsWith("http://") || target.startsWith("https://")) {
+            ref.put("kind", "external_url");
+            ref.put("url", target);
+            ref.put("resolution", "external");
+            return ref;
+        }
+
+        String cleaned = target.replaceAll("#$", "").trim();
+        if (cleaned.isBlank()) {
+            ref.put("kind", "unknown");
+            ref.put("resolution", "empty_target");
+            return ref;
+        }
+
+        if (cleaned.contains("#")) {
+            resolveMemberReference(parsed, owner, cleaned, ref);
+        } else {
+            resolveTypeReference(parsed, owner, cleaned, ref);
+        }
+        return ref;
+    }
+
+    private static void resolveMemberReference(ParsedProject parsed, CtType<?> owner,
+                                               String target, Map<String, Object> ref) {
+        int hash = target.indexOf('#');
+        String rawType = target.substring(0, hash).trim();
+        String member = target.substring(hash + 1).trim();
+        String className = resolveClassName(parsed, owner, rawType);
+        String methodName = member.replaceAll("\\(.*", "").trim();
+        int paramCount = parameterCountFromReference(member);
+
+        ref.put("kind", "member_reference");
+        ref.put("resolved_class", className);
+        ref.put("referenced_member", member);
+
+        if (className.isBlank() || methodName.isBlank()) {
+            ref.put("resolution", "unresolved");
+            return;
+        }
+
+        List<SourceMethod> candidates = parsed.methodsByClassName().getOrDefault(className, List.of()).stream()
+                .filter(method -> method.methodName().equals(methodName))
+                .filter(method -> paramCount < 0 || method.parameters().size() == paramCount)
+                .toList();
+
+        if (candidates.size() == 1) {
+            SourceMethod method = candidates.get(0);
+            ref.put("resolution", "resolved_method");
+            ref.put("method_uri", method.methodUri());
+            ref.put("signature", method.className() + "." + method.signature());
+            ref.put("source_set", method.sourceSet());
+            ref.put("javadoc_excerpt", excerpt(docComment(parsed.executablesByUri().get(method.methodUri()))));
+        } else if (candidates.size() > 1) {
+            ref.put("resolution", "ambiguous_method");
+            ref.put("candidate_method_uris", candidates.stream()
+                    .map(SourceMethod::methodUri)
+                    .limit(10)
+                    .toList());
+        } else {
+            ref.put("resolution", parsed.typesByQualifiedName().containsKey(className)
+                    ? "class_resolved_member_unresolved"
+                    : "unresolved");
+        }
+    }
+
+    private static void resolveTypeReference(ParsedProject parsed, CtType<?> owner,
+                                             String target, Map<String, Object> ref) {
+        String className = resolveClassName(parsed, owner, target);
+        if (!className.isBlank()) {
+            ref.put("kind", "type_reference");
+            ref.put("resolution", "resolved_type");
+            ref.put("resolved_class", className);
+            ref.put("class_javadoc_excerpt", excerpt(docComment(parsed.typesByQualifiedName().get(className))));
+        } else {
+            ref.put("kind", "external_or_unresolved_type");
+            ref.put("resolution", "unresolved");
+        }
+    }
+
+    private static String resolveClassName(ParsedProject parsed, CtType<?> owner, String rawType) {
+        String target = rawType == null ? "" : rawType.trim();
+        if (target.isBlank()) {
+            return owner != null ? owner.getQualifiedName() : "";
+        }
+        target = target.replaceAll("<.*>", "");
+        if (parsed.typesByQualifiedName().containsKey(target)) {
+            return target;
+        }
+        if (owner != null && !target.contains(".")) {
+            String packageName = owner.getPackage() != null ? owner.getPackage().getQualifiedName() : "";
+            String samePackage = packageName.isBlank() ? target : packageName + "." + target;
+            if (parsed.typesByQualifiedName().containsKey(samePackage)) {
+                return samePackage;
+            }
+            String nested = owner.getQualifiedName() + "$" + target;
+            if (parsed.typesByQualifiedName().containsKey(nested)) {
+                return nested;
+            }
+        }
+        String lookupTarget = target;
+        List<String> simpleMatches = parsed.typesByQualifiedName().keySet().stream()
+                .filter(name -> name.endsWith("." + lookupTarget)
+                        || name.endsWith("$" + lookupTarget)
+                        || name.equals(lookupTarget))
+                .limit(2)
+                .toList();
+        return simpleMatches.size() == 1 ? simpleMatches.get(0) : "";
+    }
+
+    private static int parameterCountFromReference(String member) {
+        int open = member.indexOf('(');
+        int close = member.lastIndexOf(')');
+        if (open < 0 || close < open) {
+            return -1;
+        }
+        String params = member.substring(open + 1, close).trim();
+        if (params.isBlank()) {
+            return 0;
+        }
+        int count = 1;
+        int depth = 0;
+        for (int i = 0; i < params.length(); i++) {
+            char c = params.charAt(i);
+            if (c == '<') depth++;
+            if (c == '>') depth = Math.max(0, depth - 1);
+            if (c == ',' && depth == 0) count++;
+        }
+        return count;
+    }
+
+    private static String excerpt(String text) {
+        if (text == null || text.isBlank()) {
+            return "";
+        }
+        String normalized = text.replaceAll("\\s+", " ").trim();
+        return normalized.length() <= 240 ? normalized : normalized.substring(0, 240) + "...";
     }
 
     private static boolean isDeprecated(CtExecutable<?> executable, String javadoc) {
@@ -786,6 +1157,13 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return "";
     }
 
+    private static String erasedReturnType(CtExecutable<?> executable, String fallback) {
+        if (executable instanceof CtMethod<?> method) {
+            return erasedType(method.getType(), fallback);
+        }
+        return "void";
+    }
+
     private static List<String> annotations(CtElement element) {
         return element.getAnnotations().stream()
                 .map(SpoonSourceModelBackend::annotationName)
@@ -890,12 +1268,19 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             List<SourceMethod> methods,
             Map<String, SourceMethod> methodsByUri,
             Map<String, CtExecutable<?>> executablesByUri,
+            Map<String, CtType<?>> typesByQualifiedName,
+            Map<String, List<SourceMethod>> methodsByClassName,
             Map<String, ClassContext> classContextsByTypeAndMethod,
             String mode) {
         private ParsedProject {
             methods = List.copyOf(methods);
             methodsByUri = Map.copyOf(methodsByUri);
             executablesByUri = Map.copyOf(executablesByUri);
+            typesByQualifiedName = Map.copyOf(typesByQualifiedName);
+            methodsByClassName = methodsByClassName.entrySet().stream()
+                    .collect(java.util.stream.Collectors.toUnmodifiableMap(
+                            Map.Entry::getKey,
+                            entry -> List.copyOf(entry.getValue())));
             mode = mode != null ? mode : "";
         }
     }

@@ -6,7 +6,10 @@
   "type": "object",
   "required": ["method_uri"],
   "properties": {
-    "method_uri": {"type": "string"},
+    "method_uri": {
+      "type": "string",
+      "description": "Canonical C4DG method URI: relative/path.java#qualified.Class.method(erasedParamTypes):erasedReturnType"
+    },
     "docstring": {"type": "string"},
     "test_prefix": {"type": "string"}
   },

@@ -174,8 +174,8 @@ public class CallGraphGenerator {
         try {
             long startTime = System.currentTimeMillis();
 
-            Set<String> callers = new HashSet<>();
-            Set<String> callees = new HashSet<>();
+            Set<CallGraphEdge> callers = new HashSet<>();
+            Set<CallGraphEdge> callees = new HashSet<>();
 
             MethodSignature sig = findMethodSignature(method);
             if (sig != null) {
@@ -184,13 +184,13 @@ public class CallGraphGenerator {
                 for (CallGraph.Call call : cg.callsTo(sig)) {
                     MethodSignature callerSig = call.getSourceMethodSignature();
                     if (!isSpecialMethod(callerSig)) {
-                        callers.add(callerSig.toString());
+                        callers.add(edgeFor(callerSig));
                     }
                 }
                 for (CallGraph.Call call : cg.callsFrom(sig)) {
                     MethodSignature calleeSig = call.getTargetMethodSignature();
                     if (!isSpecialMethod(calleeSig)) {
-                        callees.add(calleeSig.toString());
+                        callees.add(edgeFor(calleeSig));
                     }
                 }
             }
@@ -218,6 +218,7 @@ public class CallGraphGenerator {
         if (!initialized) {
             throw new IllegalStateException("CallGraphGenerator not initialized. Call initialize() first.");
         }
+        indexMethodSignatures(methods);
         return methods.stream()
                 .map(this::generateForMethod)
                 .filter(Objects::nonNull)
@@ -228,6 +229,26 @@ public class CallGraphGenerator {
 
     public String resolveSignatureToMethodId(String sootUpSignature) {
         return signatureToMethodId != null ? signatureToMethodId.get(sootUpSignature) : null;
+    }
+
+    private void indexMethodSignatures(List<MethodInfo> methods) {
+        for (MethodInfo method : methods) {
+            MethodSignature sig = findMethodSignature(method);
+            if (sig != null) {
+                signatureToMethodId.put(sig.toString(), method.getId());
+            }
+        }
+    }
+
+    private CallGraphEdge edgeFor(MethodSignature sig) {
+        String raw = sig.toString();
+        String methodId = resolveSignatureToMethodId(raw);
+        String declaringClass = sig.getDeclClassType() != null ? sig.getDeclClassType().toString() : "";
+        String methodName = sig.getName();
+        if (methodId != null && !methodId.isBlank()) {
+            return CallGraphEdge.resolved(methodId, raw, declaringClass, methodName);
+        }
+        return CallGraphEdge.unresolved(raw, declaringClass, methodName);
     }
 
     // ---- Class hierarchy queries ----
@@ -332,6 +353,9 @@ public class CallGraphGenerator {
             if (!expectedParams.isEmpty() && paramsMatch(m.getParameterTypes(), expectedParams)) {
                 score += 10;
             }
+            if (returnTypeMatches(m.getSignature(), method.getErasedReturnType())) {
+                score += 4;
+            }
 
             String sigStr = m.getSignature().toString();
             if (score > bestScore || (score == bestScore && (bestSigStr == null || sigStr.compareTo(bestSigStr) < 0))) {
@@ -366,6 +390,15 @@ public class CallGraphGenerator {
             if (!sootSimple.equals(expectedSimple.get(i))) return false;
         }
         return true;
+    }
+
+    private static boolean returnTypeMatches(MethodSignature signature, String expectedErasedReturnType) {
+        if (expectedErasedReturnType == null || expectedErasedReturnType.isBlank()) {
+            return false;
+        }
+        String sootReturn = toSimpleName(signature.getType().toString().replaceAll("<.*?>", ""));
+        String expected = toSimpleName(expectedErasedReturnType.replaceAll("<.*?>", ""));
+        return sootReturn.equals(expected);
     }
 
     private static String toSimpleName(String fqcn) {

@@ -16,6 +16,8 @@ public class MethodContext {
     private final String methodName;
     private final String classname;
     private final String signature;           // Formatted: org.example.Class.foo(String, int)
+    private final String returnType;
+    private final String erasedReturnType;
     private final int lineNumber;             // Source line number (1-indexed)
     private final List<String> parameters;    // Parameter types: ["String", "int"]
     private final List<Map<String, Object>> parameterDetails;
@@ -48,6 +50,8 @@ public class MethodContext {
         this.methodName = Objects.requireNonNull(builder.methodName, "methodName cannot be null");
         this.classname = Objects.requireNonNull(builder.classname, "classname cannot be null");
         this.signature = builder.signature != null ? builder.signature : "";
+        this.returnType = builder.returnType != null ? builder.returnType : "";
+        this.erasedReturnType = builder.erasedReturnType != null ? builder.erasedReturnType : this.returnType;
         this.lineNumber = builder.lineNumber;
         this.parameters = Collections.unmodifiableList(new ArrayList<>(builder.parameters));
         this.parameterDetails = Collections.unmodifiableList(new ArrayList<>(builder.parameterDetails));
@@ -91,6 +95,14 @@ public class MethodContext {
 
     public String getSignature() {
         return signature;
+    }
+
+    public String getReturnType() {
+        return returnType;
+    }
+
+    public String getErasedReturnType() {
+        return erasedReturnType;
     }
 
     public int getLineNumber() {
@@ -228,6 +240,8 @@ public class MethodContext {
         private String methodName;
         private String classname;
         private String signature = "";
+        private String returnType = "";
+        private String erasedReturnType = "";
         private int lineNumber = -1;
         private List<String> parameters = List.of();
         private List<Map<String, Object>> parameterDetails = List.of();
@@ -272,6 +286,19 @@ public class MethodContext {
 
         public Builder signature(String signature) {
             this.signature = signature;
+            return this;
+        }
+
+        public Builder returnType(String returnType) {
+            this.returnType = returnType;
+            if (this.erasedReturnType == null || this.erasedReturnType.isBlank()) {
+                this.erasedReturnType = returnType;
+            }
+            return this;
+        }
+
+        public Builder erasedReturnType(String erasedReturnType) {
+            this.erasedReturnType = erasedReturnType;
             return this;
         }
 

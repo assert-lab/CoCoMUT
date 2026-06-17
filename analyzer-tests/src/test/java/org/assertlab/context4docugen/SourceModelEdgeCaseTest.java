@@ -41,7 +41,9 @@ public class SourceModelEdgeCaseTest {
                     public class EdgeCase implements Parent<String> {
                         private String last;
 
-                        /** {@inheritDoc} */
+                        /** {@inheritDoc}
+                         * @see #transform(String, int)
+                         */
                         @Deprecated
                         @Override
                         public String transform(final String input) throws IOException {
@@ -93,6 +95,9 @@ public class SourceModelEdgeCaseTest {
 
             assertEquals("public", focal.visibility());
             assertEquals("java.lang.String", focal.returnType());
+            assertEquals("java.lang.String", focal.erasedReturnType());
+            assertTrue("Method URI should include erased return type",
+                    focal.methodUri().endsWith("):java.lang.String"));
             assertEquals("input", focal.parameters().get(0).name());
             assertEquals("java.lang.String", focal.parameters().get(0).type());
             assertTrue(focal.parameters().get(0).modifiers().contains("final"));
@@ -104,8 +109,10 @@ public class SourceModelEdgeCaseTest {
             assertTrue((Boolean) context.documentationMetrics().get("uses_inheritdoc"));
             assertEquals("resolved_candidate", context.javadocMetadata().get("inheritdoc_resolution"));
             assertTrue(context.javadocMetadata().containsKey("inherited_javadoc_candidates"));
+            assertTrue("Javadoc @see should resolve to a project method URI",
+                    context.javadocMetadata().get("javadoc_references").toString()
+                            .contains("#demo.EdgeCase.transform(java.lang.String,int):java.lang.String"));
             assertFalse(context.methodBody().isBlank());
-            assertEquals("{@inheritDoc}", context.javadoc().replaceAll("\\s+", ""));
             assertTrue("Method source should keep annotations", context.methodBody().startsWith("@Deprecated"));
             assertFalse("Method source must not include leading Javadoc",
                     context.methodBody().contains("/**"));
@@ -184,8 +191,12 @@ public class SourceModelEdgeCaseTest {
                     methods.stream().map(SourceMethod::methodUri).distinct().count());
             assertTrue(methods.stream().anyMatch(method -> method.methodUri().contains("java.lang.Object")));
             assertTrue(methods.stream().anyMatch(method -> method.methodUri().contains("java.lang.Throwable")));
+            assertTrue(methods.stream().anyMatch(method -> method.methodUri().endsWith("):java.lang.Object")));
+            assertTrue(methods.stream().anyMatch(method -> method.methodUri().endsWith("):java.lang.Throwable")));
             assertTrue(methods.stream().anyMatch(method -> method.parameters().get(0).erasedType().equals("java.lang.Object")));
             assertTrue(methods.stream().anyMatch(method -> method.parameters().get(0).erasedType().equals("java.lang.Throwable")));
+            assertTrue(methods.stream().anyMatch(method -> method.erasedReturnType().equals("java.lang.Object")));
+            assertTrue(methods.stream().anyMatch(method -> method.erasedReturnType().equals("java.lang.Throwable")));
         } finally {
             deleteRecursively(project);
         }

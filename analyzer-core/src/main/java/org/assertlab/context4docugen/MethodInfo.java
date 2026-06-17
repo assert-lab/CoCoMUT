@@ -18,6 +18,7 @@ public class MethodInfo {
     private final String visibility;  // "public", "private", "protected", "package-private"
     private final boolean isStatic;
     private final String returnType;
+    private final String erasedReturnType;
     private final String sourceSet;
     private final String originalDocstring;  // human-written docstring from inputs_selected.csv (empty if scanned from source)
     private final String testPrefix;         // associated test code from inputs_selected.csv (empty if scanned from source)
@@ -33,6 +34,7 @@ public class MethodInfo {
         this.visibility = Objects.requireNonNull(builder.visibility, "visibility cannot be null");
         this.isStatic = builder.isStatic;
         this.returnType = Objects.requireNonNull(builder.returnType, "returnType cannot be null");
+        this.erasedReturnType = Objects.requireNonNull(builder.erasedReturnType, "erasedReturnType cannot be null");
         this.sourceSet = builder.sourceSet != null ? builder.sourceSet : "unknown";
         this.originalDocstring = builder.originalDocstring != null ? builder.originalDocstring : "";
         this.testPrefix = builder.testPrefix != null ? builder.testPrefix : "";
@@ -83,6 +85,10 @@ public class MethodInfo {
         return returnType;
     }
 
+    public String getErasedReturnType() {
+        return erasedReturnType;
+    }
+
     public String getSourceSet() {
         return sourceSet;
     }
@@ -107,6 +113,7 @@ public class MethodInfo {
                 ", isStatic=" + isStatic +
                 ", sourceSet='" + sourceSet + '\'' +
                 ", returnType='" + returnType + '\'' +
+                ", erasedReturnType='" + erasedReturnType + '\'' +
                 '}';
     }
 
@@ -139,6 +146,7 @@ public class MethodInfo {
         private String visibility = "package-private";
         private boolean isStatic = false;
         private String returnType = "void";
+        private String erasedReturnType = "void";
         private String sourceSet = "unknown";
         private String originalDocstring = "";
         private String testPrefix = "";
@@ -190,6 +198,14 @@ public class MethodInfo {
 
         public Builder returnType(String returnType) {
             this.returnType = returnType;
+            if (this.erasedReturnType == null || this.erasedReturnType.isBlank()) {
+                this.erasedReturnType = returnType;
+            }
+            return this;
+        }
+
+        public Builder erasedReturnType(String erasedReturnType) {
+            this.erasedReturnType = erasedReturnType;
             return this;
         }
 

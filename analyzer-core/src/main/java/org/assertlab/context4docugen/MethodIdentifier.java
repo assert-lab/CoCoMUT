@@ -57,6 +57,7 @@ public class MethodIdentifier {
                 .visibility(method.visibility())
                 .isStatic(method.isStatic())
                 .returnType(method.returnType())
+                .erasedReturnType(method.erasedReturnType())
                 .sourceSet(method.sourceSet())
                 .build();
     }
