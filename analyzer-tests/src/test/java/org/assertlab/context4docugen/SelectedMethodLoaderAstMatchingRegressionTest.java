@@ -6,7 +6,6 @@ import org.junit.experimental.categories.Category;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
-import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -71,15 +70,13 @@ public class SelectedMethodLoaderAstMatchingRegressionTest {
 
         assertEquals("Pipeline should still run. Report: " + orchestrator.getExecutionReport(), true, ok);
 
-        Path methodsCsv = fixtureProject.resolve("methods.csv");
-        List<String> rows = Files.readAllLines(methodsCsv);
-        String nestedRow = rows.stream()
-                .filter(row -> row.contains("#poc.SelectedMethodMatchingFixture$Nested.value("))
+        MethodInfo nestedMethod = orchestrator.getMethodInfos().stream()
+                .filter(method -> method.getMethodUri().contains("#poc.SelectedMethodMatchingFixture$Nested.value("))
                 .findFirst()
-                .orElseThrow(() -> new AssertionError("nested_value row missing from methods.csv"));
+                .orElseThrow(() -> new AssertionError("nested_value method missing from loaded methods"));
 
         assertTrue(
                 "nested_value should be attributed to the nested declaring class, not only to the outer source file class",
-                nestedRow.contains("Nested"));
+                nestedMethod.getClassname().contains("Nested"));
     }
 }

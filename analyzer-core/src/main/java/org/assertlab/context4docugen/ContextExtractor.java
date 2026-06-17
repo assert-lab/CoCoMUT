@@ -17,7 +17,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 /**
  * Phase 4 of the method context extraction pipeline.
@@ -131,6 +130,7 @@ public class ContextExtractor {
                             Map<String, Object> detail = new java.util.LinkedHashMap<>();
                             detail.put("name", p.name());
                             detail.put("type", p.type());
+                            detail.put("erased_type", p.erasedType());
                             detail.put("modifiers", p.modifiers());
                             detail.put("annotations", p.annotations());
                             return detail;
@@ -156,7 +156,7 @@ public class ContextExtractor {
                 .javadocMetadata(sourceContext.javadocMetadata())
                 .documentationMetrics(sourceContext.documentationMetrics())
                 .sourceBackend(sourceBackend.name())
-                .sourceBackendMode(sourceBackend.mode())
+                .sourceBackendMode(sourceContext.sourceBackendMode())
                 .hierarchyResolution(sourceContext.hierarchyResolution())
                 .sourceSet(sourceMethod.sourceSet())
                 .build();

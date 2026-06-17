@@ -67,15 +67,14 @@ public class AnalyzerFacadeTest {
                         + focal + "|" + testPrefix + "|" + docstring + "|" + id + "\n");
 
         Orchestrator orch = new Orchestrator(fixtureRoot, Orchestrator.ExecutionMode.SELECTED)
-                .setInputCsvPath(tempCsv);
+                .setInputCsvPath(tempCsv)
+                .setOutputMode(AnalysisOptions.OutputMode.JSONL)
+                .setOutputDirectory(Files.createTempDirectory("c4dg-selected-json"));
         boolean ok = orch.execute();
 
         assertTrue("SELECTED-mode pipeline should succeed", ok);
 
-        Path jsonFile = findJsonForMethod("greet");
-        assertTrue("Expected JSON output at " + jsonFile, Files.exists(jsonFile));
-
-        JsonNode json = new ObjectMapper().readTree(jsonFile.toFile());
+        JsonNode json = findJsonlRowForMethod(Path.of(String.valueOf(orch.getExecutionReport().get("phase_5_jsonl_file"))), "greet");
 
         assertTrue("JSON must contain original_docstring", json.has("original_docstring"));
         assertEquals("Greets a person by their name.",
@@ -90,7 +89,6 @@ public class AnalyzerFacadeTest {
         assertEquals("greet", json.get("MUT").get("method_name").asText());
 
         Files.deleteIfExists(tempCsv);
-        Files.deleteIfExists(jsonFile);  // cleanup so we don't pollute the fixture
     }
 
     @Test
@@ -127,30 +125,48 @@ public class AnalyzerFacadeTest {
     }
 
     @Test
+    public void autoCallGraphUsesRtaWhenCompiledClassesExist() throws Exception {
+        ContextRequest request = ContextRequest.builder()
+                .projectRoot(fixtureRoot)
+                .methodSelection(MethodSelection.entryPoints())
+                .callGraphAlgorithm(CallGraphGenerator.Algorithm.AUTO)
+                .sourceResolution(AnalysisOptions.SourceResolution.AUTO)
+                .outputMode(AnalysisOptions.OutputMode.JSONL)
+                .maxMethods(1)
+                .build();
+
+        ExtractionReport report = ContextExtractorService.createDefault().extract(request);
+
+        assertTrue(report.successful());
+        assertEquals("AUTO", report.asMap().get("phase_3_algorithm"));
+        assertEquals("RTA", report.asMap().get("phase_3_effective_algorithm"));
+    }
+
+    @Test
     public void fullModeJsonOmitsResearchFields() throws Exception {
         // FULL mode has no CSV-origin metadata → research fields must be absent
-        AnalyzerFacade.analyze(fixtureRoot);
+        Path output = Files.createTempDirectory("c4dg-full-json");
+        AnalyzerFacade.analyze(fixtureRoot, AnalysisOptions.builder()
+                .outputMode(AnalysisOptions.OutputMode.JSONL)
+                .outputDirectory(output)
+                .build());
 
-        Path greetJson = findJsonForMethod("greet");
-        assertTrue("FULL-mode greet JSON should exist", Files.exists(greetJson));
-
-        JsonNode json = new ObjectMapper().readTree(greetJson.toFile());
+        JsonNode json = findJsonlRowForMethod(output.resolve("method_contexts.jsonl"), "greet");
         assertFalse("FULL-mode JSON must NOT contain original_docstring",
                 json.has("original_docstring"));
         assertFalse("FULL-mode JSON must NOT contain test_prefix",
                 json.has("test_prefix"));
     }
 
-    private Path findJsonForMethod(String methodName) throws Exception {
-        Path jsonDir = fixtureRoot.resolve("method_context_json");
-        try (var files = Files.list(jsonDir)) {
-            for (Path file : files.filter(p -> p.getFileName().toString().endsWith(".json")).toList()) {
-                JsonNode json = new ObjectMapper().readTree(file.toFile());
-                if (methodName.equals(json.path("MUT").path("method_name").asText())) {
-                    return file;
-                }
+    private JsonNode findJsonlRowForMethod(Path jsonl, String methodName) throws Exception {
+        assertTrue("Expected JSONL output at " + jsonl, Files.exists(jsonl));
+        ObjectMapper mapper = new ObjectMapper();
+        for (String line : Files.readAllLines(jsonl)) {
+            JsonNode json = mapper.readTree(line);
+            if (methodName.equals(json.path("MUT").path("method_name").asText())) {
+                return json;
             }
         }
-        throw new AssertionError("No JSON file found for method " + methodName + " in " + jsonDir);
+        throw new AssertionError("No JSONL row found for method " + methodName + " in " + jsonl);
     }
 }

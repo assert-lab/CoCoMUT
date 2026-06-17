@@ -19,7 +19,7 @@ scripts/build_release_jar.sh
 
 ```bash
 ./bin/c4dg validate --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project
-./bin/c4dg extract --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project --scope entry-points --call-graph none --output jsonl
+./bin/c4dg extract --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project --scope entry-points --call-graph none
 ```
 
 ## Development Notes

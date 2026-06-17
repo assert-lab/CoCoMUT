@@ -105,9 +105,152 @@ public class SourceModelEdgeCaseTest {
             assertEquals("resolved_candidate", context.javadocMetadata().get("inheritdoc_resolution"));
             assertTrue(context.javadocMetadata().containsKey("inherited_javadoc_candidates"));
             assertFalse(context.methodBody().isBlank());
+            assertEquals("{@inheritDoc}", context.javadoc().replaceAll("\\s+", ""));
+            assertTrue("Method source should keep annotations", context.methodBody().startsWith("@Deprecated"));
+            assertFalse("Method source must not include leading Javadoc",
+                    context.methodBody().contains("/**"));
         } finally {
             deleteRecursively(project);
         }
+    }
+
+    @Test
+    public void spoonBackendDeduplicatesOverlappingSourceRoots() throws Exception {
+        Path project = Files.createTempDirectory("c4dg-overlapping-source-roots");
+        try {
+            write(project.resolve("src/main/java/demo/DuplicateRoot.java"), """
+                    package demo;
+
+                    public class DuplicateRoot {
+                        public String value(String input) {
+                            return input;
+                        }
+                    }
+                    """);
+
+            ProjectMetadata metadata = new ProjectMetadata.Builder()
+                    .projectName("overlapping-source-roots")
+                    .projectPath(project)
+                    .buildSystem("none")
+                    .javaVersion("17")
+                    .sourceRoot(project)
+                    .classpath(List.of())
+                    .compiles(false)
+                    .compileStatus("BUILD NOT ATTEMPTED")
+                    .build();
+
+            ProjectModel model = ProjectModel.from(metadata);
+            List<SourceMethod> methods = SourceBackends.spoon().findMethods(model);
+            long matching = methods.stream()
+                    .filter(m -> m.className().equals("demo.DuplicateRoot"))
+                    .filter(m -> m.methodName().equals("value"))
+                    .count();
+
+            assertEquals("Overlapping project and src/main/java roots should not duplicate method URIs",
+                    1, matching);
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void methodUriUsesErasedSignatureForGenericOverloadIdentity() throws Exception {
+        Path project = Files.createTempDirectory("c4dg-generic-erasure-overloads");
+        try {
+            write(project.resolve("src/main/java/demo/GenericOverloads.java"), """
+                    package demo;
+
+                    public class GenericOverloads {
+                        /** Object-bounded overload. */
+                        public static <T> T throwUnchecked(final T throwable) {
+                            return throwable;
+                        }
+
+                        /** Throwable-bounded overload. */
+                        public static <T extends Throwable> T throwUnchecked(final T throwable) {
+                            return throwable;
+                        }
+                    }
+                    """);
+
+            ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
+            List<SourceMethod> methods = SourceBackends.spoon().findMethods(model).stream()
+                    .filter(method -> method.className().equals("demo.GenericOverloads"))
+                    .filter(method -> method.methodName().equals("throwUnchecked"))
+                    .toList();
+
+            assertEquals("Both generic overloads should be discoverable", 2, methods.size());
+            assertEquals("Their URI identities should remain distinct", 2,
+                    methods.stream().map(SourceMethod::methodUri).distinct().count());
+            assertTrue(methods.stream().anyMatch(method -> method.methodUri().contains("java.lang.Object")));
+            assertTrue(methods.stream().anyMatch(method -> method.methodUri().contains("java.lang.Throwable")));
+            assertTrue(methods.stream().anyMatch(method -> method.parameters().get(0).erasedType().equals("java.lang.Object")));
+            assertTrue(methods.stream().anyMatch(method -> method.parameters().get(0).erasedType().equals("java.lang.Throwable")));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void methodSourceDropsJavadocEvenWhenSpoonSliceStartsAtPreviousComment() throws Exception {
+        Path project = Files.createTempDirectory("c4dg-comment-before-javadoc");
+        try {
+            write(project.resolve("src/main/java/demo/CommentBeforeJavadoc.java"), """
+                    package demo;
+
+                    public class CommentBeforeJavadoc {
+                        // @formatter:on
+
+                        /**
+                         * Returns a {@code value()} value.
+                         *
+                         * @return value
+                         */
+                        @Deprecated
+                        public String value() {
+                            return "x";
+                        }
+                    }
+                    """);
+
+            ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
+            SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
+                    .filter(method -> method.methodName().equals("value"))
+                    .findFirst()
+                    .orElseThrow();
+            SourceContext context = SourceBackends.spoon()
+                    .extractContext(model, focal.methodUri())
+                    .orElseThrow();
+
+            assertEquals("Returns a {@code value()} value.\n\n@return value", context.javadoc());
+            assertTrue("Method source should keep annotations", context.methodBody().startsWith("@Deprecated"));
+            assertFalse("Method source must not include previous formatter comments",
+                    context.methodBody().contains("@formatter:on"));
+            assertFalse("Method source must not include leading Javadoc",
+                    context.methodBody().contains("/**"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void spoonAutoResolutionUsesClasspathWhenCompiledClassesExist() throws Exception {
+        TestFixtures.ensureMinimalMavenProjectCompiled();
+        ProjectMetadata metadata = new ProjectAnalyzer(TestFixtures.minimalMavenProjectRoot()).analyze();
+        ProjectModel model = ProjectModel.from(metadata);
+
+        SourceMethod focal = SourceBackends.spoon(AnalysisOptions.SourceResolution.AUTO)
+                .findMethods(model)
+                .stream()
+                .filter(method -> method.methodName().equals("greet"))
+                .findFirst()
+                .orElseThrow();
+
+        SourceContext context = SourceBackends.spoon(AnalysisOptions.SourceResolution.AUTO)
+                .extractContext(model, focal.methodUri())
+                .orElseThrow();
+
+        assertEquals("classpath", context.sourceBackendMode());
     }
 
     private static void write(Path path, String text) throws Exception {

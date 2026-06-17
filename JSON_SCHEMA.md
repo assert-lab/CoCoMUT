@@ -39,19 +39,19 @@ partial C4DG records early.
 ## MUT
 
 ```text
-method_uri                Stable method URI: path#qualified.Class.method(signature)
+method_uri                Stable method URI: path#qualified.Class.method(erased-parameter-signature)
 method_name               Simple method or constructor name
 source_set                main|test|integration_test|generated|example|unknown
-signature                 Qualified method signature
+signature                 Qualified human-readable source signature
 qualified_name            qualified class + method name
 line_number               Source line
-parameters                Objects with name, type, modifiers, annotations
+parameters                Objects with name, source type, erased_type, modifiers, annotations
 annotations               Method annotations
 throws                    Declared thrown exception types
 lines_of_code             Source LOC heuristic
 cyclomatic_complexity     Source complexity heuristic
-code                      Method/constructor source
-javadoc                   Method Javadoc from Spoon
+code                      Method/constructor source without leading Javadoc; annotations are kept
+javadoc                   Method Javadoc from Spoon, stored separately from code
 class_javadoc             Class Javadoc from Spoon
 class_hierarchy           Source hierarchy plus resolution confidence
 source_context            Field reads/writes, siblings, overload group
@@ -62,7 +62,7 @@ source_context            Field reads/writes, siblings, overload group
 ```text
 metadata.schema_version           0.3.0
 metadata.source_backend           spoon
-metadata.source_backend_mode      noclasspath
+metadata.source_backend_mode      noclasspath|classpath|noclasspath_fallback|noclasspath_limited
 metadata.method_identity          uri
 metadata.type_resolution          resolved|partial|missing
 metadata.call_graph.available     true|false
@@ -77,6 +77,10 @@ provenance.javadoc_extraction     spoon
 provenance.compiled_project       true|false
 provenance.hierarchy_resolution   resolved|partial|missing
 ```
+
+`source_backend_mode=classpath` means Spoon used classpath-aware source
+modeling. `noclasspath_fallback` means classpath-aware modeling was requested
+through auto mode but Spoon fell back to no-classpath extraction.
 
 ## Documentation Metrics
 

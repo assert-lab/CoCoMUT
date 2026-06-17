@@ -25,11 +25,11 @@ import sootup.callgraph.RapidTypeAnalysisAlgorithm;
  * are encapsulated here. Other phases consume only plain Java types.
  *
  * Capabilities:
- * - Builds CHA call graph over compiled classes
+ * - Builds CHA or RTA call graph over compiled classes
  * - Resolves caller/callee relationships
  * - Provides signature→methodId reverse lookup
  * - Queries transitive class hierarchy (superclasses, interfaces, subclasses)
- * - Exposes raw call graph text for Output_CallGraph_CHA.txt
+ * - Exposes raw call graph text for human-readable {@code Output_CallGraph_<ALGORITHM>.txt}
  */
 public class CallGraphGenerator {
     private final ProjectMetadata projectMetadata;
@@ -49,7 +49,7 @@ public class CallGraphGenerator {
     private final Map<String, ClassHierarchyInfo> hierarchyCache = new HashMap<>();
 
     public enum Algorithm {
-        NONE, CHA, RTA, SPARK
+        NONE, CHA, RTA, AUTO
     }
 
     /**

@@ -25,6 +25,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 
 @Command(
@@ -63,17 +64,43 @@ public final class Context4DocuGenCommand implements Callable<Integer> {
         @Option(names = "--entry-points", description = "Shortcut for --scope entry-points.")
         private boolean entryPoints;
 
-        @Option(names = "--call-graph", defaultValue = "cha", description = "Call graph mode: none, cha, or rta.")
+        @Option(names = "--call-graph", defaultValue = "auto", description = "Call graph mode: none, cha, rta, or auto.")
         private String callGraph;
 
-        @Option(names = "--output", defaultValue = "json", description = "Output mode: json, jsonl, or both.")
-        private String output;
+        @Option(names = "--resolution", defaultValue = "noclasspath",
+                description = "Source resolution mode: noclasspath, classpath, or auto.")
+        private String resolution;
+
+        @Option(names = "--output-dir", description = "Directory for generated artifacts. Defaults to ./c4dg_output/<project-name>.")
+        private Path outputDir;
 
         @Option(names = "--max-methods", description = "Limit methods for smoke tests.")
         private Integer maxMethods;
 
         @Option(names = "--max-source-files", description = "Limit parsed Java source files for low-memory smoke tests.")
         private Integer maxSourceFiles;
+
+        @Option(names = "--source-set", defaultValue = "all",
+                description = "Filter methods by source set: all, main, test, integration_test, generated, example, unknown. Comma-separated values are allowed.")
+        private String sourceSet;
+
+        @Option(names = "--package", split = ",", description = "Include package prefix, for example org.example.api.")
+        private Set<String> packages;
+
+        @Option(names = "--class", split = ",", description = "Include fully qualified or simple class name.")
+        private Set<String> classes;
+
+        @Option(names = "--method", split = ",", description = "Include method name or method URI substring.")
+        private Set<String> methods;
+
+        @Option(names = "--visibility", split = ",", description = "Include visibility: public, protected, package-private, private.")
+        private Set<String> visibilities;
+
+        @Option(names = "--include-path", split = ",", description = "Include source path glob relative to project root.")
+        private Set<String> includePaths;
+
+        @Option(names = "--exclude-path", split = ",", description = "Exclude source path glob relative to project root.")
+        private Set<String> excludePaths;
 
         @Option(names = "--compile", description = "Attempt Maven/Gradle compilation before analysis.")
         private boolean compile;
@@ -88,10 +115,19 @@ public final class Context4DocuGenCommand implements Callable<Integer> {
                     .projectRoot(project)
                     .methodSelection(selection)
                     .callGraphAlgorithm(toAlgorithm(callGraph))
-                    .outputMode(toOutputMode(output))
+                    .sourceResolution(toSourceResolution(resolution))
+                    .outputMode(AnalysisOptions.OutputMode.JSONL)
                     .maxMethods(maxMethods)
                     .maxSourceFiles(maxSourceFiles)
-                    .attemptCompile(compile)
+                    .sourceSets(toSourceSets(sourceSet))
+                    .packages(emptyIfNull(packages))
+                    .classes(emptyIfNull(classes))
+                    .methods(emptyIfNull(methods))
+                    .visibilities(emptyIfNull(visibilities))
+                    .includePathGlobs(emptyIfNull(includePaths))
+                    .excludePathGlobs(emptyIfNull(excludePaths))
+                    .outputDirectory(outputDir)
+                    .attemptCompile(compile || isAuto(callGraph) || isAuto(resolution))
                     .build();
 
             ExtractionReport report = ContextExtractorService.createDefault().extract(request);
@@ -368,20 +404,39 @@ public final class Context4DocuGenCommand implements Callable<Integer> {
             case "none" -> CallGraphGenerator.Algorithm.NONE;
             case "cha" -> CallGraphGenerator.Algorithm.CHA;
             case "rta" -> CallGraphGenerator.Algorithm.RTA;
+            case "auto" -> CallGraphGenerator.Algorithm.AUTO;
             default -> throw new IllegalArgumentException("Unsupported --call-graph: " + value);
         };
     }
 
-    private static AnalysisOptions.OutputMode toOutputMode(String value) {
+    private static AnalysisOptions.SourceResolution toSourceResolution(String value) {
         return switch (normalize(value)) {
-            case "json" -> AnalysisOptions.OutputMode.JSON;
-            case "jsonl" -> AnalysisOptions.OutputMode.JSONL;
-            case "both" -> AnalysisOptions.OutputMode.BOTH;
-            default -> throw new IllegalArgumentException("Unsupported --output: " + value);
+            case "noclasspath", "no-classpath" -> AnalysisOptions.SourceResolution.NOCLASSPATH;
+            case "classpath" -> AnalysisOptions.SourceResolution.CLASSPATH;
+            case "auto" -> AnalysisOptions.SourceResolution.AUTO;
+            default -> throw new IllegalArgumentException("Unsupported --resolution: " + value);
         };
+    }
+
+    private static Set<String> toSourceSets(String value) {
+        if (value == null || value.isBlank() || "all".equalsIgnoreCase(value.trim())) {
+            return Set.of();
+        }
+        return java.util.Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(part -> !part.isBlank())
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+    }
+
+    private static Set<String> emptyIfNull(Set<String> values) {
+        return values == null ? Set.of() : values;
     }
 
     private static String normalize(String value) {
         return value == null ? "" : value.toLowerCase(Locale.ROOT).trim();
+    }
+
+    private static boolean isAuto(String value) {
+        return "auto".equals(normalize(value));
     }
 }

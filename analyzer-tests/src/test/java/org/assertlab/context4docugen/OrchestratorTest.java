@@ -200,7 +200,9 @@ public class OrchestratorTest {
             assertEquals(false, report.get("phase_1_compiles"));
             assertEquals(true, report.get("phase_1_source_available"));
             assertEquals(false, report.get("phase_3_available"));
-            assertEquals(1, ((Number) report.get("phase_5_files_generated")).intValue());
+            assertEquals(1, ((Number) report.get("phase_5_jsonl_rows")).intValue());
+            assertTrue(Files.isRegularFile(Path.of(String.valueOf(report.get("phase_5_jsonl_file")))));
+            assertTrue(Files.isRegularFile(Path.of(String.valueOf(report.get("extraction_report_file")))));
         } finally {
             deleteRecursively(project);
         }

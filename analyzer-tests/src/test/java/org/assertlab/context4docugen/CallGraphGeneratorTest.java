@@ -62,16 +62,12 @@ public class CallGraphGeneratorTest {
 
     @Test
     public void testAlgorithmSelection() {
-        assertEquals("Default algorithm should be CHA", 
+        assertEquals("Default generator algorithm should be CHA",
                 CallGraphGenerator.Algorithm.CHA, generator.getAlgorithm());
         
         CallGraphGenerator rtaGenerator = new CallGraphGenerator(projectMetadata, CallGraphGenerator.Algorithm.RTA);
         assertEquals("Should support RTA algorithm", 
                 CallGraphGenerator.Algorithm.RTA, rtaGenerator.getAlgorithm());
-        
-        CallGraphGenerator sparkGenerator = new CallGraphGenerator(projectMetadata, CallGraphGenerator.Algorithm.SPARK);
-        assertEquals("Should support SPARK algorithm", 
-                CallGraphGenerator.Algorithm.SPARK, sparkGenerator.getAlgorithm());
     }
 
     @Test

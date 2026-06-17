@@ -105,6 +105,27 @@ The field-test follow-up hardens Spoon parsing and records the 20-repository sou
 
 The current group adds scoped source-model caching, low-memory source-file limits, stricter validation, selected/context failure artifacts, and focused regression tests.
 
+- `5dd63b7 fix: cap source context for large field tests`
+  - Caps class/sibling source context to avoid runaway memory use.
+  - Adds a resume-safe summarizer for field-test TSV output.
+
+The current group hardens the expanded field-test baseline and adds auto-mode
+build/classpath behavior.
+
+- Uses Spoon's erased/semantic executable signature for method URI identity while keeping the source-level display signature in JSON.
+- Removes default `methods.csv` generation and the CSV enrichment phase.
+- Writes generated artifacts outside the analyzed repository by default under `./c4dg_output/<project-name>/`.
+- Names human-readable call graph dumps by the effective algorithm: `Output_CallGraph_CHA.txt` or `Output_CallGraph_RTA.txt`.
+- Adds layered method selection filters for package, class, method, visibility, and include/exclude source path globs.
+- Guards optional Spoon context extraction against no-classpath generic `StackOverflowError` cases.
+- Adds regression tests for overlapping source roots and JSONL per-method result tracking.
+- Adds `--resolution auto` and `--call-graph auto`.
+- Keeps Spoon no-classpath extraction as the coverage baseline, retaining classpath-aware extraction only when it preserves enough discovered methods.
+- Uses bounded Maven/Gradle compilation attempts when auto resolution or auto call graph needs build evidence.
+- Records `@see` and `{@inheritDoc}` field-test counts and exports `javadoc_tag_cases.csv`.
+- Adds `--source-set` filtering to CLI/API extraction so dataset runs can keep only `main` methods.
+- Fixes source-set classification so standard `src/main/...` and `src/test/...` paths win over package names such as `demo`.
+
 ## Verification
 
 Current local verification:
@@ -125,7 +146,10 @@ External smoke tests are recorded in `FIELD_TEST_RESULTS.md`.
 
 Latest external baseline:
 
-- 100 filtered public Java repositories in source-only JSONL mode;
-- 98 repositories completed, 87 clean and 11 degraded;
-- 506382 methods identified and 475792 JSONL rows generated;
-- `CHA` and `RTA` call-graph smoke tests passed on three compiled Maven repositories.
+- 541 filtered public Java repositories in auto-resolution and auto-call-graph JSONL mode;
+- 534 repositories completed successfully, 5 clone-timeout skips, and 2 analysis timeouts;
+- 2373883 methods identified and 2373883 JSONL rows generated in successful runs;
+- 137 repositories compiled successfully during opportunistic build attempts;
+- 209 repositories reported call-graph availability;
+- 30826 methods with `@see`, 14856 methods with `{@inheritDoc}`, and 5386 methods with inherited-doc candidates;
+- 69 repositories required bounded retry controls.

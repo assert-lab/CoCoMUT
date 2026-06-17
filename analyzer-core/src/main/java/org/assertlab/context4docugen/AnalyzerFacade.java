@@ -167,6 +167,15 @@ public class AnalyzerFacade {
                 .setMaxMethods(options.maxMethods())
                 .setMaxSourceFiles(options.maxSourceFiles())
                 .setAttemptCompile(options.attemptCompile())
-                .setOutputMode(options.outputMode());
+                .setSourceResolution(options.sourceResolution())
+                .setOutputMode(options.outputMode())
+                .setSourceSets(options.sourceSets())
+                .setPackageFilters(options.packages())
+                .setClassFilters(options.classes())
+                .setMethodFilters(options.methods())
+                .setVisibilityFilters(options.visibilities())
+                .setIncludePathGlobs(options.includePathGlobs())
+                .setExcludePathGlobs(options.excludePathGlobs())
+                .setOutputDirectory(options.outputDirectory());
     }
 }

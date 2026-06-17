@@ -3,7 +3,6 @@ package org.assertlab.context4docugen;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,14 +16,14 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 /**
  * Phase 5 of the method context extraction pipeline.
  *
- * Generates JSON files for each method using real data from the pipeline:
+ * Generates JSONL rows for methods using real data from the pipeline:
  * - MUT node with signature, line_number, parameters, code, javadoc, class hierarchy
  * - Callers array: full context objects for project methods, flat strings for library calls
  * - Callees array: same structure as callers
  * - Metadata: tool, algorithm, counts, generation time
  *
  * Input: Map of method IDs to MethodContext objects from Phase 4
- * Output: JSON files written to filesystem, generation report
+ * Output: JSONL written to filesystem, generation report
  */
 public class JsonGenerator {
     private static final ObjectMapper objectMapper = new ObjectMapper();
@@ -51,32 +50,7 @@ public class JsonGenerator {
     }
 
     public static JsonGenerator withDefaultDirectory() {
-        return new JsonGenerator(Path.of(".", "method_context_json"));
-    }
-
-    public boolean generateJsonFile(MethodContext context) {
-        try {
-            ObjectNode json = buildJsonFromContext(context);
-
-            String filename = generateFilename(context.getMethodId(), context.getMethodName());
-            Path filePath = outputDirectory.resolve(filename);
-
-            objectMapper.writerWithDefaultPrettyPrinter()
-                    .writeValue(filePath.toFile(), json);
-
-            generationResults.put(context.getMethodId(), "SUCCESS:" + filePath.toString());
-            return true;
-        } catch (Exception e) {
-            generationResults.put(context.getMethodId(), "FAILED:" + e.getMessage());
-            return false;
-        }
-    }
-
-    public int generateJsonFiles(Map<String, MethodContext> contexts) {
-        return (int) contexts.values()
-                .stream()
-                .filter(this::generateJsonFile)
-                .count();
+        return new JsonGenerator(Path.of(".", "c4dg_output"));
     }
 
     public int generateJsonLinesFile(Map<String, MethodContext> contexts, Path jsonlPath) {
@@ -90,6 +64,7 @@ public class JsonGenerator {
                     ObjectNode json = buildJsonFromContext(context);
                     writer.write(objectMapper.writeValueAsString(json));
                     writer.newLine();
+                    generationResults.put(context.getMethodId(), "SUCCESS:" + jsonlPath);
                     rows++;
                 }
             }
@@ -233,11 +208,6 @@ public class JsonGenerator {
         return array;
     }
 
-    private String generateFilename(String methodId, String methodName) {
-        String sanitizedName = methodName.replaceAll("[^a-zA-Z0-9_]", "_");
-        return String.format("method_%s__%s.json", shortHash(methodId), sanitizedName);
-    }
-
     private ArrayNode buildParameterArray(String signature) {
         ArrayNode paramsArray = objectMapper.createArrayNode();
         int open = signature.indexOf('(');
@@ -311,20 +281,6 @@ public class JsonGenerator {
         return new ParsedParameter(name, type, modifiers);
     }
 
-    private String shortHash(String value) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));
-            StringBuilder hex = new StringBuilder();
-            for (int i = 0; i < 8 && i < hash.length; i++) {
-                hex.append(String.format("%02x", hash[i]));
-            }
-            return hex.toString();
-        } catch (Exception e) {
-            return Integer.toHexString(value.hashCode());
-        }
-    }
-
     private record ParsedParameter(String name, String type, List<String> modifiers) {
     }
 
@@ -339,10 +295,15 @@ public class JsonGenerator {
     }
 
     public Map<String, Integer> getGenerationStats() {
-        int total = generationResults.size();
-        int success = (int) generationResults.values()
+        int total = (int) generationResults.keySet()
                 .stream()
-                .filter(v -> v.startsWith("SUCCESS"))
+                .filter(key -> !key.startsWith("__"))
+                .count();
+        int success = (int) generationResults.entrySet()
+                .stream()
+                .filter(entry -> !entry.getKey().startsWith("__"))
+                .map(Map.Entry::getValue)
+                .filter(value -> value.startsWith("SUCCESS"))
                 .count();
         int failed = total - success;
 

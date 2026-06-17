@@ -28,6 +28,7 @@ analyzer-tests/src/test/resources/fixtures/**/target/
 .claude/
 .windsurf/
 dev/
+experiments/
 
 # Regenerable build/pipeline artifacts
 **/build/
