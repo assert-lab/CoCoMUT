@@ -5,40 +5,24 @@ import org.junit.experimental.categories.Category;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 /**
  * Regression test for selected-mode matching of valid Java declarations.
- *
- * Copy this file to:
- *   analyzer-tests/src/test/java/analyzer/SelectedMethodLoaderAstMatchingRegressionTest.java
- *
- * The test expects this PoC fixture project to be available at:
- *   ../pocs/context4docugen-ast-method-matching/fixture-project
- *
- * from the Context4DocuGen repository root.
  */
 @Category(FastTests.class)
 public class SelectedMethodLoaderAstMatchingRegressionTest {
 
     private Path fixtureProject() {
-        Path[] candidates = new Path[] {
-                Path.of("../pocs/context4docugen-ast-method-matching/fixture-project").toAbsolutePath().normalize(),
-                Path.of("../../pocs/context4docugen-ast-method-matching/fixture-project").toAbsolutePath().normalize(),
-                Path.of("pocs/context4docugen-ast-method-matching/fixture-project").toAbsolutePath().normalize()
-        };
-
-        for (Path candidate : candidates) {
-            if (Files.exists(candidate.resolve("inputs_selected.csv"))) {
-                return candidate;
-            }
+        Path fixture = Path.of("src/test/resources/fixtures/ast-method-matching-project")
+                .toAbsolutePath()
+                .normalize();
+        if (Files.exists(fixture.resolve("inputs_selected.csv"))) {
+            return fixture;
         }
-
-        throw new AssertionError("Could not find AST method-matching fixture project. Tried: "
-                + Arrays.toString(candidates));
+        throw new AssertionError("Could not find AST method-matching fixture project at " + fixture);
     }
 
     @Test
