@@ -1,6 +1,6 @@
-# Context4DocuGen
+# CoCoX
 
-Context4DocuGen is a static Java analysis tool for extracting method-level context for documentation research and documentation-generation systems.
+CoCoX (Code Context Extractor) is a tool for extracting method-level context from Java Syatems.
 
 For each method, it writes one JSONL record containing:
 
