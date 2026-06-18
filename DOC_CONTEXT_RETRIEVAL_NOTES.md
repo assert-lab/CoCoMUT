@@ -7,10 +7,16 @@ call-edge cleanup.
 
 The inspection targeted:
 
-- Oracle's Javadoc guidance on doc comments, especially `@see`, inline links,
-  inherited comments, and referenced auxiliary files.
+- Oracle/JDK standard doclet documentation-comment specifications, especially
+  `@see`, inline links, inherited comments, and referenced auxiliary files.
 - The expanded public-repository checkouts under
   `experiments/expanded-public-repos-auto-main/checkouts/`.
+
+The official Javadoc sources are versioned with the JDK. CoCoX follows the
+stable traditional reference forms for `@see`, `{@link ...}`, and
+`{@linkplain ...}`. Newer JDK documentation features such as Markdown
+documentation comments are treated as future scope unless they also use the
+same traditional inline/block tags.
 
 Approximate `rg` counts over Java files in those checkouts, excluding common
 build output directories:

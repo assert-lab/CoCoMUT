@@ -11,6 +11,29 @@ For each method, it writes one JSONL record containing:
 
 The tool is intentionally source/static-analysis based. It does not execute the analyzed program.
 
+## Javadoc Standards Basis
+
+CoCoX parses Javadoc references against the Oracle/JDK standard doclet model,
+not against Apache Commons Lang-specific conventions. In particular,
+`@see`, `{@link ...}`, and `{@linkplain ...}` are interpreted using the
+standard program-element reference form:
+
+```text
+module/package.Type#member optional-label
+```
+
+CoCoX also recognizes the standard `@see "text"` and
+`@see <a href="...">label</a>` forms. Project-local references may be resolved
+to CoCoX URIs; external JDK/library references are kept as symbol-level
+metadata only, without fetching external Javadoc text.
+
+The main references for this behavior are the JDK documentation-comment
+specification for the standard doclet and the Javadoc tool reference. These
+specifications are versioned with the JDK. The core `@see` and `{@link ...}`
+forms are long-standing and stable; newer JDKs add or extend features such as
+module prefixes, inline `{@return ...}`, `{@snippet ...}`, and Markdown
+documentation comments.
+
 ## Repository Shape
 
 ```text

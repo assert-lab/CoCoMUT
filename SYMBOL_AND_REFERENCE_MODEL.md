@@ -142,8 +142,9 @@ For a repository-wide run, provenance should state:
 
 ## Javadoc References
 
-CoCoX follows the standard doclet syntax for Javadoc references. The important
-official forms are:
+CoCoX follows the Oracle/JDK standard doclet syntax for Javadoc references.
+This is a Java/Javadoc convention, not an Apache Commons Lang-specific rule.
+The important official forms are:
 
 ```java
 @see "plain text with no generated link"
@@ -165,6 +166,16 @@ The program-element form can point to several symbol kinds:
 ```
 
 CoCoX stores these under `javadoc_metadata.javadoc_references`.
+
+Primary references:
+
+- JDK documentation-comment specification for the standard doclet.
+- Javadoc tool reference.
+
+These documents are versioned with the JDK. CoCoX implements the stable
+traditional Javadoc reference forms used by `@see`, `{@link ...}`, and
+`{@linkplain ...}`; it does not currently implement newer Markdown
+documentation-comment syntax as a separate parser mode.
 
 Important fields:
 
