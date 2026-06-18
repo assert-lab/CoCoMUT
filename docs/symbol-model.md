@@ -104,17 +104,17 @@ Current CLI selection supports both filters and first-class target URIs:
 The URI selector form is:
 
 ```bash
-cocox extract --project /repo --target-uri method:src/main/java/org/example/Foo.java#org.example.Foo.parse(java.lang.String):int
-cocox extract --project /repo --target-uri type:src/main/java/org/example/Foo.java#org.example.Foo
-cocox extract --project /repo --target-uri package:src/main/java/org/example/package-info.java#org.example
+cocox --project /repo --target-uri method:src/main/java/org/example/Foo.java#org.example.Foo.parse(java.lang.String):int
+cocox --project /repo --target-uri type:src/main/java/org/example/Foo.java#org.example.Foo
+cocox --project /repo --target-uri package:src/main/java/org/example/package-info.java#org.example
 ```
 
 Equivalent explicit flags are also supported:
 
 ```bash
-cocox extract --project /repo --method-uri  ...
-cocox extract --project /repo --type-uri    ...
-cocox extract --project /repo --package-uri ...
+cocox --project /repo --method-uri  ...
+cocox --project /repo --type-uri    ...
+cocox --project /repo --package-uri ...
 ```
 
 Generated JSONL should record the selected target:

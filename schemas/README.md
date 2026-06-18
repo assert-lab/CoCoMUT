@@ -1,12 +1,7 @@
 # Schemas
 
-This directory contains the machine-readable contracts for CoCoX inputs and
-outputs. The same schema files are bundled in the CLI jar and can be printed
-with:
-
-```bash
-./bin/cocox schema method-context
-```
+This directory contains the machine-readable contracts for CoCoX outputs.
+Schemas are repository files, not a separate CLI command.
 
 ## Files
 
@@ -130,14 +125,6 @@ resolution                resolved|unresolved|synthetic_or_compiler_generated
 context                   Optional method node when method_uri resolves to an extracted context
 ```
 
-## Validation
-
-Validate generated JSONL:
-
-```bash
-./bin/cocox validate --jsonl path/to/method_contexts.jsonl
-```
-
 ## Versioning
 
 Generated method-context rows include:
@@ -147,6 +134,5 @@ metadata.schema_version
 ```
 
 Schema changes should preserve backward-compatible fields where possible. If a
-field is renamed, removed, or changes meaning, update this README, the schema
-file, and the CLI-bundled copy under
-`cocox-cli/src/main/resources/schemas/`.
+field is renamed, removed, or changes meaning, update this README and the
+schema file.

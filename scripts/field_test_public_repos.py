@@ -193,7 +193,6 @@ def run_extraction(
     artifact_dir.mkdir(parents=True, exist_ok=True)
     command = [
         str(root / "bin" / "cocox"),
-        "extract",
         "--project",
         str(checkout),
         "--scope",

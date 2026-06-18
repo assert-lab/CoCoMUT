@@ -117,7 +117,7 @@ selection, see [docs/symbol-model.md](docs/symbol-model.md).
 The CLI can be run through `bin/cocox` from the repository root:
 
 ```bash
-./bin/cocox extract --project /path/to/java/project --scope entry-points --call-graph none
+./bin/cocox --project /path/to/java/project --scope entry-points --call-graph none
 ```
 
 `bin/cocox` uses `dist/cocox-cli.jar` when it exists. If the jar has not been built yet, it builds and runs the shaded development jar from `cocox-cli/target/`.
@@ -125,24 +125,20 @@ The CLI can be run through `bin/cocox` from the repository root:
 You can also run the standalone jar directly:
 
 ```bash
-java -jar dist/cocox-cli.jar extract \
+java -jar dist/cocox-cli.jar \
   --project /path/to/java/project \
   --scope entry-points \
   --call-graph none
 ```
 
-Available commands:
-
-```text
-cocox extract   Extract method contexts
-cocox validate  Validate project detection or generated JSONL
-cocox schema    Print or write bundled schemas
-```
+`cocox` has one public operation: extraction. Running `cocox` with the
+options below is the extraction command; there is no extra `extract`,
+`validate`, or `schema` command layer.
 
 Run exact method-URI selection:
 
 ```bash
-./bin/cocox extract \
+./bin/cocox \
   --project /path/to/java/project \
   --method-uri 'src/main/java/com/example/Hello.java#com.example.Hello.greet(java.lang.String):java.lang.String' \
   --call-graph none
@@ -187,7 +183,7 @@ source-only.
 For documentation datasets, prefer:
 
 ```bash
-./bin/cocox extract \
+./bin/cocox \
   --project /path/to/java/project \
   --scope entry-points \
   --source-set main \
@@ -201,7 +197,7 @@ omit the flag to preserve the default behavior.
 Layered selection is available when you do not want the whole repository:
 
 ```bash
-./bin/cocox extract \
+./bin/cocox \
   --project /path/to/java/project \
   --package org.example.api \
   --class PublicApi \
@@ -223,26 +219,13 @@ and `--package-uri`; see [docs/symbol-model.md](docs/symbol-model.md).
 Examples:
 
 ```bash
-./bin/cocox extract \
+./bin/cocox \
   --project /path/to/java/project \
   --type-uri 'src/main/java/org/example/Foo.java#org.example.Foo'
 
-./bin/cocox extract \
+./bin/cocox \
   --project /path/to/java/project \
   --package-uri 'src/main/java/org/example/package-info.java#org.example'
-```
-
-Validation examples:
-
-```bash
-./bin/cocox validate --project /path/to/java/project
-./bin/cocox validate --jsonl method_contexts.jsonl
-```
-
-Schema examples:
-
-```bash
-./bin/cocox schema method-context
 ```
 
 By default, generated artifacts are written outside the analyzed project:
@@ -259,7 +242,7 @@ By default, generated artifacts are written outside the analyzed project:
 Use `--output-dir` to choose an explicit destination:
 
 ```bash
-./bin/cocox extract --project /path/to/java/project --output-dir ./results/project-name
+./bin/cocox --project /path/to/java/project --output-dir ./results/project-name
 ```
 
 Failure artifacts are written next to the normal outputs:

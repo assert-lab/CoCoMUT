@@ -1,10 +1,8 @@
 package org.assertlab.cocox;
 
-import org.assertlab.cocox.cli.CoCoXCommand;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.Test;
-import picocli.CommandLine;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -178,24 +176,6 @@ public class RobustExtractionRegressionTest {
         } finally {
             deleteRecursively(project);
             deleteRecursively(output);
-        }
-    }
-
-    @Test
-    public void cliValidateRejectsMalformedContextJsonl() throws Exception {
-        Path file = Files.createTempFile("cocox-invalid-context", ".jsonl");
-        try {
-            Files.writeString(file,
-                    "{\"MUT\":{},\"metadata\":{},\"provenance\":{},\"documentation_metrics\":{},"
-                            + "\"javadoc_metadata\":{},\"dynamic_features\":[]}",
-                    StandardCharsets.UTF_8);
-
-            int exit = new CommandLine(new CoCoXCommand())
-                    .execute("validate", "--jsonl", file.toString());
-
-            assertEquals(1, exit);
-        } finally {
-            Files.deleteIfExists(file);
         }
     }
 

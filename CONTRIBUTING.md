@@ -18,8 +18,7 @@ scripts/build_release_jar.sh
 ## CLI Smoke Test
 
 ```bash
-./bin/cocox validate --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project
-./bin/cocox extract --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project --scope entry-points --call-graph none
+./bin/cocox --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project --scope entry-points --call-graph none
 ```
 
 ## Development Notes
