@@ -1,2 +1,0 @@
-focal_method|test_prefix|docstring|id
-public int x() {\n        return 1;\n    }||/** Unsafe id fixture. */|src/main/java/poc/UnsafeIdFixture.java::x

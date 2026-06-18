@@ -16,8 +16,7 @@ import static org.junit.Assert.*;
 /**
  * Unit tests for {@link MethodSourceStrategy} auto-detection.
  *
- * Verifies that the presence (or absence) of {@code inputs_selected.csv}
- * selects the correct strategy, using temp directories.
+ * Verifies default method-source strategy detection.
  */
 @Category(FastTests.class)
 public class MethodSourceStrategyTest {
@@ -41,13 +40,13 @@ public class MethodSourceStrategyTest {
     }
 
     @Test
-    public void csvPresentSelectsCsvStrategy() throws IOException {
-        Path csv = tempDir.resolve("inputs_selected.csv");
-        Files.writeString(csv, "focal_method|test_prefix|docstring|id\n");
+    public void localCsvPresenceDoesNotChangeStrategy() throws IOException {
+        Path csv = tempDir.resolve("data.csv");
+        Files.writeString(csv, "value\n1\n");
         MethodSourceStrategy strategy = MethodSourceStrategy.detect(tempDir);
-        assertTrue("inputs_selected.csv should pick CsvSelectedStrategy",
-                strategy instanceof CsvSelectedStrategy);
-        assertEquals("CSV_SELECTED", strategy.name());
+        assertTrue("Local CSV files should not change source scanning",
+                strategy instanceof ScanAllSourcesStrategy);
+        assertEquals("SCAN_ALL", strategy.name());
     }
 
     @Test
@@ -58,13 +57,4 @@ public class MethodSourceStrategyTest {
         assertEquals("SCAN_ALL", strategy.name());
     }
 
-    @Test
-    public void csvStrategyExposesResolvedPath() throws IOException {
-        Path csv = tempDir.resolve("inputs_selected.csv");
-        Files.writeString(csv, "focal_method|id\n");
-        MethodSourceStrategy strategy = MethodSourceStrategy.detect(tempDir);
-        assertTrue(strategy instanceof CsvSelectedStrategy);
-        assertEquals("CsvSelectedStrategy should expose the detected CSV path",
-                csv, ((CsvSelectedStrategy) strategy).getCsvPath());
-    }
 }

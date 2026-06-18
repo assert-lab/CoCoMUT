@@ -13,7 +13,7 @@ import java.util.Map;
 import static org.junit.Assert.*;
 
 /**
- * End-to-end tests for {@link AnalyzerFacade} and the SELECTED-mode JSON output.
+ * End-to-end tests for {@link AnalyzerFacade}.
  *
  * <p>Uses the shared {@link TestFixtures} minimal Maven project (already compiled)
  * so the full 6-phase pipeline runs against real bytecode and source.
@@ -30,8 +30,8 @@ public class AnalyzerFacadeTest {
     }
 
     /**
-     * The fixture has no {@code inputs_selected.csv}, so the facade must
-     * auto-detect Maven + scan-all and run the pipeline to SUCCESS.
+     * The facade must auto-detect Maven + scan-all and run the pipeline to
+     * SUCCESS.
      */
     @Test
     public void facadeAnalyzesPlainMavenProjectEndToEnd() throws Exception {
@@ -44,51 +44,6 @@ public class AnalyzerFacadeTest {
         assertEquals("FULL", report.get("execution_mode"));
         assertTrue("Phase 2 should identify the fixture methods",
                 report.containsKey("phase_2_methods_identified"));
-    }
-
-    /**
-     * CRITICAL regression test: SELECTED mode must propagate the human-written
-     * docstring and test prefix from inputs_selected.csv all the way into the JSON.
-     * This guards the fix where JsonGenerator previously dropped both fields.
-     */
-    @Test
-    public void selectedModePropagatesDocstringAndTestPrefixIntoJson() throws Exception {
-        // focal_method body for Hello.greet(String) with \n escaped per CSV format
-        String focal = "public String greet(String name) {\\n"
-                + "        return prefix() + name;\\n"
-                + "    }";
-        String testPrefix = "public void test0() { new Hello().greet(\\\"x\\\"); }";
-        String docstring  = "Greets a person by their name.";
-        String id = "9001";
-
-        Path tempCsv = Files.createTempFile("inputs_selected", ".csv");
-        Files.writeString(tempCsv,
-                "focal_method|test_prefix|docstring|id\n"
-                        + focal + "|" + testPrefix + "|" + docstring + "|" + id + "\n");
-
-        Orchestrator orch = new Orchestrator(fixtureRoot, Orchestrator.ExecutionMode.SELECTED)
-                .setInputCsvPath(tempCsv)
-                .setOutputMode(AnalysisOptions.OutputMode.JSONL)
-                .setOutputDirectory(Files.createTempDirectory("cocox-selected-json"));
-        boolean ok = orch.execute();
-
-        assertTrue("SELECTED-mode pipeline should succeed", ok);
-
-        JsonNode json = findJsonlRowForMethod(Path.of(String.valueOf(orch.getExecutionReport().get("phase_5_jsonl_file"))), "greet");
-
-        assertTrue("JSON must contain original_docstring", json.has("original_docstring"));
-        assertEquals("Greets a person by their name.",
-                json.get("original_docstring").asText());
-
-        assertTrue("JSON must contain test_prefix", json.has("test_prefix"));
-        assertTrue("test_prefix should contain the test method",
-                json.get("test_prefix").asText().contains("greet"));
-
-        // Sanity: MUT node still present with the real method
-        assertTrue("JSON must contain MUT node", json.has("MUT"));
-        assertEquals("greet", json.get("MUT").get("method_name").asText());
-
-        Files.deleteIfExists(tempCsv);
     }
 
     @Test
@@ -140,22 +95,6 @@ public class AnalyzerFacadeTest {
         assertTrue(report.successful());
         assertEquals("AUTO", report.asMap().get("phase_3_algorithm"));
         assertEquals("RTA", report.asMap().get("phase_3_effective_algorithm"));
-    }
-
-    @Test
-    public void fullModeJsonOmitsResearchFields() throws Exception {
-        // FULL mode has no CSV-origin metadata → research fields must be absent
-        Path output = Files.createTempDirectory("cocox-full-json");
-        AnalyzerFacade.analyze(fixtureRoot, AnalysisOptions.builder()
-                .outputMode(AnalysisOptions.OutputMode.JSONL)
-                .outputDirectory(output)
-                .build());
-
-        JsonNode json = findJsonlRowForMethod(output.resolve("method_contexts.jsonl"), "greet");
-        assertFalse("FULL-mode JSON must NOT contain original_docstring",
-                json.has("original_docstring"));
-        assertFalse("FULL-mode JSON must NOT contain test_prefix",
-                json.has("test_prefix"));
     }
 
     private JsonNode findJsonlRowForMethod(Path jsonl, String methodName) throws Exception {

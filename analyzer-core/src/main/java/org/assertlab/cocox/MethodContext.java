@@ -29,8 +29,6 @@ public class MethodContext {
     private final CallGraphResult callGraph;  // Call graph from Phase 3
     private final int linesOfCode;
     private final int cyclomatic;             // McCabe complexity
-    private final String originalDocstring;   // human-written docstring from inputs_selected.csv
-    private final String testPrefix;          // test code from inputs_selected.csv
     private final List<String> annotations;
     private final List<String> thrownExceptions;
     private final List<String> fieldReads;
@@ -63,8 +61,6 @@ public class MethodContext {
         this.callGraph = builder.callGraph;
         this.linesOfCode = builder.linesOfCode;
         this.cyclomatic = builder.cyclomatic;
-        this.originalDocstring = builder.originalDocstring != null ? builder.originalDocstring : "";
-        this.testPrefix = builder.testPrefix != null ? builder.testPrefix : "";
         this.annotations = Collections.unmodifiableList(new ArrayList<>(builder.annotations));
         this.thrownExceptions = Collections.unmodifiableList(new ArrayList<>(builder.thrownExceptions));
         this.fieldReads = Collections.unmodifiableList(new ArrayList<>(builder.fieldReads));
@@ -147,14 +143,6 @@ public class MethodContext {
 
     public int getCyclomatic() {
         return cyclomatic;
-    }
-
-    public String getOriginalDocstring() {
-        return originalDocstring;
-    }
-
-    public String getTestPrefix() {
-        return testPrefix;
     }
 
     public List<String> getAnnotations() {
@@ -253,8 +241,6 @@ public class MethodContext {
         private CallGraphResult callGraph;
         private int linesOfCode = 0;
         private int cyclomatic = 1;
-        private String originalDocstring = "";
-        private String testPrefix = "";
         private List<String> annotations = List.of();
         private List<String> thrownExceptions = List.of();
         private List<String> fieldReads = List.of();
@@ -359,16 +345,6 @@ public class MethodContext {
 
         public Builder cyclomatic(int cyclomatic) {
             this.cyclomatic = cyclomatic;
-            return this;
-        }
-
-        public Builder originalDocstring(String originalDocstring) {
-            this.originalDocstring = originalDocstring;
-            return this;
-        }
-
-        public Builder testPrefix(String testPrefix) {
-            this.testPrefix = testPrefix;
             return this;
         }
 

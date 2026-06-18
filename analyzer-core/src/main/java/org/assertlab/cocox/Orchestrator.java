@@ -31,8 +31,7 @@ public class Orchestrator {
     private final Path projectPath;
     private final ExecutionMode executionMode;
     private final Map<String, Object> executionReport;
-    private Path inputCsvPath;  // SELECTED mode: override default inputs_selected.csv location
-    private MethodSourceStrategy methodSourceStrategy;  // optional Phase 2 override (FULL mode)
+    private MethodSourceStrategy methodSourceStrategy;  // optional Phase 2 override
     private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.AUTO;
     private Integer maxMethods;
     private Integer maxSourceFiles;
@@ -61,7 +60,7 @@ public class Orchestrator {
     private final Set<FailureCode> failureCodes = new LinkedHashSet<>();
 
     public enum ExecutionMode {
-        FULL, SELECTED
+        FULL
     }
 
     public Orchestrator(Path projectPath, ExecutionMode executionMode) {
@@ -74,17 +73,10 @@ public class Orchestrator {
         return new Orchestrator(projectPath, ExecutionMode.FULL);
     }
 
-    /** SELECTED mode only: override the default inputs_selected.csv path. */
-    public Orchestrator setInputCsvPath(Path csv) {
-        this.inputCsvPath = csv;
-        return this;
-    }
-
     /**
-     * Optional Phase 2 override for non-SELECTED modes: supply a
+     * Optional Phase 2 override: supply a
      * {@link MethodSourceStrategy} (e.g., entry-points-only) whose
      * {@code loadMethods()} result replaces the default full source scan.
-     * Ignored in SELECTED mode (which always reads inputs_selected.csv).
      */
     public Orchestrator setMethodSourceStrategy(MethodSourceStrategy strategy) {
         this.methodSourceStrategy = strategy;
@@ -246,26 +238,6 @@ public class Orchestrator {
 
     private boolean executePhase2() {
         try {
-            if (executionMode == ExecutionMode.SELECTED) {
-                Path csv = (inputCsvPath != null) ? inputCsvPath
-                        : projectPath.resolve("inputs_selected.csv");
-                SelectedMethodLoader loader = new SelectedMethodLoader(projectMetadata, csv);
-                methodInfos = loader.load();
-                methodInfos = filterMethods(methodInfos);
-                methodInfos = limitMethods(methodInfos);
-
-                executionReport.put("phase_2_mode", "SELECTED");
-                executionReport.put("phase_2_input_csv", csv.toString());
-                executionReport.put("phase_2_methods_loaded", methodInfos.size());
-                if (!loader.getFailures().isEmpty()) {
-                    Path failuresPath = writeSelectedMethodFailures(loader.getFailures());
-                    failureCodes.add(FailureCode.SELECTED_METHOD_NOT_FOUND);
-                    executionReport.put("phase_2_selected_failures", loader.getFailures().size());
-                    executionReport.put("phase_2_selected_failures_file", failuresPath.toString());
-                }
-                return !methodInfos.isEmpty();
-            }
-
             if (methodSourceStrategy != null) {
                 methodInfos = methodSourceStrategy.loadMethods(projectMetadata);
                 methodInfos = filterMethods(methodInfos);
@@ -528,26 +500,6 @@ public class Orchestrator {
             }
         }
         return failures;
-    }
-
-    private Path writeSelectedMethodFailures(List<SelectedMethodLoader.Failure> failures)
-            throws java.io.IOException {
-        Path output = outputRoot().resolve("selected_method_failures.jsonl");
-        Files.createDirectories(output.getParent());
-        try (var writer = Files.newBufferedWriter(output)) {
-            for (SelectedMethodLoader.Failure failure : failures) {
-                ObjectNode node = OBJECT_MAPPER.createObjectNode();
-                node.put("phase", "selected_method_loading");
-                node.put("failure_code", FailureCode.SELECTED_METHOD_NOT_FOUND.toString());
-                node.put("row_id", failure.rowId());
-                node.put("reason", failure.reason());
-                node.put("method_uri", failure.methodUri());
-                node.put("focal_method_prefix", failure.focalPrefix());
-                writer.write(OBJECT_MAPPER.writeValueAsString(node));
-                writer.newLine();
-            }
-        }
-        return output;
     }
 
     private Path writeContextExtractionFailures(Map<String, String> failures)

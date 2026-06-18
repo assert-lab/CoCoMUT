@@ -145,28 +145,6 @@ public class FullIntegrationTest {
     }
 
     @Test
-    public void testSelectedModeOnComplexProject() {
-        System.out.println("\n[SELECTED] Testing selected-mode mode on workspace...");
-        long startTime = System.currentTimeMillis();
-        
-        orchestrator = new Orchestrator(workspaceRoot, Orchestrator.ExecutionMode.SELECTED);
-        boolean success = orchestrator.execute();
-        
-        long duration = System.currentTimeMillis() - startTime;
-        System.out.println("Selected-mode completed in " + duration + "ms (" + (duration/1000) + "s)");
-        
-        Map<String, Object> report = orchestrator.getExecutionReport();
-        
-        assertNotNull("Should have execution report", report);
-        assertEquals("Should be SELECTED mode", "SELECTED", report.get("execution_mode"));
-        
-        // In SELECTED mode, we expect focused execution on pre-selected methods
-        assertTrue("Selected-mode should complete faster", duration < 300000); // < 5 minutes
-        
-        orchestrator.printReport();
-    }
-
-    @Test
     public void testScalabilityMetrics() {
         if (!Files.exists(commonsLang3Root)) {
             System.out.println("Skipping scalability test - commons-lang3 not found");

@@ -118,9 +118,6 @@ public final class ContextRequest {
                 .excludePathGlobs(excludePathGlobs)
                 .targets(targets)
                 .outputDirectory(outputDirectory);
-        if (methodSelection.kind() == MethodSelection.Kind.SELECTED_CSV) {
-            builder.selectedCsv(methodSelection.selectedCsv());
-        }
         return builder.build();
     }
 

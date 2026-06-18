@@ -56,9 +56,6 @@ public final class CoCoXCommand implements Callable<Integer> {
         @Option(names = "--project", required = true, description = "Project root to analyze.")
         private Path project;
 
-        @Option(names = "--selected", description = "Pipe-delimited selected-method CSV.")
-        private Path selected;
-
         @Option(names = "--scope", defaultValue = "all", description = "Method scope: all or entry-points.")
         private String scope;
 
@@ -123,9 +120,7 @@ public final class CoCoXCommand implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
-            MethodSelection selection = selected != null
-                    ? MethodSelection.fromCsv(selected.toAbsolutePath().normalize())
-                    : toSelection(entryPoints ? "entry-points" : scope);
+            MethodSelection selection = toSelection(entryPoints ? "entry-points" : scope);
 
             ContextRequest request = ContextRequest.builder()
                     .projectRoot(project)
@@ -153,13 +148,10 @@ public final class CoCoXCommand implements Callable<Integer> {
         }
     }
 
-    @Command(name = "validate", description = "Validate projects, selected CSVs, or generated JSON/JSONL.")
+    @Command(name = "validate", description = "Validate projects or generated JSON/JSONL.")
     static final class ValidateCommand implements Callable<Integer> {
         @Option(names = "--project", description = "Validate project detection/source roots.")
         private Path project;
-
-        @Option(names = "--selected", description = "Validate selected-method CSV shape.")
-        private Path selected;
 
         @Option(names = "--json", description = "Validate a generated method-context JSON file.")
         private Path json;
@@ -177,10 +169,6 @@ public final class CoCoXCommand implements Callable<Integer> {
                 checks++;
                 ok &= validateProject(project);
             }
-            if (selected != null) {
-                checks++;
-                ok &= validateSelectedCsv(selected);
-            }
             if (json != null) {
                 checks++;
                 ok &= validateJson(json);
@@ -190,7 +178,7 @@ public final class CoCoXCommand implements Callable<Integer> {
                 ok &= validateJsonl(jsonl);
             }
             if (checks == 0) {
-                System.err.println("No validation target supplied. Use --project, --selected, --json, or --jsonl.");
+                System.err.println("No validation target supplied. Use --project, --json, or --jsonl.");
                 return 2;
             }
             return ok ? 0 : 1;
@@ -213,35 +201,6 @@ public final class CoCoXCommand implements Callable<Integer> {
                 return model.sourceAvailable();
             } catch (Exception e) {
                 System.err.println("PROJECT invalid: " + e.getMessage());
-                return false;
-            }
-        }
-
-        private boolean validateSelectedCsv(Path input) {
-            Path csv = input.toAbsolutePath().normalize();
-            if (!Files.isRegularFile(csv)) {
-                System.err.println("SELECTED invalid: not a file: " + csv);
-                return false;
-            }
-            try {
-                List<String> lines = Files.readAllLines(csv, StandardCharsets.UTF_8);
-                if (lines.isEmpty()) {
-                    System.err.println("SELECTED invalid: empty file: " + csv);
-                    return false;
-                }
-                String header = lines.get(0);
-                boolean preferred = header.contains("method_uri");
-                boolean legacy = header.contains("focal_method") && header.contains("id");
-                if (!preferred && !legacy) {
-                    System.err.println("SELECTED invalid: expected method_uri or legacy focal_method/id header");
-                    return false;
-                }
-                System.out.printf("SELECTED ok: rows=%d mode=%s%n",
-                        Math.max(0, lines.size() - 1),
-                        preferred ? "method_uri" : "legacy");
-                return true;
-            } catch (IOException e) {
-                System.err.println("SELECTED invalid: " + e.getMessage());
                 return false;
             }
         }
@@ -362,7 +321,7 @@ public final class CoCoXCommand implements Callable<Integer> {
     @Command(name = "schema", description = "Print or write bundled schemas.")
     static final class SchemaCommand implements Callable<Integer> {
         @Parameters(index = "0", defaultValue = "method-context",
-                description = "Schema name: method-context or selected-methods.")
+                description = "Schema name: method-context.")
         private String schemaName;
 
         @Option(names = "--print", description = "Print schema to stdout.")
@@ -394,7 +353,6 @@ public final class CoCoXCommand implements Callable<Integer> {
             String normalized = name.toLowerCase(Locale.ROOT);
             String resource = switch (normalized) {
                 case "method-context", "method_context", "context" -> "/schemas/method-context.schema.json";
-                case "selected-methods", "selected_methods", "selected" -> "/schemas/selected-methods.schema.json";
                 default -> throw new CommandLine.ParameterException(
                         new CommandLine(this),
                         "Unsupported schema: " + name);

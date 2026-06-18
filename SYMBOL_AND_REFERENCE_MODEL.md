@@ -91,7 +91,6 @@ Current CLI selection supports both filters and first-class target URIs:
 
 ```text
 --project      repository root
---selected     selected-method CSV using method_uri
 --package      package-name filter
 --class        type/class-name filter
 --method       method-name or method-URI substring filter

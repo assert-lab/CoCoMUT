@@ -98,15 +98,6 @@ public class JsonGenerator {
         json.set("callers", buildCallerCalleeArray(cg != null ? cg.getCallers() : Set.of()));
         json.set("callees", buildCallerCalleeArray(cg != null ? cg.getCallees() : Set.of()));
 
-        // Research metadata: human-written docstring and test prefix from inputs_selected.csv.
-        // Only emitted when present (SELECTED mode); absent in FULL-mode runs.
-        if (!context.getOriginalDocstring().isEmpty()) {
-            json.put("original_docstring", context.getOriginalDocstring());
-        }
-        if (!context.getTestPrefix().isEmpty()) {
-            json.put("test_prefix", context.getTestPrefix());
-        }
-
         // Metadata
         ObjectNode metadata = objectMapper.createObjectNode();
         metadata.put("schema_version", "0.3.0");
@@ -131,7 +122,7 @@ public class JsonGenerator {
         json.set("metadata", metadata);
 
         ObjectNode provenance = objectMapper.createObjectNode();
-        provenance.put("method_source", context.getOriginalDocstring().isEmpty() ? "source_scan" : "selected_csv");
+        provenance.put("method_source", "source_scan");
         provenance.put("method_matching", context.getSourceBackend());
         provenance.put("source_backend", context.getSourceBackend());
         provenance.put("source_backend_mode", context.getSourceBackendMode());

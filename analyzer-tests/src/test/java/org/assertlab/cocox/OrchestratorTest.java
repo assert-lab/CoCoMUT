@@ -49,7 +49,6 @@ public class OrchestratorTest {
     @Test
     public void testExecutionModesExist() {
         assertTrue("Should have FULL mode", Orchestrator.ExecutionMode.FULL != null);
-        assertTrue("Should have SELECTED mode", Orchestrator.ExecutionMode.SELECTED != null);
     }
 
     @Test
@@ -106,10 +105,8 @@ public class OrchestratorTest {
     @Test
     public void testMultipleExecutionModes() {
         Orchestrator fullOrch = new Orchestrator(testProjectPath, Orchestrator.ExecutionMode.FULL);
-        Orchestrator selectedOrch = new Orchestrator(testProjectPath, Orchestrator.ExecutionMode.SELECTED);
 
         assertNotNull("Should create FULL orchestrator", fullOrch);
-        assertNotNull("Should create SELECTED orchestrator", selectedOrch);
     }
 
     @Test

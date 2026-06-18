@@ -6,14 +6,12 @@ with:
 
 ```bash
 ./bin/cocox schema method-context
-./bin/cocox schema selected-methods
 ```
 
 ## Files
 
 ```text
 method-context.schema.json     JSON Schema for one method-context JSONL row
-selected-methods.schema.json   JSON Schema for preferred selected-method input rows
 ```
 
 ## Method Context Rows
@@ -36,8 +34,6 @@ provenance                Extraction source and confidence information
 documentation_metrics     Computed Javadoc quality flags
 javadoc_metadata          Parsed @see, @since, inline links, deprecation, inheritDoc hints
 dynamic_features          Static hints for reflection, proxies, service loaders, DI, native code
-original_docstring        Selected-CSV metadata, only when supplied
-test_prefix               Selected-CSV metadata, only when supplied
 selection                 Project/method/type/package target provenance
 ```
 
@@ -131,44 +127,12 @@ resolution                resolved|unresolved|synthetic_or_compiler_generated
 context                   Optional method node when method_uri resolves to an extracted context
 ```
 
-## Selected Methods
-
-`selected-methods.schema.json` documents the preferred selected-method input
-shape. CoCoX accepts pipe-delimited CSVs with at least:
-
-```text
-method_uri
-```
-
-Optional selected-mode metadata:
-
-```text
-docstring
-test_prefix
-```
-
-Preferred example:
-
-```csv
-method_uri|docstring|test_prefix
-src/main/java/com/example/Hello.java#com.example.Hello.greet(java.lang.String):java.lang.String|Greets a person.|new Hello().greet("x")
-```
-
-Legacy PoC CSVs with `focal_method|test_prefix|docstring|id` are still accepted
-for compatibility, but `method_uri` is the stable input identity.
-
 ## Validation
 
 Validate generated JSONL:
 
 ```bash
 ./bin/cocox validate --jsonl path/to/method_contexts.jsonl
-```
-
-Validate selected-method input shape:
-
-```bash
-./bin/cocox validate --selected selected-methods.csv
 ```
 
 ## Versioning

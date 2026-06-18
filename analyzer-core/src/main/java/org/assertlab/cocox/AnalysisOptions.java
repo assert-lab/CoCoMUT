@@ -20,8 +20,7 @@ import java.util.Set;
 public final class AnalysisOptions {
     public enum Scope {
         ALL,
-        ENTRY_POINTS,
-        SELECTED
+        ENTRY_POINTS
     }
 
     public enum OutputMode {
@@ -35,7 +34,6 @@ public final class AnalysisOptions {
     }
 
     private final Scope scope;
-    private final Path selectedCsv;
     private final CallGraphGenerator.Algorithm callGraphAlgorithm;
     private final Integer maxMethods;
     private final Integer maxSourceFiles;
@@ -54,7 +52,6 @@ public final class AnalysisOptions {
 
     private AnalysisOptions(Builder builder) {
         this.scope = Objects.requireNonNull(builder.scope, "scope cannot be null");
-        this.selectedCsv = builder.selectedCsv;
         this.callGraphAlgorithm = Objects.requireNonNull(builder.callGraphAlgorithm, "callGraphAlgorithm cannot be null");
         this.maxMethods = builder.maxMethods;
         this.maxSourceFiles = builder.maxSourceFiles;
@@ -82,10 +79,6 @@ public final class AnalysisOptions {
 
     public Scope scope() {
         return scope;
-    }
-
-    public Path selectedCsv() {
-        return selectedCsv;
     }
 
     public CallGraphGenerator.Algorithm callGraphAlgorithm() {
@@ -156,13 +149,11 @@ public final class AnalysisOptions {
         return switch (scope) {
             case ALL -> new ScanAllSourcesStrategy();
             case ENTRY_POINTS -> new EntryPointScanStrategy();
-            case SELECTED -> null;
         };
     }
 
     public static final class Builder {
         private Scope scope = Scope.ALL;
-        private Path selectedCsv;
         private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.AUTO;
         private Integer maxMethods;
         private Integer maxSourceFiles;
@@ -181,12 +172,6 @@ public final class AnalysisOptions {
 
         public Builder scope(Scope scope) {
             this.scope = Objects.requireNonNull(scope, "scope cannot be null");
-            return this;
-        }
-
-        public Builder selectedCsv(Path selectedCsv) {
-            this.selectedCsv = selectedCsv;
-            this.scope = Scope.SELECTED;
             return this;
         }
 
@@ -306,9 +291,6 @@ public final class AnalysisOptions {
         }
 
         public AnalysisOptions build() {
-            if (scope == Scope.SELECTED && selectedCsv == null) {
-                throw new IllegalArgumentException("selectedCsv is required for SELECTED scope");
-            }
             return new AnalysisOptions(this);
         }
 

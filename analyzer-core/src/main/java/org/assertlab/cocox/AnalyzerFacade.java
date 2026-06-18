@@ -1,7 +1,6 @@
 package org.assertlab.cocox;
 
 import org.assertlab.cocox.adapter.ProjectAdapter;
-import org.assertlab.cocox.strategy.CsvSelectedStrategy;
 import org.assertlab.cocox.strategy.MethodSourceStrategy;
 
 import java.io.IOException;
@@ -21,11 +20,8 @@ import java.util.Objects;
  * // Analyse any project — one line:
  * Map<String, Object> report = AnalyzerFacade.analyze(Path.of("/projects/my-library"));
  *
- * // OE-25 research mode (inputs_selected.csv present):
- * //   → auto-detects CsvSelectedStrategy, runs in SELECTED mode
- *
- * // Generic project (no CSV):
- * //   → auto-detects ScanAllSourcesStrategy, runs in FULL mode
+ * // Generic project:
+ * //   → scans source and applies URI/package/class/method filters
  * }</pre>
  *
  * <h2>Auto-detection logic</h2>
@@ -35,16 +31,13 @@ import java.util.Objects;
  *   ├── build.gradle?     → GradleProjectAdapter
  *   └── (fallback)        → GenericJavaAdapter
  *
- *   ├── inputs_selected.csv? → CsvSelectedStrategy  (SELECTED mode)
- *   └── (fallback)           → ScanAllSourcesStrategy (FULL mode)
+ *   └── ScanAllSourcesStrategy (FULL mode)
  * </pre>
  *
  * <h2>Design notes</h2>
  * The facade delegates all execution to the existing {@link Orchestrator}. The
  * {@link ProjectAdapter} and {@link MethodSourceStrategy} layers translate project
- * diversity into the two types the Orchestrator already understands:
- * {@link Orchestrator.ExecutionMode#SELECTED} and {@link Orchestrator.ExecutionMode#FULL}.
- * No pipeline phase (1–6) is modified.
+ * diversity into the source strategy the Orchestrator understands.
  */
 public class AnalyzerFacade {
 
@@ -67,7 +60,7 @@ public class AnalyzerFacade {
      *                     cannot produce a classpath
      */
     public static Map<String, Object> analyze(Path projectPath) throws IOException {
-        // Auto-detect method source — CSV (research) or scan-all (generic)
+        // Auto-detect method source.
         return analyze(projectPath, MethodSourceStrategy.detect(projectPath));
     }
 
@@ -142,26 +135,13 @@ public class AnalyzerFacade {
      */
     private static Orchestrator buildOrchestrator(Path projectPath,
                                                    MethodSourceStrategy strategy) {
-        if (strategy instanceof CsvSelectedStrategy csvStrategy) {
-            // SELECTED mode: Orchestrator reads the pre-curated CSV in Phase 2
-            return new Orchestrator(projectPath, Orchestrator.ExecutionMode.SELECTED)
-                    .setInputCsvPath(csvStrategy.getCsvPath());
-        }
-        // Any other strategy (e.g., EntryPointScanStrategy): FULL mode with the
-        // strategy injected into Phase 2 via the override hook.
         return new Orchestrator(projectPath, Orchestrator.ExecutionMode.FULL)
                 .setMethodSourceStrategy(strategy);
     }
 
     private static Orchestrator buildOrchestrator(Path projectPath, AnalysisOptions options) {
-        Orchestrator orchestrator;
-        if (options.scope() == AnalysisOptions.Scope.SELECTED) {
-            orchestrator = new Orchestrator(projectPath, Orchestrator.ExecutionMode.SELECTED)
-                    .setInputCsvPath(options.selectedCsv());
-        } else {
-            orchestrator = new Orchestrator(projectPath, Orchestrator.ExecutionMode.FULL)
-                    .setMethodSourceStrategy(options.methodSourceStrategy());
-        }
+        Orchestrator orchestrator = new Orchestrator(projectPath, Orchestrator.ExecutionMode.FULL)
+                .setMethodSourceStrategy(options.methodSourceStrategy());
         return orchestrator
                 .setCallGraphAlgorithm(options.callGraphAlgorithm())
                 .setMaxMethods(options.maxMethods())

@@ -135,16 +135,16 @@ Available commands:
 
 ```text
 cocox extract   Extract method contexts
-cocox validate  Validate project detection, selected CSVs, JSONL, or a schema row
+cocox validate  Validate project detection, JSONL, or a schema row
 cocox schema    Print or write bundled schemas
 ```
 
-Run selected-method mode:
+Run exact method-URI selection:
 
 ```bash
 ./bin/cocox extract \
   --project /path/to/java/project \
-  --selected /path/to/selected-methods.csv \
+  --method-uri 'src/main/java/com/example/Hello.java#com.example.Hello.greet(java.lang.String):java.lang.String' \
   --call-graph none
 ```
 
@@ -238,7 +238,6 @@ Validation examples:
 
 ```bash
 ./bin/cocox validate --project /path/to/java/project
-./bin/cocox validate --selected selected-methods.csv
 ./bin/cocox validate --jsonl method_contexts.jsonl
 ```
 
@@ -246,7 +245,6 @@ Schema examples:
 
 ```bash
 ./bin/cocox schema method-context
-./bin/cocox schema selected-methods --output selected-methods.schema.json
 ```
 
 By default, generated artifacts are written outside the analyzed project:
@@ -257,7 +255,6 @@ By default, generated artifacts are written outside the analyzed project:
   extraction_report.json
   Output_CallGraph_CHA.txt     when CHA is effectively used
   Output_CallGraph_RTA.txt     when RTA is effectively used
-  selected_method_failures.jsonl
   method_context_failures.jsonl
 ```
 
@@ -270,20 +267,8 @@ Use `--output-dir` to choose an explicit destination:
 Failure artifacts are written next to the normal outputs:
 
 ```text
-selected_method_failures.jsonl when selected CSV rows cannot be matched
 method_context_failures.jsonl  when a discovered method cannot be contextualized
 ```
-
-## Selected-Method CSV
-
-Preferred selected CSV columns:
-
-```csv
-method_uri|docstring|test_prefix
-src/main/java/com/example/Hello.java#com.example.Hello.greet(String name)|Greets a person.|new Hello().greet("x")
-```
-
-Legacy PoC/research CSVs with `focal_method|test_prefix|docstring|id` are still accepted. In that mode, the loader parses source and emits method URIs anyway; the old `id` is not used as the method identity.
 
 ## API Usage
 

@@ -20,8 +20,6 @@ public class MethodInfo {
     private final String returnType;
     private final String erasedReturnType;
     private final String sourceSet;
-    private final String originalDocstring;  // human-written docstring from inputs_selected.csv (empty if scanned from source)
-    private final String testPrefix;         // associated test code from inputs_selected.csv (empty if scanned from source)
 
     private MethodInfo(Builder builder) {
         this.id = Objects.requireNonNull(builder.id, "id cannot be null");
@@ -36,8 +34,6 @@ public class MethodInfo {
         this.returnType = Objects.requireNonNull(builder.returnType, "returnType cannot be null");
         this.erasedReturnType = Objects.requireNonNull(builder.erasedReturnType, "erasedReturnType cannot be null");
         this.sourceSet = builder.sourceSet != null ? builder.sourceSet : "unknown";
-        this.originalDocstring = builder.originalDocstring != null ? builder.originalDocstring : "";
-        this.testPrefix = builder.testPrefix != null ? builder.testPrefix : "";
     }
 
     // Getters
@@ -93,14 +89,6 @@ public class MethodInfo {
         return sourceSet;
     }
 
-    public String getOriginalDocstring() {
-        return originalDocstring;
-    }
-
-    public String getTestPrefix() {
-        return testPrefix;
-    }
-
     @Override
     public String toString() {
         return "MethodInfo{" +
@@ -148,8 +136,6 @@ public class MethodInfo {
         private String returnType = "void";
         private String erasedReturnType = "void";
         private String sourceSet = "unknown";
-        private String originalDocstring = "";
-        private String testPrefix = "";
 
         public Builder id(String id) {
             this.id = id;
@@ -211,16 +197,6 @@ public class MethodInfo {
 
         public Builder sourceSet(String sourceSet) {
             this.sourceSet = sourceSet;
-            return this;
-        }
-
-        public Builder originalDocstring(String originalDocstring) {
-            this.originalDocstring = originalDocstring;
-            return this;
-        }
-
-        public Builder testPrefix(String testPrefix) {
-            this.testPrefix = testPrefix;
             return this;
         }
 

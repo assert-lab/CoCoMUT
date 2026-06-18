@@ -98,17 +98,6 @@ public class IntegrationTest {
     }
 
     @Test
-    public void testSelectedMode() {
-        Orchestrator selectedOrch = new Orchestrator(testProjectPath, Orchestrator.ExecutionMode.SELECTED);
-
-        selectedOrch.execute();
-        Map<String, Object> report = selectedOrch.getExecutionReport();
-
-        assertNotNull("Should have report in selected mode", report);
-        assertEquals("Execution mode should be SELECTED", "SELECTED", report.get("execution_mode"));
-    }
-
-    @Test
     public void testFullModeReport() {
         Orchestrator fullOrch = new Orchestrator(testProjectPath, Orchestrator.ExecutionMode.FULL);
 
@@ -177,7 +166,6 @@ public class IntegrationTest {
     @Test
     public void testExecutionModesExist() {
         assertTrue("Should have FULL mode", Orchestrator.ExecutionMode.FULL != null);
-        assertTrue("Should have SELECTED mode", Orchestrator.ExecutionMode.SELECTED != null);
     }
 
     @Test

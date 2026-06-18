@@ -188,43 +188,6 @@ public class RobustExtractionRegressionTest {
     }
 
     @Test
-    public void selectedModeWritesFailureArtifactForUnmatchedRows() throws Exception {
-        Path project = Files.createTempDirectory("cocox-selected-project");
-        try {
-            write(project.resolve("src/main/java/demo/SelectedTarget.java"),
-                    "package demo; public class SelectedTarget { public String ok(String value) { return value; } }");
-            ProjectMetadata metadata = new ProjectAnalyzer(project).analyze();
-            String methodUri = new MethodIdentifier(metadata).identify().get(0).getId();
-
-            Path selected = project.resolve("inputs_selected.csv");
-            Files.writeString(selected,
-                    "method_uri|docstring|test_prefix\n"
-                            + methodUri + "|doc|test\n"
-                            + "src/main/java/demo/Missing.java#demo.Missing.nope()|doc|test\n",
-                    StandardCharsets.UTF_8);
-
-            ExtractionReport report = ContextExtractorService.createDefault().extract(ContextRequest.builder()
-                    .projectRoot(project)
-                    .methodSelection(MethodSelection.fromCsv(selected))
-                    .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
-                    .outputMode(AnalysisOptions.OutputMode.JSONL)
-                    .build());
-
-            Path failures = Path.of(System.getProperty("user.dir"))
-                    .resolve("cocox_output")
-                    .resolve(project.getFileName().toString())
-                    .resolve("selected_method_failures.jsonl");
-            assertTrue(report.successful());
-            assertTrue(Files.isRegularFile(failures));
-            List<String> lines = Files.readAllLines(failures);
-            assertEquals(1, lines.size());
-            assertTrue(lines.get(0).contains("SELECTED_METHOD_NOT_FOUND"));
-        } finally {
-            deleteRecursively(project);
-        }
-    }
-
-    @Test
     public void cliValidateRejectsMalformedContextJson() throws Exception {
         Path file = Files.createTempFile("cocox-invalid-context", ".json");
         try {

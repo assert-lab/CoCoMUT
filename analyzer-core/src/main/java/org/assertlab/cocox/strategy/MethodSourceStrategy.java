@@ -4,7 +4,6 @@ import org.assertlab.cocox.MethodInfo;
 import org.assertlab.cocox.ProjectMetadata;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -12,15 +11,8 @@ import java.util.List;
  * Strategy interface — abstracts <em>which methods</em> the pipeline processes.
  *
  * The pipeline always receives a {@code List<MethodInfo>} for Phase 3 onward.
- * How that list is produced depends on context:
- *
- * <table>
- *   <caption>Built-in method source strategies</caption>
- *   <tr><th>Scenario</th><th>Strategy</th></tr>
- *   <tr><td>OE-25 research (pre-selected samples)</td><td>{@link CsvSelectedStrategy}</td></tr>
- *   <tr><td>Full project scan</td><td>{@link ScanAllSourcesStrategy}</td></tr>
- *   <tr><td>Generic project (no CSV, no preset)</td><td>{@link EntryPointScanStrategy} (Sprint 2)</td></tr>
- * </table>
+ * How that list is produced depends on context. Built-in strategies are full
+ * project scanning and entry-point scanning.
  *
  * <h2>Adding a new method source</h2>
  * <ol>
@@ -46,20 +38,10 @@ public interface MethodSourceStrategy {
     /**
      * Auto-detect the best strategy for a project root.
      *
-     * <p>Detection order:
-     * <ol>
-     *   <li>{@code inputs_selected.csv} present → {@link CsvSelectedStrategy}</li>
-     *   <li>Otherwise → {@link ScanAllSourcesStrategy} (scan all public methods)</li>
-     * </ol>
-     *
      * @param projectPath absolute path to the project root directory
      * @return the most appropriate strategy for this project
      */
     static MethodSourceStrategy detect(Path projectPath) {
-        Path csv = projectPath.resolve("inputs_selected.csv");
-        if (Files.exists(csv)) {
-            return new CsvSelectedStrategy(csv);
-        }
         return new ScanAllSourcesStrategy();
     }
 }

@@ -1,7 +1,7 @@
 package poc;
 
 /**
- * Fixture for selected-method matching edge cases.
+ * Fixture for method URI matching edge cases.
  */
 public class SelectedMethodMatchingFixture {
     private final String label;
