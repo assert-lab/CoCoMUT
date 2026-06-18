@@ -40,7 +40,7 @@ doc-files/images/html references   39268
   `{@link ...}`, and `{@linkplain ...}`:
   - external URLs;
   - project type references;
-  - project member references resolved to C4DG method URIs when possible;
+  - project member references resolved to CoCoX method URIs when possible;
   - short referenced Javadoc excerpts.
 - Javadoc metadata now includes `structured_tags` for:
   - `@param`;
@@ -71,12 +71,12 @@ file_ref_rows           37
 
 - Deep semantic resolution for external JDK/library references such as
   `java.util.List#add(Object)`.
-- Full Javadoc doclet rendering semantics. C4DG parses useful source-level
+- Full Javadoc doclet rendering semantics. CoCoX parses useful source-level
   context; it does not attempt to exactly reproduce generated Javadoc HTML.
 - Rich resolution for all label variants in handwritten `@see` text. The
   resolver handles common `target label` patterns, but unusual prose-heavy
   references remain best-effort.
-- Full auxiliary-file ingestion. C4DG records referenced file paths and small
+- Full auxiliary-file ingestion. CoCoX records referenced file paths and small
   text excerpts, but it does not embed binary images or large HTML files.
 - Full `{@value}` constant resolution and rendered `{@code}`/`{@literal}`
   text normalization. These are counted as common but currently remain raw

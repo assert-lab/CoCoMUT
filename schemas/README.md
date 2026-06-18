@@ -1,12 +1,12 @@
 # Schemas
 
-This directory contains the machine-readable contracts for C4DG inputs and
+This directory contains the machine-readable contracts for CoCoX inputs and
 outputs. The same schema files are bundled in the CLI jar and can be printed
 with:
 
 ```bash
-./bin/c4dg schema method-context
-./bin/c4dg schema selected-methods
+./bin/cocox schema method-context
+./bin/cocox schema selected-methods
 ```
 
 ## Files
@@ -18,10 +18,10 @@ selected-methods.schema.json   JSON Schema for preferred selected-method input r
 
 ## Method Context Rows
 
-C4DG writes JSONL. Each line in a generated `*.jsonl` file is one complete
+CoCoX writes JSONL. Each line in a generated `*.jsonl` file is one complete
 method-context object that follows `method-context.schema.json`.
 
-The schema is intentionally permissive with `additionalProperties: true` so C4DG
+The schema is intentionally permissive with `additionalProperties: true` so CoCoX
 can add research fields without breaking older consumers. Consumers should rely
 on the documented stable fields and ignore unknown fields by default.
 
@@ -77,7 +77,7 @@ Call graph arrays are normalized edge objects, not raw strings:
 
 ```text
 kind                      project_method|unresolved_method|synthetic_or_compiler_method
-method_uri                C4DG method URI when the edge resolves to a project method
+method_uri                CoCoX method URI when the edge resolves to a project method
 raw_signature             SootUp bytecode signature retained as provenance
 declaring_class           Declaring class reported by SootUp
 method_name               Method name reported by SootUp
@@ -88,7 +88,7 @@ context                   Optional method node when method_uri resolves to an ex
 ## Selected Methods
 
 `selected-methods.schema.json` documents the preferred selected-method input
-shape. C4DG accepts pipe-delimited CSVs with at least:
+shape. CoCoX accepts pipe-delimited CSVs with at least:
 
 ```text
 method_uri
@@ -116,13 +116,13 @@ for compatibility, but `method_uri` is the stable input identity.
 Validate generated JSONL:
 
 ```bash
-./bin/c4dg validate --jsonl path/to/method_contexts.jsonl
+./bin/cocox validate --jsonl path/to/method_contexts.jsonl
 ```
 
 Validate selected-method input shape:
 
 ```bash
-./bin/c4dg validate --selected selected-methods.csv
+./bin/cocox validate --selected selected-methods.csv
 ```
 
 ## Versioning
@@ -136,4 +136,4 @@ metadata.schema_version
 Schema changes should preserve backward-compatible fields where possible. If a
 field is renamed, removed, or changes meaning, update this README, the schema
 file, and the CLI-bundled copy under
-`context4docugen-cli/src/main/resources/schemas/`.
+`cocox-cli/src/main/resources/schemas/`.

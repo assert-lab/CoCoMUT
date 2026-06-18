@@ -88,9 +88,9 @@ Status breakdown:
 
 | Status | Count | Meaning |
 | --- | ---: | --- |
-| Success | 541 | C4DG completed and emitted one JSONL row per selected method. |
-| Skipped | 0 | Git clone timed out before C4DG analysis started. |
-| Timeout | 0 | C4DG analysis exceeded the configured per-repository timeout. |
+| Success | 541 | CoCoX completed and emitted one JSONL row per selected method. |
+| Skipped | 0 | Git clone timed out before CoCoX analysis started. |
+| Timeout | 0 | CoCoX analysis exceeded the configured per-repository timeout. |
 
 Non-success repositories:
 

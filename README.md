@@ -15,7 +15,7 @@ The tool is intentionally source/static-analysis based. It does not execute the 
 
 ```text
 analyzer-core/   Java library and extraction API
-context4docugen-cli/ Standalone Picocli command-line application
+cocox-cli/ Standalone Picocli command-line application
 analyzer-tests/  unit and integration tests with tiny fixtures
 examples/        small API usage example
 schemas/         machine-readable schema drafts and schema documentation
@@ -46,12 +46,12 @@ scripts/build_release_jar.sh
 The script runs tests, packages all modules, and writes:
 
 ```text
-dist/context4docugen-cli.jar
+dist/cocox-cli.jar
 ```
 
 ## Method Identity
 
-Context4DocuGen identifies methods by URI.
+CoCoX identifies methods by URI.
 
 Format:
 
@@ -74,18 +74,18 @@ This is important because overloaded methods need more than a method name. A rel
 
 ## CLI Usage
 
-The CLI can be run through `bin/c4dg` from the repository root:
+The CLI can be run through `bin/cocox` from the repository root:
 
 ```bash
-./bin/c4dg extract --project /path/to/java/project --scope entry-points --call-graph none
+./bin/cocox extract --project /path/to/java/project --scope entry-points --call-graph none
 ```
 
-`bin/c4dg` uses `dist/context4docugen-cli.jar` when it exists. If the jar has not been built yet, it builds and runs the shaded development jar from `context4docugen-cli/target/`.
+`bin/cocox` uses `dist/cocox-cli.jar` when it exists. If the jar has not been built yet, it builds and runs the shaded development jar from `cocox-cli/target/`.
 
 You can also run the standalone jar directly:
 
 ```bash
-java -jar dist/context4docugen-cli.jar extract \
+java -jar dist/cocox-cli.jar extract \
   --project /path/to/java/project \
   --scope entry-points \
   --call-graph none
@@ -94,15 +94,15 @@ java -jar dist/context4docugen-cli.jar extract \
 Available commands:
 
 ```text
-c4dg extract   Extract method contexts
-c4dg validate  Validate project detection, selected CSVs, JSONL, or a schema row
-c4dg schema    Print or write bundled schemas
+cocox extract   Extract method contexts
+cocox validate  Validate project detection, selected CSVs, JSONL, or a schema row
+cocox schema    Print or write bundled schemas
 ```
 
 Run selected-method mode:
 
 ```bash
-./bin/c4dg extract \
+./bin/cocox extract \
   --project /path/to/java/project \
   --selected /path/to/selected-methods.csv \
   --call-graph none
@@ -141,7 +141,7 @@ source-only.
 For documentation datasets, prefer:
 
 ```bash
-./bin/c4dg extract \
+./bin/cocox extract \
   --project /path/to/java/project \
   --scope entry-points \
   --source-set main \
@@ -155,7 +155,7 @@ omit the flag to preserve the default behavior.
 Layered selection is available when you do not want the whole repository:
 
 ```bash
-./bin/c4dg extract \
+./bin/cocox extract \
   --project /path/to/java/project \
   --package org.example.api \
   --class PublicApi \
@@ -173,22 +173,22 @@ selected thing, for example `package__org.example.api.jsonl`,
 Validation examples:
 
 ```bash
-./bin/c4dg validate --project /path/to/java/project
-./bin/c4dg validate --selected selected-methods.csv
-./bin/c4dg validate --jsonl method_contexts.jsonl
+./bin/cocox validate --project /path/to/java/project
+./bin/cocox validate --selected selected-methods.csv
+./bin/cocox validate --jsonl method_contexts.jsonl
 ```
 
 Schema examples:
 
 ```bash
-./bin/c4dg schema method-context
-./bin/c4dg schema selected-methods --output selected-methods.schema.json
+./bin/cocox schema method-context
+./bin/cocox schema selected-methods --output selected-methods.schema.json
 ```
 
 By default, generated artifacts are written outside the analyzed project:
 
 ```text
-./c4dg_output/<project-name>/
+./cocox_output/<project-name>/
   method_contexts.jsonl
   extraction_report.json
   Output_CallGraph_CHA.txt     when CHA is effectively used
@@ -200,7 +200,7 @@ By default, generated artifacts are written outside the analyzed project:
 Use `--output-dir` to choose an explicit destination:
 
 ```bash
-./bin/c4dg extract --project /path/to/java/project --output-dir ./results/project-name
+./bin/cocox extract --project /path/to/java/project --output-dir ./results/project-name
 ```
 
 Failure artifacts are written next to the normal outputs:
@@ -231,7 +231,7 @@ mvn install
 
 ```xml
 <dependency>
-  <groupId>org.assertlab.context4docugen</groupId>
+  <groupId>org.assertlab.cocox</groupId>
   <artifactId>analyzer-core</artifactId>
   <version>1.0-SNAPSHOT</version>
 </dependency>
@@ -240,12 +240,12 @@ mvn install
 Minimal Java API:
 
 ```java
-import org.assertlab.context4docugen.AnalysisOptions;
-import org.assertlab.context4docugen.CallGraphGenerator;
-import org.assertlab.context4docugen.ContextExtractorService;
-import org.assertlab.context4docugen.ContextRequest;
-import org.assertlab.context4docugen.ExtractionReport;
-import org.assertlab.context4docugen.MethodSelection;
+import org.assertlab.cocox.AnalysisOptions;
+import org.assertlab.cocox.CallGraphGenerator;
+import org.assertlab.cocox.ContextExtractorService;
+import org.assertlab.cocox.ContextRequest;
+import org.assertlab.cocox.ExtractionReport;
+import org.assertlab.cocox.MethodSelection;
 
 import java.nio.file.Path;
 
@@ -254,7 +254,7 @@ class Example {
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(Path.of("/path/to/java/project"))
                 .methodSelection(MethodSelection.entryPoints())
-                .callGraphAlgorithm(org.assertlab.context4docugen.CallGraphGenerator.Algorithm.NONE)
+                .callGraphAlgorithm(org.assertlab.cocox.CallGraphGenerator.Algorithm.NONE)
                 .outputMode(AnalysisOptions.OutputMode.JSONL)
                 .maxSourceFiles(500) // optional low-memory smoke-run cap
                 .build();
@@ -277,27 +277,27 @@ Run it from the repository root:
 ```bash
 mvn install
 cd examples/api-toy-project
-mvn compile exec:java -Dexec.mainClass=example.RunContext4DocuGen
+mvn compile exec:java -Dexec.mainClass=example.RunCoCoX
 ```
 
 To analyze another project:
 
 ```bash
 mvn compile exec:java \
-  -Dexec.mainClass=example.RunContext4DocuGen \
+  -Dexec.mainClass=example.RunCoCoX \
   -Dexec.args="/path/to/java/project"
 ```
 
 ## Static Analysis Boundaries
 
-Context4DocuGen does not perform dynamic analysis. It does not execute tests, run application code, observe runtime values, or resolve reflection dynamically.
+CoCoX does not perform dynamic analysis. It does not execute tests, run application code, observe runtime values, or resolve reflection dynamically.
 
 Current static-analysis boundaries:
 
 - source extraction uses Spoon; auto mode keeps no-classpath extraction as the coverage baseline and uses classpath-aware extraction when it is available and coverage-preserving;
 - call graph extraction uses optional SootUp `CHA` or `RTA`;
 - call graph quality depends on compiled class directories and classpath resolution;
-- build-tool compilation is explicit via `--compile` or opportunistic through `--resolution auto` / `--call-graph auto`; otherwise C4DG only reuses existing class files;
+- build-tool compilation is explicit via `--compile` or opportunistic through `--resolution auto` / `--call-graph auto`; otherwise CoCoX only reuses existing class files;
 - reflection, proxies, generated code, Lombok, service loaders, and dependency injection can reduce precision, but common dynamic-feature hints are labeled in JSON;
 - generated methods from Lombok/annotation processors are not visible unless generated source or bytecode is available.
 

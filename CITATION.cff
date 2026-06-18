@@ -1,8 +1,8 @@
 cff-version: 1.2.0
-message: "If you use Context4DocuGen in academic work, please cite this repository."
-title: "Context4DocuGen"
+message: "If you use CoCoX in academic work, please cite this repository."
+title: "CoCoX"
 version: "1.0-SNAPSHOT"
-repository-code: "https://github.com/assert-lab/Context4DocuGen"
+repository-code: "https://github.com/assert-lab/CoCoX"
 abstract: "Static Java method-context extraction for documentation research and documentation-generation systems."
 authors:
   - name: "ASSERT Lab"
