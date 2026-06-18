@@ -48,7 +48,7 @@ public class ContextExtractorTest {
     @Test
     public void testExtractContextForSingleMethod() {
         MethodInfo testMethod = new MethodInfo.Builder()
-                .id("1")
+                .methodUri("1")
                 .classname("com.example.MyClass")
                 .methodName("testMethod")
                 .methodSignature("testMethod()")
@@ -62,7 +62,7 @@ public class ContextExtractorTest {
         
         // Context may be null if file not found, which is ok for test
         if (context != null) {
-            assertEquals("Context should have correct method ID", "1", context.getMethodId());
+            assertEquals("Context should have correct method URI", "1", context.getMethodUri());
             assertEquals("Context should have correct method name", "testMethod", context.getMethodName());
             assertEquals("Context should have correct classname", "com.example.MyClass", context.getClassname());
         }
@@ -71,7 +71,7 @@ public class ContextExtractorTest {
     @Test
     public void testMethodContextBuilder() {
         MethodContext context = new MethodContext.Builder()
-                .methodId("1")
+                .methodUri("1")
                 .methodName("testMethod")
                 .classname("com.example.MyClass")
                 .methodBody("public void testMethod() { }")
@@ -83,7 +83,7 @@ public class ContextExtractorTest {
                 .build();
         
         assertNotNull("Should build context", context);
-        assertEquals("Should have method ID", "1", context.getMethodId());
+        assertEquals("Should have method URI", "1", context.getMethodUri());
         assertEquals("Should have method body", "public void testMethod() { }", context.getMethodBody());
         assertEquals("Should have javadoc", "/** Test method */", context.getJavadoc());
         assertTrue("Should have class hierarchy", context.getClassHierarchy().contains("MyClass"));
@@ -95,7 +95,7 @@ public class ContextExtractorTest {
     @Test
     public void testMethodContextWithCallGraph() {
         CallGraphResult callGraph = new CallGraphResult.Builder()
-                .methodId("1")
+                .methodUri("1")
                 .methodName("testMethod")
                 .classname("com.example.MyClass")
                 .addCaller(CallGraphEdge.resolved(
@@ -111,7 +111,7 @@ public class ContextExtractorTest {
                 .build();
         
         MethodContext context = new MethodContext.Builder()
-                .methodId("1")
+                .methodUri("1")
                 .methodName("testMethod")
                 .classname("com.example.MyClass")
                 .callGraph(callGraph)
@@ -125,14 +125,14 @@ public class ContextExtractorTest {
     @Test
     public void testMethodContextHasJavadoc() {
         MethodContext contextWithJavadoc = new MethodContext.Builder()
-                .methodId("1")
+                .methodUri("1")
                 .methodName("testMethod")
                 .classname("com.example.MyClass")
                 .javadoc("/** Test method */")
                 .build();
         
         MethodContext contextWithoutJavadoc = new MethodContext.Builder()
-                .methodId("2")
+                .methodUri("2")
                 .methodName("testMethod2")
                 .classname("com.example.MyClass")
                 .build();
@@ -144,7 +144,7 @@ public class ContextExtractorTest {
     @Test
     public void testContextCaching() {
         MethodInfo testMethod = new MethodInfo.Builder()
-                .id("1")
+                .methodUri("1")
                 .classname("com.example.MyClass")
                 .methodName("testMethod")
                 .methodSignature("testMethod()")
@@ -158,7 +158,7 @@ public class ContextExtractorTest {
         // Should be cached (same reference or null for both)
         if (context1 != null && context2 != null) {
             assertEquals("Second call should return cached result",
-                    context1.getMethodId(), context2.getMethodId());
+                    context1.getMethodUri(), context2.getMethodUri());
         }
     }
 
@@ -166,7 +166,7 @@ public class ContextExtractorTest {
     public void testExtractContextForMultipleMethods() {
         List<MethodInfo> methods = List.of(
                 new MethodInfo.Builder()
-                        .id("1")
+                        .methodUri("1")
                         .classname("com.example.MyClass")
                         .methodName("method1")
                         .methodSignature("method1()")
@@ -174,7 +174,7 @@ public class ContextExtractorTest {
                         .lineNumber(10)
                         .build(),
                 new MethodInfo.Builder()
-                        .id("2")
+                        .methodUri("2")
                         .classname("com.example.MyClass")
                         .methodName("method2")
                         .methodSignature("method2()")
@@ -193,7 +193,7 @@ public class ContextExtractorTest {
     @Test
     public void testCacheStats() {
         MethodInfo testMethod = new MethodInfo.Builder()
-                .id("1")
+                .methodUri("1")
                 .classname("com.example.MyClass")
                 .methodName("testMethod")
                 .methodSignature("testMethod()")
@@ -211,7 +211,7 @@ public class ContextExtractorTest {
     @Test
     public void testClearCache() {
         MethodInfo testMethod = new MethodInfo.Builder()
-                .id("1")
+                .methodUri("1")
                 .classname("com.example.MyClass")
                 .methodName("testMethod")
                 .methodSignature("testMethod()")
@@ -239,7 +239,7 @@ public class ContextExtractorTest {
     @Test
     public void testMethodContextToString() {
         MethodContext context = new MethodContext.Builder()
-                .methodId("1")
+                .methodUri("1")
                 .methodName("testMethod")
                 .classname("com.example.MyClass")
                 .linesOfCode(10)
@@ -248,7 +248,7 @@ public class ContextExtractorTest {
         
         String str = context.toString();
         assertNotNull("Should have string representation", str);
-        assertTrue("Should contain method ID", str.contains("methodId"));
+        assertTrue("Should contain method URI", str.contains("methodUri"));
         assertTrue("Should contain lines of code", str.contains("linesOfCode"));
     }
 }

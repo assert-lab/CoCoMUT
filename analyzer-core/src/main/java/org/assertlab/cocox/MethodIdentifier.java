@@ -47,7 +47,7 @@ public class MethodIdentifier {
 
     public static MethodInfo toMethodInfo(SourceMethod method) {
         return new MethodInfo.Builder()
-                .id(method.methodUri())
+                .methodUri(method.methodUri())
                 .classname(method.className())
                 .methodName(method.methodName())
                 .methodSignature(method.signature())

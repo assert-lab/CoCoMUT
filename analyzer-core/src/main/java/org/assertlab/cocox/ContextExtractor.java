@@ -6,37 +6,27 @@ import org.assertlab.cocox.source.SourceContext;
 import org.assertlab.cocox.source.SourceMethod;
 import org.assertlab.cocox.source.SourceModelBackend;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * Phase 4 of the method context extraction pipeline.
  *
  * Extracts complete context for identified methods:
- * - Method body (brace-counted from source)
- * - JavaDoc documentation (method-level and class-level)
+ * - Method source
+ * - Javadoc documentation (method-level and class-level)
  * - Class hierarchy (via Spoon source model, with SootUp when available)
  * - Related class methods
  * - Metrics (LOC, cyclomatic complexity)
  * - Combines with call graph from Phase 3
  *
  * Input: ProjectMetadata from Phase 1, MethodInfo from Phase 2, CallGraphGenerator from Phase 3
- * Output: Map of method IDs to MethodContext objects
+ * Output: Map of method URIs to MethodContext objects
  */
 public class ContextExtractor {
-    private static final Pattern CLASS_DECLARATION_PATTERN = Pattern.compile(
-            "(public|package-private)?\\s+(class|interface|enum)\\s+(\\w+)(?:\\s+extends\\s+([\\w,\\s]+))?(?:\\s+implements\\s+([\\w,\\s]+))?"
-    );
-
     private final ProjectMetadata projectMetadata;
     private final CallGraphGenerator callGraphGenerator;
     private final Map<String, MethodContext> cache;
@@ -52,74 +42,35 @@ public class ContextExtractor {
     }
 
     public MethodContext extractContext(MethodInfo method) {
-        String cacheKey = method.getId();
-        if (cache.containsKey(cacheKey)) {
-            return cache.get(cacheKey);
+        String methodUri = method.getMethodUri();
+        if (cache.containsKey(methodUri)) {
+            return cache.get(methodUri);
         }
 
         try {
             java.util.Optional<SourceContext> sourceContext =
-                    sourceBackend.extractContext(projectModel, method.getMethodUri());
+                    sourceBackend.extractContext(projectModel, methodUri);
             if (sourceContext.isPresent()) {
                 MethodContext context = fromSourceContext(method, sourceContext.get());
-                cache.put(cacheKey, context);
+                cache.put(methodUri, context);
                 return context;
             }
 
-            String fileContent = readSourceFile(method.getSourceFile());
-
-            String javadoc = extractJavadoc(fileContent, method.getLineNumber());
-            String classJavadoc = extractClassJavadoc(fileContent);
-            String methodBody = extractMethodBody(fileContent, method.getLineNumber());
-            String classHierarchy = resolveClassHierarchy(method.getClassname(), fileContent);
-            Map<String, String> classMethods = extractClassMethods(fileContent, method.getClassname());
-            CallGraphResult callGraph = callGraphGenerator.getCachedResult(method.getId());
-            int linesOfCode = countLinesOfCode(methodBody);
-            int cyclomatic = calculateCyclomaticComplexity(methodBody);
-
-            String formattedSignature = method.getClassname() + "."
-                    + method.getMethodSignature();
-            List<String> parameters = parseParameterTypes(method.getMethodSignature());
-
-            MethodContext context = new MethodContext.Builder()
-                    .methodId(method.getId())
-                    .methodName(method.getMethodName())
-                    .classname(method.getClassname())
-                    .signature(formattedSignature)
-                    .returnType(method.getReturnType())
-                    .erasedReturnType(method.getErasedReturnType())
-                    .lineNumber(method.getLineNumber())
-                    .parameters(parameters)
-                    .methodBody(methodBody)
-                    .javadoc(javadoc)
-                    .classJavadoc(classJavadoc)
-                    .classHierarchy(classHierarchy)
-                    .classMethods(classMethods)
-                    .callGraph(callGraph)
-                    .linesOfCode(linesOfCode)
-                    .cyclomatic(cyclomatic)
-                    .sourceBackend(sourceBackend.name())
-                    .sourceBackendMode("fallback_text")
-                    .hierarchyResolution("source_text")
-                    .build();
-
-            cache.put(cacheKey, context);
-            return context;
-
-        } catch (IOException e) {
+            return null;
+        } catch (Exception e) {
             System.err.println("[ContextExtractor] Failed to extract context for method "
-                    + method.getId() + " (" + method.getMethodName() + "): " + e.getMessage());
+                    + methodUri + " (" + method.getMethodName() + "): " + e.getMessage());
             return null;
         }
     }
 
     private MethodContext fromSourceContext(MethodInfo method, SourceContext sourceContext) {
         SourceMethod sourceMethod = sourceContext.method();
-        CallGraphResult callGraph = callGraphGenerator.getCachedResult(method.getId());
+        CallGraphResult callGraph = callGraphGenerator.getCachedResult(method.getMethodUri());
         String methodBody = sourceContext.methodBody();
 
         return new MethodContext.Builder()
-                .methodId(method.getId())
+                .methodUri(method.getMethodUri())
                 .methodName(method.getMethodName())
                 .classname(method.getClassname())
                 .signature(method.getClassname() + "." + method.getMethodSignature())
@@ -167,194 +118,13 @@ public class ContextExtractor {
         for (MethodInfo method : methods) {
             MethodContext ctx = extractContext(method);
             if (ctx != null) {
-                result.put(ctx.getMethodId(), ctx);
+                result.put(ctx.getMethodUri(), ctx);
             } else {
-                System.err.println("[ContextExtractor] Dropped method id=" + method.getId()
+                System.err.println("[ContextExtractor] Dropped method_uri=" + method.getMethodUri()
                         + " (" + method.getMethodName() + ") — could not extract context");
             }
         }
         return result;
-    }
-
-    // ---- Class hierarchy resolution ----
-
-    private String resolveClassHierarchy(String classname, String fileContent) {
-        CallGraphGenerator.ClassHierarchyInfo info = callGraphGenerator.getClassHierarchy(classname);
-        if (info != null) {
-            return formatHierarchyInfo(info);
-        }
-        return extractClassHierarchyFromSource(fileContent);
-    }
-
-    private String formatHierarchyInfo(CallGraphGenerator.ClassHierarchyInfo info) {
-        StringBuilder sb = new StringBuilder(info.getSimpleName());
-        if (!info.getSuperclasses().isEmpty()) {
-            sb.append(" extends ").append(String.join(", ", info.getSuperclasses()));
-        }
-        if (!info.getInterfaces().isEmpty()) {
-            sb.append(" implements ").append(String.join(", ", info.getInterfaces()));
-        }
-        if (!info.getDirectSubclasses().isEmpty()) {
-            sb.append(" [subclasses: ").append(String.join(", ", info.getDirectSubclasses())).append("]");
-        }
-        return sb.toString();
-    }
-
-    private String extractClassHierarchyFromSource(String fileContent) {
-        Matcher matcher = CLASS_DECLARATION_PATTERN.matcher(fileContent);
-        if (matcher.find()) {
-            StringBuilder hierarchy = new StringBuilder();
-            hierarchy.append(matcher.group(3));
-            if (matcher.group(4) != null) {
-                hierarchy.append(" extends ").append(matcher.group(4));
-            }
-            if (matcher.group(5) != null) {
-                hierarchy.append(" implements ").append(matcher.group(5));
-            }
-            return hierarchy.toString();
-        }
-        return "";
-    }
-
-    // ---- Class-level javadoc ----
-
-    private String extractClassJavadoc(String fileContent) {
-        String[] lines = fileContent.split("\\R");
-        StringBuilder javadoc = new StringBuilder();
-        boolean inJavadoc = false;
-
-        for (String rawLine : lines) {
-            String line = rawLine.trim();
-            if (line.matches(".*\\b(class|interface|enum)\\s+\\w+.*") && !line.startsWith("*") && !line.startsWith("//")) {
-                break;
-            }
-            if (line.startsWith("/**")) {
-                inJavadoc = true;
-                javadoc.setLength(0);
-                javadoc.append(rawLine).append("\n");
-            } else if (inJavadoc) {
-                javadoc.append(rawLine).append("\n");
-                if (line.endsWith("*/")) {
-                    inJavadoc = false;
-                }
-            }
-        }
-        return javadoc.toString().trim();
-    }
-
-    // ---- Parameter parsing ----
-
-    private List<String> parseParameterTypes(String methodSignature) {
-        if (methodSignature == null) return List.of();
-        int open = methodSignature.indexOf('(');
-        int close = methodSignature.lastIndexOf(')');
-        if (open < 0 || close <= open) return List.of();
-        String paramStr = methodSignature.substring(open + 1, close).trim();
-        if (paramStr.isEmpty()) return List.of();
-        List<String> types = new ArrayList<>();
-        for (String p : paramStr.split(",")) {
-            String[] parts = p.trim().split("\\s+");
-            if (parts.length >= 1) types.add(parts[0]);
-        }
-        return types;
-    }
-
-    // ---- Source file reading ----
-
-    private String readSourceFile(Path sourceFile) throws IOException {
-        Path projectRoot = projectMetadata.getSourceRoot().getParent();
-        Path fullPath = projectRoot.resolve(sourceFile);
-
-        if (!Files.exists(fullPath)) {
-            fullPath = projectMetadata.getSourceRoot().resolve(sourceFile.getFileName());
-        }
-
-        if (!Files.exists(fullPath)) {
-            fullPath = projectMetadata.getProjectPath().resolve("src/main/java").resolve(sourceFile.getFileName());
-        }
-
-        if (Files.exists(fullPath)) {
-            return new String(Files.readAllBytes(fullPath), StandardCharsets.UTF_8);
-        }
-
-        return "";
-    }
-
-    // ---- Method javadoc ----
-
-    private String extractJavadoc(String fileContent, int lineNumber) {
-        String[] lines = fileContent.split("\\R");
-
-        if (lineNumber > 0 && lineNumber <= lines.length) {
-            for (int i = lineNumber - 2; i >= 0 && i >= lineNumber - 50; i--) {
-                String line = lines[i].trim();
-                if (line.startsWith("/**")) {
-                    StringBuilder javadoc = new StringBuilder();
-                    for (int j = i; j < lines.length && j < lineNumber; j++) {
-                        javadoc.append(lines[j]).append("\n");
-                        if (lines[j].contains("*/")) {
-                            return javadoc.toString();
-                        }
-                    }
-                }
-            }
-        }
-
-        return "";
-    }
-
-    // ---- Method body extraction ----
-
-    private String extractMethodBody(String fileContent, int lineNumber) {
-        String[] lines = fileContent.split("\\R");
-
-        if (lineNumber <= 0 || lineNumber > lines.length) {
-            return "";
-        }
-
-        StringBuilder methodBody = new StringBuilder();
-        int braceCount = 0;
-        boolean inMethod = false;
-
-        for (int i = lineNumber - 1; i < lines.length; i++) {
-            String line = lines[i];
-
-            for (char c : line.toCharArray()) {
-                if (c == '{') {
-                    braceCount++;
-                    inMethod = true;
-                } else if (c == '}') {
-                    braceCount--;
-                }
-            }
-
-            methodBody.append(line).append("\n");
-
-            if (inMethod && braceCount == 0) {
-                break;
-            }
-        }
-
-        return methodBody.toString();
-    }
-
-    // ---- Class methods extraction ----
-
-    private Map<String, String> extractClassMethods(String fileContent, String classname) {
-        Map<String, String> methods = new HashMap<>();
-
-        Pattern methodPattern = Pattern.compile(
-                "\\b(public|private|protected)?\\s+(static)?\\s+([\\w<>,\\s]+?)\\s+(\\w+)\\s*\\([^)]*\\)"
-        );
-
-        Matcher matcher = methodPattern.matcher(fileContent);
-        while (matcher.find()) {
-            String methodName = matcher.group(4);
-            String returnType = matcher.group(3);
-            methods.put(methodName, returnType);
-        }
-
-        return methods;
     }
 
     // ---- Metrics ----
@@ -394,8 +164,8 @@ public class ContextExtractor {
 
     // ---- Cache management ----
 
-    public MethodContext getCachedContext(String methodId) {
-        return cache.get(methodId);
+    public MethodContext getCachedContext(String methodUri) {
+        return cache.get(methodUri);
     }
 
     public void clearCache() {

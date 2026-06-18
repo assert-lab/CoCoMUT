@@ -27,7 +27,7 @@ public class IntegrationTest {
     public void setUp() throws Exception {
         TestFixtures.ensureMinimalMavenProjectCompiled();
         testProjectPath = TestFixtures.minimalMavenProjectRoot();
-        orchestrator = new Orchestrator(testProjectPath, Orchestrator.ExecutionMode.FULL);
+        orchestrator = new Orchestrator(testProjectPath);
     }
 
     @After
@@ -93,19 +93,19 @@ public class IntegrationTest {
 
         assertTrue("Report should have start_time", report.containsKey("start_time"));
         assertTrue("Report should have end_time", report.containsKey("end_time"));
-        assertTrue("Report should have execution_mode", report.containsKey("execution_mode"));
+        assertTrue("Report should have pipeline phase count", report.containsKey("pipeline_phases"));
         assertTrue("Report should have status", report.containsKey("status"));
     }
 
     @Test
-    public void testFullModeReport() {
-        Orchestrator fullOrch = new Orchestrator(testProjectPath, Orchestrator.ExecutionMode.FULL);
+    public void testPipelinePhaseReport() {
+        Orchestrator orchestrator = new Orchestrator(testProjectPath);
 
-        fullOrch.execute();
-        Map<String, Object> report = fullOrch.getExecutionReport();
+        orchestrator.execute();
+        Map<String, Object> report = orchestrator.getExecutionReport();
 
-        assertNotNull("Should have report in full mode", report);
-        assertEquals("Execution mode should be FULL", "FULL", report.get("execution_mode"));
+        assertNotNull("Should have report", report);
+        assertEquals("Pipeline should have five phases", 5, report.get("pipeline_phases"));
     }
 
     @Test
@@ -123,7 +123,7 @@ public class IntegrationTest {
 
     @Test
     public void testConfigurationValidation() {
-        Orchestrator validOrch = new Orchestrator(testProjectPath, Orchestrator.ExecutionMode.FULL);
+        Orchestrator validOrch = new Orchestrator(testProjectPath);
         boolean valid = validOrch.validateConfiguration();
 
         assertTrue("Should validate existing project", valid);
@@ -131,10 +131,7 @@ public class IntegrationTest {
 
     @Test
     public void testInvalidProjectPath() {
-        Orchestrator invalidOrch = new Orchestrator(
-                Paths.get("/nonexistent/path/to/project"),
-                Orchestrator.ExecutionMode.FULL
-        );
+        Orchestrator invalidOrch = new Orchestrator(Paths.get("/nonexistent/path/to/project"));
 
         boolean valid = invalidOrch.validateConfiguration();
 
@@ -164,16 +161,8 @@ public class IntegrationTest {
     }
 
     @Test
-    public void testExecutionModesExist() {
-        assertTrue("Should have FULL mode", Orchestrator.ExecutionMode.FULL != null);
-    }
-
-    @Test
     public void testErrorHandling() {
-        Orchestrator errorOrch = new Orchestrator(
-                Paths.get("/nonexistent/path"),
-                Orchestrator.ExecutionMode.FULL
-        );
+        Orchestrator errorOrch = new Orchestrator(Paths.get("/nonexistent/path"));
 
         errorOrch.execute();
         Map<String, Object> report = errorOrch.getExecutionReport();

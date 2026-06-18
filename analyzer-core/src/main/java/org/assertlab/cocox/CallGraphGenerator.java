@@ -27,7 +27,7 @@ import sootup.callgraph.RapidTypeAnalysisAlgorithm;
  * Capabilities:
  * - Builds CHA or RTA call graph over compiled classes
  * - Resolves caller/callee relationships
- * - Provides signature→methodId reverse lookup
+ * - Provides signature→methodUri reverse lookup
  * - Queries transitive class hierarchy (superclasses, interfaces, subclasses)
  * - Exposes raw call graph text for human-readable {@code Output_CallGraph_<ALGORITHM>.txt}
  */
@@ -42,8 +42,8 @@ public class CallGraphGenerator {
     private CallGraph cg;
     private Map<String, List<SootMethod>> methodsByClass;
 
-    // Reverse lookup: SootUp signature string → project methodId
-    private Map<String, String> signatureToMethodId;
+    // Reverse lookup: SootUp signature string → project methodUri
+    private Map<String, String> signatureToMethodUri;
 
     // Class hierarchy cache
     private final Map<String, ClassHierarchyInfo> hierarchyCache = new HashMap<>();
@@ -91,7 +91,7 @@ public class CallGraphGenerator {
         this.projectMetadata = Objects.requireNonNull(projectMetadata, "projectMetadata cannot be null");
         this.algorithm = Objects.requireNonNull(algorithm, "algorithm cannot be null");
         this.cache = new HashMap<>();
-        this.signatureToMethodId = new HashMap<>();
+        this.signatureToMethodUri = new HashMap<>();
         this.initialized = false;
     }
 
@@ -168,7 +168,7 @@ public class CallGraphGenerator {
             throw new IllegalStateException("CallGraphGenerator not initialized. Call initialize() first.");
         }
 
-        String cacheKey = method.getId();
+        String cacheKey = method.getMethodUri();
         if (cache.containsKey(cacheKey)) return cache.get(cacheKey);
 
         try {
@@ -179,7 +179,7 @@ public class CallGraphGenerator {
 
             MethodSignature sig = findMethodSignature(method);
             if (sig != null) {
-                signatureToMethodId.put(sig.toString(), method.getId());
+                signatureToMethodUri.put(sig.toString(), method.getMethodUri());
 
                 for (CallGraph.Call call : cg.callsTo(sig)) {
                     MethodSignature callerSig = call.getSourceMethodSignature();
@@ -198,7 +198,7 @@ public class CallGraphGenerator {
             long endTime = System.currentTimeMillis();
 
             CallGraphResult result = new CallGraphResult.Builder()
-                    .methodId(method.getId())
+                    .methodUri(method.getMethodUri())
                     .methodName(method.getMethodName())
                     .classname(method.getClassname())
                     .callers(callers)
@@ -222,31 +222,31 @@ public class CallGraphGenerator {
         return methods.stream()
                 .map(this::generateForMethod)
                 .filter(Objects::nonNull)
-                .collect(Collectors.toMap(CallGraphResult::getMethodId, r -> r));
+                .collect(Collectors.toMap(CallGraphResult::getMethodUri, r -> r));
     }
 
     // ---- Signature resolution ----
 
-    public String resolveSignatureToMethodId(String sootUpSignature) {
-        return signatureToMethodId != null ? signatureToMethodId.get(sootUpSignature) : null;
+    public String resolveSignatureToMethodUri(String sootUpSignature) {
+        return signatureToMethodUri != null ? signatureToMethodUri.get(sootUpSignature) : null;
     }
 
     private void indexMethodSignatures(List<MethodInfo> methods) {
         for (MethodInfo method : methods) {
             MethodSignature sig = findMethodSignature(method);
             if (sig != null) {
-                signatureToMethodId.put(sig.toString(), method.getId());
+                signatureToMethodUri.put(sig.toString(), method.getMethodUri());
             }
         }
     }
 
     private CallGraphEdge edgeFor(MethodSignature sig) {
         String raw = sig.toString();
-        String methodId = resolveSignatureToMethodId(raw);
+        String methodUri = resolveSignatureToMethodUri(raw);
         String declaringClass = sig.getDeclClassType() != null ? sig.getDeclClassType().toString() : "";
         String methodName = sig.getName();
-        if (methodId != null && !methodId.isBlank()) {
-            return CallGraphEdge.resolved(methodId, raw, declaringClass, methodName);
+        if (methodUri != null && !methodUri.isBlank()) {
+            return CallGraphEdge.resolved(methodUri, raw, declaringClass, methodName);
         }
         return CallGraphEdge.unresolved(raw, declaringClass, methodName);
     }
@@ -429,8 +429,8 @@ public class CallGraphGenerator {
 
     // ---- Accessors ----
 
-    public CallGraphResult getCachedResult(String methodId) {
-        return cache.get(methodId);
+    public CallGraphResult getCachedResult(String methodUri) {
+        return cache.get(methodUri);
     }
 
     public void clearCache() {

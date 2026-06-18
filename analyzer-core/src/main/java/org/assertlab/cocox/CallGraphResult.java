@@ -7,7 +7,7 @@ import java.util.*;
  * Contains callers (methods that call this method) and callees (methods this method calls).
  */
 public class CallGraphResult {
-    private final String methodId;
+    private final String methodUri;
     private final String methodName;
     private final String classname;
     private final Set<CallGraphEdge> callers;    // Methods that call this method
@@ -16,7 +16,7 @@ public class CallGraphResult {
     private final long generationTime;
 
     private CallGraphResult(Builder builder) {
-        this.methodId = Objects.requireNonNull(builder.methodId, "methodId cannot be null");
+        this.methodUri = Objects.requireNonNull(builder.methodUri, "methodUri cannot be null");
         this.methodName = Objects.requireNonNull(builder.methodName, "methodName cannot be null");
         this.classname = Objects.requireNonNull(builder.classname, "classname cannot be null");
         this.callers = Collections.unmodifiableSet(new HashSet<>(builder.callers));
@@ -26,8 +26,8 @@ public class CallGraphResult {
     }
 
     // Getters
-    public String getMethodId() {
-        return methodId;
+    public String getMethodUri() {
+        return methodUri;
     }
 
     public String getMethodName() {
@@ -65,7 +65,7 @@ public class CallGraphResult {
     @Override
     public String toString() {
         return "CallGraphResult{" +
-                "methodId='" + methodId + '\'' +
+                "methodUri='" + methodUri + '\'' +
                 ", methodName='" + methodName + '\'' +
                 ", classname='" + classname + '\'' +
                 ", callerCount=" + callers.size() +
@@ -78,7 +78,7 @@ public class CallGraphResult {
      * Builder for CallGraphResult
      */
     public static class Builder {
-        private String methodId;
+        private String methodUri;
         private String methodName;
         private String classname;
         private Set<CallGraphEdge> callers = new HashSet<>();
@@ -86,8 +86,8 @@ public class CallGraphResult {
         private String algorithm = "CHA";
         private long generationTime = 0;
 
-        public Builder methodId(String methodId) {
-            this.methodId = methodId;
+        public Builder methodUri(String methodUri) {
+            this.methodUri = methodUri;
             return this;
         }
 

@@ -88,7 +88,7 @@ Status breakdown:
 
 | Status | Count | Meaning |
 | --- | ---: | --- |
-| Success | 541 | CoCoX completed and emitted one JSONL row per selected method. |
+| Success | 541 | CoCoX completed and emitted one JSONL row per extracted method context. |
 | Skipped | 0 | Git clone timed out before CoCoX analysis started. |
 | Timeout | 0 | CoCoX analysis exceeded the configured per-repository timeout. |
 

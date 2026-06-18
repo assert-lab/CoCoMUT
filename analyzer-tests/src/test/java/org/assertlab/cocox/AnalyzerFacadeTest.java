@@ -16,7 +16,7 @@ import static org.junit.Assert.*;
  * End-to-end tests for {@link AnalyzerFacade}.
  *
  * <p>Uses the shared {@link TestFixtures} minimal Maven project (already compiled)
- * so the full 6-phase pipeline runs against real bytecode and source.
+ * so the pipeline runs against real bytecode and source.
  */
 @Category(FastTests.class)
 public class AnalyzerFacadeTest {
@@ -40,8 +40,7 @@ public class AnalyzerFacadeTest {
         assertNotNull("Facade should return a report", report);
         assertEquals("Pipeline should succeed on the minimal fixture",
                 "SUCCESS", report.get("status"));
-        // Scan-all maps to FULL execution mode
-        assertEquals("FULL", report.get("execution_mode"));
+        assertEquals("Pipeline should have five phases", 5, report.get("pipeline_phases"));
         assertTrue("Phase 2 should identify the fixture methods",
                 report.containsKey("phase_2_methods_identified"));
     }
@@ -62,7 +61,7 @@ public class AnalyzerFacadeTest {
     public void serviceApiReturnsTypedExtractionReport() throws Exception {
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(fixtureRoot)
-                .methodSelection(MethodSelection.entryPoints())
+                .scope(AnalysisOptions.Scope.ENTRY_POINTS)
                 .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                 .outputMode(AnalysisOptions.OutputMode.JSONL)
                 .build();
@@ -83,7 +82,7 @@ public class AnalyzerFacadeTest {
     public void autoCallGraphUsesRtaWhenCompiledClassesExist() throws Exception {
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(fixtureRoot)
-                .methodSelection(MethodSelection.entryPoints())
+                .scope(AnalysisOptions.Scope.ENTRY_POINTS)
                 .callGraphAlgorithm(CallGraphGenerator.Algorithm.AUTO)
                 .sourceResolution(AnalysisOptions.SourceResolution.AUTO)
                 .outputMode(AnalysisOptions.OutputMode.JSONL)

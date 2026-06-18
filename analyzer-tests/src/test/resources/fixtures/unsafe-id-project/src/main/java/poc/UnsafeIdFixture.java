@@ -5,7 +5,7 @@ package poc;
  */
 public class UnsafeIdFixture {
     /**
-     * Simple method whose selected-row id intentionally contains path separators.
+     * Simple method whose method URI id intentionally contains path separators.
      *
      * @return one
      */

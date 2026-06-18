@@ -18,7 +18,7 @@ import java.util.List;
  * comprehensive but unfiltered method list. Downstream phases handle all of
  * them unless a sampling limit is configured on {@link MethodIdentifier}.
  *
- * <p>Selected automatically by {@link MethodSourceStrategy#detect(java.nio.file.Path)}.
+ * <p>Selected by {@link org.assertlab.cocox.AnalysisOptions.Scope#ALL}.
  */
 public class ScanAllSourcesStrategy implements MethodSourceStrategy {
 

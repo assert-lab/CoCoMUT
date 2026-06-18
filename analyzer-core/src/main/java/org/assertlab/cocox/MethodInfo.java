@@ -4,11 +4,10 @@ import java.nio.file.Path;
 import java.util.Objects;
 
 /**
- * Immutable data class representing a detected method in the project
- * Used by MethodIdentifier to store method information
+ * Immutable data class representing a detected method in the project.
  */
 public class MethodInfo {
-    private final String id;
+    private final String methodUri;
     private final String classname;
     private final String methodName;
     private final String methodSignature;
@@ -22,7 +21,7 @@ public class MethodInfo {
     private final String sourceSet;
 
     private MethodInfo(Builder builder) {
-        this.id = Objects.requireNonNull(builder.id, "id cannot be null");
+        this.methodUri = Objects.requireNonNull(builder.methodUri, "methodUri cannot be null");
         this.classname = Objects.requireNonNull(builder.classname, "classname cannot be null");
         this.methodName = Objects.requireNonNull(builder.methodName, "methodName cannot be null");
         this.methodSignature = Objects.requireNonNull(builder.methodSignature, "methodSignature cannot be null");
@@ -36,13 +35,8 @@ public class MethodInfo {
         this.sourceSet = builder.sourceSet != null ? builder.sourceSet : "unknown";
     }
 
-    // Getters
-    public String getId() {
-        return id;
-    }
-
     public String getMethodUri() {
-        return id;
+        return methodUri;
     }
 
     public String getClassname() {
@@ -92,7 +86,7 @@ public class MethodInfo {
     @Override
     public String toString() {
         return "MethodInfo{" +
-                "id='" + id + '\'' +
+                "methodUri='" + methodUri + '\'' +
                 ", classname='" + classname + '\'' +
                 ", methodName='" + methodName + '\'' +
                 ", sourceFile=" + sourceFile +
@@ -110,21 +104,21 @@ public class MethodInfo {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         MethodInfo that = (MethodInfo) o;
-        return Objects.equals(id, that.id) &&
+        return Objects.equals(methodUri, that.methodUri) &&
                 Objects.equals(classname, that.classname) &&
                 Objects.equals(methodName, that.methodName);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, classname, methodName);
+        return Objects.hash(methodUri, classname, methodName);
     }
 
     /**
      * Builder for MethodInfo - fluent API for construction
      */
     public static class Builder {
-        private String id;
+        private String methodUri;
         private String classname;
         private String methodName;
         private String methodSignature;
@@ -137,8 +131,8 @@ public class MethodInfo {
         private String erasedReturnType = "void";
         private String sourceSet = "unknown";
 
-        public Builder id(String id) {
-            this.id = id;
+        public Builder methodUri(String methodUri) {
+            this.methodUri = methodUri;
             return this;
         }
 

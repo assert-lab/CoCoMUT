@@ -71,7 +71,7 @@ public class FullIntegrationTest {
         System.out.println("\n[FULL-SCALE] Testing complete workspace analysis...");
         long startTime = System.currentTimeMillis();
         
-        orchestrator = new Orchestrator(workspaceRoot, Orchestrator.ExecutionMode.FULL);
+        orchestrator = new Orchestrator(workspaceRoot);
         boolean success = orchestrator.execute();
         
         long duration = System.currentTimeMillis() - startTime;
@@ -111,7 +111,7 @@ public class FullIntegrationTest {
         System.out.println("\n[COMMONS-LANG3] Testing against Apache Commons Lang specifically...");
         long startTime = System.currentTimeMillis();
         
-        orchestrator = new Orchestrator(commonsLang3Root, Orchestrator.ExecutionMode.FULL);
+        orchestrator = new Orchestrator(commonsLang3Root);
         boolean success = orchestrator.execute();
         
         long duration = System.currentTimeMillis() - startTime;
@@ -153,7 +153,7 @@ public class FullIntegrationTest {
         
         System.out.println("\n[SCALABILITY] Measuring performance on large codebase...");
         
-        orchestrator = new Orchestrator(commonsLang3Root, Orchestrator.ExecutionMode.FULL);
+        orchestrator = new Orchestrator(commonsLang3Root);
         
         long startTime = System.currentTimeMillis();
         boolean success = orchestrator.execute();
@@ -197,7 +197,7 @@ public class FullIntegrationTest {
         Runtime runtime = Runtime.getRuntime();
         long startMemory = runtime.totalMemory() - runtime.freeMemory();
         
-        orchestrator = new Orchestrator(commonsLang3Root, Orchestrator.ExecutionMode.FULL);
+        orchestrator = new Orchestrator(commonsLang3Root);
         boolean success = orchestrator.execute();
         
         runtime.gc(); // Suggest garbage collection

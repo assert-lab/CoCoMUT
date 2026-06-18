@@ -29,7 +29,6 @@ public class Orchestrator {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final Path projectPath;
-    private final ExecutionMode executionMode;
     private final Map<String, Object> executionReport;
     private MethodSourceStrategy methodSourceStrategy;  // optional Phase 2 override
     private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.AUTO;
@@ -59,18 +58,13 @@ public class Orchestrator {
     private Map<String, String> contextExtractionFailures = new LinkedHashMap<>();
     private final Set<FailureCode> failureCodes = new LinkedHashSet<>();
 
-    public enum ExecutionMode {
-        FULL
-    }
-
-    public Orchestrator(Path projectPath, ExecutionMode executionMode) {
+    public Orchestrator(Path projectPath) {
         this.projectPath = Objects.requireNonNull(projectPath, "projectPath cannot be null");
-        this.executionMode = Objects.requireNonNull(executionMode, "executionMode cannot be null");
         this.executionReport = new LinkedHashMap<>();
     }
 
     public static Orchestrator create(Path projectPath) {
-        return new Orchestrator(projectPath, ExecutionMode.FULL);
+        return new Orchestrator(projectPath);
     }
 
     /**
@@ -161,7 +155,7 @@ public class Orchestrator {
     public boolean execute() {
         long startTime = System.currentTimeMillis();
         executionReport.put("start_time", new java.util.Date());
-        executionReport.put("execution_mode", executionMode.toString());
+        executionReport.put("pipeline_phases", 5);
 
         boolean success = false;
         try {
@@ -495,8 +489,8 @@ public class Orchestrator {
         Map<String, String> failures = new LinkedHashMap<>();
         Set<String> extracted = actual != null ? actual.keySet() : Set.of();
         for (MethodInfo method : expected) {
-            if (!extracted.contains(method.getId())) {
-                failures.put(method.getId(), "CONTEXT_EXTRACTION_FAILED");
+            if (!extracted.contains(method.getMethodUri())) {
+                failures.put(method.getMethodUri(), "CONTEXT_EXTRACTION_FAILED");
             }
         }
         return failures;
@@ -508,13 +502,13 @@ public class Orchestrator {
         Files.createDirectories(output.getParent());
         try (var writer = Files.newBufferedWriter(output)) {
             for (MethodInfo method : methodInfos) {
-                if (!failures.containsKey(method.getId())) {
+                if (!failures.containsKey(method.getMethodUri())) {
                     continue;
                 }
                 ObjectNode node = OBJECT_MAPPER.createObjectNode();
                 node.put("phase", "context_extraction");
-                node.put("failure_code", failures.get(method.getId()));
-                node.put("method_uri", method.getId());
+                node.put("failure_code", failures.get(method.getMethodUri()));
+                node.put("method_uri", method.getMethodUri());
                 node.put("class_name", method.getClassname());
                 node.put("method_name", method.getMethodName());
                 node.put("signature", method.getMethodSignature());

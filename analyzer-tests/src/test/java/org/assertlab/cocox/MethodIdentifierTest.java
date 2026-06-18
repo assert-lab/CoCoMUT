@@ -31,9 +31,9 @@ public class MethodIdentifierTest {
         assertTrue("Should find at least some methods", methods.size() > 0);
 
         for (MethodInfo method : methods) {
-            assertTrue("ID should be a method URI", method.getId().contains("#"));
-            assertTrue("Method URI should include signature", method.getId().contains("("));
-            assertTrue("Method URI should include erased return type", method.getId().contains("):"));
+            assertTrue("Method URI should be a method URI", method.getMethodUri().contains("#"));
+            assertTrue("Method URI should include signature", method.getMethodUri().contains("("));
+            assertTrue("Method URI should include erased return type", method.getMethodUri().contains("):"));
         }
     }
 
@@ -44,7 +44,7 @@ public class MethodIdentifierTest {
         assertTrue("Should find at least one method", methods.size() > 0);
         MethodInfo method = methods.get(0);
 
-        assertNotNull("ID should be set", method.getId());
+        assertNotNull("Method URI should be set", method.getMethodUri());
         assertNotNull("Class name should be set", method.getClassname());
         assertNotNull("Method name should be set", method.getMethodName());
         assertNotNull("Method signature should be set", method.getMethodSignature());
@@ -55,7 +55,7 @@ public class MethodIdentifierTest {
     @Test
     public void methodInfoEqualityUsesUriIdentity() {
         MethodInfo method1 = new MethodInfo.Builder()
-                .id("src/main/java/Test.java#Test.test():void")
+                .methodUri("src/main/java/Test.java#Test.test():void")
                 .classname("TestClass")
                 .methodName("test")
                 .methodSignature("test()")
@@ -64,7 +64,7 @@ public class MethodIdentifierTest {
                 .build();
 
         MethodInfo method2 = new MethodInfo.Builder()
-                .id("src/main/java/Test.java#Test.test():void")
+                .methodUri("src/main/java/Test.java#Test.test():void")
                 .classname("TestClass")
                 .methodName("test")
                 .methodSignature("test()")

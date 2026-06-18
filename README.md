@@ -294,7 +294,6 @@ import org.assertlab.cocox.CallGraphGenerator;
 import org.assertlab.cocox.ContextExtractorService;
 import org.assertlab.cocox.ContextRequest;
 import org.assertlab.cocox.ExtractionReport;
-import org.assertlab.cocox.MethodSelection;
 
 import java.nio.file.Path;
 
@@ -302,7 +301,7 @@ class Example {
     public static void main(String[] args) throws Exception {
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(Path.of("/path/to/java/project"))
-                .methodSelection(MethodSelection.entryPoints())
+                .scope(AnalysisOptions.Scope.ENTRY_POINTS)
                 .callGraphAlgorithm(org.assertlab.cocox.CallGraphGenerator.Algorithm.NONE)
                 .outputMode(AnalysisOptions.OutputMode.JSONL)
                 .maxSourceFiles(500) // optional low-memory smoke-run cap

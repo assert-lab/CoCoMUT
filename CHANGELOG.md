@@ -15,6 +15,6 @@
 - Added `--max-methods` and bounded retry guidance for very large repositories.
 - Deduplicated Spoon-discovered methods by stable method URI.
 - Hardened optional Spoon context extraction against recursive generic type-resolution failures.
-- Added JSONL failure artifacts for selected-method and context-extraction misses.
+- Added JSONL failure artifacts for method-context extraction misses.
 - Removed `methods.csv` generation from the product extraction path.
 - Tightened generated context JSONL validation.

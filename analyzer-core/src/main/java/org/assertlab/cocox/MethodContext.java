@@ -12,7 +12,7 @@ import java.util.Objects;
  * Contains method body, javadocs, call graph, and class hierarchy information.
  */
 public class MethodContext {
-    private final String methodId;
+    private final String methodUri;
     private final String methodName;
     private final String classname;
     private final String signature;           // Formatted: org.example.Class.foo(String, int)
@@ -44,7 +44,7 @@ public class MethodContext {
     private final String sourceSet;
 
     private MethodContext(Builder builder) {
-        this.methodId = Objects.requireNonNull(builder.methodId, "methodId cannot be null");
+        this.methodUri = Objects.requireNonNull(builder.methodUri, "methodUri cannot be null");
         this.methodName = Objects.requireNonNull(builder.methodName, "methodName cannot be null");
         this.classname = Objects.requireNonNull(builder.classname, "classname cannot be null");
         this.signature = builder.signature != null ? builder.signature : "";
@@ -77,8 +77,8 @@ public class MethodContext {
     }
 
     // Getters
-    public String getMethodId() {
-        return methodId;
+    public String getMethodUri() {
+        return methodUri;
     }
 
     public String getMethodName() {
@@ -208,7 +208,7 @@ public class MethodContext {
     @Override
     public String toString() {
         return "MethodContext{" +
-                "methodId='" + methodId + '\'' +
+                "methodUri='" + methodUri + '\'' +
                 ", methodName='" + methodName + '\'' +
                 ", classname='" + classname + '\'' +
                 ", lineNumber=" + lineNumber +
@@ -224,7 +224,7 @@ public class MethodContext {
      * Builder for MethodContext
      */
     public static class Builder {
-        private String methodId;
+        private String methodUri;
         private String methodName;
         private String classname;
         private String signature = "";
@@ -255,8 +255,8 @@ public class MethodContext {
         private String hierarchyResolution = "";
         private String sourceSet = "unknown";
 
-        public Builder methodId(String methodId) {
-            this.methodId = methodId;
+        public Builder methodUri(String methodUri) {
+            this.methodUri = methodUri;
             return this;
         }
 

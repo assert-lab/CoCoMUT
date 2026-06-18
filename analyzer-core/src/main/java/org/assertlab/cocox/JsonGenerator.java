@@ -22,7 +22,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  * - Callees array: same structure as callers
  * - Metadata: tool, algorithm, counts, generation time
  *
- * Input: Map of method IDs to MethodContext objects from Phase 4
+ * Input: Map of method URIs to MethodContext objects from Phase 4
  * Output: JSONL written to filesystem, generation report
  */
 public class JsonGenerator {
@@ -71,7 +71,7 @@ public class JsonGenerator {
                     ObjectNode json = buildJsonFromContext(context);
                     writer.write(objectMapper.writeValueAsString(json));
                     writer.newLine();
-                    generationResults.put(context.getMethodId(), "SUCCESS:" + jsonlPath);
+                    generationResults.put(context.getMethodUri(), "SUCCESS:" + jsonlPath);
                     rows++;
                 }
             }
@@ -150,7 +150,7 @@ public class JsonGenerator {
 
     private ObjectNode buildMethodNode(MethodContext context) {
         ObjectNode node = objectMapper.createObjectNode();
-        node.put("method_uri", context.getMethodId());
+        node.put("method_uri", context.getMethodUri());
         node.put("method_name", context.getMethodName());
         node.put("source_set", context.getSourceSet());
         node.put("signature", context.getSignature());
@@ -292,8 +292,8 @@ public class JsonGenerator {
 
     // ---- Results and stats ----
 
-    public String getGenerationResult(String methodId) {
-        return generationResults.get(methodId);
+    public String getGenerationResult(String methodUri) {
+        return generationResults.get(methodUri);
     }
 
     public Map<String, String> getAllGenerationResults() {
@@ -331,13 +331,13 @@ public class JsonGenerator {
     public Map<String, Boolean> verifyJsonFiles() {
         Map<String, Boolean> verification = new LinkedHashMap<>();
 
-        generationResults.forEach((methodId, result) -> {
+        generationResults.forEach((methodUri, result) -> {
             if (result.startsWith("SUCCESS:")) {
                 String filePath = result.substring("SUCCESS:".length());
                 boolean exists = Files.exists(Path.of(filePath));
-                verification.put(methodId, exists);
+                verification.put(methodUri, exists);
             } else {
-                verification.put(methodId, false);
+                verification.put(methodUri, false);
             }
         });
 

@@ -12,8 +12,8 @@ import java.util.Objects;
  * Single entry point for the method context extraction pipeline.
  *
  * <p>Pass any Java project directory — Maven, Gradle, or plain — and the facade
- * will auto-detect the build system ({@link ProjectAdapter}) and the method
- * source ({@link MethodSourceStrategy}), then run all 6 pipeline phases.
+ * will auto-detect the build system ({@link ProjectAdapter}), choose the requested
+ * source scope, and run the five extraction phases.
  *
  * <h2>Usage</h2>
  * <pre>{@code
@@ -31,13 +31,14 @@ import java.util.Objects;
  *   ├── build.gradle?     → GradleProjectAdapter
  *   └── (fallback)        → GenericJavaAdapter
  *
- *   └── ScanAllSourcesStrategy (FULL mode)
+ *   └── scope all           → ScanAllSourcesStrategy
+ *   └── scope entry-points  → EntryPointScanStrategy
  * </pre>
  *
  * <h2>Design notes</h2>
  * The facade delegates all execution to the existing {@link Orchestrator}. The
  * {@link ProjectAdapter} and {@link MethodSourceStrategy} layers translate project
- * diversity into the source strategy the Orchestrator understands.
+ * diversity and source scope into the strategy the Orchestrator understands.
  */
 public class AnalyzerFacade {
 
@@ -49,7 +50,7 @@ public class AnalyzerFacade {
      * Analyse a Java project and return the pipeline execution report.
      *
      * <p>The method auto-detects the build system and method source, reuses
-     * existing compiled classes when present, and runs all 6 pipeline phases. On success the
+     * existing compiled classes when present, and runs the five extraction phases. On success the
      * report contains {@code "status": "SUCCESS"} and per-phase statistics.
      * On failure the report contains {@code "status": "FAILED"} with the
      * failing phase number and error message.
@@ -60,8 +61,7 @@ public class AnalyzerFacade {
      *                     cannot produce a classpath
      */
     public static Map<String, Object> analyze(Path projectPath) throws IOException {
-        // Auto-detect method source.
-        return analyze(projectPath, MethodSourceStrategy.detect(projectPath));
+        return analyze(projectPath, AnalysisOptions.defaults());
     }
 
     public static Map<String, Object> analyze(Path projectPath, AnalysisOptions options)
@@ -128,19 +128,16 @@ public class AnalyzerFacade {
     // -----------------------------------------------------------------------
 
     /**
-     * Translate the detected strategy into the appropriate {@link Orchestrator}
-     * execution mode.  This keeps the facade's auto-detection logic out of the
-     * Orchestrator, preserving backward compatibility for callers that already
-     * construct Orchestrator directly.
+     * Build an orchestrator with an explicitly supplied source strategy.
      */
     private static Orchestrator buildOrchestrator(Path projectPath,
                                                    MethodSourceStrategy strategy) {
-        return new Orchestrator(projectPath, Orchestrator.ExecutionMode.FULL)
+        return new Orchestrator(projectPath)
                 .setMethodSourceStrategy(strategy);
     }
 
     private static Orchestrator buildOrchestrator(Path projectPath, AnalysisOptions options) {
-        Orchestrator orchestrator = new Orchestrator(projectPath, Orchestrator.ExecutionMode.FULL)
+        Orchestrator orchestrator = new Orchestrator(projectPath)
                 .setMethodSourceStrategy(options.methodSourceStrategy());
         return orchestrator
                 .setCallGraphAlgorithm(options.callGraphAlgorithm())

@@ -17,7 +17,8 @@ import java.util.stream.Collectors;
  * {@link ScanAllSourcesStrategy} while still covering everything an external caller
  * can reach.
  *
- * <p>Not auto-selected by {@link MethodSourceStrategy#detect}; choose it explicitly:
+ * <p>Choose it with {@link org.assertlab.cocox.AnalysisOptions.Scope#ENTRY_POINTS}
+ * or pass the strategy explicitly:
  * <pre>{@code
  * AnalyzerFacade.analyze(projectPath, new EntryPointScanStrategy());
  * }</pre>

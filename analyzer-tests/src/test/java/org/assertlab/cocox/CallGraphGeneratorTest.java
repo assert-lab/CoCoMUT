@@ -75,7 +75,7 @@ public class CallGraphGeneratorTest {
         generator.initialize();
         
         MethodInfo testMethod = new MethodInfo.Builder()
-                .id("1")
+                .methodUri("1")
                 .classname("com.example.MyClass")
                 .methodName("testMethod")
                 .methodSignature("testMethod()")
@@ -88,7 +88,7 @@ public class CallGraphGeneratorTest {
         CallGraphResult result = generator.generateForMethod(testMethod);
         
         assertNotNull("Should generate call graph result", result);
-        assertEquals("Result should have correct method ID", "1", result.getMethodId());
+        assertEquals("Result should have correct method URI", "1", result.getMethodUri());
         assertEquals("Result should have correct method name", "testMethod", result.getMethodName());
         assertEquals("Result should have correct classname", "com.example.MyClass", result.getClassname());
     }
@@ -98,7 +98,7 @@ public class CallGraphGeneratorTest {
         generator.initialize();
         
         MethodInfo testMethod = new MethodInfo.Builder()
-                .id("1")
+                .methodUri("1")
                 .classname("com.example.MyClass")
                 .methodName("processData")
                 .methodSignature("processData()")
@@ -121,7 +121,7 @@ public class CallGraphGeneratorTest {
         generator.initialize();
         
         MethodInfo testMethod = new MethodInfo.Builder()
-                .id("1")
+                .methodUri("1")
                 .classname("com.example.MyClass")
                 .methodName("testMethod")
                 .methodSignature("testMethod()")
@@ -140,7 +140,7 @@ public class CallGraphGeneratorTest {
         assertNotNull("First result should not be null", result1);
         assertNotNull("Second result should not be null", result2);
         // Both should be the same cached instance or equivalent
-        assertEquals("Results should be equal", result1.getMethodId(), result2.getMethodId());
+        assertEquals("Results should be equal", result1.getMethodUri(), result2.getMethodUri());
         
         // Verify cache contains the result
         CallGraphResult cached = generator.getCachedResult("1");
@@ -153,7 +153,7 @@ public class CallGraphGeneratorTest {
         
         List<MethodInfo> methods = List.of(
                 new MethodInfo.Builder()
-                        .id("1")
+                        .methodUri("1")
                         .classname("com.example.MyClass")
                         .methodName("method1")
                         .methodSignature("method1()")
@@ -161,7 +161,7 @@ public class CallGraphGeneratorTest {
                         .lineNumber(10)
                         .build(),
                 new MethodInfo.Builder()
-                        .id("2")
+                        .methodUri("2")
                         .classname("com.example.MyClass")
                         .methodName("method2")
                         .methodSignature("method2()")
@@ -183,7 +183,7 @@ public class CallGraphGeneratorTest {
         generator.initialize();
         
         MethodInfo testMethod = new MethodInfo.Builder()
-                .id("1")
+                .methodUri("1")
                 .classname("com.example.MyClass")
                 .methodName("testMethod")
                 .methodSignature("testMethod()")
@@ -204,7 +204,7 @@ public class CallGraphGeneratorTest {
         generator.initialize();
         
         MethodInfo testMethod = new MethodInfo.Builder()
-                .id("1")
+                .methodUri("1")
                 .classname("com.example.MyClass")
                 .methodName("testMethod")
                 .methodSignature("testMethod()")
@@ -227,7 +227,7 @@ public class CallGraphGeneratorTest {
     @Test(expected = IllegalStateException.class)
     public void testGenerateBeforeInitialization() {
         MethodInfo testMethod = new MethodInfo.Builder()
-                .id("1")
+                .methodUri("1")
                 .classname("com.example.MyClass")
                 .methodName("testMethod")
                 .methodSignature("testMethod()")
@@ -242,7 +242,7 @@ public class CallGraphGeneratorTest {
     @Test
     public void testCallGraphResultBuilder() {
         CallGraphResult result = new CallGraphResult.Builder()
-                .methodId("1")
+                .methodUri("1")
                 .methodName("testMethod")
                 .classname("com.example.MyClass")
                 .addCaller(CallGraphEdge.resolved(
@@ -259,7 +259,7 @@ public class CallGraphGeneratorTest {
                 .build();
         
         assertNotNull("Should build result", result);
-        assertEquals("Should have method ID", "1", result.getMethodId());
+        assertEquals("Should have method URI", "1", result.getMethodUri());
         assertEquals("Should have 1 caller", 1, result.getCallerCount());
         assertEquals("Should have 1 callee", 1, result.getCalleeCount());
         assertEquals("Should have algorithm", "CHA", result.getAlgorithm());

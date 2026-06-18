@@ -9,7 +9,7 @@ import java.util.Objects;
  */
 public final class ContextRequest {
     private final Path projectRoot;
-    private final MethodSelection methodSelection;
+    private final AnalysisOptions.Scope scope;
     private final CallGraphGenerator.Algorithm callGraphAlgorithm;
     private final AnalysisOptions.OutputMode outputMode;
     private final Integer maxMethods;
@@ -30,7 +30,7 @@ public final class ContextRequest {
         this.projectRoot = Objects.requireNonNull(builder.projectRoot, "projectRoot cannot be null")
                 .toAbsolutePath()
                 .normalize();
-        this.methodSelection = Objects.requireNonNull(builder.methodSelection, "methodSelection cannot be null");
+        this.scope = Objects.requireNonNull(builder.scope, "scope cannot be null");
         this.callGraphAlgorithm = Objects.requireNonNull(builder.callGraphAlgorithm,
                 "callGraphAlgorithm cannot be null");
         this.outputMode = Objects.requireNonNull(builder.outputMode, "outputMode cannot be null");
@@ -60,8 +60,8 @@ public final class ContextRequest {
         return projectRoot;
     }
 
-    public MethodSelection methodSelection() {
-        return methodSelection;
+    public AnalysisOptions.Scope scope() {
+        return scope;
     }
 
     public CallGraphGenerator.Algorithm callGraphAlgorithm() {
@@ -102,7 +102,7 @@ public final class ContextRequest {
 
     AnalysisOptions toAnalysisOptions() {
         AnalysisOptions.Builder builder = AnalysisOptions.builder()
-                .scope(methodSelection.toScope())
+                .scope(scope)
                 .callGraphAlgorithm(callGraphAlgorithm)
                 .outputMode(outputMode)
                 .maxMethods(maxMethods)
@@ -123,7 +123,7 @@ public final class ContextRequest {
 
     public static final class Builder {
         private Path projectRoot;
-        private MethodSelection methodSelection = MethodSelection.all();
+        private AnalysisOptions.Scope scope = AnalysisOptions.Scope.ALL;
         private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.AUTO;
         private AnalysisOptions.OutputMode outputMode = AnalysisOptions.OutputMode.JSONL;
         private Integer maxMethods;
@@ -145,8 +145,8 @@ public final class ContextRequest {
             return this;
         }
 
-        public Builder methodSelection(MethodSelection methodSelection) {
-            this.methodSelection = methodSelection;
+        public Builder scope(AnalysisOptions.Scope scope) {
+            this.scope = scope;
             return this;
         }
 

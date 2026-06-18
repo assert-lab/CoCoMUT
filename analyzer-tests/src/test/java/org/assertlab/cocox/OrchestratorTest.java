@@ -24,7 +24,7 @@ public class OrchestratorTest {
     public void setUp() throws Exception {
         TestFixtures.ensureMinimalMavenProjectCompiled();
         testProjectPath = TestFixtures.minimalMavenProjectRoot();
-        orchestrator = new Orchestrator(testProjectPath, Orchestrator.ExecutionMode.FULL);
+        orchestrator = new Orchestrator(testProjectPath);
     }
 
     @Test
@@ -47,11 +47,6 @@ public class OrchestratorTest {
     }
 
     @Test
-    public void testExecutionModesExist() {
-        assertTrue("Should have FULL mode", Orchestrator.ExecutionMode.FULL != null);
-    }
-
-    @Test
     public void testOrchestratorExecute() {
         orchestrator.execute();
 
@@ -59,7 +54,7 @@ public class OrchestratorTest {
 
         assertNotNull("Should have execution report", report);
         assertTrue("Report should contain status", report.containsKey("status"));
-        assertTrue("Report should contain execution_mode", report.containsKey("execution_mode"));
+        assertEquals("Pipeline should have five phases", 5, report.get("pipeline_phases"));
     }
 
     @Test
@@ -70,7 +65,7 @@ public class OrchestratorTest {
 
         assertNotNull("Should have report", report);
         assertNotNull("Should have status", report.get("status"));
-        assertNotNull("Should have execution_mode", report.get("execution_mode"));
+        assertNotNull("Should have pipeline phase count", report.get("pipeline_phases"));
     }
 
     @Test
@@ -103,15 +98,8 @@ public class OrchestratorTest {
     }
 
     @Test
-    public void testMultipleExecutionModes() {
-        Orchestrator fullOrch = new Orchestrator(testProjectPath, Orchestrator.ExecutionMode.FULL);
-
-        assertNotNull("Should create FULL orchestrator", fullOrch);
-    }
-
-    @Test
     public void testInvalidProjectPath() {
-        Orchestrator invalidOrch = new Orchestrator(Path.of("/nonexistent/path"), Orchestrator.ExecutionMode.FULL);
+        Orchestrator invalidOrch = new Orchestrator(Path.of("/nonexistent/path"));
 
         boolean valid = invalidOrch.validateConfiguration();
 
@@ -140,20 +128,10 @@ public class OrchestratorTest {
     @Test
     public void testOrchestratorNullProjectPath() {
         try {
-            new Orchestrator(null, Orchestrator.ExecutionMode.FULL);
+            new Orchestrator(null);
             fail("Should throw NullPointerException");
         } catch (NullPointerException e) {
             assertTrue("Should catch null project path", true);
-        }
-    }
-
-    @Test
-    public void testOrchestratorNullExecutionMode() {
-        try {
-            new Orchestrator(testProjectPath, null);
-            fail("Should throw NullPointerException");
-        } catch (NullPointerException e) {
-            assertTrue("Should catch null execution mode", true);
         }
     }
 
@@ -189,7 +167,7 @@ public class OrchestratorTest {
                     }
                     """);
 
-            Orchestrator sourceOnly = new Orchestrator(project, Orchestrator.ExecutionMode.FULL);
+            Orchestrator sourceOnly = new Orchestrator(project);
             assertTrue("Source-only project should still complete", sourceOnly.execute());
 
             Map<String, Object> report = sourceOnly.getExecutionReport();

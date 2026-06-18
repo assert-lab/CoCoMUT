@@ -3,7 +3,7 @@ package poc;
 /**
  * Fixture for method URI matching edge cases.
  */
-public class SelectedMethodMatchingFixture {
+public class AstMethodMatchingFixture {
     private final String label;
 
     /**
@@ -11,12 +11,12 @@ public class SelectedMethodMatchingFixture {
      *
      * @param label stored label
      */
-    public SelectedMethodMatchingFixture(String label) {
+    public AstMethodMatchingFixture(String label) {
         this.label = label;
     }
 
     /**
-     * Control method that the current regex-based loader can locate.
+     * Control method that the source backend can locate.
      *
      * @param left left operand
      * @param right right operand
@@ -50,7 +50,7 @@ public class SelectedMethodMatchingFixture {
     }
 
     /**
-     * Nested class used to verify that selected matching preserves declaring
+     * Nested class used to verify that AST method matching preserves declaring
      * class identity, not only source file identity.
      */
     public static class Nested {

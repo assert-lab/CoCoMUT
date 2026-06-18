@@ -5,7 +5,6 @@ import org.assertlab.cocox.CallGraphGenerator;
 import org.assertlab.cocox.ContextExtractorService;
 import org.assertlab.cocox.ContextRequest;
 import org.assertlab.cocox.ExtractionReport;
-import org.assertlab.cocox.MethodSelection;
 import org.assertlab.cocox.ProjectAnalyzer;
 import org.assertlab.cocox.ProjectMetadata;
 import org.assertlab.cocox.SymbolTarget;
@@ -120,11 +119,11 @@ public final class CoCoXCommand implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
-            MethodSelection selection = toSelection(entryPoints ? "entry-points" : scope);
+            AnalysisOptions.Scope selectedScope = toScope(entryPoints ? "entry-points" : scope);
 
             ContextRequest request = ContextRequest.builder()
                     .projectRoot(project)
-                    .methodSelection(selection)
+                    .scope(selectedScope)
                     .callGraphAlgorithm(toAlgorithm(callGraph))
                     .sourceResolution(toSourceResolution(resolution))
                     .outputMode(AnalysisOptions.OutputMode.JSONL)
@@ -366,10 +365,10 @@ public final class CoCoXCommand implements Callable<Integer> {
         }
     }
 
-    private static MethodSelection toSelection(String value) {
+    private static AnalysisOptions.Scope toScope(String value) {
         return switch (normalize(value)) {
-            case "all" -> MethodSelection.all();
-            case "entry-points", "entry_points" -> MethodSelection.entryPoints();
+            case "all" -> AnalysisOptions.Scope.ALL;
+            case "entry-points", "entry_points" -> AnalysisOptions.Scope.ENTRY_POINTS;
             default -> throw new IllegalArgumentException("Unsupported --scope: " + value);
         };
     }

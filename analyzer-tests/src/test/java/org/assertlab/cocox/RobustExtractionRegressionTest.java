@@ -30,7 +30,7 @@ public class RobustExtractionRegressionTest {
 
             ExtractionReport report = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
-                    .methodSelection(MethodSelection.all())
+                    .scope(AnalysisOptions.Scope.ALL)
                     .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                     .outputMode(AnalysisOptions.OutputMode.JSONL)
                     .maxSourceFiles(1)
@@ -56,14 +56,14 @@ public class RobustExtractionRegressionTest {
 
             ExtractionReport all = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
-                    .methodSelection(MethodSelection.entryPoints())
+                    .scope(AnalysisOptions.Scope.ENTRY_POINTS)
                     .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                     .outputMode(AnalysisOptions.OutputMode.JSONL)
                     .build());
 
             ExtractionReport mainOnly = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
-                    .methodSelection(MethodSelection.entryPoints())
+                    .scope(AnalysisOptions.Scope.ENTRY_POINTS)
                     .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                     .outputMode(AnalysisOptions.OutputMode.JSONL)
                     .sourceSet("main")
@@ -94,7 +94,7 @@ public class RobustExtractionRegressionTest {
 
             ExtractionReport report = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
-                    .methodSelection(MethodSelection.all())
+                    .scope(AnalysisOptions.Scope.ALL)
                     .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                     .outputMode(AnalysisOptions.OutputMode.JSONL)
                     .outputDirectory(output)
@@ -146,7 +146,7 @@ public class RobustExtractionRegressionTest {
             String typeUri = "src/main/java/demo/api/PublicApi.java#demo.api.PublicApi";
             ExtractionReport typeReport = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
-                    .methodSelection(MethodSelection.all())
+                    .scope(AnalysisOptions.Scope.ALL)
                     .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                     .outputMode(AnalysisOptions.OutputMode.JSONL)
                     .outputDirectory(output.resolve("type"))
@@ -165,7 +165,7 @@ public class RobustExtractionRegressionTest {
             String packageUri = "src/main/java/demo/api/package-info.java#demo.api";
             ExtractionReport packageReport = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
-                    .methodSelection(MethodSelection.all())
+                    .scope(AnalysisOptions.Scope.ALL)
                     .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                     .outputMode(AnalysisOptions.OutputMode.JSONL)
                     .outputDirectory(output.resolve("package"))

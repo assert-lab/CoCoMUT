@@ -4,7 +4,6 @@ import org.assertlab.cocox.MethodInfo;
 import org.assertlab.cocox.ProjectMetadata;
 
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.List;
 
 /**
@@ -14,12 +13,8 @@ import java.util.List;
  * How that list is produced depends on context. Built-in strategies are full
  * project scanning and entry-point scanning.
  *
- * <h2>Adding a new method source</h2>
- * <ol>
- *   <li>Implement this interface.</li>
- *   <li>Register it in {@link #detect(Path)} before the default fallback.</li>
- *   <li>No changes to the pipeline phases needed.</li>
- * </ol>
+ * <p>Built-in strategies are selected from {@link org.assertlab.cocox.AnalysisOptions.Scope}.
+ * Custom callers may still pass an explicit strategy through {@code AnalyzerFacade}.
  */
 public interface MethodSourceStrategy {
 
@@ -35,13 +30,4 @@ public interface MethodSourceStrategy {
     /** Short identifier used in logs and execution reports. */
     String name();
 
-    /**
-     * Auto-detect the best strategy for a project root.
-     *
-     * @param projectPath absolute path to the project root directory
-     * @return the most appropriate strategy for this project
-     */
-    static MethodSourceStrategy detect(Path projectPath) {
-        return new ScanAllSourcesStrategy();
-    }
 }

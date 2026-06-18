@@ -5,7 +5,6 @@ import org.assertlab.cocox.CallGraphGenerator;
 import org.assertlab.cocox.ContextExtractorService;
 import org.assertlab.cocox.ContextRequest;
 import org.assertlab.cocox.ExtractionReport;
-import org.assertlab.cocox.MethodSelection;
 
 import java.nio.file.Path;
 
@@ -19,7 +18,7 @@ public class RunCoCoX {
 
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(project)
-                .methodSelection(MethodSelection.entryPoints())
+                .scope(AnalysisOptions.Scope.ENTRY_POINTS)
                 .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                 .outputMode(AnalysisOptions.OutputMode.JSONL)
                 .build();

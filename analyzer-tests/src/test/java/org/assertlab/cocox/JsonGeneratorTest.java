@@ -59,7 +59,7 @@ public class JsonGeneratorTest {
     @Test
     public void testGenerateJsonLinesFileForSingleMethod() throws Exception {
         MethodContext context = new MethodContext.Builder()
-                .methodId("1")
+                .methodUri("1")
                 .methodName("testMethod")
                 .classname("com.example.MyClass")
                 .methodBody("@Override\npublic void testMethod() { }")
@@ -87,12 +87,12 @@ public class JsonGeneratorTest {
     public void testGenerateJsonLinesFileForMultipleMethods() throws Exception {
         Map<String, MethodContext> contexts = new LinkedHashMap<>();
         contexts.put("1", new MethodContext.Builder()
-                .methodId("1")
+                .methodUri("1")
                 .methodName("method1")
                 .classname("com.example.MyClass")
                 .build());
         contexts.put("2", new MethodContext.Builder()
-                .methodId("2")
+                .methodUri("2")
                 .methodName("method2")
                 .classname("com.example.MyClass")
                 .build());
@@ -109,7 +109,7 @@ public class JsonGeneratorTest {
     @Test
     public void testGenerationResultsPointToJsonlFile() {
         MethodContext context = new MethodContext.Builder()
-                .methodId("1")
+                .methodUri("1")
                 .methodName("testMethod")
                 .classname("com.example.MyClass")
                 .build();
@@ -125,7 +125,7 @@ public class JsonGeneratorTest {
     @Test
     public void testVerifyGeneratedJsonlPath() {
         MethodContext context = new MethodContext.Builder()
-                .methodId("1")
+                .methodUri("1")
                 .methodName("testMethod")
                 .classname("com.example.MyClass")
                 .build();
@@ -140,7 +140,7 @@ public class JsonGeneratorTest {
     @Test
     public void testClearResults() {
         MethodContext context = new MethodContext.Builder()
-                .methodId("1")
+                .methodUri("1")
                 .methodName("testMethod")
                 .classname("com.example.MyClass")
                 .build();
@@ -157,7 +157,7 @@ public class JsonGeneratorTest {
     @Test
     public void testJsonLinesWithCallGraph() throws Exception {
         CallGraphResult callGraph = new CallGraphResult.Builder()
-                .methodId("1")
+                .methodUri("1")
                 .methodName("testMethod")
                 .classname("com.example.MyClass")
                 .addCaller(CallGraphEdge.resolved(
@@ -173,7 +173,7 @@ public class JsonGeneratorTest {
                 .build();
 
         MethodContext context = new MethodContext.Builder()
-                .methodId("1")
+                .methodUri("1")
                 .methodName("testMethod")
                 .classname("com.example.MyClass")
                 .callGraph(callGraph)
