@@ -38,7 +38,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.zip.ZipFile;
 
 /**
  * Spoon-backed source model.
@@ -246,7 +245,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
 
         return new ParsedProject(project.projectPath(), methods, methodsByUri, executablesByUri,
                 typesByQualifiedName, methodsByClassName, fieldsByClassName,
-                importsByFile, sourceArchives(project), new ConcurrentHashMap<>(), parsedModels.mode());
+                importsByFile, new ConcurrentHashMap<>(), parsedModels.mode());
     }
 
     private ParsedModels parseModels(ProjectModel project) throws IOException {
@@ -385,30 +384,6 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         project.classOutputDirs().forEach(path -> entries.add(path.toString()));
         project.dependencyJars().forEach(path -> entries.add(path.toString()));
         return entries;
-    }
-
-    private static List<Path> sourceArchives(ProjectModel project) {
-        LinkedHashSet<Path> archives = new LinkedHashSet<>();
-        Path javaHome = Path.of(System.getProperty("java.home", ""));
-        List<Path> jdkCandidates = List.of(
-                javaHome.resolve("lib/src.zip"),
-                javaHome.getParent() != null ? javaHome.getParent().resolve("lib/src.zip") : javaHome.resolve("missing"));
-        for (Path candidate : jdkCandidates) {
-            if (Files.isRegularFile(candidate)) {
-                archives.add(candidate.toAbsolutePath().normalize());
-            }
-        }
-        for (Path jar : project.dependencyJars()) {
-            String name = jar.getFileName() != null ? jar.getFileName().toString() : "";
-            if (!name.endsWith(".jar") || name.endsWith("-sources.jar")) {
-                continue;
-            }
-            Path sibling = jar.resolveSibling(name.substring(0, name.length() - 4) + "-sources.jar");
-            if (Files.isRegularFile(sibling)) {
-                archives.add(sibling.toAbsolutePath().normalize());
-            }
-        }
-        return List.copyOf(archives);
     }
 
     private static Optional<Path> sourceFile(CtElement element) {
@@ -1089,7 +1064,6 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             ref.put("resolution", external.resolved() ? "external_symbol" : "unresolved");
             ref.put("external_class", external.qualifiedName());
             ref.put("external_resolution", external.confidence());
-            putExternalExcerpt(parsed, external.qualifiedName(), "", ref);
         }
     }
 
@@ -1110,7 +1084,6 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         ref.put("resolution", "external_symbol");
         ref.put("external_member_kind", member.memberKind());
         ref.put("external_member_resolution", member.confidence());
-        putExternalExcerpt(parsed, external.qualifiedName(), rawMember, ref);
     }
 
     private static ExternalType resolveExternalType(ParsedProject parsed, CtType<?> owner, String rawType) {
@@ -1201,15 +1174,6 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return true;
         } catch (Throwable ignored) {
             return false;
-        }
-    }
-
-    private static void putExternalExcerpt(ParsedProject parsed, String className, String member,
-                                           Map<String, Object> ref) {
-        ExternalExcerpt excerpt = externalExcerpt(parsed.sourceArchives(), className, member);
-        ref.put("external_doc_source", excerpt.source());
-        if (!excerpt.text().isBlank()) {
-            ref.put("external_javadoc_excerpt", excerpt.text());
         }
     }
 
@@ -1484,69 +1448,6 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
         String target = rawType.replaceAll("<.*>", "").trim();
         return target.contains(".") && !target.startsWith(".");
-    }
-
-    private static ExternalExcerpt externalExcerpt(List<Path> sourceArchives, String className, String member) {
-        if (className == null || className.isBlank()) {
-            return ExternalExcerpt.missing();
-        }
-        String entrySuffix = className.replace('.', '/') + ".java";
-        for (Path archive : sourceArchives) {
-            try (ZipFile zip = new ZipFile(archive.toFile())) {
-                java.util.Enumeration<? extends java.util.zip.ZipEntry> entries = zip.entries();
-                while (entries.hasMoreElements()) {
-                    java.util.zip.ZipEntry entry = entries.nextElement();
-                    if (!entry.getName().endsWith(entrySuffix)) {
-                        continue;
-                    }
-                    String source = new String(zip.getInputStream(entry).readAllBytes(), StandardCharsets.UTF_8);
-                    String doc = member == null || member.isBlank()
-                            ? classDocFromSource(source, simpleTypeName(className))
-                            : memberDocFromSource(source, memberName(member));
-                    if (!doc.isBlank()) {
-                        return new ExternalExcerpt(excerpt(cleanJavadocSource(doc)),
-                                archive.getFileName() + "!" + entry.getName());
-                    }
-                }
-            } catch (Exception ignored) {
-                // Source/Javadoc archives are optional enrichment.
-            }
-        }
-        return ExternalExcerpt.missing();
-    }
-
-    private static String classDocFromSource(String source, String simpleName) {
-        Pattern pattern = Pattern.compile("(?s)(/\\*\\*.*?\\*/)\\s*(?:@[\\w.]+(?:\\([^)]*\\))?\\s*)*(?:public\\s+|protected\\s+|private\\s+)?(?:final\\s+|abstract\\s+|sealed\\s+|non-sealed\\s+)*"
-                + "(?:class|interface|enum|record|@interface)\\s+" + Pattern.quote(simpleName) + "\\b");
-        Matcher matcher = pattern.matcher(source);
-        return matcher.find() ? matcher.group(1) : "";
-    }
-
-    private static String memberDocFromSource(String source, String memberName) {
-        Pattern pattern = Pattern.compile("(?s)(/\\*\\*.*?\\*/)\\s*(?:@[\\w.]+(?:\\([^)]*\\))?\\s*)*(?:public\\s+|protected\\s+|private\\s+)?(?:static\\s+|final\\s+|synchronized\\s+|native\\s+|abstract\\s+|default\\s+|transient\\s+|volatile\\s+)*[^;{}()=]*\\b"
-                + Pattern.quote(memberName) + "\\s*(?:\\(|[=;])");
-        Matcher matcher = pattern.matcher(source);
-        return matcher.find() ? matcher.group(1) : "";
-    }
-
-    private static String memberName(String member) {
-        String value = member == null ? "" : member.trim();
-        int open = value.indexOf('(');
-        if (open >= 0) {
-            return value.substring(0, open).trim();
-        }
-        return value;
-    }
-
-    private static String cleanJavadocSource(String raw) {
-        if (raw == null || raw.isBlank()) {
-            return "";
-        }
-        return raw.replaceAll("(?s)^\\s*/\\*\\*\\s*", "")
-                .replaceAll("(?s)\\s*\\*/\\s*$", "")
-                .replaceAll("(?m)^\\s*\\* ?", "")
-                .replaceAll("\\s+", " ")
-                .trim();
     }
 
     private static int parameterCountFromReference(String member) {
@@ -1851,7 +1752,6 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             Map<String, List<SourceMethod>> methodsByClassName,
             Map<String, List<SourceField>> fieldsByClassName,
             Map<Path, ImportContext> importsByFile,
-            List<Path> sourceArchives,
             Map<String, ClassContext> classContextsByTypeAndMethod,
             String mode) {
         private ParsedProject {
@@ -1869,7 +1769,6 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                             Map.Entry::getKey,
                             entry -> List.copyOf(entry.getValue())));
             importsByFile = importsByFile != null ? Map.copyOf(importsByFile) : Map.of();
-            sourceArchives = sourceArchives != null ? List.copyOf(sourceArchives) : List.of();
             mode = mode != null ? mode : "";
         }
     }
@@ -1896,12 +1795,6 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     }
 
     private record ExternalMember(String kind, String memberKind, String confidence) {
-    }
-
-    private record ExternalExcerpt(String text, String source) {
-        static ExternalExcerpt missing() {
-            return new ExternalExcerpt("", "unavailable");
-        }
     }
 
     private record SourceField(

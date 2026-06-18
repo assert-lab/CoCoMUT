@@ -98,10 +98,13 @@ external_class/member     Symbol-only external reference when source/Javadoc is 
 external_resolution       qualified_symbol|explicit_import|implicit_java_lang|
                           wildcard_import_symbol|common_jdk_probe|unresolved
 external_member_kind      method|field|unknown for external members
-external_doc_source       source archive used for external_javadoc_excerpt, or unavailable
-external_javadoc_excerpt  Short JDK/dependency source excerpt when available
 javadoc_excerpt           Short Javadoc excerpt from the referenced project symbol
 ```
+
+External references are intentionally symbol-level only in the current schema.
+CoCoX does not fetch JDK/dependency source jars or generated Javadoc pages for
+external `@see` / `{@link ...}` targets, because that behavior depends heavily
+on local build artifacts and would make dataset provenance noisier.
 
 When a target omits parameters, for example `@see #parse`, CoCoX resolves it
 only if there is a single project method named `parse` in the target class. If

@@ -55,8 +55,6 @@ doc-files/images/html references   39268
   - cautious common-JDK probing when the runtime can prove the class exists;
   - external field-vs-method classification when reflection can prove the
     member kind;
-  - optional JDK/dependency source-archive Javadoc excerpts when `src.zip` or
-    `*-sources.jar` is available;
   - short referenced Javadoc excerpts.
 - Javadoc metadata now includes `structured_tags` for:
   - `@param`;
@@ -97,14 +95,14 @@ external types           26
 unknown external members  3
 ```
 
-No external Javadoc excerpts were found in this run because the available
-source archives did not contain the referenced JDK symbols.
+External references are intentionally symbol-level only. CoCoX does not attempt
+to retrieve external Javadoc/source excerpts from JDK or dependency archives.
 
 ## Still Missing
 
-- Deep semantic rendering for external JDK/library references. CoCoX now
-  resolves many of these as external symbols and attempts source-archive
-  excerpts, but it does not download missing source/Javadoc artifacts.
+- Deep semantic rendering for external JDK/library references. CoCoX resolves
+  many of these as external symbols, but it intentionally does not retrieve
+  external source/Javadoc text in the current product scope.
 - Full Javadoc doclet rendering semantics. CoCoX parses useful source-level
   context; it does not attempt to exactly reproduce generated Javadoc HTML.
 - Rich resolution for all label variants in handwritten `@see` text. The

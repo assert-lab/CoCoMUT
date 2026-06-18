@@ -159,8 +159,6 @@
         "external_resolution": {"type": "string"},
         "external_member_kind": {"type": "string"},
         "external_member_resolution": {"type": "string"},
-        "external_doc_source": {"type": "string"},
-        "external_javadoc_excerpt": {"type": "string"},
         "javadoc_excerpt": {"type": "string"}
       },
       "additionalProperties": true

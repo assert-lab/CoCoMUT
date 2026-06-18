@@ -311,20 +311,14 @@ or dependency symbols are available:
 
 instead of treating all external `Class#member` refs as generic member refs.
 
-## External Javadoc Excerpts
+## External Reference Limitation
 
-CoCoX currently does not load JDK or dependency source/Javadoc jars. Therefore,
-for external references it can usually identify the symbol but cannot provide
-the referenced documentation text.
+CoCoX intentionally stops external references at symbol identity. For example,
+`@see java.util.regex.Matcher#replaceAll(String)` may be classified as an
+external method reference, but CoCoX does not try to load JDK/dependency source
+jars or generated Javadoc pages to attach the referenced documentation text.
 
-Future behavior:
-
-```text
-1. Resolve external symbol from imports/classpath.
-2. Locate source jar or Javadoc jar.
-3. Extract a short Javadoc excerpt.
-4. Record provenance: jdk_source|dependency_source|javadoc_jar|unavailable.
-```
-
-This should remain optional and provenance-rich because public repositories
-often have incomplete or non-compiling builds.
+This is a product boundary, not a parser failure. External documentation
+retrieval is build-environment sensitive, often depends on missing source
+artifacts, and can make mined datasets harder to interpret. If this is added
+later, it should be an explicit optional mode with separate provenance.
