@@ -288,9 +288,11 @@ public class SourceModelEdgeCaseTest {
                          * @see Helper
                          * @see #inherited(CharSequence)
                          * @see java.util.List#add(Object)
+                         * @see java.base/java.util.List#remove(Object)
                          * @see Arrays#sort(byte[])
                          * @see Long#MIN_VALUE
                          * @see Pattern#DOTALL
+                         * @see "Reference text without a generated link"
                          */
                         public void focal() {
                         }
@@ -356,6 +358,12 @@ public class SourceModelEdgeCaseTest {
             assertEquals("add(Object)", external.get("external_member"));
             assertEquals("method", external.get("external_member_kind"));
 
+            Map<String, Object> modulePrefixed = referenceByTarget(refs, "java.base/java.util.List#remove(Object)");
+            assertEquals("external_symbol", modulePrefixed.get("resolution"));
+            assertEquals("java.util.List", modulePrefixed.get("external_class"));
+            assertEquals("remove(Object)", modulePrefixed.get("external_member"));
+            assertEquals("method", modulePrefixed.get("external_member_kind"));
+
             Map<String, Object> imported = referenceByTarget(refs, "Arrays#sort(byte[])");
             assertEquals("external_symbol", imported.get("resolution"));
             assertEquals("java.util.Arrays", imported.get("external_class"));
@@ -375,6 +383,11 @@ public class SourceModelEdgeCaseTest {
             assertEquals("java.util.regex.Pattern", wildcardField.get("external_class"));
             assertEquals("wildcard_import_symbol", wildcardField.get("external_resolution"));
             assertEquals("field", wildcardField.get("external_member_kind"));
+
+            Map<String, Object> textReference = referenceByTarget(refs, "\"Reference text without a generated link\"");
+            assertEquals("text_reference", textReference.get("kind"));
+            assertEquals("text", textReference.get("resolution"));
+            assertEquals("Reference text without a generated link", textReference.get("text"));
         } finally {
             deleteRecursively(project);
         }

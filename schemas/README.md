@@ -85,10 +85,11 @@ tag                       see|link|linkplain
 raw                       Raw Javadoc reference text
 target                    Parsed reference target
 label                     Optional rendered-label text
-kind                      type_reference|member_reference|field_reference|external_url
+kind                      type_reference|member_reference|field_reference|external_url|text_reference
 resolution                resolved_type|resolved_method|resolved_field|
                           resolved_inherited_method|resolved_inherited_field|
-                          overload_ambiguous|ambiguous_field|external_symbol|unresolved
+                          overload_ambiguous|ambiguous_field|external_symbol|
+                          external|text|unresolved
 method_uri                Canonical CoCoX URI for resolved project methods
 field_uri                 Canonical CoCoX URI for resolved project fields
 type_uri                  Canonical CoCoX URI for resolved project types
@@ -100,6 +101,11 @@ external_resolution       qualified_symbol|explicit_import|implicit_java_lang|
 external_member_kind      method|field|unknown for external members
 javadoc_excerpt           Short Javadoc excerpt from the referenced project symbol
 ```
+
+CoCoX recognizes the standard doclet `@see` forms: quoted text entries,
+HTML anchor links, and program-element references such as
+`module/package.Type#member label`. Module prefixes are normalized before
+symbol lookup.
 
 External references are intentionally symbol-level only in the current schema.
 CoCoX does not fetch JDK/dependency source jars or generated Javadoc pages for

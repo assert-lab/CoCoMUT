@@ -944,6 +944,14 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return new String[]{"", ""};
         }
         String trimmed = raw.trim();
+        if (trimmed.startsWith("\"")) {
+            int endQuote = trimmed.indexOf('"', 1);
+            if (endQuote > 0) {
+                return new String[]{trimmed.substring(0, endQuote + 1),
+                        trimmed.substring(endQuote + 1).trim()};
+            }
+            return new String[]{trimmed, ""};
+        }
         if (trimmed.startsWith("<a ") || trimmed.startsWith("<A ")
                 || trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
             return new String[]{trimmed, ""};
@@ -979,6 +987,13 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         ref.put("target", target);
         ref.put("label", label == null ? "" : label);
 
+        if (target.startsWith("\"")) {
+            ref.put("kind", "text_reference");
+            ref.put("text", target.replaceAll("^\"|\"$", ""));
+            ref.put("resolution", "text");
+            return ref;
+        }
+
         Matcher anchor = ANCHOR_HREF.matcher(target);
         if (anchor.find()) {
             ref.put("kind", "external_url");
@@ -995,7 +1010,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return ref;
         }
 
-        String cleaned = target.replaceAll("#$", "").trim();
+        String cleaned = stripModulePrefix(target.replaceAll("#$", "").trim());
         if (cleaned.isBlank()) {
             ref.put("kind", "unknown");
             ref.put("resolution", "empty_target");
@@ -1013,7 +1028,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     private static void resolveMemberReference(ParsedProject parsed, CtType<?> owner,
                                                String target, Map<String, Object> ref) {
         int hash = target.indexOf('#');
-        String rawType = target.substring(0, hash).trim();
+        String rawType = stripModulePrefix(target.substring(0, hash).trim());
         String member = target.substring(hash + 1).trim();
         String className = resolveClassName(parsed, owner, rawType);
         MemberReference memberReference = parseMemberReference(member);
@@ -1052,6 +1067,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
 
     private static void resolveTypeReference(ParsedProject parsed, CtType<?> owner,
                                              String target, Map<String, Object> ref) {
+        target = stripModulePrefix(target);
         String className = resolveClassName(parsed, owner, target);
         if (!className.isBlank()) {
             ref.put("kind", "type_reference");
@@ -1121,6 +1137,18 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             }
         }
         return ExternalType.unresolved(rawType);
+    }
+
+    private static String stripModulePrefix(String target) {
+        if (target == null) {
+            return "";
+        }
+        String value = target.trim();
+        int slash = value.indexOf('/');
+        if (slash > 0 && slash + 1 < value.length()) {
+            return value.substring(slash + 1).trim();
+        }
+        return value;
     }
 
     private static ImportContext importContext(ParsedProject parsed, CtType<?> owner) {

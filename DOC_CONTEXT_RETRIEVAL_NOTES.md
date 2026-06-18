@@ -38,6 +38,9 @@ doc-files/images/html references   39268
   bytecode signatures are retained only as provenance in `raw_signature`.
 - Javadoc metadata now includes `javadoc_references` for `@see`,
   `{@link ...}`, and `{@linkplain ...}`:
+  - quoted `@see "text"` entries;
+  - HTML anchor `@see <a href="...">label</a>` entries;
+  - module-prefixed `module/package.Type#member` references;
   - external URLs;
   - project type references with `type_uri`, source path, class Javadoc excerpt,
     and hierarchy metadata;

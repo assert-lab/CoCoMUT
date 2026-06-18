@@ -142,7 +142,18 @@ For a repository-wide run, provenance should state:
 
 ## Javadoc References
 
-Javadoc references can point to several symbol kinds:
+CoCoX follows the standard doclet syntax for Javadoc references. The important
+official forms are:
+
+```java
+@see "plain text with no generated link"
+@see <a href="https://example.org/spec">external label</a>
+@see module/package.Type#member optional label
+{@link package.Type#member optional label}
+{@linkplain package.Type#member optional label}
+```
+
+The program-element form can point to several symbol kinds:
 
 ```java
 @see #parse(String)
@@ -158,10 +169,10 @@ CoCoX stores these under `javadoc_metadata.javadoc_references`.
 Important fields:
 
 ```text
-kind                 type_reference|member_reference|field_reference|external_url
+kind                 type_reference|member_reference|field_reference|external_url|text_reference
 resolution           resolved_method|resolved_type|resolved_field|
                      resolved_inherited_method|resolved_inherited_field|
-                     overload_ambiguous|external_symbol|unresolved
+                     overload_ambiguous|external_symbol|external|text|unresolved
 method_uri           present for resolved project methods
 field_uri            present for resolved project fields
 type_uri             present for resolved project types
@@ -189,12 +200,12 @@ Typed-class references name the class/type:
 
 CoCoX first tries project-local type lookup. If the type is not in the parsed
 project, the reference becomes an external symbol unless it can be resolved
-through imports, classpath, or future external Javadoc support.
+through imports, language-defined `java.lang.*`, wildcard imports, or cautious
+JDK symbol probing. External documentation text is not fetched.
 
 ## Import-Aware Resolution
 
-The next resolver improvement should inspect imports in the declaring source
-file.
+The resolver inspects imports in the declaring source file.
 
 Example source:
 
@@ -210,13 +221,13 @@ public byte[] sort(byte[] values) { ... }
 The Javadoc target says `Arrays#sort(byte[])`, but the source import tells us
 that `Arrays` means `java.util.Arrays`.
 
-Planned behavior:
+Behavior:
 
 ```text
 raw target:          Arrays#sort(byte[])
 resolved external:   java.util.Arrays#sort(byte[])
 resolution:          external_symbol
-confidence:          import_resolved
+confidence:          explicit_import
 ```
 
 Wildcard imports should be handled more carefully:
@@ -226,8 +237,16 @@ import java.util.*;
 ```
 
 In that case, probing `java.util.Arrays` is reasonable only if classpath/JDK
-symbols are available. The output should record lower confidence than an
-explicit single-type import.
+symbols are available. The output records lower confidence than an explicit
+single-type import:
+
+```text
+external_resolution: wildcard_import_symbol
+```
+
+CoCoX also has a small `common_jdk_probe` fallback for common JDK packages.
+That fallback is a pragmatic symbol-classification heuristic, not an Apache
+Commons Lang rule and not a Javadoc syntax rule.
 
 ## Implicit `java.lang.*`
 

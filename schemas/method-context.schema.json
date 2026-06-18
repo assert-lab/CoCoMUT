@@ -144,6 +144,7 @@
         "raw": {"type": "string"},
         "target": {"type": "string"},
         "label": {"type": "string"},
+        "text": {"type": "string"},
         "kind": {"type": "string"},
         "resolution": {"type": "string"},
         "method_uri": {"type": "string"},
