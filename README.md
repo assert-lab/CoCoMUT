@@ -72,6 +72,9 @@ This is important because overloaded methods need more than a method name. A rel
 - the erased parameter types;
 - the erased return type.
 
+For the broader symbol model, including planned `type_uri` and `package_uri`
+selection, see [SYMBOL_AND_REFERENCE_MODEL.md](SYMBOL_AND_REFERENCE_MODEL.md).
+
 ## CLI Usage
 
 The CLI can be run through `bin/cocox` from the repository root:
@@ -169,6 +172,10 @@ Repository-wide extraction writes `method_contexts.jsonl`. Package, class, or
 method-filtered extraction writes a distinguishable JSONL filename based on the
 selected thing, for example `package__org.example.api.jsonl`,
 `class__org.example.PublicApi.jsonl`, or `method__parse.jsonl`.
+
+Current package and class/type selection is filter-based. The intended product
+direction is URI-based selection with `method_uri`, `type_uri`, and
+`package_uri`; see [SYMBOL_AND_REFERENCE_MODEL.md](SYMBOL_AND_REFERENCE_MODEL.md).
 
 Validation examples:
 
