@@ -39,8 +39,17 @@ doc-files/images/html references   39268
 - Javadoc metadata now includes `javadoc_references` for `@see`,
   `{@link ...}`, and `{@linkplain ...}`:
   - external URLs;
-  - project type references;
-  - project member references resolved to CoCoX method URIs when possible;
+  - project type references with `type_uri`, source path, class Javadoc excerpt,
+    and hierarchy metadata;
+  - project method references resolved to CoCoX method URIs when possible;
+  - project field references resolved to `field_uri`, type, modifiers, and
+    Javadoc excerpt;
+  - superclass/interface method and field references when the target is a
+    project-local inherited member;
+  - precise overload ambiguity reports when omitted or explicit parameters do
+    not identify exactly one method;
+  - symbol-only external class/member references when the source/Javadoc is not
+    part of the parsed project;
   - short referenced Javadoc excerpts.
 - Javadoc metadata now includes `structured_tags` for:
   - `@param`;
@@ -70,7 +79,8 @@ file_ref_rows           37
 ## Still Missing
 
 - Deep semantic resolution for external JDK/library references such as
-  `java.util.List#add(Object)`.
+  `java.util.List#add(Object)`. CoCoX now records these as symbol-only external
+  references; it does not yet load source or Javadoc jars for excerpts.
 - Full Javadoc doclet rendering semantics. CoCoX parses useful source-level
   context; it does not attempt to exactly reproduce generated Javadoc HTML.
 - Rich resolution for all label variants in handwritten `@see` text. The

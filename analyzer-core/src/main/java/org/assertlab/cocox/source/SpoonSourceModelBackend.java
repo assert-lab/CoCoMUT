@@ -11,6 +11,7 @@ import spoon.reflect.declaration.CtAnnotation;
 import spoon.reflect.declaration.CtConstructor;
 import spoon.reflect.declaration.CtElement;
 import spoon.reflect.declaration.CtExecutable;
+import spoon.reflect.declaration.CtField;
 import spoon.reflect.declaration.CtMethod;
 import spoon.reflect.declaration.CtModifiable;
 import spoon.reflect.declaration.CtParameter;
@@ -191,6 +192,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         Map<String, CtExecutable<?>> executablesByUri = new LinkedHashMap<>();
         Map<String, CtType<?>> typesByQualifiedName = new LinkedHashMap<>();
         Map<String, List<SourceMethod>> methodsByClassName = new LinkedHashMap<>();
+        Map<String, List<SourceField>> fieldsByClassName = new LinkedHashMap<>();
 
         List<CtExecutable<?>> executables = new ArrayList<>();
         for (CtModel model : parsedModels.models()) {
@@ -198,6 +200,12 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 String qualifiedName = type.getQualifiedName();
                 if (qualifiedName != null && !qualifiedName.isBlank()) {
                     typesByQualifiedName.putIfAbsent(qualifiedName, type);
+                    for (CtField<?> field : type.getFields()) {
+                        toSourceField(project, type, field)
+                                .ifPresent(sourceField -> fieldsByClassName
+                                        .computeIfAbsent(sourceField.className(), ignored -> new ArrayList<>())
+                                        .add(sourceField));
+                    }
                 }
             }
             for (CtExecutable<?> executable : model.getElements(new TypeFilter<>(CtExecutable.class))) {
@@ -225,8 +233,9 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             }
         }
 
-        return new ParsedProject(methods, methodsByUri, executablesByUri,
-                typesByQualifiedName, methodsByClassName, new ConcurrentHashMap<>(), parsedModels.mode());
+        return new ParsedProject(project.projectPath(), methods, methodsByUri, executablesByUri,
+                typesByQualifiedName, methodsByClassName, fieldsByClassName,
+                new ConcurrentHashMap<>(), parsedModels.mode());
     }
 
     private ParsedModels parseModels(ProjectModel project) throws IOException {
@@ -400,6 +409,28 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 thrownExceptions(executable),
                 sourceSet(project.projectPath(), sourceFile),
                 executable instanceof CtConstructor<?>));
+    }
+
+    private Optional<SourceField> toSourceField(ProjectModel project, CtType<?> owner, CtField<?> field) {
+        SourcePosition position = field.getPosition();
+        if (owner == null || position == null || !position.isValidPosition()) {
+            return Optional.empty();
+        }
+        Path sourceFile = position.getFile().toPath().toAbsolutePath().normalize();
+        String sourceType = typeName(field.getType());
+        String erasedType = erasedType(field.getType(), sourceType);
+        return Optional.of(new SourceField(
+                fieldUri(project.projectPath(), sourceFile, owner.getQualifiedName(), field.getSimpleName(), erasedType),
+                owner.getQualifiedName(),
+                field.getSimpleName(),
+                sourceType,
+                erasedType,
+                sourceFile,
+                position.getLine(),
+                modifiers(field),
+                annotations(field),
+                docComment(field),
+                sourceSet(project.projectPath(), sourceFile)));
     }
 
     private static String methodName(CtExecutable<?> executable, CtType<?> owner) {
@@ -872,8 +903,14 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return new String[]{trimmed, ""};
         }
         int firstWhitespace = -1;
+        int parenDepth = 0;
         for (int i = 0; i < trimmed.length(); i++) {
-            if (Character.isWhitespace(trimmed.charAt(i))) {
+            char c = trimmed.charAt(i);
+            if (c == '(') {
+                parenDepth++;
+            } else if (c == ')') {
+                parenDepth = Math.max(0, parenDepth - 1);
+            } else if (Character.isWhitespace(c) && parenDepth == 0) {
                 firstWhitespace = i;
                 break;
             }
@@ -933,40 +970,40 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         String rawType = target.substring(0, hash).trim();
         String member = target.substring(hash + 1).trim();
         String className = resolveClassName(parsed, owner, rawType);
-        String methodName = member.replaceAll("\\(.*", "").trim();
-        int paramCount = parameterCountFromReference(member);
+        MemberReference memberReference = parseMemberReference(member);
 
         ref.put("kind", "member_reference");
         ref.put("resolved_class", className);
         ref.put("referenced_member", member);
 
-        if (className.isBlank() || methodName.isBlank()) {
+        if (className.isBlank()) {
+            ref.put("resolution", isExternalReference(rawType) ? "external_symbol" : "unresolved");
+            ref.put("external_class", rawType);
+            ref.put("external_member", member);
+            return;
+        }
+
+        if (memberReference.name().isBlank()) {
             ref.put("resolution", "unresolved");
             return;
         }
 
-        List<SourceMethod> candidates = parsed.methodsByClassName().getOrDefault(className, List.of()).stream()
-                .filter(method -> method.methodName().equals(methodName))
-                .filter(method -> paramCount < 0 || method.parameters().size() == paramCount)
-                .toList();
+        if (resolveMethodCandidate(parsed, className, memberReference, false, ref)) {
+            return;
+        }
+        if (resolveFieldCandidate(parsed, className, memberReference, false, ref)) {
+            return;
+        }
+        if (resolveInheritedMemberCandidate(parsed, className, memberReference, ref)) {
+            return;
+        }
 
-        if (candidates.size() == 1) {
-            SourceMethod method = candidates.get(0);
-            ref.put("resolution", "resolved_method");
-            ref.put("method_uri", method.methodUri());
-            ref.put("signature", method.className() + "." + method.signature());
-            ref.put("source_set", method.sourceSet());
-            ref.put("javadoc_excerpt", excerpt(docComment(parsed.executablesByUri().get(method.methodUri()))));
-        } else if (candidates.size() > 1) {
-            ref.put("resolution", "ambiguous_method");
-            ref.put("candidate_method_uris", candidates.stream()
-                    .map(SourceMethod::methodUri)
-                    .limit(10)
-                    .toList());
-        } else {
-            ref.put("resolution", parsed.typesByQualifiedName().containsKey(className)
-                    ? "class_resolved_member_unresolved"
-                    : "unresolved");
+        ref.put("resolution", parsed.typesByQualifiedName().containsKey(className)
+                ? "class_resolved_member_unresolved"
+                : (isExternalReference(rawType) ? "external_symbol" : "unresolved"));
+        if (isExternalReference(rawType)) {
+            ref.put("external_class", rawType);
+            ref.put("external_member", member);
         }
     }
 
@@ -977,11 +1014,164 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             ref.put("kind", "type_reference");
             ref.put("resolution", "resolved_type");
             ref.put("resolved_class", className);
-            ref.put("class_javadoc_excerpt", excerpt(docComment(parsed.typesByQualifiedName().get(className))));
+            putTypeDetails(parsed, className, ref);
         } else {
-            ref.put("kind", "external_or_unresolved_type");
-            ref.put("resolution", "unresolved");
+            ref.put("kind", "type_reference");
+            ref.put("resolution", isExternalReference(target) ? "external_symbol" : "unresolved");
+            ref.put("external_class", target);
         }
+    }
+
+    private static boolean resolveMethodCandidate(ParsedProject parsed, String className,
+                                                  MemberReference memberReference, boolean inherited,
+                                                  Map<String, Object> ref) {
+        List<SourceMethod> nameMatches = parsed.methodsByClassName().getOrDefault(className, List.of()).stream()
+                .filter(method -> method.methodName().equals(memberReference.name()))
+                .toList();
+        if (nameMatches.isEmpty()) {
+            return false;
+        }
+
+        List<SourceMethod> candidates = nameMatches.stream()
+                .filter(method -> memberReference.matches(method))
+                .toList();
+        if (candidates.size() == 1) {
+            SourceMethod method = candidates.get(0);
+            ref.put("resolution", inherited ? "resolved_inherited_method" : "resolved_method");
+            ref.put("method_uri", method.methodUri());
+            ref.put("signature", method.className() + "." + method.signature());
+            ref.put("source_set", method.sourceSet());
+            ref.put("javadoc_excerpt", excerpt(docComment(parsed.executablesByUri().get(method.methodUri()))));
+            if (inherited) {
+                ref.put("inherited_from", className);
+            }
+            return true;
+        }
+        if (candidates.size() > 1 || (!memberReference.hasParameters() && nameMatches.size() > 1)) {
+            List<SourceMethod> ambiguous = candidates.isEmpty() ? nameMatches : candidates;
+            ref.put("resolution", "overload_ambiguous");
+            ref.put("ambiguity_reason", memberReference.hasParameters()
+                    ? "explicit_parameter_types_match_multiple_overloads"
+                    : "target_omits_parameter_types");
+            ref.put("candidate_method_uris", ambiguous.stream()
+                    .map(SourceMethod::methodUri)
+                    .limit(20)
+                    .toList());
+            if (inherited) {
+                ref.put("inherited_from", className);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean resolveFieldCandidate(ParsedProject parsed, String className,
+                                                 MemberReference memberReference, boolean inherited,
+                                                 Map<String, Object> ref) {
+        if (memberReference.hasParameters()) {
+            return false;
+        }
+        List<SourceField> fields = parsed.fieldsByClassName().getOrDefault(className, List.of()).stream()
+                .filter(field -> field.fieldName().equals(memberReference.name()))
+                .toList();
+        if (fields.isEmpty()) {
+            return false;
+        }
+        if (fields.size() == 1) {
+            SourceField field = fields.get(0);
+            ref.put("kind", "field_reference");
+            ref.put("resolution", inherited ? "resolved_inherited_field" : "resolved_field");
+            ref.put("field_uri", field.fieldUri());
+            ref.put("field_name", field.fieldName());
+            ref.put("field_type", field.type());
+            ref.put("field_erased_type", field.erasedType());
+            ref.put("field_modifiers", field.modifiers());
+            ref.put("source_set", field.sourceSet());
+            ref.put("javadoc_excerpt", excerpt(field.javadoc()));
+            if (inherited) {
+                ref.put("inherited_from", className);
+            }
+            return true;
+        }
+        ref.put("kind", "field_reference");
+        ref.put("resolution", "ambiguous_field");
+        ref.put("candidate_field_uris", fields.stream()
+                .map(SourceField::fieldUri)
+                .limit(20)
+                .toList());
+        if (inherited) {
+            ref.put("inherited_from", className);
+        }
+        return true;
+    }
+
+    private static boolean resolveInheritedMemberCandidate(ParsedProject parsed, String className,
+                                                           MemberReference memberReference,
+                                                           Map<String, Object> ref) {
+        for (String parent : localSupertypes(parsed, className)) {
+            if (resolveMethodCandidate(parsed, parent, memberReference, true, ref)) {
+                return true;
+            }
+            if (resolveFieldCandidate(parsed, parent, memberReference, true, ref)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static List<String> localSupertypes(ParsedProject parsed, String className) {
+        CtType<?> type = parsed.typesByQualifiedName().get(className);
+        if (type == null) {
+            return List.of();
+        }
+        List<String> result = new ArrayList<>();
+        collectLocalSupertypes(parsed, type, result, new LinkedHashSet<>());
+        return result;
+    }
+
+    private static void collectLocalSupertypes(ParsedProject parsed, CtType<?> type,
+                                               List<String> result, Set<String> seen) {
+        if (type == null) {
+            return;
+        }
+        seen.add(type.getQualifiedName());
+        List<CtTypeReference<?>> refs = new ArrayList<>();
+        if (type.getSuperclass() != null) {
+            refs.add(type.getSuperclass());
+        }
+        refs.addAll(type.getSuperInterfaces());
+        for (CtTypeReference<?> ref : refs) {
+            String parentName = resolveClassName(parsed, type, typeName(ref));
+            if (parentName.isBlank() || !seen.add(parentName)) {
+                continue;
+            }
+            result.add(parentName);
+            CtType<?> parentType = parsed.typesByQualifiedName().get(parentName);
+            if (parentType != null) {
+                List<CtTypeReference<?>> parentRefs = new ArrayList<>();
+                if (parentType.getSuperclass() != null) {
+                    parentRefs.add(parentType.getSuperclass());
+                }
+                parentRefs.addAll(parentType.getSuperInterfaces());
+                for (CtTypeReference<?> parentRef : parentRefs) {
+                    String ancestorName = resolveClassName(parsed, parentType, typeName(parentRef));
+                    if (!ancestorName.isBlank() && seen.add(ancestorName)) {
+                        result.add(ancestorName);
+                        collectLocalSupertypes(parsed, parsed.typesByQualifiedName().get(ancestorName), result, seen);
+                    }
+                }
+            }
+        }
+    }
+
+    private static void putTypeDetails(ParsedProject parsed, String className, Map<String, Object> ref) {
+        CtType<?> type = parsed.typesByQualifiedName().get(className);
+        ref.put("type_uri", typeUri(parsed.projectRoot(), type));
+        ref.put("source_path", sourcePath(type));
+        ref.put("line_number", lineNumber(type));
+        ref.put("class_javadoc_excerpt", excerpt(docComment(type)));
+        ref.put("class_hierarchy", type != null ? classHierarchy(type) : "");
+        ref.put("hierarchy_resolution", hierarchyResolution(type));
     }
 
     private static String resolveClassName(ParsedProject parsed, CtType<?> owner, String rawType) {
@@ -1012,6 +1202,97 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 .limit(2)
                 .toList();
         return simpleMatches.size() == 1 ? simpleMatches.get(0) : "";
+    }
+
+    private static MemberReference parseMemberReference(String member) {
+        String value = member == null ? "" : member.trim();
+        int open = value.indexOf('(');
+        int close = value.lastIndexOf(')');
+        if (open < 0 || close < open) {
+            return new MemberReference(value, false, List.of());
+        }
+        String name = value.substring(0, open).trim();
+        String params = value.substring(open + 1, close).trim();
+        if (params.isBlank()) {
+            return new MemberReference(name, true, List.of());
+        }
+        return new MemberReference(name, true, splitReferenceParameters(params));
+    }
+
+    private static List<String> splitReferenceParameters(String params) {
+        List<String> parts = new ArrayList<>();
+        int start = 0;
+        int depth = 0;
+        for (int i = 0; i < params.length(); i++) {
+            char c = params.charAt(i);
+            if (c == '<') {
+                depth++;
+            } else if (c == '>') {
+                depth = Math.max(0, depth - 1);
+            } else if (c == ',' && depth == 0) {
+                parts.add(cleanReferenceParameter(params.substring(start, i)));
+                start = i + 1;
+            }
+        }
+        parts.add(cleanReferenceParameter(params.substring(start)));
+        return parts.stream().filter(part -> !part.isBlank()).toList();
+    }
+
+    private static String cleanReferenceParameter(String raw) {
+        String value = raw == null ? "" : raw.trim();
+        value = value.replaceAll("@[\\w.]+(?:\\([^)]*\\))?\\s*", "");
+        value = value.replaceAll("\\bfinal\\s+", "");
+        value = value.replaceAll("<.*>", "");
+        value = value.replace("...", "[]");
+        String[] tokens = value.trim().split("\\s+");
+        if (tokens.length > 1) {
+            value = tokens[0];
+        }
+        return value.trim();
+    }
+
+    private static boolean typeMatches(String referenceType, SourceParameter parameter) {
+        String ref = normalizeTypeForMatch(referenceType);
+        Set<String> candidates = new LinkedHashSet<>();
+        candidates.add(normalizeTypeForMatch(parameter.type()));
+        candidates.add(normalizeTypeForMatch(parameter.erasedType()));
+        candidates.add(normalizeTypeForMatch(simpleTypeName(parameter.type())));
+        candidates.add(normalizeTypeForMatch(simpleTypeName(parameter.erasedType())));
+        return candidates.contains(ref);
+    }
+
+    private static String normalizeTypeForMatch(String type) {
+        if (type == null) {
+            return "";
+        }
+        return type.replaceAll("<.*>", "")
+                .replace("...", "[]")
+                .replaceAll("\\s+", "")
+                .trim();
+    }
+
+    private static String simpleTypeName(String type) {
+        if (type == null || type.isBlank()) {
+            return "";
+        }
+        String suffix = "";
+        String value = type.trim();
+        while (value.endsWith("[]")) {
+            suffix += "[]";
+            value = value.substring(0, value.length() - 2);
+        }
+        int dot = value.lastIndexOf('.');
+        int nested = value.lastIndexOf('$');
+        int index = Math.max(dot, nested);
+        return (index >= 0 ? value.substring(index + 1) : value) + suffix;
+    }
+
+    private static boolean isExternalReference(String rawType) {
+        if (rawType == null || rawType.isBlank()) {
+            return false;
+        }
+        String target = rawType.replaceAll("<.*>", "").trim();
+        return target.contains(".") && !target.startsWith(".");
     }
 
     private static int parameterCountFromReference(String member) {
@@ -1239,6 +1520,49 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return relative + "#" + className + "." + signature.replaceAll("\\s+", " ").trim();
     }
 
+    private static String fieldUri(Path projectRoot, Path sourceFile, String className, String fieldName,
+                                   String erasedType) {
+        Path normalizedRoot = projectRoot.toAbsolutePath().normalize();
+        Path normalizedFile = sourceFile.toAbsolutePath().normalize();
+        String relative = normalizedRoot.relativize(normalizedFile).toString().replace('\\', '/');
+        String type = erasedType == null || erasedType.isBlank() ? "unknown" : erasedType;
+        return relative + "#" + className + "." + fieldName + ":" + type;
+    }
+
+    private static String typeUri(Path projectRoot, CtType<?> type) {
+        if (type == null || type.getPosition() == null || !type.getPosition().isValidPosition()) {
+            return "";
+        }
+        try {
+            Path sourceFile = type.getPosition().getFile().toPath().toAbsolutePath().normalize();
+            Path root = projectRoot.toAbsolutePath().normalize();
+            String path = sourceFile.startsWith(root)
+                    ? root.relativize(sourceFile).toString().replace('\\', '/')
+                    : sourceFile.toString();
+            return path + "#" + type.getQualifiedName();
+        } catch (Exception e) {
+            return "#" + type.getQualifiedName();
+        }
+    }
+
+    private static String sourcePath(CtElement element) {
+        if (element == null || element.getPosition() == null || !element.getPosition().isValidPosition()) {
+            return "";
+        }
+        try {
+            return element.getPosition().getFile().toPath().toString();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static int lineNumber(CtElement element) {
+        if (element == null || element.getPosition() == null || !element.getPosition().isValidPosition()) {
+            return -1;
+        }
+        return element.getPosition().getLine();
+    }
+
     private static String sourceSet(Path projectRoot, Path sourceFile) {
         String relative = projectRoot.toAbsolutePath().normalize()
                 .relativize(sourceFile.toAbsolutePath().normalize())
@@ -1265,14 +1589,17 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     }
 
     private record ParsedProject(
+            Path projectRoot,
             List<SourceMethod> methods,
             Map<String, SourceMethod> methodsByUri,
             Map<String, CtExecutable<?>> executablesByUri,
             Map<String, CtType<?>> typesByQualifiedName,
             Map<String, List<SourceMethod>> methodsByClassName,
+            Map<String, List<SourceField>> fieldsByClassName,
             Map<String, ClassContext> classContextsByTypeAndMethod,
             String mode) {
         private ParsedProject {
+            projectRoot = projectRoot != null ? projectRoot.toAbsolutePath().normalize() : Path.of(".").toAbsolutePath().normalize();
             methods = List.copyOf(methods);
             methodsByUri = Map.copyOf(methodsByUri);
             executablesByUri = Map.copyOf(executablesByUri);
@@ -1281,7 +1608,62 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                     .collect(java.util.stream.Collectors.toUnmodifiableMap(
                             Map.Entry::getKey,
                             entry -> List.copyOf(entry.getValue())));
+            fieldsByClassName = fieldsByClassName.entrySet().stream()
+                    .collect(java.util.stream.Collectors.toUnmodifiableMap(
+                            Map.Entry::getKey,
+                            entry -> List.copyOf(entry.getValue())));
             mode = mode != null ? mode : "";
+        }
+    }
+
+    private record SourceField(
+            String fieldUri,
+            String className,
+            String fieldName,
+            String type,
+            String erasedType,
+            Path sourceFile,
+            int lineNumber,
+            List<String> modifiers,
+            List<String> annotations,
+            String javadoc,
+            String sourceSet) {
+        private SourceField {
+            fieldUri = fieldUri != null ? fieldUri : "";
+            className = className != null ? className : "";
+            fieldName = fieldName != null ? fieldName : "";
+            type = type != null ? type : "";
+            erasedType = erasedType != null ? erasedType : "";
+            sourceFile = sourceFile != null ? sourceFile : Path.of("");
+            modifiers = modifiers != null ? List.copyOf(modifiers) : List.of();
+            annotations = annotations != null ? List.copyOf(annotations) : List.of();
+            javadoc = javadoc != null ? javadoc : "";
+            sourceSet = sourceSet != null ? sourceSet : "unknown";
+        }
+    }
+
+    private record MemberReference(String name, boolean hasParameters, List<String> parameterTypes) {
+        private MemberReference {
+            name = name != null ? name.trim() : "";
+            parameterTypes = parameterTypes != null ? List.copyOf(parameterTypes) : List.of();
+        }
+
+        boolean matches(SourceMethod method) {
+            if (!method.methodName().equals(name)) {
+                return false;
+            }
+            if (!hasParameters) {
+                return true;
+            }
+            if (method.parameters().size() != parameterTypes.size()) {
+                return false;
+            }
+            for (int i = 0; i < parameterTypes.size(); i++) {
+                if (!typeMatches(parameterTypes.get(i), method.parameters().get(i))) {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 

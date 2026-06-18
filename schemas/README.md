@@ -73,6 +73,33 @@ inherited_javadoc_candidates
                           Candidate inherited Javadoc snippets for {@inheritDoc}
 ```
 
+`javadoc_references` entries are best-effort source-level resolutions:
+
+```text
+tag                       see|link|linkplain
+raw                       Raw Javadoc reference text
+target                    Parsed reference target
+label                     Optional rendered-label text
+kind                      type_reference|member_reference|field_reference|external_url
+resolution                resolved_type|resolved_method|resolved_field|
+                          resolved_inherited_method|resolved_inherited_field|
+                          overload_ambiguous|ambiguous_field|external_symbol|unresolved
+method_uri                Canonical CoCoX URI for resolved project methods
+field_uri                 Canonical CoCoX URI for resolved project fields
+type_uri                  Canonical CoCoX URI for resolved project types
+candidate_method_uris     Present when omitted or explicit parameters are ambiguous
+ambiguity_reason          Why an overload could not be uniquely selected
+external_class/member     Symbol-only external reference when source/Javadoc is unavailable
+javadoc_excerpt           Short Javadoc excerpt from the referenced project symbol
+```
+
+When a target omits parameters, for example `@see #parse`, CoCoX resolves it
+only if there is a single project method named `parse` in the target class. If
+multiple overloads exist, it reports `overload_ambiguous` and emits candidate
+method URIs instead of guessing. When a target includes parameters, for example
+`@see #parse(String, int)`, CoCoX matches those parameter types against source
+and erased parameter types.
+
 Call graph arrays are normalized edge objects, not raw strings:
 
 ```text

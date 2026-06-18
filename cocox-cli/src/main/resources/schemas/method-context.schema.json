@@ -92,7 +92,23 @@
       "additionalProperties": true
     },
     "documentation_metrics": {"type": "object"},
-    "javadoc_metadata": {"type": "object"},
+    "javadoc_metadata": {
+      "type": "object",
+      "properties": {
+        "see": {"type": "array"},
+        "inline_links": {"type": "array"},
+        "javadoc_references": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/javadocReference"}
+        },
+        "file_references": {"type": "array"},
+        "structured_tags": {"type": "object"},
+        "uses_inheritdoc": {"type": "boolean"},
+        "inheritdoc_resolution": {"type": "string"},
+        "inherited_javadoc_candidates": {"type": "array"}
+      },
+      "additionalProperties": true
+    },
     "dynamic_features": {"type": "array"}
   },
   "$defs": {
@@ -107,6 +123,30 @@
         "method_name": {"type": "string"},
         "resolution": {"type": "string"},
         "context": {"type": "object"}
+      },
+      "additionalProperties": true
+    },
+    "javadocReference": {
+      "type": "object",
+      "required": ["tag", "raw", "target", "kind", "resolution"],
+      "properties": {
+        "tag": {"type": "string"},
+        "raw": {"type": "string"},
+        "target": {"type": "string"},
+        "label": {"type": "string"},
+        "kind": {"type": "string"},
+        "resolution": {"type": "string"},
+        "method_uri": {"type": "string"},
+        "field_uri": {"type": "string"},
+        "type_uri": {"type": "string"},
+        "resolved_class": {"type": "string"},
+        "referenced_member": {"type": "string"},
+        "candidate_method_uris": {"type": "array"},
+        "candidate_field_uris": {"type": "array"},
+        "ambiguity_reason": {"type": "string"},
+        "external_class": {"type": "string"},
+        "external_member": {"type": "string"},
+        "javadoc_excerpt": {"type": "string"}
       },
       "additionalProperties": true
     }

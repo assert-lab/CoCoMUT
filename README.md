@@ -1,6 +1,6 @@
 # CoCoX
 
-CoCoX (Code Context Extractor) is a tool for extracting method-level context from Java Syatems.
+CoCoX (Code Context Extractor) is a tool for extracting method-level context from Java systems.
 
 For each method, it writes one JSONL record containing:
 

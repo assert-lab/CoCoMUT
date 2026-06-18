@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -245,6 +246,114 @@ public class SourceModelEdgeCaseTest {
     }
 
     @Test
+    public void javadocReferencesResolveAmbiguousFieldsTypesInheritedAndExternalSymbols() throws Exception {
+        Path project = Files.createTempDirectory("cocox-javadoc-reference-resolution");
+        try {
+            write(project.resolve("src/main/java/demo/Base.java"), """
+                    package demo;
+
+                    /** Base docs. */
+                    public class Base {
+                        /** Token field docs. */
+                        protected static final String TOKEN = "x";
+
+                        /** Parent method docs.
+                         * @param input input text
+                         * @return parent result
+                         */
+                        public CharSequence inherited(CharSequence input) {
+                            return input;
+                        }
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/Helper.java"), """
+                    package demo;
+
+                    /** Helper type docs. */
+                    public class Helper {
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/Child.java"), """
+                    package demo;
+
+                    /** Child docs. */
+                    public class Child extends Base {
+                        /** Exercises Javadoc reference resolution.
+                         * @see #sameName
+                         * @see #sameName(String)
+                         * @see #TOKEN
+                         * @see Helper
+                         * @see #inherited(CharSequence)
+                         * @see java.util.List#add(Object)
+                         */
+                        public void focal() {
+                        }
+
+                        /** No-arg overload. */
+                        public void sameName() {
+                        }
+
+                        /** String overload. */
+                        public void sameName(String value) {
+                        }
+                    }
+                    """);
+
+            ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
+            SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
+                    .filter(method -> method.className().equals("demo.Child"))
+                    .filter(method -> method.methodName().equals("focal"))
+                    .findFirst()
+                    .orElseThrow();
+            SourceContext context = SourceBackends.spoon()
+                    .extractContext(model, focal.methodUri())
+                    .orElseThrow();
+
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> refs = (List<Map<String, Object>>) context.javadocMetadata()
+                    .get("javadoc_references");
+
+            Map<String, Object> ambiguous = referenceByTarget(refs, "#sameName");
+            assertEquals("overload_ambiguous", ambiguous.get("resolution"));
+            assertEquals("target_omits_parameter_types", ambiguous.get("ambiguity_reason"));
+            assertTrue(ambiguous.get("candidate_method_uris").toString().contains("sameName():void"));
+            assertTrue(ambiguous.get("candidate_method_uris").toString()
+                    .contains("sameName(java.lang.String):void"));
+
+            Map<String, Object> exactOverload = referenceByTarget(refs, "#sameName(String)");
+            assertEquals("resolved_method", exactOverload.get("resolution"));
+            assertTrue(exactOverload.get("method_uri").toString()
+                    .contains("sameName(java.lang.String):void"));
+
+            Map<String, Object> inheritedField = referenceByTarget(refs, "#TOKEN");
+            assertEquals("field_reference", inheritedField.get("kind"));
+            assertEquals("resolved_inherited_field", inheritedField.get("resolution"));
+            assertEquals("java.lang.String", inheritedField.get("field_erased_type"));
+            assertTrue(inheritedField.get("field_uri").toString().contains("Base.TOKEN:java.lang.String"));
+            assertTrue(inheritedField.get("javadoc_excerpt").toString().contains("Token field docs"));
+
+            Map<String, Object> type = referenceByTarget(refs, "Helper");
+            assertEquals("resolved_type", type.get("resolution"));
+            assertTrue(type.get("type_uri").toString().contains("Helper.java#demo.Helper"));
+            assertTrue(type.get("class_javadoc_excerpt").toString().contains("Helper type docs"));
+            assertTrue(type.containsKey("class_hierarchy"));
+
+            Map<String, Object> inheritedMethod = referenceByTarget(refs, "#inherited(CharSequence)");
+            assertEquals("resolved_inherited_method", inheritedMethod.get("resolution"));
+            assertEquals("demo.Base", inheritedMethod.get("inherited_from"));
+            assertTrue(inheritedMethod.get("method_uri").toString()
+                    .contains("Base.inherited(java.lang.CharSequence):java.lang.CharSequence"));
+
+            Map<String, Object> external = referenceByTarget(refs, "java.util.List#add(Object)");
+            assertEquals("external_symbol", external.get("resolution"));
+            assertEquals("java.util.List", external.get("external_class"));
+            assertEquals("add(Object)", external.get("external_member"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void spoonAutoResolutionUsesClasspathWhenCompiledClassesExist() throws Exception {
         TestFixtures.ensureMinimalMavenProjectCompiled();
         ProjectMetadata metadata = new ProjectAnalyzer(TestFixtures.minimalMavenProjectRoot()).analyze();
@@ -267,6 +376,13 @@ public class SourceModelEdgeCaseTest {
     private static void write(Path path, String text) throws Exception {
         Files.createDirectories(path.getParent());
         Files.writeString(path, text, StandardCharsets.UTF_8);
+    }
+
+    private static Map<String, Object> referenceByTarget(List<Map<String, Object>> references, String target) {
+        return references.stream()
+                .filter(reference -> target.equals(reference.get("target")))
+                .findFirst()
+                .orElseThrow();
     }
 
     private static void deleteRecursively(Path root) throws Exception {
