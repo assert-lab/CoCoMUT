@@ -13,10 +13,15 @@ The tool is intentionally source/static-analysis based. It does not execute the 
 
 ## Javadoc Standards Basis
 
-CoCoX parses Javadoc references against the Oracle/JDK standard doclet model,
-not against Apache Commons Lang-specific conventions. In particular,
-`@see`, `{@link ...}`, and `{@linkplain ...}` are interpreted using the
-standard program-element reference form:
+CoCoX parses common Javadoc tags using the official Oracle/JDK Javadoc syntax
+and standard doclet model, not repository-specific conventions. This applies to
+the common documentation tags and inline tags that matter for method-context
+mining, including `@param`, `@return`, `@throws` / `@exception`, `@since`,
+`@deprecated`, `@see`, `{@link ...}`, `{@linkplain ...}`, `{@code ...}`,
+`{@literal ...}`, `{@value ...}`, and `{@inheritDoc}`.
+
+For references, `@see`, `{@link ...}`, and `{@linkplain ...}` are interpreted
+using the standard program-element reference form:
 
 ```text
 module/package.Type#member optional-label
@@ -27,12 +32,21 @@ CoCoX also recognizes the standard `@see "text"` and
 to CoCoX URIs; external JDK/library references are kept as symbol-level
 metadata only, without fetching external Javadoc text.
 
-The main references for this behavior are the JDK documentation-comment
-specification for the standard doclet and the Javadoc tool reference. These
-specifications are versioned with the JDK. The core `@see` and `{@link ...}`
-forms are long-standing and stable; newer JDKs add or extend features such as
-module prefixes, inline `{@return ...}`, `{@snippet ...}`, and Markdown
-documentation comments.
+Official sources used:
+
+- JDK 17 documentation-comment specification for the standard doclet:
+  <https://docs.oracle.com/en/java/javase/17/docs/specs/javadoc/doc-comment-spec.html>
+- JDK 25 documentation-comment specification for the standard doclet:
+  <https://docs.oracle.com/en/java/javase/25/docs/specs/javadoc/doc-comment-spec.html>
+- JDK 8 Javadoc tool reference:
+  <https://docs.oracle.com/javase/8/docs/technotes/tools/windows/javadoc.html>
+
+These specifications are versioned with the JDK. The core block tags, inline
+tags, `@see`, and `{@link ...}` forms are long-standing and stable. Newer JDKs
+add or extend features such as module prefixes, inline `{@return ...}`,
+`{@snippet ...}`, and Markdown documentation comments; CoCoX treats
+version-specific features explicitly instead of inferring rules from a single
+project such as Apache Commons Lang.
 
 ## Repository Shape
 
