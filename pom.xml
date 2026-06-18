@@ -5,13 +5,13 @@
                               http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.assertlab.context4docugen</groupId>
-    <artifactId>context4docugen</artifactId>
+    <groupId>org.assertlab.cocox</groupId>
+    <artifactId>cocox</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
-    <name>Context4DocuGen — Parent</name>
+    <name>CoCoX — Parent</name>
     <description>Static Java method-context extraction for documentation research and documentation-generation systems.</description>
-    <url>https://github.com/assert-lab/Context4DocuGen</url>
+    <url>https://github.com/assert-lab/CoCoX</url>
 
     <licenses>
         <license>
@@ -30,20 +30,20 @@
     </developers>
 
     <scm>
-        <connection>scm:git:https://github.com/assert-lab/Context4DocuGen.git</connection>
-        <developerConnection>scm:git:https://github.com/assert-lab/Context4DocuGen.git</developerConnection>
-        <url>https://github.com/assert-lab/Context4DocuGen</url>
+        <connection>scm:git:https://github.com/assert-lab/CoCoX.git</connection>
+        <developerConnection>scm:git:https://github.com/assert-lab/CoCoX.git</developerConnection>
+        <url>https://github.com/assert-lab/CoCoX</url>
         <tag>HEAD</tag>
     </scm>
 
     <issueManagement>
         <system>GitHub Issues</system>
-        <url>https://github.com/assert-lab/Context4DocuGen/issues</url>
+        <url>https://github.com/assert-lab/CoCoX/issues</url>
     </issueManagement>
 
     <modules>
         <module>analyzer-core</module>
-        <module>context4docugen-cli</module>
+        <module>cocox-cli</module>
         <module>analyzer-tests</module>
     </modules>
 
@@ -81,11 +81,6 @@
                 <version>${sootup.version}</version>
             </dependency>
             <dependency>
-                <groupId>com.opencsv</groupId>
-                <artifactId>opencsv</artifactId>
-                <version>5.9</version>
-            </dependency>
-            <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-databind</artifactId>
                 <version>2.15.2</version>
@@ -107,13 +102,13 @@
             </dependency>
             <!-- Internal: analyzer-tests depends on analyzer-core -->
             <dependency>
-                <groupId>org.assertlab.context4docugen</groupId>
+                <groupId>org.assertlab.cocox</groupId>
                 <artifactId>analyzer-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.assertlab.context4docugen</groupId>
-                <artifactId>context4docugen-cli</artifactId>
+                <groupId>org.assertlab.cocox</groupId>
+                <artifactId>cocox-cli</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>
@@ -128,7 +123,7 @@
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>3.0.0-M9</version>
                     <configuration>
-                        <excludedGroups>org.assertlab.context4docugen.SlowTests</excludedGroups>
+                        <excludedGroups>org.assertlab.cocox.SlowTests</excludedGroups>
                     </configuration>
                 </plugin>
                 <plugin>
@@ -186,7 +181,7 @@
                             <artifactId>maven-surefire-plugin</artifactId>
                             <version>3.0.0-M9</version>
                             <configuration>
-                                <groups>org.assertlab.context4docugen.SlowTests</groups>
+                                <groups>org.assertlab.cocox.SlowTests</groups>
                                 <excludedGroups/>
                             </configuration>
                         </plugin>

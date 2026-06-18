@@ -1,2 +1,0 @@
-focal_method|test_prefix|docstring|id
-public <T> T choose(final T first, T second) {\n        return first != null ? first : second;\n    }||/** Generic parameter fixture. */|generic_choose

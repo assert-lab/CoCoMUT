@@ -6,13 +6,13 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>org.assertlab.context4docugen</groupId>
-        <artifactId>context4docugen</artifactId>
+        <groupId>org.assertlab.cocox</groupId>
+        <artifactId>cocox</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>analyzer-tests</artifactId>
-    <name>Context4DocuGen — Analyzer Tests</name>
+    <name>CoCoX — Analyzer Tests</name>
 
     <!--
         This module has no src/main/java — only src/test/java.
@@ -23,13 +23,13 @@
     <dependencies>
         <!-- Bring in all production code + its transitive deps -->
         <dependency>
-            <groupId>org.assertlab.context4docugen</groupId>
+            <groupId>org.assertlab.cocox</groupId>
             <artifactId>analyzer-core</artifactId>
             <!-- compile scope so test classes can reference production classes -->
         </dependency>
         <dependency>
-            <groupId>org.assertlab.context4docugen</groupId>
-            <artifactId>context4docugen-cli</artifactId>
+            <groupId>org.assertlab.cocox</groupId>
+            <artifactId>cocox-cli</artifactId>
         </dependency>
         <!-- Test framework -->
         <dependency>

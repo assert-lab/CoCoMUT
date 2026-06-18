@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://assert-lab.github.io/context4docugen/schemas/method-context.schema.json",
-  "title": "Context4DocuGen Method Context",
+  "$id": "https://assert-lab.github.io/cocox/schemas/method-context.schema.json",
+  "title": "CoCoX Method Context",
   "type": "object",
   "required": ["MUT", "metadata", "provenance", "documentation_metrics", "javadoc_metadata", "dynamic_features"],
   "properties": {
@@ -12,6 +12,8 @@
         "method_name",
         "source_set",
         "signature",
+        "return_type",
+        "erased_return_type",
         "qualified_name",
         "parameters",
         "code",
@@ -20,10 +22,15 @@
         "source_context"
       ],
       "properties": {
-        "method_uri": {"type": "string"},
+        "method_uri": {
+          "type": "string",
+          "description": "Canonical CoCoX method URI: relative/path.java#qualified.Class.method(erasedParamTypes):erasedReturnType"
+        },
         "method_name": {"type": "string"},
         "source_set": {"type": "string"},
         "signature": {"type": "string"},
+        "return_type": {"type": "string"},
+        "erased_return_type": {"type": "string"},
         "qualified_name": {"type": "string"},
         "line_number": {"type": "integer"},
         "parameters": {"type": "array"},
@@ -45,8 +52,14 @@
       },
       "additionalProperties": true
     },
-    "callers": {"type": "array"},
-    "callees": {"type": "array"},
+    "callers": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/callGraphEdge"}
+    },
+    "callees": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/callGraphEdge"}
+    },
     "metadata": {
       "type": "object",
       "required": [
@@ -79,8 +92,80 @@
       "additionalProperties": true
     },
     "documentation_metrics": {"type": "object"},
-    "javadoc_metadata": {"type": "object"},
-    "dynamic_features": {"type": "array"}
+    "javadoc_metadata": {
+      "type": "object",
+      "properties": {
+        "see": {"type": "array"},
+        "inline_links": {"type": "array"},
+        "javadoc_references": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/javadocReference"}
+        },
+        "file_references": {"type": "array"},
+        "structured_tags": {"type": "object"},
+        "uses_inheritdoc": {"type": "boolean"},
+        "inheritdoc_resolution": {"type": "string"},
+        "inherited_javadoc_candidates": {"type": "array"}
+      },
+      "additionalProperties": true
+    },
+    "dynamic_features": {"type": "array"},
+    "selection": {
+      "type": "object",
+      "properties": {
+        "kind": {"type": "string"},
+        "uri": {"type": "string"},
+        "selector": {"type": "string"},
+        "targets": {"type": "array"}
+      },
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "callGraphEdge": {
+      "type": "object",
+      "required": ["kind", "method_uri", "raw_signature", "declaring_class", "method_name", "resolution"],
+      "properties": {
+        "kind": {"type": "string"},
+        "method_uri": {"type": "string"},
+        "raw_signature": {"type": "string"},
+        "declaring_class": {"type": "string"},
+        "method_name": {"type": "string"},
+        "resolution": {"type": "string"},
+        "context": {"type": "object"}
+      },
+      "additionalProperties": true
+    },
+    "javadocReference": {
+      "type": "object",
+      "required": ["tag", "raw", "target", "kind", "resolution"],
+      "properties": {
+        "tag": {"type": "string"},
+        "raw": {"type": "string"},
+        "target": {"type": "string"},
+        "label": {"type": "string"},
+        "text": {"type": "string"},
+        "kind": {"type": "string"},
+        "resolution": {"type": "string"},
+        "method_uri": {"type": "string"},
+        "field_uri": {"type": "string"},
+        "type_uri": {"type": "string"},
+        "referenced_method": {"type": "object"},
+        "field_javadoc": {"type": "string"},
+        "class_javadoc": {"type": "string"},
+        "resolved_class": {"type": "string"},
+        "referenced_member": {"type": "string"},
+        "candidate_method_uris": {"type": "array"},
+        "candidate_field_uris": {"type": "array"},
+        "ambiguity_reason": {"type": "string"},
+        "external_class": {"type": "string"},
+        "external_member": {"type": "string"},
+        "external_resolution": {"type": "string"},
+        "external_member_kind": {"type": "string"},
+        "external_member_resolution": {"type": "string"}
+      },
+      "additionalProperties": true
+    }
   },
   "additionalProperties": true
 }

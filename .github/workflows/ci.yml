@@ -27,5 +27,5 @@ jobs:
 
       - name: CLI smoke test
         run: |
-          java -jar context4docugen-cli/target/context4docugen-cli-1.0-SNAPSHOT-all.jar --help
-          java -jar context4docugen-cli/target/context4docugen-cli-1.0-SNAPSHOT-all.jar validate --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project
+          java -jar cocox-cli/target/cocox-cli-1.0-SNAPSHOT-all.jar --help
+          java -jar cocox-cli/target/cocox-cli-1.0-SNAPSHOT-all.jar validate --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project

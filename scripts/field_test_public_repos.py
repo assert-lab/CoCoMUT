@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run C4DG against a filtered sample of public Java repositories.
+"""Run CoCoX against a filtered sample of public Java repositories.
 
 The script expects the repo-mining CSV used in this workspace and writes
 resume-safe evidence under target/field-tests/public-repos/.
@@ -192,7 +192,7 @@ def run_extraction(
     shutil.rmtree(artifact_dir, ignore_errors=True)
     artifact_dir.mkdir(parents=True, exist_ok=True)
     command = [
-        str(root / "bin" / "c4dg"),
+        str(root / "bin" / "cocox"),
         "extract",
         "--project",
         str(checkout),
@@ -277,11 +277,11 @@ def run_repo(
     env = os.environ.copy()
     env.setdefault("MAVEN_OPTS", "-Xmx2g")
     env.setdefault("JAVA_TOOL_OPTIONS", "-Xmx2g")
-    env.setdefault("C4DG_COMPILE_TIMEOUT_SECONDS", str(compile_timeout))
+    env.setdefault("COCOX_COMPILE_TIMEOUT_SECONDS", str(compile_timeout))
     if java_home:
         env["JAVA_HOME"] = java_home
         env["PATH"] = str(Path(java_home) / "bin") + os.pathsep + env.get("PATH", "")
-    log_path = logs / f"{safe}.c4dg.log"
+    log_path = logs / f"{safe}.cocox.log"
     start = time.time()
     status, data, tail = run_extraction(root, checkout, artifact_dir, log_path, timeout, env,
                                         None, None, resolution, call_graph, source_set)
@@ -292,7 +292,7 @@ def run_repo(
     should_retry = status is None or status != 0 or "Java heap space" in tail or "OutOfMemoryError" in tail
     if should_retry and retry_max_source_files > 0:
         retry_mode = f"max_source_files={retry_max_source_files}"
-        retry_log = logs / f"{safe}.c4dg.retry.log"
+        retry_log = logs / f"{safe}.cocox.retry.log"
         status, data, retry_tail = run_extraction(
             root, checkout, artifact_dir, retry_log, timeout, env, retry_max_source_files, None,
             resolution, call_graph, source_set)
@@ -303,7 +303,7 @@ def run_repo(
     should_retry_methods = status != 0 and not timed_out_or_oom
     if should_retry_methods and retry_max_methods > 0:
         retry_mode = f"max_source_files={retry_max_source_files};max_methods={retry_max_methods}"
-        retry_log = logs / f"{safe}.c4dg.retry-max-methods.log"
+        retry_log = logs / f"{safe}.cocox.retry-max-methods.log"
         status, data, retry_tail = run_extraction(
             root,
             checkout,
@@ -324,7 +324,7 @@ def run_repo(
         fallback_source_set = "main,unknown"
         active_source_set = fallback_source_set
         retry_mode = f"{retry_mode};source_set={fallback_source_set}"
-        retry_log = logs / f"{safe}.c4dg.retry-source-set.log"
+        retry_log = logs / f"{safe}.cocox.retry-source-set.log"
         status, data, retry_tail = run_extraction(
             root,
             checkout,
@@ -351,7 +351,7 @@ def run_repo(
             f"{retry_mode};smoke_resolution=noclasspath;smoke_call_graph=none;"
             f"smoke_max_source_files={retry_smoke_source_files};smoke_max_methods={retry_smoke_methods}"
         )
-        retry_log = logs / f"{safe}.c4dg.retry-smoke.log"
+        retry_log = logs / f"{safe}.cocox.retry-smoke.log"
         status, data, retry_tail = run_extraction(
             root,
             checkout,
@@ -478,16 +478,16 @@ def main() -> int:
                         help="Last-resort method cap for timeout/OOM repos. Use 0 to disable.")
     parser.add_argument("--resolution", default="noclasspath",
                         choices=["noclasspath", "classpath", "auto"],
-                        help="C4DG source resolution mode.")
+                        help="CoCoX source resolution mode.")
     parser.add_argument("--call-graph", default="none",
                         choices=["none", "cha", "rta", "auto"],
-                        help="C4DG call graph mode.")
+                        help="CoCoX call graph mode.")
     parser.add_argument("--source-set", default="all",
-                        help="C4DG source-set filter: all, main, test, integration_test, generated, example, unknown.")
+                        help="CoCoX source-set filter: all, main, test, integration_test, generated, example, unknown.")
     parser.add_argument("--compile-timeout", type=int, default=120,
                         help="Per-repository Maven/Gradle compile timeout in seconds for auto/compile runs.")
     parser.add_argument("--java-home", default="",
-                        help="Optional JAVA_HOME for C4DG and build-tool attempts.")
+                        help="Optional JAVA_HOME for CoCoX and build-tool attempts.")
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parents[1]

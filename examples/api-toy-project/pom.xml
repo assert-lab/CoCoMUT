@@ -3,8 +3,8 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.assertlab.context4docugen.examples</groupId>
-    <artifactId>c4dg-api-toy-project</artifactId>
+    <groupId>org.assertlab.cocox.examples</groupId>
+    <artifactId>cocox-api-toy-project</artifactId>
     <version>0.1.0-SNAPSHOT</version>
 
     <properties>
@@ -15,7 +15,7 @@
 
     <dependencies>
         <dependency>
-            <groupId>org.assertlab.context4docugen</groupId>
+            <groupId>org.assertlab.cocox</groupId>
             <artifactId>analyzer-core</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>

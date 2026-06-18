@@ -1,6 +1,6 @@
 # Contributing
 
-Context4DocuGen is a Java 17 Maven project.
+CoCoX is a Java 17 Maven project.
 
 ## Build
 
@@ -18,14 +18,14 @@ scripts/build_release_jar.sh
 ## CLI Smoke Test
 
 ```bash
-./bin/c4dg validate --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project
-./bin/c4dg extract --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project --scope entry-points --call-graph none
+./bin/cocox validate --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project
+./bin/cocox extract --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project --scope entry-points --call-graph none
 ```
 
 ## Development Notes
 
 - Keep core extraction code in `analyzer-core`.
-- Keep CLI-specific code in `context4docugen-cli`.
+- Keep CLI-specific code in `cocox-cli`.
 - Keep generated outputs out of git.
 - Add focused tests for parser, method identity, JSON output, and CLI behavior.
 - Do not add benchmark repositories or generated research artifacts to the product repository.

@@ -1,0 +1,169 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assert-lab.github.io/cocox/schemas/method-context.schema.json",
+  "title": "CoCoX Method Context",
+  "type": "object",
+  "required": ["MUT", "metadata", "provenance", "documentation_metrics", "javadoc_metadata", "dynamic_features"],
+  "properties": {
+    "MUT": {
+      "type": "object",
+      "required": [
+        "method_uri",
+        "method_name",
+        "source_set",
+        "signature",
+        "return_type",
+        "erased_return_type",
+        "qualified_name",
+        "parameters",
+        "code",
+        "javadoc",
+        "class_hierarchy",
+        "source_context"
+      ],
+      "properties": {
+        "method_uri": {
+          "type": "string",
+          "description": "Canonical CoCoX method URI: relative/path.java#qualified.Class.method(erasedParamTypes):erasedReturnType"
+        },
+        "method_name": {"type": "string"},
+        "source_set": {"type": "string"},
+        "signature": {"type": "string"},
+        "return_type": {"type": "string"},
+        "erased_return_type": {"type": "string"},
+        "qualified_name": {"type": "string"},
+        "line_number": {"type": "integer"},
+        "parameters": {"type": "array"},
+        "annotations": {"type": "array"},
+        "throws": {"type": "array"},
+        "lines_of_code": {"type": "integer"},
+        "cyclomatic_complexity": {"type": "integer"},
+        "code": {
+          "type": "string",
+          "description": "Method or constructor source without leading Javadoc. Method annotations are kept."
+        },
+        "javadoc": {
+          "type": "string",
+          "description": "Method Javadoc stored separately from method source."
+        },
+        "class_hierarchy": {"type": "object"},
+        "source_context": {"type": "object"},
+        "class_javadoc": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "callers": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/callGraphEdge"}
+    },
+    "callees": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/callGraphEdge"}
+    },
+    "metadata": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "source_backend",
+        "source_backend_mode",
+        "method_identity",
+        "type_resolution",
+        "call_graph"
+      ],
+      "properties": {
+        "schema_version": {"type": "string"},
+        "source_backend": {"type": "string"},
+        "source_backend_mode": {"type": "string"},
+        "method_identity": {"type": "string"},
+        "type_resolution": {"type": "string"},
+        "call_graph": {"type": "object"}
+      },
+      "additionalProperties": true
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "method_source": {"type": "string"},
+        "method_matching": {"type": "string"},
+        "javadoc_extraction": {"type": "string"},
+        "compiled_project": {"type": "boolean"},
+        "context_confidence": {"type": "object"}
+      },
+      "additionalProperties": true
+    },
+    "documentation_metrics": {"type": "object"},
+    "javadoc_metadata": {
+      "type": "object",
+      "properties": {
+        "see": {"type": "array"},
+        "inline_links": {"type": "array"},
+        "javadoc_references": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/javadocReference"}
+        },
+        "file_references": {"type": "array"},
+        "structured_tags": {"type": "object"},
+        "uses_inheritdoc": {"type": "boolean"},
+        "inheritdoc_resolution": {"type": "string"},
+        "inherited_javadoc_candidates": {"type": "array"}
+      },
+      "additionalProperties": true
+    },
+    "dynamic_features": {"type": "array"},
+    "selection": {
+      "type": "object",
+      "properties": {
+        "kind": {"type": "string"},
+        "uri": {"type": "string"},
+        "selector": {"type": "string"},
+        "targets": {"type": "array"}
+      },
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "callGraphEdge": {
+      "type": "object",
+      "required": ["kind", "method_uri", "raw_signature", "declaring_class", "method_name", "resolution"],
+      "properties": {
+        "kind": {"type": "string"},
+        "method_uri": {"type": "string"},
+        "raw_signature": {"type": "string"},
+        "declaring_class": {"type": "string"},
+        "method_name": {"type": "string"},
+        "resolution": {"type": "string"},
+        "context": {"type": "object"}
+      },
+      "additionalProperties": true
+    },
+    "javadocReference": {
+      "type": "object",
+      "required": ["tag", "raw", "target", "kind", "resolution"],
+      "properties": {
+        "tag": {"type": "string"},
+        "raw": {"type": "string"},
+        "target": {"type": "string"},
+        "label": {"type": "string"},
+        "text": {"type": "string"},
+        "kind": {"type": "string"},
+        "resolution": {"type": "string"},
+        "method_uri": {"type": "string"},
+        "field_uri": {"type": "string"},
+        "type_uri": {"type": "string"},
+        "resolved_class": {"type": "string"},
+        "referenced_member": {"type": "string"},
+        "candidate_method_uris": {"type": "array"},
+        "candidate_field_uris": {"type": "array"},
+        "ambiguity_reason": {"type": "string"},
+        "external_class": {"type": "string"},
+        "external_member": {"type": "string"},
+        "external_resolution": {"type": "string"},
+        "external_member_kind": {"type": "string"},
+        "external_member_resolution": {"type": "string"},
+        "javadoc_excerpt": {"type": "string"}
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}
