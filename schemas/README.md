@@ -38,6 +38,7 @@ javadoc_metadata          Parsed @see, @since, inline links, deprecation, inheri
 dynamic_features          Static hints for reflection, proxies, service loaders, DI, native code
 original_docstring        Selected-CSV metadata, only when supplied
 test_prefix               Selected-CSV metadata, only when supplied
+selection                 Project/method/type/package target provenance
 ```
 
 Important `MUT` fields:
@@ -94,6 +95,11 @@ type_uri                  Canonical CoCoX URI for resolved project types
 candidate_method_uris     Present when omitted or explicit parameters are ambiguous
 ambiguity_reason          Why an overload could not be uniquely selected
 external_class/member     Symbol-only external reference when source/Javadoc is unavailable
+external_resolution       qualified_symbol|explicit_import|implicit_java_lang|
+                          wildcard_import_symbol|common_jdk_probe|unresolved
+external_member_kind      method|field|unknown for external members
+external_doc_source       source archive used for external_javadoc_excerpt, or unavailable
+external_javadoc_excerpt  Short JDK/dependency source excerpt when available
 javadoc_excerpt           Short Javadoc excerpt from the referenced project symbol
 ```
 

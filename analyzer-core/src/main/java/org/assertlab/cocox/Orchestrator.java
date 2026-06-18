@@ -46,6 +46,7 @@ public class Orchestrator {
     private Set<String> visibilityFilters = Set.of();
     private Set<String> includePathGlobs = Set.of();
     private Set<String> excludePathGlobs = Set.of();
+    private Set<SymbolTarget> targetFilters = Set.of();
     private Path outputDirectory;
     private String previousMaxSourceFilesProperty;
     private boolean sourceFileLimitConfigured;
@@ -152,6 +153,11 @@ public class Orchestrator {
 
     public Orchestrator setExcludePathGlobs(Set<String> excludePathGlobs) {
         this.excludePathGlobs = excludePathGlobs == null ? Set.of() : Set.copyOf(excludePathGlobs);
+        return this;
+    }
+
+    public Orchestrator setTargetFilters(Set<SymbolTarget> targetFilters) {
+        this.targetFilters = targetFilters == null ? Set.of() : Set.copyOf(targetFilters);
         return this;
     }
 
@@ -407,6 +413,7 @@ public class Orchestrator {
                 .filter(this::matchesMethodFilter)
                 .filter(this::matchesVisibilityFilter)
                 .filter(method -> matchesPathFilters(method, includeMatchers, excludeMatchers))
+                .filter(this::matchesTargetFilter)
                 .toList();
         executionReport.put("phase_2_selection_filter_before", beforeSelection);
         executionReport.put("phase_2_selection_filter_after", filtered.size());
@@ -416,6 +423,10 @@ public class Orchestrator {
         executionReport.put("phase_2_visibility_filter", visibilityFilters.isEmpty() ? "all" : String.join(",", visibilityFilters));
         executionReport.put("phase_2_include_path_filter", includePathGlobs.isEmpty() ? "all" : String.join(",", includePathGlobs));
         executionReport.put("phase_2_exclude_path_filter", excludePathGlobs.isEmpty() ? "none" : String.join(",", excludePathGlobs));
+        executionReport.put("phase_2_target_filter", targetFilters.isEmpty()
+                ? "all"
+                : targetFilters.stream().map(SymbolTarget::prefixedUri).toList());
+        executionReport.put("selection", selectionProvenance());
         return filtered;
     }
 
@@ -456,7 +467,7 @@ public class Orchestrator {
             Files.createDirectories(root);
             executionReport.put("output_directory", root.toString());
 
-            JsonGenerator jsonGen = new JsonGenerator(root, methodContexts, callGraphGenerator);
+            JsonGenerator jsonGen = new JsonGenerator(root, methodContexts, callGraphGenerator, selectionProvenance());
             Path jsonlPath = root.resolve(outputJsonlFilename());
             int jsonlRows = jsonGen.generateJsonLinesFile(methodContexts, jsonlPath);
 
@@ -627,6 +638,30 @@ public class Orchestrator {
         return included && !excluded;
     }
 
+    private boolean matchesTargetFilter(MethodInfo method) {
+        if (targetFilters.isEmpty()) {
+            return true;
+        }
+        String methodUri = method.getMethodUri();
+        String typeUri = typeUri(method);
+        String packageUri = packageUri(method);
+        for (SymbolTarget target : targetFilters) {
+            if (target.kind() == SymbolTarget.Kind.METHOD && methodUri.equals(target.uri())) {
+                return true;
+            }
+            if (target.kind() == SymbolTarget.Kind.TYPE && typeUri.equals(target.uri())) {
+                return true;
+            }
+            if (target.kind() == SymbolTarget.Kind.PACKAGE && packageUri.equals(target.uri())) {
+                return true;
+            }
+            if (target.kind() == SymbolTarget.Kind.PROJECT) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private Path relativeSourceFile(MethodInfo method) {
         try {
             return projectPath.toAbsolutePath().normalize()
@@ -634,6 +669,48 @@ public class Orchestrator {
         } catch (IllegalArgumentException e) {
             return method.getSourceFile();
         }
+    }
+
+    private String typeUri(MethodInfo method) {
+        return relativeSourceFile(method).toString().replace('\\', '/') + "#" + method.getClassname();
+    }
+
+    private String packageUri(MethodInfo method) {
+        String className = method.getClassname();
+        int lastDot = className.lastIndexOf('.');
+        String packageName = lastDot >= 0 ? className.substring(0, lastDot) : "";
+        Path relativeFile = relativeSourceFile(method);
+        Path packageDir = relativeFile.getParent();
+        Path packageInfo = packageDir != null ? packageDir.resolve("package-info.java") : Path.of("package-info.java");
+        Path absolutePackageInfo = projectPath.toAbsolutePath().normalize().resolve(packageInfo).normalize();
+        String anchor = Files.isRegularFile(absolutePackageInfo)
+                ? packageInfo.toString().replace('\\', '/')
+                : (packageDir != null ? packageDir.toString().replace('\\', '/') + "/" : "");
+        return anchor + "#" + packageName;
+    }
+
+    private Map<String, Object> selectionProvenance() {
+        Map<String, Object> selection = new LinkedHashMap<>();
+        if (targetFilters.isEmpty()) {
+            selection.put("kind", "project");
+            selection.put("uri", projectPath.toAbsolutePath().normalize().toString());
+            selection.put("selector", "project");
+            return selection;
+        }
+        if (targetFilters.size() == 1) {
+            SymbolTarget target = targetFilters.iterator().next();
+            selection.put("kind", target.kind().name().toLowerCase(Locale.ROOT));
+            selection.put("uri", target.uri());
+            selection.put("selector", target.prefixedUri());
+            return selection;
+        }
+        selection.put("kind", "multiple");
+        selection.put("targets", targetFilters.stream()
+                .map(target -> Map.of(
+                        "kind", target.kind().name().toLowerCase(Locale.ROOT),
+                        "uri", target.uri()))
+                .toList());
+        return selection;
     }
 
     private static List<PathMatcher> pathMatchers(Set<String> globs) {
@@ -662,6 +739,11 @@ public class Orchestrator {
     private String selectionLabel() {
         if (!methodFilters.isEmpty()) {
             return "method__" + String.join("__", methodFilters);
+        }
+        if (!targetFilters.isEmpty()) {
+            return targetFilters.size() == 1
+                    ? targetFilters.iterator().next().prefixedUri()
+                    : "targets__" + targetFilters.size();
         }
         if (!classFilters.isEmpty()) {
             return "class__" + String.join("__", classFilters);

@@ -23,6 +23,7 @@ public final class ContextRequest {
     private final Set<String> visibilities;
     private final Set<String> includePathGlobs;
     private final Set<String> excludePathGlobs;
+    private final Set<SymbolTarget> targets;
     private final Path outputDirectory;
 
     private ContextRequest(Builder builder) {
@@ -45,6 +46,7 @@ public final class ContextRequest {
         this.visibilities = Set.copyOf(builder.visibilities);
         this.includePathGlobs = Set.copyOf(builder.includePathGlobs);
         this.excludePathGlobs = Set.copyOf(builder.excludePathGlobs);
+        this.targets = Set.copyOf(builder.targets);
         this.outputDirectory = builder.outputDirectory != null
                 ? builder.outputDirectory.toAbsolutePath().normalize()
                 : null;
@@ -94,6 +96,10 @@ public final class ContextRequest {
         return outputDirectory;
     }
 
+    public Set<SymbolTarget> targets() {
+        return targets;
+    }
+
     AnalysisOptions toAnalysisOptions() {
         AnalysisOptions.Builder builder = AnalysisOptions.builder()
                 .scope(methodSelection.toScope())
@@ -110,6 +116,7 @@ public final class ContextRequest {
                 .visibilities(visibilities)
                 .includePathGlobs(includePathGlobs)
                 .excludePathGlobs(excludePathGlobs)
+                .targets(targets)
                 .outputDirectory(outputDirectory);
         if (methodSelection.kind() == MethodSelection.Kind.SELECTED_CSV) {
             builder.selectedCsv(methodSelection.selectedCsv());
@@ -133,6 +140,7 @@ public final class ContextRequest {
         private Set<String> visibilities = Set.of();
         private Set<String> includePathGlobs = Set.of();
         private Set<String> excludePathGlobs = Set.of();
+        private Set<SymbolTarget> targets = Set.of();
         private Path outputDirectory;
 
         public Builder projectRoot(Path projectRoot) {
@@ -215,6 +223,32 @@ public final class ContextRequest {
             return this;
         }
 
+        public Builder targets(Set<SymbolTarget> targets) {
+            this.targets = targets == null ? Set.of() : Set.copyOf(targets);
+            return this;
+        }
+
+        public Builder target(SymbolTarget target) {
+            this.targets = target == null ? this.targets : union(this.targets, Set.of(target));
+            return this;
+        }
+
+        public Builder targetUri(String targetUri) {
+            return target(SymbolTarget.parse(targetUri));
+        }
+
+        public Builder methodUri(String methodUri) {
+            return target(SymbolTarget.method(methodUri));
+        }
+
+        public Builder typeUri(String typeUri) {
+            return target(SymbolTarget.type(typeUri));
+        }
+
+        public Builder packageUri(String packageUri) {
+            return target(SymbolTarget.packageTarget(packageUri));
+        }
+
         public Builder outputDirectory(Path outputDirectory) {
             this.outputDirectory = outputDirectory;
             return this;
@@ -222,6 +256,17 @@ public final class ContextRequest {
 
         public ContextRequest build() {
             return new ContextRequest(this);
+        }
+
+        private static Set<SymbolTarget> union(Set<SymbolTarget> left, Set<SymbolTarget> right) {
+            java.util.LinkedHashSet<SymbolTarget> result = new java.util.LinkedHashSet<>();
+            if (left != null) {
+                result.addAll(left);
+            }
+            if (right != null) {
+                result.addAll(right);
+            }
+            return Set.copyOf(result);
         }
     }
 }

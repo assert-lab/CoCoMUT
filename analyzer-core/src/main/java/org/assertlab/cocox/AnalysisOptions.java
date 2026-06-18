@@ -49,6 +49,7 @@ public final class AnalysisOptions {
     private final Set<String> visibilities;
     private final Set<String> includePathGlobs;
     private final Set<String> excludePathGlobs;
+    private final Set<SymbolTarget> targets;
     private final Path outputDirectory;
 
     private AnalysisOptions(Builder builder) {
@@ -67,6 +68,7 @@ public final class AnalysisOptions {
         this.visibilities = Collections.unmodifiableSet(new LinkedHashSet<>(builder.visibilities));
         this.includePathGlobs = Collections.unmodifiableSet(new LinkedHashSet<>(builder.includePathGlobs));
         this.excludePathGlobs = Collections.unmodifiableSet(new LinkedHashSet<>(builder.excludePathGlobs));
+        this.targets = Collections.unmodifiableSet(new LinkedHashSet<>(builder.targets));
         this.outputDirectory = builder.outputDirectory;
     }
 
@@ -138,6 +140,10 @@ public final class AnalysisOptions {
         return excludePathGlobs;
     }
 
+    public Set<SymbolTarget> targets() {
+        return targets;
+    }
+
     public Path outputDirectory() {
         return outputDirectory;
     }
@@ -170,6 +176,7 @@ public final class AnalysisOptions {
         private Set<String> visibilities = new LinkedHashSet<>();
         private Set<String> includePathGlobs = new LinkedHashSet<>();
         private Set<String> excludePathGlobs = new LinkedHashSet<>();
+        private Set<SymbolTarget> targets = new LinkedHashSet<>();
         private Path outputDirectory;
 
         public Builder scope(Scope scope) {
@@ -250,6 +257,46 @@ public final class AnalysisOptions {
 
         public Builder excludePathGlobs(Set<String> excludePathGlobs) {
             this.excludePathGlobs = normalizeNonBlank(excludePathGlobs);
+            return this;
+        }
+
+        public Builder targets(Set<SymbolTarget> targets) {
+            this.targets = targets == null ? new LinkedHashSet<>() : new LinkedHashSet<>(targets);
+            return this;
+        }
+
+        public Builder target(SymbolTarget target) {
+            if (target != null) {
+                this.targets.add(target);
+            }
+            return this;
+        }
+
+        public Builder targetUri(String targetUri) {
+            if (targetUri != null && !targetUri.isBlank()) {
+                this.targets.add(SymbolTarget.parse(targetUri));
+            }
+            return this;
+        }
+
+        public Builder methodUri(String methodUri) {
+            if (methodUri != null && !methodUri.isBlank()) {
+                this.targets.add(SymbolTarget.method(methodUri));
+            }
+            return this;
+        }
+
+        public Builder typeUri(String typeUri) {
+            if (typeUri != null && !typeUri.isBlank()) {
+                this.targets.add(SymbolTarget.type(typeUri));
+            }
+            return this;
+        }
+
+        public Builder packageUri(String packageUri) {
+            if (packageUri != null && !packageUri.isBlank()) {
+                this.targets.add(SymbolTarget.packageTarget(packageUri));
+            }
             return this;
         }
 

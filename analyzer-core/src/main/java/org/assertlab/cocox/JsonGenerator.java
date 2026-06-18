@@ -31,6 +31,7 @@ public class JsonGenerator {
     private final Map<String, String> generationResults;
     private final Map<String, MethodContext> allContexts;
     private final CallGraphGenerator callGraphGenerator;
+    private final Map<String, Object> selection;
 
     public JsonGenerator(Path outputDirectory) {
         this(outputDirectory, Map.of(), null);
@@ -38,10 +39,16 @@ public class JsonGenerator {
 
     public JsonGenerator(Path outputDirectory, Map<String, MethodContext> allContexts,
                          CallGraphGenerator callGraphGenerator) {
+        this(outputDirectory, allContexts, callGraphGenerator, Map.of());
+    }
+
+    public JsonGenerator(Path outputDirectory, Map<String, MethodContext> allContexts,
+                         CallGraphGenerator callGraphGenerator, Map<String, Object> selection) {
         this.outputDirectory = Objects.requireNonNull(outputDirectory, "outputDirectory cannot be null");
         this.generationResults = new LinkedHashMap<>();
         this.allContexts = allContexts != null ? allContexts : Map.of();
         this.callGraphGenerator = callGraphGenerator;
+        this.selection = selection != null ? Map.copyOf(selection) : Map.of();
         try {
             Files.createDirectories(outputDirectory);
         } catch (Exception e) {
@@ -143,6 +150,9 @@ public class JsonGenerator {
         json.set("documentation_metrics", objectMapper.valueToTree(context.getDocumentationMetrics()));
         json.set("javadoc_metadata", objectMapper.valueToTree(context.getJavadocMetadata()));
         json.set("dynamic_features", objectMapper.valueToTree(context.getDynamicFeatures()));
+        if (!selection.isEmpty()) {
+            json.set("selection", objectMapper.valueToTree(selection));
+        }
 
         return json;
     }

@@ -6,9 +6,8 @@ This note documents two product concepts that are easy to confuse:
 - how CoCoX resolves Javadoc references such as `@see`, `{@link ...}`, and
   `{@linkplain ...}`.
 
-The current implementation already uses canonical method URIs and emits
-best-effort Javadoc reference metadata. Some URI selectors described below are
-the intended product direction and are not fully implemented yet.
+The current implementation uses canonical method URIs, supports type/package
+URI selection, and emits best-effort Javadoc reference metadata.
 
 ## Symbol URIs
 
@@ -86,9 +85,9 @@ src/main/java/org/example/#org.example
 This makes package selection reproducible without relying only on a textual
 prefix such as `--package org.example`.
 
-## Current Selection Model
+## Selection Model
 
-Current CLI selection supports:
+Current CLI selection supports both filters and first-class target URIs:
 
 ```text
 --project      repository root
@@ -96,14 +95,14 @@ Current CLI selection supports:
 --package      package-name filter
 --class        type/class-name filter
 --method       method-name or method-URI substring filter
+--target-uri   method:URI|type:URI|package:URI|project:URI
+--method-uri   exact method URI
+--type-uri     exact type URI
+--class-uri    alias for --type-uri
+--package-uri  exact package URI
 ```
 
-The important limitation is that methods are first-class URI targets, while
-packages and types are currently filters.
-
-## Planned URI Selectors
-
-The cleaner product model is:
+The URI selector form is:
 
 ```bash
 cocox extract --project /repo --target-uri method:src/main/java/org/example/Foo.java#org.example.Foo.parse(java.lang.String):int
@@ -111,7 +110,7 @@ cocox extract --project /repo --target-uri type:src/main/java/org/example/Foo.ja
 cocox extract --project /repo --target-uri package:src/main/java/org/example/package-info.java#org.example
 ```
 
-Equivalent explicit flags would also be reasonable:
+Equivalent explicit flags are also supported:
 
 ```bash
 cocox extract --project /repo --method-uri  ...
@@ -329,4 +328,3 @@ Future behavior:
 
 This should remain optional and provenance-rich because public repositories
 often have incomplete or non-compiling builds.
-

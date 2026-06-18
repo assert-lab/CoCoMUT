@@ -109,7 +109,17 @@
       },
       "additionalProperties": true
     },
-    "dynamic_features": {"type": "array"}
+    "dynamic_features": {"type": "array"},
+    "selection": {
+      "type": "object",
+      "properties": {
+        "kind": {"type": "string"},
+        "uri": {"type": "string"},
+        "selector": {"type": "string"},
+        "targets": {"type": "array"}
+      },
+      "additionalProperties": true
+    }
   },
   "$defs": {
     "callGraphEdge": {
@@ -146,6 +156,11 @@
         "ambiguity_reason": {"type": "string"},
         "external_class": {"type": "string"},
         "external_member": {"type": "string"},
+        "external_resolution": {"type": "string"},
+        "external_member_kind": {"type": "string"},
+        "external_member_resolution": {"type": "string"},
+        "external_doc_source": {"type": "string"},
+        "external_javadoc_excerpt": {"type": "string"},
         "javadoc_excerpt": {"type": "string"}
       },
       "additionalProperties": true

@@ -276,6 +276,9 @@ public class SourceModelEdgeCaseTest {
             write(project.resolve("src/main/java/demo/Child.java"), """
                     package demo;
 
+                    import java.util.Arrays;
+                    import java.util.regex.*;
+
                     /** Child docs. */
                     public class Child extends Base {
                         /** Exercises Javadoc reference resolution.
@@ -285,6 +288,9 @@ public class SourceModelEdgeCaseTest {
                          * @see Helper
                          * @see #inherited(CharSequence)
                          * @see java.util.List#add(Object)
+                         * @see Arrays#sort(byte[])
+                         * @see Long#MIN_VALUE
+                         * @see Pattern#DOTALL
                          */
                         public void focal() {
                         }
@@ -348,6 +354,27 @@ public class SourceModelEdgeCaseTest {
             assertEquals("external_symbol", external.get("resolution"));
             assertEquals("java.util.List", external.get("external_class"));
             assertEquals("add(Object)", external.get("external_member"));
+            assertEquals("method", external.get("external_member_kind"));
+
+            Map<String, Object> imported = referenceByTarget(refs, "Arrays#sort(byte[])");
+            assertEquals("external_symbol", imported.get("resolution"));
+            assertEquals("java.util.Arrays", imported.get("external_class"));
+            assertEquals("explicit_import", imported.get("external_resolution"));
+            assertEquals("method", imported.get("external_member_kind"));
+
+            Map<String, Object> javaLangField = referenceByTarget(refs, "Long#MIN_VALUE");
+            assertEquals("field_reference", javaLangField.get("kind"));
+            assertEquals("external_symbol", javaLangField.get("resolution"));
+            assertEquals("java.lang.Long", javaLangField.get("external_class"));
+            assertEquals("implicit_java_lang", javaLangField.get("external_resolution"));
+            assertEquals("field", javaLangField.get("external_member_kind"));
+
+            Map<String, Object> wildcardField = referenceByTarget(refs, "Pattern#DOTALL");
+            assertEquals("field_reference", wildcardField.get("kind"));
+            assertEquals("external_symbol", wildcardField.get("resolution"));
+            assertEquals("java.util.regex.Pattern", wildcardField.get("external_class"));
+            assertEquals("wildcard_import_symbol", wildcardField.get("external_resolution"));
+            assertEquals("field", wildcardField.get("external_member_kind"));
         } finally {
             deleteRecursively(project);
         }

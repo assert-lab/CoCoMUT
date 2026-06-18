@@ -126,6 +126,12 @@ Useful options:
 --package NAME                 Include package prefix, repeatable/comma-separated
 --class NAME                   Include fully qualified or simple class name
 --method NAME                  Include method name or method URI substring
+--target-uri KIND:URI          Exact target URI, where KIND is method, type,
+                                package, or project
+--method-uri URI               Exact method URI target
+--type-uri URI                 Exact type URI target: path#qualified.Type
+--class-uri URI                Alias for --type-uri
+--package-uri URI              Exact package URI target
 --visibility public|protected|package-private|private
                                 Include methods with matching visibility
 --include-path GLOB            Include source path glob relative to project root
@@ -176,6 +182,20 @@ selected thing, for example `package__org.example.api.jsonl`,
 Current package and class/type selection is filter-based. The intended product
 direction is URI-based selection with `method_uri`, `type_uri`, and
 `package_uri`; see [SYMBOL_AND_REFERENCE_MODEL.md](SYMBOL_AND_REFERENCE_MODEL.md).
+CoCoX already supports exact URI targets through `--target-uri`, `--method-uri`,
+`--type-uri` / `--class-uri`, and `--package-uri`.
+
+Examples:
+
+```bash
+./bin/cocox extract \
+  --project /path/to/java/project \
+  --type-uri 'src/main/java/org/example/Foo.java#org.example.Foo'
+
+./bin/cocox extract \
+  --project /path/to/java/project \
+  --package-uri 'src/main/java/org/example/package-info.java#org.example'
+```
 
 Validation examples:
 

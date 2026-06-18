@@ -50,6 +50,13 @@ doc-files/images/html references   39268
     not identify exactly one method;
   - symbol-only external class/member references when the source/Javadoc is not
     part of the parsed project;
+  - import-aware external reference resolution for explicit imports;
+  - language-defined `java.lang.*` resolution for simple JDK names;
+  - cautious common-JDK probing when the runtime can prove the class exists;
+  - external field-vs-method classification when reflection can prove the
+    member kind;
+  - optional JDK/dependency source-archive Javadoc excerpts when `src.zip` or
+    `*-sources.jar` is available;
   - short referenced Javadoc excerpts.
 - Javadoc metadata now includes `structured_tags` for:
   - `@param`;
@@ -66,21 +73,38 @@ doc-files/images/html references   39268
 
 ## Commons Lang Check
 
-Fresh no-call-graph extraction against the Apache Commons Lang checkout:
+Fresh no-call-graph extraction against the Apache Commons Lang checkout after
+import-aware external resolution:
 
 ```text
-rows                  4491
-resolved_refs          442
-external_refs           61
-structured_tag_rows   3116
-file_ref_rows           37
+rows                         4491
+raw @see refs                 644
+project resolved @see refs    310
+external symbol @see refs     272
+external URL @see refs         61
+unresolved @see refs            1
 ```
+
+External symbol resolution breakdown:
+
+```text
+explicit_import          77
+implicit_java_lang      150
+qualified_symbol         45
+external methods        223
+external fields          20
+external types           26
+unknown external members  3
+```
+
+No external Javadoc excerpts were found in this run because the available
+source archives did not contain the referenced JDK symbols.
 
 ## Still Missing
 
-- Deep semantic resolution for external JDK/library references such as
-  `java.util.List#add(Object)`. CoCoX now records these as symbol-only external
-  references; it does not yet load source or Javadoc jars for excerpts.
+- Deep semantic rendering for external JDK/library references. CoCoX now
+  resolves many of these as external symbols and attempts source-archive
+  excerpts, but it does not download missing source/Javadoc artifacts.
 - Full Javadoc doclet rendering semantics. CoCoX parses useful source-level
   context; it does not attempt to exactly reproduce generated Javadoc HTML.
 - Rich resolution for all label variants in handwritten `@see` text. The

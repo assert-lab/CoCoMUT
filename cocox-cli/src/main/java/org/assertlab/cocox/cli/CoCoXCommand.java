@@ -8,6 +8,7 @@ import org.assertlab.cocox.ExtractionReport;
 import org.assertlab.cocox.MethodSelection;
 import org.assertlab.cocox.ProjectAnalyzer;
 import org.assertlab.cocox.ProjectMetadata;
+import org.assertlab.cocox.SymbolTarget;
 import org.assertlab.cocox.source.ProjectModel;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -93,6 +94,21 @@ public final class CoCoXCommand implements Callable<Integer> {
         @Option(names = "--method", split = ",", description = "Include method name or method URI substring.")
         private Set<String> methods;
 
+        @Option(names = "--target-uri", split = ",",
+                description = "First-class target URI prefixed with method:, type:, package:, or project:.")
+        private Set<String> targetUris;
+
+        @Option(names = "--method-uri", split = ",", description = "Exact method URI target.")
+        private Set<String> methodUris;
+
+        @Option(names = {"--type-uri", "--class-uri"}, split = ",",
+                description = "Exact type/class URI target: path#qualified.Type.")
+        private Set<String> typeUris;
+
+        @Option(names = "--package-uri", split = ",",
+                description = "Exact package URI target: package-info path or package dir#qualified.package.")
+        private Set<String> packageUris;
+
         @Option(names = "--visibility", split = ",", description = "Include visibility: public, protected, package-private, private.")
         private Set<String> visibilities;
 
@@ -123,6 +139,7 @@ public final class CoCoXCommand implements Callable<Integer> {
                     .packages(emptyIfNull(packages))
                     .classes(emptyIfNull(classes))
                     .methods(emptyIfNull(methods))
+                    .targets(toTargets(targetUris, methodUris, typeUris, packageUris))
                     .visibilities(emptyIfNull(visibilities))
                     .includePathGlobs(emptyIfNull(includePaths))
                     .excludePathGlobs(emptyIfNull(excludePaths))
@@ -430,6 +447,28 @@ public final class CoCoXCommand implements Callable<Integer> {
 
     private static Set<String> emptyIfNull(Set<String> values) {
         return values == null ? Set.of() : values;
+    }
+
+    private static Set<SymbolTarget> toTargets(Set<String> targetUris, Set<String> methodUris,
+                                               Set<String> typeUris, Set<String> packageUris) {
+        java.util.LinkedHashSet<SymbolTarget> targets = new java.util.LinkedHashSet<>();
+        emptyIfNull(targetUris).stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(SymbolTarget::parse)
+                .forEach(targets::add);
+        emptyIfNull(methodUris).stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(SymbolTarget::method)
+                .forEach(targets::add);
+        emptyIfNull(typeUris).stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(SymbolTarget::type)
+                .forEach(targets::add);
+        emptyIfNull(packageUris).stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(SymbolTarget::packageTarget)
+                .forEach(targets::add);
+        return targets;
     }
 
     private static String normalize(String value) {

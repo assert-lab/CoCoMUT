@@ -1,6 +1,8 @@
 package org.assertlab.cocox;
 
 import org.assertlab.cocox.cli.CoCoXCommand;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.Test;
 import picocli.CommandLine;
 
@@ -15,6 +17,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 public class RobustExtractionRegressionTest {
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @Test
     public void maxSourceFilesLimitsParsedSourceForSmokeRuns() throws Exception {
@@ -111,6 +114,73 @@ public class RobustExtractionRegressionTest {
             List<String> rows = Files.readAllLines(jsonl);
             assertEquals(1, rows.size());
             assertTrue(rows.get(0).contains("demo.api.PublicApi.keep"));
+        } finally {
+            deleteRecursively(project);
+            deleteRecursively(output);
+        }
+    }
+
+    @Test
+    public void extractionSupportsTypeAndPackageUriTargetsWithSelectionProvenance() throws Exception {
+        Path project = Files.createTempDirectory("cocox-target-uri-project");
+        Path output = Files.createTempDirectory("cocox-target-uri-output");
+        try {
+            write(project.resolve("src/main/java/demo/api/package-info.java"), """
+                    /** API package docs. */
+                    package demo.api;
+                    """);
+            write(project.resolve("src/main/java/demo/api/PublicApi.java"), """
+                    package demo.api;
+                    public class PublicApi {
+                        public void keepOne() {}
+                        public void keepTwo() {}
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/other/OtherApi.java"), """
+                    package demo.other;
+                    public class OtherApi {
+                        public void drop() {}
+                    }
+                    """);
+
+            String typeUri = "src/main/java/demo/api/PublicApi.java#demo.api.PublicApi";
+            ExtractionReport typeReport = ContextExtractorService.createDefault().extract(ContextRequest.builder()
+                    .projectRoot(project)
+                    .methodSelection(MethodSelection.all())
+                    .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
+                    .outputMode(AnalysisOptions.OutputMode.JSONL)
+                    .outputDirectory(output.resolve("type"))
+                    .typeUri(typeUri)
+                    .build());
+
+            Path typeJsonl = output.resolve("type").resolve("type_src_main_java_demo_api_PublicApi.java#demo.api.PublicApi.jsonl");
+            assertTrue(typeReport.successful());
+            assertTrue(Files.isRegularFile(typeJsonl));
+            List<String> typeRows = Files.readAllLines(typeJsonl);
+            assertEquals(2, typeRows.size());
+            JsonNode typeSelection = MAPPER.readTree(typeRows.get(0)).get("selection");
+            assertEquals("type", typeSelection.get("kind").asText());
+            assertEquals(typeUri, typeSelection.get("uri").asText());
+
+            String packageUri = "src/main/java/demo/api/package-info.java#demo.api";
+            ExtractionReport packageReport = ContextExtractorService.createDefault().extract(ContextRequest.builder()
+                    .projectRoot(project)
+                    .methodSelection(MethodSelection.all())
+                    .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
+                    .outputMode(AnalysisOptions.OutputMode.JSONL)
+                    .outputDirectory(output.resolve("package"))
+                    .packageUri(packageUri)
+                    .build());
+
+            Path packageJsonl = output.resolve("package")
+                    .resolve("package_src_main_java_demo_api_package-info.java#demo.api.jsonl");
+            assertTrue(packageReport.successful());
+            assertTrue(Files.isRegularFile(packageJsonl));
+            List<String> packageRows = Files.readAllLines(packageJsonl);
+            assertEquals(2, packageRows.size());
+            JsonNode packageSelection = MAPPER.readTree(packageRows.get(0)).get("selection");
+            assertEquals("package", packageSelection.get("kind").asText());
+            assertEquals(packageUri, packageSelection.get("uri").asText());
         } finally {
             deleteRecursively(project);
             deleteRecursively(output);

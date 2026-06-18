@@ -176,6 +176,7 @@ public class AnalyzerFacade {
                 .setVisibilityFilters(options.visibilities())
                 .setIncludePathGlobs(options.includePathGlobs())
                 .setExcludePathGlobs(options.excludePathGlobs())
+                .setTargetFilters(options.targets())
                 .setOutputDirectory(options.outputDirectory());
     }
 }
