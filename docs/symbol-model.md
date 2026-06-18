@@ -186,10 +186,24 @@ resolution           resolved_method|resolved_type|resolved_field|
 method_uri           present for resolved project methods
 field_uri            present for resolved project fields
 type_uri             present for resolved project types
+referenced_method    compact source/Javadoc context for resolved project methods
+field_javadoc        full field Javadoc for resolved project fields
+class_javadoc        full class/type Javadoc for resolved project types
 external_class       present for external symbols
 external_member      present for external member symbols
 candidate_method_uris present when overload resolution is ambiguous
 ```
+
+For project-local method references, `referenced_method` intentionally embeds a
+compact method context rather than only an excerpt. It includes the referenced
+method URI, signature, source code without leading Javadoc, method Javadoc,
+parameters, return type, thrown exceptions, annotations, source set, and source
+line. CoCoX does not recursively embed that referenced method's callers/callees
+inside the Javadoc reference object, to avoid unbounded nested output.
+
+For project-local class/type and field references, CoCoX stores the full
+available Javadoc text as `class_javadoc` or `field_javadoc`. External
+JDK/library symbols remain symbol-only.
 
 ## Same-Class vs Typed-Class Member References
 

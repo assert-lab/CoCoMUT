@@ -89,13 +89,16 @@ resolution                resolved_type|resolved_method|resolved_field|
 method_uri                Canonical CoCoX URI for resolved project methods
 field_uri                 Canonical CoCoX URI for resolved project fields
 type_uri                  Canonical CoCoX URI for resolved project types
+referenced_method         Compact method context for resolved project methods:
+                          URI, signature, source, Javadoc, params, return, throws
+field_javadoc             Full field Javadoc for resolved project fields
+class_javadoc             Full class/type Javadoc for resolved project types
 candidate_method_uris     Present when omitted or explicit parameters are ambiguous
 ambiguity_reason          Why an overload could not be uniquely selected
 external_class/member     Symbol-only external reference when source/Javadoc is unavailable
 external_resolution       qualified_symbol|explicit_import|implicit_java_lang|
                           wildcard_import_symbol|common_jdk_probe|unresolved
 external_member_kind      method|field|unknown for external members
-javadoc_excerpt           Short Javadoc excerpt from the referenced project symbol
 ```
 
 CoCoX recognizes the standard doclet `@see` forms: quoted text entries,

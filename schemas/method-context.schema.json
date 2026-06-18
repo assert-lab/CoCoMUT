@@ -150,6 +150,9 @@
         "method_uri": {"type": "string"},
         "field_uri": {"type": "string"},
         "type_uri": {"type": "string"},
+        "referenced_method": {"type": "object"},
+        "field_javadoc": {"type": "string"},
+        "class_javadoc": {"type": "string"},
         "resolved_class": {"type": "string"},
         "referenced_member": {"type": "string"},
         "candidate_method_uris": {"type": "array"},
@@ -159,8 +162,7 @@
         "external_member": {"type": "string"},
         "external_resolution": {"type": "string"},
         "external_member_kind": {"type": "string"},
-        "external_member_resolution": {"type": "string"},
-        "javadoc_excerpt": {"type": "string"}
+        "external_member_resolution": {"type": "string"}
       },
       "additionalProperties": true
     }

@@ -268,6 +268,27 @@ Failure artifacts are written next to the normal outputs:
 method_context_failures.jsonl  when a discovered method cannot be contextualized
 ```
 
+## JSONL Viewer
+
+For manual inspection of generated method contexts, CoCoX ships a dependency-free
+research viewer:
+
+```bash
+python3 scripts/method_contexts_viewer.py /path/to/method_contexts.jsonl
+```
+
+You can also pass an output directory; the viewer recursively finds `*.jsonl`
+files:
+
+```bash
+python3 scripts/method_contexts_viewer.py /path/to/cocox_output
+```
+
+The viewer indexes JSONL by byte offset, so large outputs can be browsed without
+loading the whole file into memory. It displays method source, Javadoc,
+selection provenance, source context, Javadoc references, call graph context,
+documentation metrics, and the raw record.
+
 ## API Usage
 
 Add the dependency after installing the project locally:

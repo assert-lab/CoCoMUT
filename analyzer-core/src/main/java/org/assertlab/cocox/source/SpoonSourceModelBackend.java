@@ -1224,7 +1224,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             ref.put("method_uri", method.methodUri());
             ref.put("signature", method.className() + "." + method.signature());
             ref.put("source_set", method.sourceSet());
-            ref.put("javadoc_excerpt", excerpt(docComment(parsed.executablesByUri().get(method.methodUri()))));
+            ref.put("referenced_method", referencedMethodContext(parsed, method));
             if (inherited) {
                 ref.put("inherited_from", className);
             }
@@ -1270,7 +1270,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             ref.put("field_erased_type", field.erasedType());
             ref.put("field_modifiers", field.modifiers());
             ref.put("source_set", field.sourceSet());
-            ref.put("javadoc_excerpt", excerpt(field.javadoc()));
+            ref.put("field_javadoc", field.javadoc());
             if (inherited) {
                 ref.put("inherited_from", className);
             }
@@ -1352,9 +1352,45 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         ref.put("type_uri", typeUri(parsed.projectRoot(), type));
         ref.put("source_path", sourcePath(type));
         ref.put("line_number", lineNumber(type));
-        ref.put("class_javadoc_excerpt", excerpt(docComment(type)));
+        ref.put("class_javadoc", docComment(type));
         ref.put("class_hierarchy", type != null ? classHierarchy(type) : "");
         ref.put("hierarchy_resolution", hierarchyResolution(type));
+    }
+
+    private static Map<String, Object> referencedMethodContext(ParsedProject parsed, SourceMethod method) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        CtExecutable<?> executable = parsed.executablesByUri().get(method.methodUri());
+        CtType<?> owner = executable != null ? executable.getParent(CtType.class) : null;
+        details.put("method_uri", method.methodUri());
+        details.put("method_name", method.methodName());
+        details.put("qualified_name", method.className() + "." + method.methodName());
+        details.put("signature", method.className() + "." + method.signature());
+        details.put("source_set", method.sourceSet());
+        details.put("line_number", method.lineNumber());
+        details.put("visibility", method.visibility());
+        details.put("static", method.isStatic());
+        details.put("constructor", method.constructor());
+        details.put("return_type", method.returnType());
+        details.put("erased_return_type", method.erasedReturnType());
+        details.put("parameters", method.parameters().stream()
+                .map(SpoonSourceModelBackend::parameterContext)
+                .toList());
+        details.put("annotations", method.annotations());
+        details.put("throws", method.thrownExceptions());
+        details.put("code", executable != null ? sourceSlice(executable) : "");
+        details.put("javadoc", executable != null ? docComment(executable) : "");
+        details.put("class_javadoc", owner != null ? docComment(owner) : "");
+        return details;
+    }
+
+    private static Map<String, Object> parameterContext(SourceParameter parameter) {
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("name", parameter.name());
+        details.put("type", parameter.type());
+        details.put("erased_type", parameter.erasedType());
+        details.put("modifiers", parameter.modifiers());
+        details.put("annotations", parameter.annotations());
+        return details;
     }
 
     private static String resolveClassName(ParsedProject parsed, CtType<?> owner, String rawType) {

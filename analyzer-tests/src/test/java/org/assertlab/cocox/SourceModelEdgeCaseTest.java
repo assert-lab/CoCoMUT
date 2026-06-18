@@ -332,18 +332,22 @@ public class SourceModelEdgeCaseTest {
             assertEquals("resolved_method", exactOverload.get("resolution"));
             assertTrue(exactOverload.get("method_uri").toString()
                     .contains("sameName(java.lang.String):void"));
+            @SuppressWarnings("unchecked")
+            Map<String, Object> exactOverloadContext = (Map<String, Object>) exactOverload.get("referenced_method");
+            assertTrue(exactOverloadContext.get("code").toString().contains("public void sameName(String value)"));
+            assertTrue(exactOverloadContext.get("javadoc").toString().contains("String overload."));
 
             Map<String, Object> inheritedField = referenceByTarget(refs, "#TOKEN");
             assertEquals("field_reference", inheritedField.get("kind"));
             assertEquals("resolved_inherited_field", inheritedField.get("resolution"));
             assertEquals("java.lang.String", inheritedField.get("field_erased_type"));
             assertTrue(inheritedField.get("field_uri").toString().contains("Base.TOKEN:java.lang.String"));
-            assertTrue(inheritedField.get("javadoc_excerpt").toString().contains("Token field docs"));
+            assertTrue(inheritedField.get("field_javadoc").toString().contains("Token field docs"));
 
             Map<String, Object> type = referenceByTarget(refs, "Helper");
             assertEquals("resolved_type", type.get("resolution"));
             assertTrue(type.get("type_uri").toString().contains("Helper.java#demo.Helper"));
-            assertTrue(type.get("class_javadoc_excerpt").toString().contains("Helper type docs"));
+            assertTrue(type.get("class_javadoc").toString().contains("Helper type docs"));
             assertTrue(type.containsKey("class_hierarchy"));
 
             Map<String, Object> inheritedMethod = referenceByTarget(refs, "#inherited(CharSequence)");
@@ -351,6 +355,10 @@ public class SourceModelEdgeCaseTest {
             assertEquals("demo.Base", inheritedMethod.get("inherited_from"));
             assertTrue(inheritedMethod.get("method_uri").toString()
                     .contains("Base.inherited(java.lang.CharSequence):java.lang.CharSequence"));
+            @SuppressWarnings("unchecked")
+            Map<String, Object> inheritedMethodContext = (Map<String, Object>) inheritedMethod.get("referenced_method");
+            assertTrue(inheritedMethodContext.get("code").toString().contains("public CharSequence inherited"));
+            assertTrue(inheritedMethodContext.get("javadoc").toString().contains("Parent method docs"));
 
             Map<String, Object> external = referenceByTarget(refs, "java.util.List#add(Object)");
             assertEquals("external_symbol", external.get("resolution"));

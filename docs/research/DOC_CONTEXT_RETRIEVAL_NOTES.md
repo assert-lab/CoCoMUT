@@ -48,11 +48,13 @@ doc-files/images/html references   39268
   - HTML anchor `@see <a href="...">label</a>` entries;
   - module-prefixed `module/package.Type#member` references;
   - external URLs;
-  - project type references with `type_uri`, source path, class Javadoc excerpt,
+  - project type references with `type_uri`, source path, full class Javadoc,
     and hierarchy metadata;
-  - project method references resolved to CoCoX method URIs when possible;
+  - project method references resolved to CoCoX method URIs plus compact
+    referenced-method context: source, Javadoc, signature, params, return,
+    throws, annotations, and source location;
   - project field references resolved to `field_uri`, type, modifiers, and
-    Javadoc excerpt;
+    full field Javadoc;
   - superclass/interface method and field references when the target is a
     project-local inherited member;
   - precise overload ambiguity reports when omitted or explicit parameters do
@@ -63,8 +65,7 @@ doc-files/images/html references   39268
   - language-defined `java.lang.*` resolution for simple JDK names;
   - cautious common-JDK probing when the runtime can prove the class exists;
   - external field-vs-method classification when reflection can prove the
-    member kind;
-  - short referenced Javadoc excerpts.
+    member kind.
 - Javadoc metadata now includes `structured_tags` for:
   - `@param`;
   - `@return`;
