@@ -35,12 +35,6 @@ public class OrchestratorTest {
     }
 
     @Test
-    public void testOrchestratorCreateDefault() {
-        Orchestrator defaultOrch = Orchestrator.create(testProjectPath);
-        assertNotNull("Should create orchestrator with defaults", defaultOrch);
-    }
-
-    @Test
     public void testValidateConfiguration() {
         boolean valid = orchestrator.validateConfiguration();
         assertTrue("Should validate configuration for existing project", valid);
@@ -128,7 +122,7 @@ public class OrchestratorTest {
     @Test
     public void testOrchestratorNullProjectPath() {
         try {
-            new Orchestrator(null);
+            new Orchestrator((Path) null);
             fail("Should throw NullPointerException");
         } catch (NullPointerException e) {
             assertTrue("Should catch null project path", true);

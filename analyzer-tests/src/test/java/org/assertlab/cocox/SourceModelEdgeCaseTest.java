@@ -399,14 +399,14 @@ public class SourceModelEdgeCaseTest {
         ProjectMetadata metadata = new ProjectAnalyzer(TestFixtures.minimalMavenProjectRoot()).analyze();
         ProjectModel model = ProjectModel.from(metadata);
 
-        SourceMethod focal = SourceBackends.spoon(AnalysisOptions.SourceResolution.AUTO)
+        SourceMethod focal = SourceBackends.spoon(ContextRequest.SourceResolution.AUTO)
                 .findMethods(model)
                 .stream()
                 .filter(method -> method.methodName().equals("greet"))
                 .findFirst()
                 .orElseThrow();
 
-        SourceContext context = SourceBackends.spoon(AnalysisOptions.SourceResolution.AUTO)
+        SourceContext context = SourceBackends.spoon(ContextRequest.SourceResolution.AUTO)
                 .extractContext(model, focal.methodUri())
                 .orElseThrow();
 

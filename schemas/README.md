@@ -57,9 +57,9 @@ class_hierarchy           Source hierarchy and resolution confidence
 source_context            Field reads/writes, overload group, sibling methods
 ```
 
-CoCoX uses method URIs today and is moving toward the same `path#symbol`
-convention for type and package selection. See
-[../SYMBOL_AND_REFERENCE_MODEL.md](../SYMBOL_AND_REFERENCE_MODEL.md).
+CoCoX uses the same `path#symbol` convention for method, type, and package
+selection. See
+[../docs/symbol-model.md](../docs/symbol-model.md).
 
 Important `javadoc_metadata` fields:
 

@@ -1,6 +1,5 @@
 package example;
 
-import org.assertlab.cocox.AnalysisOptions;
 import org.assertlab.cocox.CallGraphGenerator;
 import org.assertlab.cocox.ContextExtractorService;
 import org.assertlab.cocox.ContextRequest;
@@ -18,9 +17,8 @@ public class RunCoCoX {
 
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(project)
-                .scope(AnalysisOptions.Scope.ENTRY_POINTS)
+                .scope(ContextRequest.Scope.ENTRY_POINTS)
                 .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
-                .outputMode(AnalysisOptions.OutputMode.JSONL)
                 .build();
 
         ExtractionReport report = ContextExtractorService.createDefault().extract(request);

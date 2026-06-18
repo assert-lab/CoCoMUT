@@ -1,6 +1,5 @@
 package org.assertlab.cocox.cli;
 
-import org.assertlab.cocox.AnalysisOptions;
 import org.assertlab.cocox.CallGraphGenerator;
 import org.assertlab.cocox.ContextExtractorService;
 import org.assertlab.cocox.ContextRequest;
@@ -119,14 +118,13 @@ public final class CoCoXCommand implements Callable<Integer> {
 
         @Override
         public Integer call() throws Exception {
-            AnalysisOptions.Scope selectedScope = toScope(entryPoints ? "entry-points" : scope);
+            ContextRequest.Scope selectedScope = toScope(entryPoints ? "entry-points" : scope);
 
             ContextRequest request = ContextRequest.builder()
                     .projectRoot(project)
                     .scope(selectedScope)
                     .callGraphAlgorithm(toAlgorithm(callGraph))
                     .sourceResolution(toSourceResolution(resolution))
-                    .outputMode(AnalysisOptions.OutputMode.JSONL)
                     .maxMethods(maxMethods)
                     .maxSourceFiles(maxSourceFiles)
                     .sourceSets(toSourceSets(sourceSet))
@@ -147,13 +145,10 @@ public final class CoCoXCommand implements Callable<Integer> {
         }
     }
 
-    @Command(name = "validate", description = "Validate projects or generated JSON/JSONL.")
+    @Command(name = "validate", description = "Validate projects or generated JSONL.")
     static final class ValidateCommand implements Callable<Integer> {
         @Option(names = "--project", description = "Validate project detection/source roots.")
         private Path project;
-
-        @Option(names = "--json", description = "Validate a generated method-context JSON file.")
-        private Path json;
 
         @Option(names = "--jsonl", description = "Validate a generated method-context JSONL file.")
         private Path jsonl;
@@ -168,16 +163,12 @@ public final class CoCoXCommand implements Callable<Integer> {
                 checks++;
                 ok &= validateProject(project);
             }
-            if (json != null) {
-                checks++;
-                ok &= validateJson(json);
-            }
             if (jsonl != null) {
                 checks++;
                 ok &= validateJsonl(jsonl);
             }
             if (checks == 0) {
-                System.err.println("No validation target supplied. Use --project, --json, or --jsonl.");
+                System.err.println("No validation target supplied. Use --project or --jsonl.");
                 return 2;
             }
             return ok ? 0 : 1;
@@ -200,21 +191,6 @@ public final class CoCoXCommand implements Callable<Integer> {
                 return model.sourceAvailable();
             } catch (Exception e) {
                 System.err.println("PROJECT invalid: " + e.getMessage());
-                return false;
-            }
-        }
-
-        private boolean validateJson(Path input) {
-            Path file = input.toAbsolutePath().normalize();
-            if (!Files.isRegularFile(file)) {
-                System.err.println("JSON invalid: not a file: " + file);
-                return false;
-            }
-            try {
-                JsonNode node = mapper.readTree(file.toFile());
-                return validateContextNode(node, "JSON");
-            } catch (IOException e) {
-                System.err.println("JSON invalid: " + e.getMessage());
                 return false;
             }
         }
@@ -249,16 +225,6 @@ public final class CoCoXCommand implements Callable<Integer> {
                 System.err.println("JSONL invalid: " + e.getMessage());
                 return false;
             }
-        }
-
-        private boolean validateContextNode(JsonNode node, String label) {
-            List<String> errors = contextValidationErrors(node);
-            if (!errors.isEmpty()) {
-                System.err.println(label + " invalid: " + String.join("; ", errors));
-                return false;
-            }
-            System.out.println(label + " ok");
-            return true;
         }
 
         private List<String> contextValidationErrors(JsonNode node) {
@@ -365,10 +331,10 @@ public final class CoCoXCommand implements Callable<Integer> {
         }
     }
 
-    private static AnalysisOptions.Scope toScope(String value) {
+    private static ContextRequest.Scope toScope(String value) {
         return switch (normalize(value)) {
-            case "all" -> AnalysisOptions.Scope.ALL;
-            case "entry-points", "entry_points" -> AnalysisOptions.Scope.ENTRY_POINTS;
+            case "all" -> ContextRequest.Scope.ALL;
+            case "entry-points", "entry_points" -> ContextRequest.Scope.ENTRY_POINTS;
             default -> throw new IllegalArgumentException("Unsupported --scope: " + value);
         };
     }
@@ -383,11 +349,11 @@ public final class CoCoXCommand implements Callable<Integer> {
         };
     }
 
-    private static AnalysisOptions.SourceResolution toSourceResolution(String value) {
+    private static ContextRequest.SourceResolution toSourceResolution(String value) {
         return switch (normalize(value)) {
-            case "noclasspath", "no-classpath" -> AnalysisOptions.SourceResolution.NOCLASSPATH;
-            case "classpath" -> AnalysisOptions.SourceResolution.CLASSPATH;
-            case "auto" -> AnalysisOptions.SourceResolution.AUTO;
+            case "noclasspath", "no-classpath" -> ContextRequest.SourceResolution.NOCLASSPATH;
+            case "classpath" -> ContextRequest.SourceResolution.CLASSPATH;
+            case "auto" -> ContextRequest.SourceResolution.AUTO;
             default -> throw new IllegalArgumentException("Unsupported --resolution: " + value);
         };
     }

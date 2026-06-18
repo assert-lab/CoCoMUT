@@ -30,9 +30,8 @@ public class RobustExtractionRegressionTest {
 
             ExtractionReport report = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
-                    .scope(AnalysisOptions.Scope.ALL)
+                    .scope(ContextRequest.Scope.ALL)
                     .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
-                    .outputMode(AnalysisOptions.OutputMode.JSONL)
                     .maxSourceFiles(1)
                     .build());
 
@@ -56,16 +55,14 @@ public class RobustExtractionRegressionTest {
 
             ExtractionReport all = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
-                    .scope(AnalysisOptions.Scope.ENTRY_POINTS)
+                    .scope(ContextRequest.Scope.ENTRY_POINTS)
                     .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
-                    .outputMode(AnalysisOptions.OutputMode.JSONL)
                     .build());
 
             ExtractionReport mainOnly = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
-                    .scope(AnalysisOptions.Scope.ENTRY_POINTS)
+                    .scope(ContextRequest.Scope.ENTRY_POINTS)
                     .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
-                    .outputMode(AnalysisOptions.OutputMode.JSONL)
                     .sourceSet("main")
                     .build());
 
@@ -94,9 +91,8 @@ public class RobustExtractionRegressionTest {
 
             ExtractionReport report = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
-                    .scope(AnalysisOptions.Scope.ALL)
+                    .scope(ContextRequest.Scope.ALL)
                     .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
-                    .outputMode(AnalysisOptions.OutputMode.JSONL)
                     .outputDirectory(output)
                     .packages(Set.of("demo.api"))
                     .classes(Set.of("PublicApi"))
@@ -146,9 +142,8 @@ public class RobustExtractionRegressionTest {
             String typeUri = "src/main/java/demo/api/PublicApi.java#demo.api.PublicApi";
             ExtractionReport typeReport = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
-                    .scope(AnalysisOptions.Scope.ALL)
+                    .scope(ContextRequest.Scope.ALL)
                     .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
-                    .outputMode(AnalysisOptions.OutputMode.JSONL)
                     .outputDirectory(output.resolve("type"))
                     .typeUri(typeUri)
                     .build());
@@ -165,9 +160,8 @@ public class RobustExtractionRegressionTest {
             String packageUri = "src/main/java/demo/api/package-info.java#demo.api";
             ExtractionReport packageReport = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
-                    .scope(AnalysisOptions.Scope.ALL)
+                    .scope(ContextRequest.Scope.ALL)
                     .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
-                    .outputMode(AnalysisOptions.OutputMode.JSONL)
                     .outputDirectory(output.resolve("package"))
                     .packageUri(packageUri)
                     .build());
@@ -188,8 +182,8 @@ public class RobustExtractionRegressionTest {
     }
 
     @Test
-    public void cliValidateRejectsMalformedContextJson() throws Exception {
-        Path file = Files.createTempFile("cocox-invalid-context", ".json");
+    public void cliValidateRejectsMalformedContextJsonl() throws Exception {
+        Path file = Files.createTempFile("cocox-invalid-context", ".jsonl");
         try {
             Files.writeString(file,
                     "{\"MUT\":{},\"metadata\":{},\"provenance\":{},\"documentation_metrics\":{},"
@@ -197,7 +191,7 @@ public class RobustExtractionRegressionTest {
                     StandardCharsets.UTF_8);
 
             int exit = new CommandLine(new CoCoXCommand())
-                    .execute("validate", "--json", file.toString());
+                    .execute("validate", "--jsonl", file.toString());
 
             assertEquals(1, exit);
         } finally {

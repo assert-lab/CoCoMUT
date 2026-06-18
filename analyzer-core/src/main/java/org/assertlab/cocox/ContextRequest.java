@@ -1,21 +1,37 @@
 package org.assertlab.cocox;
 
 import java.nio.file.Path;
-import java.util.Set;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 
 /**
- * Public request object for extracting method context from a Java project.
+ * Public request object for method-context extraction.
+ *
+ * <p>This is the product API configuration surface. The pipeline always emits
+ * JSONL, so callers configure what to extract, not the output format.
  */
 public final class ContextRequest {
+    public enum Scope {
+        ALL,
+        ENTRY_POINTS
+    }
+
+    public enum SourceResolution {
+        NOCLASSPATH,
+        CLASSPATH,
+        AUTO
+    }
+
     private final Path projectRoot;
-    private final AnalysisOptions.Scope scope;
+    private final Scope scope;
     private final CallGraphGenerator.Algorithm callGraphAlgorithm;
-    private final AnalysisOptions.OutputMode outputMode;
     private final Integer maxMethods;
     private final Integer maxSourceFiles;
     private final boolean attemptCompile;
-    private final AnalysisOptions.SourceResolution sourceResolution;
+    private final SourceResolution sourceResolution;
     private final Set<String> sourceSets;
     private final Set<String> packages;
     private final Set<String> classes;
@@ -33,20 +49,19 @@ public final class ContextRequest {
         this.scope = Objects.requireNonNull(builder.scope, "scope cannot be null");
         this.callGraphAlgorithm = Objects.requireNonNull(builder.callGraphAlgorithm,
                 "callGraphAlgorithm cannot be null");
-        this.outputMode = Objects.requireNonNull(builder.outputMode, "outputMode cannot be null");
         this.maxMethods = builder.maxMethods;
         this.maxSourceFiles = builder.maxSourceFiles;
         this.attemptCompile = builder.attemptCompile;
         this.sourceResolution = Objects.requireNonNull(builder.sourceResolution,
                 "sourceResolution cannot be null");
-        this.sourceSets = Set.copyOf(builder.sourceSets);
-        this.packages = Set.copyOf(builder.packages);
-        this.classes = Set.copyOf(builder.classes);
-        this.methods = Set.copyOf(builder.methods);
-        this.visibilities = Set.copyOf(builder.visibilities);
-        this.includePathGlobs = Set.copyOf(builder.includePathGlobs);
-        this.excludePathGlobs = Set.copyOf(builder.excludePathGlobs);
-        this.targets = Set.copyOf(builder.targets);
+        this.sourceSets = Collections.unmodifiableSet(new LinkedHashSet<>(builder.sourceSets));
+        this.packages = Collections.unmodifiableSet(new LinkedHashSet<>(builder.packages));
+        this.classes = Collections.unmodifiableSet(new LinkedHashSet<>(builder.classes));
+        this.methods = Collections.unmodifiableSet(new LinkedHashSet<>(builder.methods));
+        this.visibilities = Collections.unmodifiableSet(new LinkedHashSet<>(builder.visibilities));
+        this.includePathGlobs = Collections.unmodifiableSet(new LinkedHashSet<>(builder.includePathGlobs));
+        this.excludePathGlobs = Collections.unmodifiableSet(new LinkedHashSet<>(builder.excludePathGlobs));
+        this.targets = Collections.unmodifiableSet(new LinkedHashSet<>(builder.targets));
         this.outputDirectory = builder.outputDirectory != null
                 ? builder.outputDirectory.toAbsolutePath().normalize()
                 : null;
@@ -56,20 +71,20 @@ public final class ContextRequest {
         return new Builder();
     }
 
+    public static ContextRequest defaults(Path projectRoot) {
+        return builder().projectRoot(projectRoot).build();
+    }
+
     public Path projectRoot() {
         return projectRoot;
     }
 
-    public AnalysisOptions.Scope scope() {
+    public Scope scope() {
         return scope;
     }
 
     public CallGraphGenerator.Algorithm callGraphAlgorithm() {
         return callGraphAlgorithm;
-    }
-
-    public AnalysisOptions.OutputMode outputMode() {
-        return outputMode;
     }
 
     public Integer maxMethods() {
@@ -84,7 +99,7 @@ public final class ContextRequest {
         return attemptCompile;
     }
 
-    public AnalysisOptions.SourceResolution sourceResolution() {
+    public SourceResolution sourceResolution() {
         return sourceResolution;
     }
 
@@ -92,52 +107,54 @@ public final class ContextRequest {
         return sourceSets;
     }
 
-    public Path outputDirectory() {
-        return outputDirectory;
+    public Set<String> packages() {
+        return packages;
+    }
+
+    public Set<String> classes() {
+        return classes;
+    }
+
+    public Set<String> methods() {
+        return methods;
+    }
+
+    public Set<String> visibilities() {
+        return visibilities;
+    }
+
+    public Set<String> includePathGlobs() {
+        return includePathGlobs;
+    }
+
+    public Set<String> excludePathGlobs() {
+        return excludePathGlobs;
     }
 
     public Set<SymbolTarget> targets() {
         return targets;
     }
 
-    AnalysisOptions toAnalysisOptions() {
-        AnalysisOptions.Builder builder = AnalysisOptions.builder()
-                .scope(scope)
-                .callGraphAlgorithm(callGraphAlgorithm)
-                .outputMode(outputMode)
-                .maxMethods(maxMethods)
-                .maxSourceFiles(maxSourceFiles)
-                .attemptCompile(attemptCompile)
-                .sourceResolution(sourceResolution)
-                .sourceSets(sourceSets)
-                .packages(packages)
-                .classes(classes)
-                .methods(methods)
-                .visibilities(visibilities)
-                .includePathGlobs(includePathGlobs)
-                .excludePathGlobs(excludePathGlobs)
-                .targets(targets)
-                .outputDirectory(outputDirectory);
-        return builder.build();
+    public Path outputDirectory() {
+        return outputDirectory;
     }
 
     public static final class Builder {
         private Path projectRoot;
-        private AnalysisOptions.Scope scope = AnalysisOptions.Scope.ALL;
+        private Scope scope = Scope.ALL;
         private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.AUTO;
-        private AnalysisOptions.OutputMode outputMode = AnalysisOptions.OutputMode.JSONL;
         private Integer maxMethods;
         private Integer maxSourceFiles;
         private boolean attemptCompile;
-        private AnalysisOptions.SourceResolution sourceResolution = AnalysisOptions.SourceResolution.NOCLASSPATH;
-        private Set<String> sourceSets = Set.of();
-        private Set<String> packages = Set.of();
-        private Set<String> classes = Set.of();
-        private Set<String> methods = Set.of();
-        private Set<String> visibilities = Set.of();
-        private Set<String> includePathGlobs = Set.of();
-        private Set<String> excludePathGlobs = Set.of();
-        private Set<SymbolTarget> targets = Set.of();
+        private SourceResolution sourceResolution = SourceResolution.NOCLASSPATH;
+        private Set<String> sourceSets = new LinkedHashSet<>();
+        private Set<String> packages = new LinkedHashSet<>();
+        private Set<String> classes = new LinkedHashSet<>();
+        private Set<String> methods = new LinkedHashSet<>();
+        private Set<String> visibilities = new LinkedHashSet<>();
+        private Set<String> includePathGlobs = new LinkedHashSet<>();
+        private Set<String> excludePathGlobs = new LinkedHashSet<>();
+        private Set<SymbolTarget> targets = new LinkedHashSet<>();
         private Path outputDirectory;
 
         public Builder projectRoot(Path projectRoot) {
@@ -145,18 +162,13 @@ public final class ContextRequest {
             return this;
         }
 
-        public Builder scope(AnalysisOptions.Scope scope) {
-            this.scope = scope;
+        public Builder scope(Scope scope) {
+            this.scope = Objects.requireNonNull(scope, "scope cannot be null");
             return this;
         }
 
         public Builder callGraphAlgorithm(CallGraphGenerator.Algorithm callGraphAlgorithm) {
-            this.callGraphAlgorithm = callGraphAlgorithm;
-            return this;
-        }
-
-        public Builder outputMode(AnalysisOptions.OutputMode outputMode) {
-            this.outputMode = outputMode;
+            this.callGraphAlgorithm = Objects.requireNonNull(callGraphAlgorithm, "callGraphAlgorithm cannot be null");
             return this;
         }
 
@@ -175,75 +187,89 @@ public final class ContextRequest {
             return this;
         }
 
-        public Builder sourceResolution(AnalysisOptions.SourceResolution sourceResolution) {
-            this.sourceResolution = sourceResolution;
+        public Builder sourceResolution(SourceResolution sourceResolution) {
+            this.sourceResolution = Objects.requireNonNull(sourceResolution, "sourceResolution cannot be null");
             return this;
         }
 
         public Builder sourceSets(Set<String> sourceSets) {
-            this.sourceSets = sourceSets == null ? Set.of() : Set.copyOf(sourceSets);
+            this.sourceSets = normalizeSourceSets(sourceSets);
             return this;
         }
 
         public Builder sourceSet(String sourceSet) {
-            this.sourceSets = sourceSet == null ? Set.of() : Set.of(sourceSet);
+            this.sourceSets = normalizeSourceSets(sourceSet == null ? Set.of() : Set.of(sourceSet));
             return this;
         }
 
         public Builder packages(Set<String> packages) {
-            this.packages = packages == null ? Set.of() : Set.copyOf(packages);
+            this.packages = normalizeNonBlank(packages);
             return this;
         }
 
         public Builder classes(Set<String> classes) {
-            this.classes = classes == null ? Set.of() : Set.copyOf(classes);
+            this.classes = normalizeNonBlank(classes);
             return this;
         }
 
         public Builder methods(Set<String> methods) {
-            this.methods = methods == null ? Set.of() : Set.copyOf(methods);
+            this.methods = normalizeNonBlank(methods);
             return this;
         }
 
         public Builder visibilities(Set<String> visibilities) {
-            this.visibilities = visibilities == null ? Set.of() : Set.copyOf(visibilities);
+            this.visibilities = normalizeVisibilities(visibilities);
             return this;
         }
 
         public Builder includePathGlobs(Set<String> includePathGlobs) {
-            this.includePathGlobs = includePathGlobs == null ? Set.of() : Set.copyOf(includePathGlobs);
+            this.includePathGlobs = normalizeNonBlank(includePathGlobs);
             return this;
         }
 
         public Builder excludePathGlobs(Set<String> excludePathGlobs) {
-            this.excludePathGlobs = excludePathGlobs == null ? Set.of() : Set.copyOf(excludePathGlobs);
+            this.excludePathGlobs = normalizeNonBlank(excludePathGlobs);
             return this;
         }
 
         public Builder targets(Set<SymbolTarget> targets) {
-            this.targets = targets == null ? Set.of() : Set.copyOf(targets);
+            this.targets = targets == null ? new LinkedHashSet<>() : new LinkedHashSet<>(targets);
             return this;
         }
 
         public Builder target(SymbolTarget target) {
-            this.targets = target == null ? this.targets : union(this.targets, Set.of(target));
+            if (target != null) {
+                this.targets.add(target);
+            }
             return this;
         }
 
         public Builder targetUri(String targetUri) {
-            return target(SymbolTarget.parse(targetUri));
+            if (targetUri != null && !targetUri.isBlank()) {
+                this.targets.add(SymbolTarget.parse(targetUri));
+            }
+            return this;
         }
 
         public Builder methodUri(String methodUri) {
-            return target(SymbolTarget.method(methodUri));
+            if (methodUri != null && !methodUri.isBlank()) {
+                this.targets.add(SymbolTarget.method(methodUri));
+            }
+            return this;
         }
 
         public Builder typeUri(String typeUri) {
-            return target(SymbolTarget.type(typeUri));
+            if (typeUri != null && !typeUri.isBlank()) {
+                this.targets.add(SymbolTarget.type(typeUri));
+            }
+            return this;
         }
 
         public Builder packageUri(String packageUri) {
-            return target(SymbolTarget.packageTarget(packageUri));
+            if (packageUri != null && !packageUri.isBlank()) {
+                this.targets.add(SymbolTarget.packageTarget(packageUri));
+            }
+            return this;
         }
 
         public Builder outputDirectory(Path outputDirectory) {
@@ -255,15 +281,50 @@ public final class ContextRequest {
             return new ContextRequest(this);
         }
 
-        private static Set<SymbolTarget> union(Set<SymbolTarget> left, Set<SymbolTarget> right) {
-            java.util.LinkedHashSet<SymbolTarget> result = new java.util.LinkedHashSet<>();
-            if (left != null) {
-                result.addAll(left);
+        private static Set<String> normalizeSourceSets(Set<String> values) {
+            if (values == null || values.isEmpty()) {
+                return new LinkedHashSet<>();
             }
-            if (right != null) {
-                result.addAll(right);
+            LinkedHashSet<String> normalized = new LinkedHashSet<>();
+            for (String value : values) {
+                if (value == null || value.isBlank()) {
+                    continue;
+                }
+                String lower = value.trim().toLowerCase(Locale.ROOT).replace('-', '_');
+                if ("all".equals(lower)) {
+                    return new LinkedHashSet<>();
+                }
+                if (!Set.of("main", "test", "integration_test", "generated", "example", "unknown").contains(lower)) {
+                    throw new IllegalArgumentException("Unsupported source set: " + value);
+                }
+                normalized.add(lower);
             }
-            return Set.copyOf(result);
+            return normalized;
+        }
+
+        private static Set<String> normalizeNonBlank(Set<String> values) {
+            if (values == null || values.isEmpty()) {
+                return new LinkedHashSet<>();
+            }
+            LinkedHashSet<String> normalized = new LinkedHashSet<>();
+            for (String value : values) {
+                if (value != null && !value.isBlank()) {
+                    normalized.add(value.trim());
+                }
+            }
+            return normalized;
+        }
+
+        private static Set<String> normalizeVisibilities(Set<String> values) {
+            LinkedHashSet<String> normalized = new LinkedHashSet<>();
+            for (String value : normalizeNonBlank(values)) {
+                String lower = value.toLowerCase(Locale.ROOT).replace('_', '-');
+                if (!Set.of("public", "protected", "private", "package-private").contains(lower)) {
+                    throw new IllegalArgumentException("Unsupported visibility: " + value);
+                }
+                normalized.add(lower);
+            }
+            return normalized;
         }
     }
 }

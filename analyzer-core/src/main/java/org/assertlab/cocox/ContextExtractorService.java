@@ -16,8 +16,6 @@ public final class ContextExtractorService {
 
     public ExtractionReport extract(ContextRequest request) throws IOException {
         Objects.requireNonNull(request, "request cannot be null");
-        return new ExtractionReport(AnalyzerFacade.analyze(
-                request.projectRoot(),
-                request.toAnalysisOptions()));
+        return new ExtractionReport(AnalyzerFacade.analyze(request));
     }
 }

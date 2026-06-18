@@ -109,8 +109,8 @@ This is important because overloaded methods need more than a method name. A rel
 - the erased parameter types;
 - the erased return type.
 
-For the broader symbol model, including planned `type_uri` and `package_uri`
-selection, see [SYMBOL_AND_REFERENCE_MODEL.md](SYMBOL_AND_REFERENCE_MODEL.md).
+For the broader symbol model, including `type_uri` and `package_uri`
+selection, see [docs/symbol-model.md](docs/symbol-model.md).
 
 ## CLI Usage
 
@@ -135,7 +135,7 @@ Available commands:
 
 ```text
 cocox extract   Extract method contexts
-cocox validate  Validate project detection, JSONL, or a schema row
+cocox validate  Validate project detection or generated JSONL
 cocox schema    Print or write bundled schemas
 ```
 
@@ -213,14 +213,12 @@ Layered selection is available when you do not want the whole repository:
 
 Repository-wide extraction writes `method_contexts.jsonl`. Package, class, or
 method-filtered extraction writes a distinguishable JSONL filename based on the
-selected thing, for example `package__org.example.api.jsonl`,
+selected target, for example `package__org.example.api.jsonl`,
 `class__org.example.PublicApi.jsonl`, or `method__parse.jsonl`.
 
-Current package and class/type selection is filter-based. The intended product
-direction is URI-based selection with `method_uri`, `type_uri`, and
-`package_uri`; see [SYMBOL_AND_REFERENCE_MODEL.md](SYMBOL_AND_REFERENCE_MODEL.md).
-CoCoX already supports exact URI targets through `--target-uri`, `--method-uri`,
-`--type-uri` / `--class-uri`, and `--package-uri`.
+CoCoX supports both filter-based package/class/method selection and exact URI
+targets through `--target-uri`, `--method-uri`, `--type-uri` / `--class-uri`,
+and `--package-uri`; see [docs/symbol-model.md](docs/symbol-model.md).
 
 Examples:
 
@@ -289,7 +287,6 @@ mvn install
 Minimal Java API:
 
 ```java
-import org.assertlab.cocox.AnalysisOptions;
 import org.assertlab.cocox.CallGraphGenerator;
 import org.assertlab.cocox.ContextExtractorService;
 import org.assertlab.cocox.ContextRequest;
@@ -301,9 +298,8 @@ class Example {
     public static void main(String[] args) throws Exception {
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(Path.of("/path/to/java/project"))
-                .scope(AnalysisOptions.Scope.ENTRY_POINTS)
+                .scope(ContextRequest.Scope.ENTRY_POINTS)
                 .callGraphAlgorithm(org.assertlab.cocox.CallGraphGenerator.Algorithm.NONE)
-                .outputMode(AnalysisOptions.OutputMode.JSONL)
                 .maxSourceFiles(500) // optional low-memory smoke-run cap
                 .build();
 
@@ -351,5 +347,5 @@ Current static-analysis boundaries:
 
 The JSONL output schema is summarized in `schemas/README.md`. Field-test
 results and current static-analysis limitations are recorded in
-`FIELD_TEST_RESULTS.md`. Documentation-context retrieval notes are recorded in
-`DOC_CONTEXT_RETRIEVAL_NOTES.md`.
+`docs/research/FIELD_TEST_RESULTS.md`. Documentation-context retrieval notes are recorded in
+`docs/research/DOC_CONTEXT_RETRIEVAL_NOTES.md`.

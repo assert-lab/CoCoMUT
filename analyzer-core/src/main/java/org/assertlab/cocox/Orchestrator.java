@@ -2,7 +2,6 @@ package org.assertlab.cocox;
 
 import org.assertlab.cocox.source.ProjectModel;
 import org.assertlab.cocox.source.SourceBackends;
-import org.assertlab.cocox.strategy.MethodSourceStrategy;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
@@ -25,18 +24,17 @@ import java.util.*;
  * Input: Project root path
  * Output: JSONL method contexts and execution report
  */
-public class Orchestrator {
+final class Orchestrator {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final Path projectPath;
     private final Map<String, Object> executionReport;
-    private MethodSourceStrategy methodSourceStrategy;  // optional Phase 2 override
+    private ContextRequest.Scope scope = ContextRequest.Scope.ALL;
     private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.AUTO;
     private Integer maxMethods;
     private Integer maxSourceFiles;
     private boolean attemptCompile;
-    private AnalysisOptions.SourceResolution sourceResolution = AnalysisOptions.SourceResolution.NOCLASSPATH;
-    private AnalysisOptions.OutputMode outputMode = AnalysisOptions.OutputMode.JSONL;
+    private ContextRequest.SourceResolution sourceResolution = ContextRequest.SourceResolution.NOCLASSPATH;
     private Set<String> sourceSets = Set.of();
     private Set<String> packageFilters = Set.of();
     private Set<String> classFilters = Set.of();
@@ -58,96 +56,96 @@ public class Orchestrator {
     private Map<String, String> contextExtractionFailures = new LinkedHashMap<>();
     private final Set<FailureCode> failureCodes = new LinkedHashSet<>();
 
-    public Orchestrator(Path projectPath) {
+    Orchestrator(Path projectPath) {
         this.projectPath = Objects.requireNonNull(projectPath, "projectPath cannot be null");
         this.executionReport = new LinkedHashMap<>();
     }
 
-    public static Orchestrator create(Path projectPath) {
-        return new Orchestrator(projectPath);
+    Orchestrator(ContextRequest request) {
+        this(request.projectRoot());
+        this.scope = request.scope();
+        this.callGraphAlgorithm = request.callGraphAlgorithm();
+        this.maxMethods = request.maxMethods();
+        this.maxSourceFiles = request.maxSourceFiles();
+        this.attemptCompile = request.attemptCompile();
+        this.sourceResolution = request.sourceResolution();
+        this.sourceSets = request.sourceSets();
+        this.packageFilters = request.packages();
+        this.classFilters = request.classes();
+        this.methodFilters = request.methods();
+        this.visibilityFilters = request.visibilities();
+        this.includePathGlobs = request.includePathGlobs();
+        this.excludePathGlobs = request.excludePathGlobs();
+        this.targetFilters = request.targets();
+        this.outputDirectory = request.outputDirectory();
     }
 
-    /**
-     * Optional Phase 2 override: supply a
-     * {@link MethodSourceStrategy} (e.g., entry-points-only) whose
-     * {@code loadMethods()} result replaces the default full source scan.
-     */
-    public Orchestrator setMethodSourceStrategy(MethodSourceStrategy strategy) {
-        this.methodSourceStrategy = strategy;
-        return this;
-    }
-
-    public Orchestrator setCallGraphAlgorithm(CallGraphGenerator.Algorithm algorithm) {
+    Orchestrator setCallGraphAlgorithm(CallGraphGenerator.Algorithm algorithm) {
         this.callGraphAlgorithm = Objects.requireNonNull(algorithm, "algorithm cannot be null");
         return this;
     }
 
-    public Orchestrator setMaxMethods(Integer maxMethods) {
+    Orchestrator setMaxMethods(Integer maxMethods) {
         this.maxMethods = maxMethods;
         return this;
     }
 
-    public Orchestrator setMaxSourceFiles(Integer maxSourceFiles) {
+    Orchestrator setMaxSourceFiles(Integer maxSourceFiles) {
         this.maxSourceFiles = maxSourceFiles;
         return this;
     }
 
-    public Orchestrator setAttemptCompile(boolean attemptCompile) {
+    Orchestrator setAttemptCompile(boolean attemptCompile) {
         this.attemptCompile = attemptCompile;
         return this;
     }
 
-    public Orchestrator setSourceResolution(AnalysisOptions.SourceResolution sourceResolution) {
+    Orchestrator setSourceResolution(ContextRequest.SourceResolution sourceResolution) {
         this.sourceResolution = Objects.requireNonNull(sourceResolution, "sourceResolution cannot be null");
         return this;
     }
 
-    public Orchestrator setOutputMode(AnalysisOptions.OutputMode outputMode) {
-        this.outputMode = Objects.requireNonNull(outputMode, "outputMode cannot be null");
-        return this;
-    }
-
-    public Orchestrator setSourceSets(Set<String> sourceSets) {
+    Orchestrator setSourceSets(Set<String> sourceSets) {
         this.sourceSets = sourceSets == null ? Set.of() : Set.copyOf(sourceSets);
         return this;
     }
 
-    public Orchestrator setPackageFilters(Set<String> packageFilters) {
+    Orchestrator setPackageFilters(Set<String> packageFilters) {
         this.packageFilters = packageFilters == null ? Set.of() : Set.copyOf(packageFilters);
         return this;
     }
 
-    public Orchestrator setClassFilters(Set<String> classFilters) {
+    Orchestrator setClassFilters(Set<String> classFilters) {
         this.classFilters = classFilters == null ? Set.of() : Set.copyOf(classFilters);
         return this;
     }
 
-    public Orchestrator setMethodFilters(Set<String> methodFilters) {
+    Orchestrator setMethodFilters(Set<String> methodFilters) {
         this.methodFilters = methodFilters == null ? Set.of() : Set.copyOf(methodFilters);
         return this;
     }
 
-    public Orchestrator setVisibilityFilters(Set<String> visibilityFilters) {
+    Orchestrator setVisibilityFilters(Set<String> visibilityFilters) {
         this.visibilityFilters = visibilityFilters == null ? Set.of() : Set.copyOf(visibilityFilters);
         return this;
     }
 
-    public Orchestrator setIncludePathGlobs(Set<String> includePathGlobs) {
+    Orchestrator setIncludePathGlobs(Set<String> includePathGlobs) {
         this.includePathGlobs = includePathGlobs == null ? Set.of() : Set.copyOf(includePathGlobs);
         return this;
     }
 
-    public Orchestrator setExcludePathGlobs(Set<String> excludePathGlobs) {
+    Orchestrator setExcludePathGlobs(Set<String> excludePathGlobs) {
         this.excludePathGlobs = excludePathGlobs == null ? Set.of() : Set.copyOf(excludePathGlobs);
         return this;
     }
 
-    public Orchestrator setTargetFilters(Set<SymbolTarget> targetFilters) {
+    Orchestrator setTargetFilters(Set<SymbolTarget> targetFilters) {
         this.targetFilters = targetFilters == null ? Set.of() : Set.copyOf(targetFilters);
         return this;
     }
 
-    public Orchestrator setOutputDirectory(Path outputDirectory) {
+    Orchestrator setOutputDirectory(Path outputDirectory) {
         this.outputDirectory = outputDirectory;
         return this;
     }
@@ -192,7 +190,7 @@ public class Orchestrator {
     private boolean executePhase1() {
         try {
             boolean effectiveAttemptCompile = attemptCompile
-                    || sourceResolution == AnalysisOptions.SourceResolution.AUTO
+                    || sourceResolution == ContextRequest.SourceResolution.AUTO
                     || callGraphAlgorithm == CallGraphGenerator.Algorithm.AUTO;
             ProjectAnalyzer analyzer = new ProjectAnalyzer(projectPath, true, "auto", effectiveAttemptCompile);
             projectMetadata = analyzer.analyze();
@@ -232,21 +230,14 @@ public class Orchestrator {
 
     private boolean executePhase2() {
         try {
-            if (methodSourceStrategy != null) {
-                methodInfos = methodSourceStrategy.loadMethods(projectMetadata);
-                methodInfos = filterMethods(methodInfos);
-                methodInfos = limitMethods(methodInfos);
-                executionReport.put("phase_2_strategy", methodSourceStrategy.name());
-                executionReport.put("phase_2_methods_identified", methodInfos.size());
-                return !methodInfos.isEmpty();
-            }
-
             MethodIdentifier identifier = new MethodIdentifier(projectMetadata);
 
             methodInfos = identifier.identify();
+            methodInfos = filterScope(methodInfos);
             methodInfos = filterMethods(methodInfos);
             methodInfos = limitMethods(methodInfos);
 
+            executionReport.put("phase_2_strategy", scope.toString());
             executionReport.put("phase_2_methods_identified", methodInfos.size());
             return true;
         } catch (Exception e) {
@@ -257,7 +248,7 @@ public class Orchestrator {
     }
 
     /**
-     * Phase 3: Build call graph once and store for reuse in Phase 4 and Phase 6.
+     * Phase 3: Build call graph once and store for reuse in Phase 4.
      */
     private boolean executePhase3() {
         try {
@@ -396,6 +387,25 @@ public class Orchestrator {
         return filtered;
     }
 
+    private List<MethodInfo> filterScope(List<MethodInfo> methods) {
+        if (scope == ContextRequest.Scope.ALL) {
+            executionReport.put("phase_2_scope_filter_before", methods.size());
+            executionReport.put("phase_2_scope_filter_after", methods.size());
+            return methods;
+        }
+        List<MethodInfo> filtered = methods.stream()
+                .filter(method -> "public".equals(method.getVisibility()))
+                .filter(method -> !isMain(method))
+                .toList();
+        executionReport.put("phase_2_scope_filter_before", methods.size());
+        executionReport.put("phase_2_scope_filter_after", filtered.size());
+        return filtered;
+    }
+
+    private static boolean isMain(MethodInfo method) {
+        return "main".equals(method.getMethodName()) && method.isStatic();
+    }
+
     private void configureSourceFileLimit() {
         if (maxSourceFiles != null && maxSourceFiles > 0) {
             if (!sourceFileLimitConfigured) {
@@ -437,7 +447,6 @@ public class Orchestrator {
             Path jsonlPath = root.resolve(outputJsonlFilename());
             int jsonlRows = jsonGen.generateJsonLinesFile(methodContexts, jsonlPath);
 
-            executionReport.put("phase_5_output_mode", "JSONL");
             executionReport.put("phase_5_jsonl_file", jsonlPath.toString());
             executionReport.put("phase_5_jsonl_rows", jsonlRows);
             executionReport.put("phase_5_files_generated", jsonlRows);

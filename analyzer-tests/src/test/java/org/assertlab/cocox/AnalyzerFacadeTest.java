@@ -46,9 +46,11 @@ public class AnalyzerFacadeTest {
     }
 
     @Test
-    public void entryPointStrategyProcessesOnlyPublicMethods() throws Exception {
-        Map<String, Object> report = AnalyzerFacade.analyze(
-                fixtureRoot, new org.assertlab.cocox.strategy.EntryPointScanStrategy());
+    public void entryPointScopeProcessesOnlyPublicMethods() throws Exception {
+        Map<String, Object> report = AnalyzerFacade.analyze(ContextRequest.builder()
+                .projectRoot(fixtureRoot)
+                .scope(ContextRequest.Scope.ENTRY_POINTS)
+                .build());
 
         assertEquals("SUCCESS", report.get("status"));
         assertEquals("ENTRY_POINTS", report.get("phase_2_strategy"));
@@ -61,9 +63,8 @@ public class AnalyzerFacadeTest {
     public void serviceApiReturnsTypedExtractionReport() throws Exception {
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(fixtureRoot)
-                .scope(AnalysisOptions.Scope.ENTRY_POINTS)
+                .scope(ContextRequest.Scope.ENTRY_POINTS)
                 .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
-                .outputMode(AnalysisOptions.OutputMode.JSONL)
                 .build();
 
         ExtractionReport report = ContextExtractorService.createDefault().extract(request);
@@ -82,10 +83,9 @@ public class AnalyzerFacadeTest {
     public void autoCallGraphUsesRtaWhenCompiledClassesExist() throws Exception {
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(fixtureRoot)
-                .scope(AnalysisOptions.Scope.ENTRY_POINTS)
+                .scope(ContextRequest.Scope.ENTRY_POINTS)
                 .callGraphAlgorithm(CallGraphGenerator.Algorithm.AUTO)
-                .sourceResolution(AnalysisOptions.SourceResolution.AUTO)
-                .outputMode(AnalysisOptions.OutputMode.JSONL)
+                .sourceResolution(ContextRequest.SourceResolution.AUTO)
                 .maxMethods(1)
                 .build();
 

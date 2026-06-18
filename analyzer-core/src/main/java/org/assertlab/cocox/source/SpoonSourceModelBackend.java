@@ -1,6 +1,6 @@
 package org.assertlab.cocox.source;
 
-import org.assertlab.cocox.AnalysisOptions;
+import org.assertlab.cocox.ContextRequest;
 import spoon.Launcher;
 import spoon.reflect.CtModel;
 import spoon.reflect.code.CtFieldRead;
@@ -72,13 +72,13 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             "java.time",
             "java.text",
             "java.io");
-    private final AnalysisOptions.SourceResolution requestedResolution;
+    private final ContextRequest.SourceResolution requestedResolution;
     private final Map<String, ParsedProject> cache = new ConcurrentHashMap<>();
 
-    SpoonSourceModelBackend(AnalysisOptions.SourceResolution requestedResolution) {
+    SpoonSourceModelBackend(ContextRequest.SourceResolution requestedResolution) {
         this.requestedResolution = requestedResolution != null
                 ? requestedResolution
-                : AnalysisOptions.SourceResolution.NOCLASSPATH;
+                : ContextRequest.SourceResolution.NOCLASSPATH;
     }
 
     @Override
@@ -166,7 +166,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
 
     private ParsedProject parse(ProjectModel project) throws IOException {
         Integer maxSourceFiles = maxSourceFiles();
-        if (requestedResolution == AnalysisOptions.SourceResolution.AUTO
+        if (requestedResolution == ContextRequest.SourceResolution.AUTO
                 && maxSourceFiles == null
                 && hasClasspathEvidence(project)) {
             ParsedProject classpath = null;
@@ -255,7 +255,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                     complianceLevel(project.javaVersion()), maxSourceFiles, true), "noclasspath_limited");
         }
 
-        if (requestedResolution == AnalysisOptions.SourceResolution.CLASSPATH) {
+        if (requestedResolution == ContextRequest.SourceResolution.CLASSPATH) {
             return new ParsedModels(parseModels(project, false), "classpath");
         }
 
