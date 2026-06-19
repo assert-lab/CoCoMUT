@@ -2,77 +2,60 @@
 
 CoCoX (Code Context Extractor) is a tool for extracting method-level context from Java systems.
 
-For each method, it writes one JSONL record containing:
+For each method, it writes one **JSONL record** containing:
 
 - method URI, name, signature, source code, Javadoc, class Javadoc, and class hierarchy;
 - structured parameters, annotations, thrown exceptions, field usage, overload groups, dynamic-feature hints, and documentation metrics;
 - optional SootUp caller/callee context when bytecode is available;
 - provenance metadata describing how context was extracted.
 
-The tool is intentionally source/static-analysis based. It does not execute the analyzed program.
-
-## Javadoc Standards Basis
-
-CoCoX parses common Javadoc tags using the official Oracle/JDK Javadoc syntax
-and standard doclet model, not repository-specific conventions. This applies to
-the common documentation tags and inline tags that matter for method-context
-mining, including `@param`, `@return`, `@throws` / `@exception`, `@since`,
-`@deprecated`, `@see`, `{@link ...}`, `{@linkplain ...}`, `{@code ...}`,
-`{@literal ...}`, `{@value ...}`, and `{@inheritDoc}`.
-
-For references, `@see`, `{@link ...}`, and `{@linkplain ...}` are interpreted
-using the standard program-element reference form:
-
-```text
-module/package.Type#member optional-label
-```
-
-CoCoX also recognizes the standard `@see "text"` and
-`@see <a href="...">label</a>` forms. Project-local references may be resolved
-to CoCoX URIs; external JDK/library references are kept as symbol-level
-metadata only, without fetching external Javadoc text.
-
-Official sources used:
-
-- JDK 17 documentation-comment specification for the standard doclet:
-  <https://docs.oracle.com/en/java/javase/17/docs/specs/javadoc/doc-comment-spec.html>
-- JDK 25 documentation-comment specification for the standard doclet:
-  <https://docs.oracle.com/en/java/javase/25/docs/specs/javadoc/doc-comment-spec.html>
-- JDK 8 Javadoc tool reference:
-  <https://docs.oracle.com/javase/8/docs/technotes/tools/windows/javadoc.html>
-
-These specifications are versioned with the JDK. The core block tags, inline
-tags, `@see`, and `{@link ...}` forms are long-standing and stable. Newer JDKs
-add or extend features such as module prefixes, inline `{@return ...}`,
-`{@snippet ...}`, and Markdown documentation comments; CoCoX treats
-version-specific features explicitly instead of inferring rules from a single
-project such as Apache Commons Lang.
+CoCoX analyzes source code and, when requested, compiled bytecode. It does not
+execute the analyzed program.
 
 ## Repository Shape
 
 ```text
 analyzer-core/   Java library and extraction API
-cocox-cli/ Standalone Picocli command-line application
-analyzer-tests/  unit and integration tests with tiny fixtures
+cocox-cli/       Standalone Picocli command-line application
+analyzer-tests/  unit and integration tests
 examples/        small API usage example
+docs/            product notes, symbol model, and research-run reports
 schemas/         machine-readable schema drafts and schema documentation
-scripts/         release/field-test helper scripts
+scripts/         release/testing helpers
 ```
 
+## Javadoc Standards Basis
+
+CoCoX parses common Javadoc tags against the official Oracle/JDK doc-comment
+syntax and standard doclet model, not against project-specific conventions. In
+particular, `@see`, `{@link ...}`, and `{@linkplain ...}` follow the standard
+program-element reference forms documented by the JDK. Project-local references
+may be resolved to CoCoX URIs; external JDK/library references are kept as
+symbol-level metadata only, without fetching external Javadoc text.
+
+See [docs/javadoc-reference-policy.md](docs/javadoc-reference-policy.md) for
+the full policy, supported forms, and official sources.
 
 ## Build
 
 ```bash
-mvn test
+./mvnw test
 ```
 
 If Maven cannot write to your global `~/.m2`, use a local repository:
 
 ```bash
-mvn -Dmaven.repo.local=.m2/repository test
+./mvnw -Dmaven.repo.local=.m2/repository test
 ```
 
-The project targets Java 17.
+To run only the test module and the required reactor modules:
+
+```bash
+./mvnw -pl analyzer-tests -am test
+```
+
+CoCoX requires Java 17 or newer at runtime and uses Maven compiler target
+Java 17.
 
 Build the standalone CLI jar:
 
@@ -147,7 +130,9 @@ Run exact method-URI selection:
 Useful options:
 
 ```text
---scope all|entry-points       Method scope for source scanning
+--scope all|entry-points       Method scope for source scanning: all extracts
+                                every discovered method; entry-points keeps
+                                public/protected API-like methods
 --call-graph none|cha|rta|auto Optional SootUp call graph mode
 --resolution noclasspath|classpath|auto
                                 Spoon source-resolution mode
@@ -172,13 +157,15 @@ Useful options:
 --compile                      Attempt Maven/Gradle compilation before analysis
 ```
 
-`--resolution auto` attempts bounded Maven/Gradle compilation when useful,
-tries Spoon classpath-aware extraction when compiled classes or dependency jars
-are available, and falls back to no-classpath mode if resolution is incomplete
-or loses too much method coverage. `--call-graph auto` also uses bounded
-compilation and asks SootUp for RTA call graphs when class directories are
-available; otherwise it records the call graph as unavailable and continues
-source-only.
+`--resolution auto` attempts bounded build/classpath discovery when useful,
+tries Spoon classpath-aware extraction only when the discovered classpath is
+usable and coverage-preserving, and falls back to no-classpath source
+extraction when compilation is unavailable, incomplete, too expensive, or loses
+method coverage.
+
+`--call-graph auto` asks SootUp for an RTA call graph when compiled class
+directories are available. If bytecode is unavailable or unusable, CoCoX records
+the call graph as unavailable and still emits source/Javadoc contexts.
 
 For documentation datasets, prefer:
 
@@ -189,6 +176,11 @@ For documentation datasets, prefer:
   --source-set main \
   --call-graph none
 ```
+
+`--call-graph none` is the safest default for large documentation-mining runs:
+it avoids build/classpath failures and focuses the output on source and Javadoc
+context. Use `--call-graph auto`, `rta`, or `cha` when caller/callee context is
+part of the study design.
 
 `--source-set main` excludes public methods found under test, generated,
 example, integration-test, or unknown source roots. Use `--source-set all` or
@@ -228,7 +220,9 @@ Examples:
   --package-uri 'src/main/java/org/example/package-info.java#org.example'
 ```
 
-By default, generated artifacts are written outside the analyzed project:
+By default, generated artifacts are written outside the analyzed project under
+`./cocox_output/<project-name>/`, relative to the directory where you run
+`cocox`:
 
 ```text
 ./cocox_output/<project-name>/
@@ -236,7 +230,7 @@ By default, generated artifacts are written outside the analyzed project:
   extraction_report.json
   Output_CallGraph_CHA.txt     when CHA is effectively used
   Output_CallGraph_RTA.txt     when RTA is effectively used
-  method_context_failures.jsonl
+  method_context_failures.jsonl only when some methods fail context extraction
 ```
 
 Use `--output-dir` to choose an explicit destination:
@@ -303,7 +297,7 @@ class Example {
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(Path.of("/path/to/java/project"))
                 .scope(ContextRequest.Scope.ENTRY_POINTS)
-                .callGraphAlgorithm(org.assertlab.cocox.CallGraphGenerator.Algorithm.NONE)
+                .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                 .maxSourceFiles(500) // optional low-memory smoke-run cap
                 .build();
 
@@ -349,7 +343,8 @@ Current static-analysis boundaries:
 - reflection, proxies, generated code, Lombok, service loaders, and dependency injection can reduce precision, but common dynamic-feature hints are labeled in JSON;
 - generated methods from Lombok/annotation processors are not visible unless generated source or bytecode is available.
 
-The JSONL output schema is summarized in `schemas/README.md`. Field-test
-results and current static-analysis limitations are recorded in
-`docs/research/FIELD_TEST_RESULTS.md`. Documentation-context retrieval notes are recorded in
-`docs/research/DOC_CONTEXT_RETRIEVAL_NOTES.md`.
+The JSONL output schema is summarized in `schemas/README.md`. Javadoc reference
+handling is documented in `docs/javadoc-reference-policy.md`. Field-test results
+and current static-analysis limitations are recorded in
+`docs/research/FIELD_TEST_RESULTS.md`. Documentation-context retrieval notes are
+recorded in `docs/research/DOC_CONTEXT_RETRIEVAL_NOTES.md`.
