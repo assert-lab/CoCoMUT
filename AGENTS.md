@@ -9,6 +9,11 @@ branch status in `docs/agents/CURRENT_STATE.md` instead.
 CoCoX, Code Context Extractor, is a static Java context extraction tool for
 documentation-mining research and reusable Java repository analysis.
 
+CoCoX is not a generic Java static-analysis framework, not a build tool, and
+not a benchmark-specific script collection. New work should strengthen the
+source/Javadoc/context extraction product rather than expanding the repository
+into unrelated static-analysis infrastructure.
+
 The tool combines:
 
 - Spoon for source, Javadoc, symbols, method/type/package selection, and
@@ -19,10 +24,30 @@ The tool combines:
 CoCoX must remain a product-style tool, not an experiment dump. Prefer small,
 documented, deterministic features over project-specific heuristics.
 
+## Protected Product Paths
+
+Fixes in one subsystem must not quietly break another product path. When a
+change touches shared models, schema fields, project resolution, or extraction
+control flow, consider all of these paths:
+
+- default source and Javadoc extraction;
+- Spoon no-classpath fallback;
+- classpath-aware source extraction when build/classpath evidence is available;
+- optional SootUp CHA/RTA call graph extraction;
+- CLI extraction;
+- Java API extraction;
+- JSONL schema and sample output;
+- research viewer and script compatibility when fields are user-facing.
+
+Do not optimize one path by weakening another unless the tradeoff is explicit,
+documented, and tested.
+
 ## Non-Negotiable Invariants
 
 - Static analysis only. Do not add dynamic execution of analyzed projects.
 - Do not add Apache Commons Lang, OE25, or benchmark-specific rules.
+- Preserve correctness before coverage. Do not increase match counts by
+  guessing source identities.
 - Do not fake source identities. If a source method cannot be resolved
   deterministically, leave `method_uri` empty and explain why.
 - Prefer deterministic matching. Do not use probabilistic, fuzzy, or score-only
@@ -33,6 +58,25 @@ documented, deterministic features over project-specific heuristics.
 - Do not delete or rewrite existing experiment folders unless the user
   explicitly asks for it.
 - Do not commit generated test output such as `analyzer-tests/cocox_output/`.
+
+## Engineering Quality Rules
+
+- Keep the implementation small, readable, and testable.
+- Do not add fragile project-specific patches, dead code, unused abstractions,
+  or complicated fallback paths without evidence.
+- Prefer one clear release path over many permanent semantic variants.
+- Diagnostic switches are acceptable when they validate or explain the intended
+  behavior. Avoid long-lived flags that create multiple incompatible meanings
+  for the same output field.
+- Comment important extraction logic where source/bytecode identity, Javadoc
+  resolution, fallback behavior, cache lifetime, or schema semantics are not
+  obvious from the local code.
+- Prefer compact comments beside the implementation over detached design notes
+  when the comment explains why a matching rule, fallback, or memory policy
+  exists.
+- Keep public APIs narrow. CLI and API layers should not know Spoon `Ct*`
+  internals or SootUp implementation details. Hide those behind internal
+  adapters and product-level request/result objects.
 
 ## Public Entry Points
 
@@ -186,7 +230,54 @@ General:
 ./mvnw -q test
 ```
 
-Call graph and JSON output changes:
+Risk-based testing:
+
+### Source Extraction Changes
+
+Run source-model tests and cover both no-classpath and classpath-aware behavior
+when the change could affect project parsing or symbol resolution.
+
+Suggested commands:
+
+```bash
+./mvnw -q -pl analyzer-tests -am \
+  -Dtest=SourceModelEdgeCaseTest,AnalyzerFacadeTest \
+  -Dsurefire.failIfNoSpecifiedTests=false test
+```
+
+If classpath/build behavior changes, also test a small Maven fixture or known
+compiled repository with:
+
+```bash
+./bin/cocox --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project \
+  --compile --resolution auto --call-graph none --source-set main --scope all \
+  --output-dir /tmp/cocox-minimal-source-test
+```
+
+### Javadoc Extraction Or Reference Changes
+
+Run the tests that cover Javadoc tags, `@see`, `{@link ...}`, and
+`{@inheritDoc}`. Inspect at least one generated JSONL row when the output shape
+or semantics changes.
+
+Suggested commands:
+
+```bash
+./mvnw -q -pl analyzer-tests -am \
+  -Dtest=SourceModelEdgeCaseTest,RobustExtractionRegressionTest \
+  -Dsurefire.failIfNoSpecifiedTests=false test
+```
+
+When adding Javadoc reference behavior, confirm it follows official Javadoc
+syntax and update:
+
+- `docs/javadoc-reference-policy.md`;
+- `docs/symbol-model.md`;
+- `schemas/README.md` if fields or semantics change.
+
+### Call Graph Or SootUp-to-Spoon Join Changes
+
+Run call graph and JSON output tests:
 
 ```bash
 ./mvnw -q -pl analyzer-tests -am \
@@ -194,7 +285,28 @@ Call graph and JSON output changes:
   -Dsurefire.failIfNoSpecifiedTests=false test
 ```
 
-Schema sanity:
+If the join logic changes, test a compiled repository with `--call-graph auto`
+and inspect the distribution of:
+
+- `target_kind`;
+- `resolution`;
+- `unresolved_reason`;
+- `method_uri` presence versus `target_uri` presence.
+
+Do not claim aggregate matching-rate improvements from a single repository.
+Use a broader field run before making global claims.
+
+### Schema Or JSONL Output Changes
+
+Any schema-visible output change requires:
+
+- Java emitter update;
+- schema update;
+- schema docs update;
+- sample JSONL update if useful;
+- tests for the new field or semantic.
+
+Run schema sanity:
 
 ```bash
 python3 -m json.tool schemas/method-context.schema.json >/dev/null
@@ -207,6 +319,27 @@ for line in Path("examples/sample-output/minimal-method-context.jsonl").read_tex
 print("sample JSONL parses")
 PY
 ```
+
+If the field is user-facing in the viewer, update `scripts/method_contexts_viewer.py`
+or document why it is intentionally hidden.
+
+### CLI Or API Changes
+
+CLI and API should expose equivalent extraction functionality unless there is a
+documented reason not to. When changing request options, update:
+
+- `docs/usage.md`;
+- `examples/api/` if API examples are affected;
+- CLI tests or command examples where present.
+
+Run at least one CLI smoke extraction and one API-level test when feasible.
+
+### Experiment-Folder Safety
+
+Existing folders under `experiments/` are historical artifacts. They may contain
+manual reruns, representative subsets, or evidence used in reports. Do not
+delete, overwrite, rename, or regenerate them unless the user explicitly asks.
+When a new experiment is needed, create a new timestamped or descriptive folder.
 
 The local pre-commit hook may attempt `mvn formatter:validate` even when that
 plugin is not configured. If it fails for plugin-resolution reasons after tests
@@ -236,4 +369,3 @@ Rules:
   classes unless coordination is explicit.
 
 Use `docs/agents/CURRENT_STATE.md` for active coordination among agents.
-
