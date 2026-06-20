@@ -12,12 +12,10 @@
 </p>
 
 <p align="center">
-  <big><a href="#quickstart">🚀 Quickstart</a></big> |
-  <big><a href="docs/usage.md">📘 Usage</a></big> |
-  <big><a href="schemas/README.md">🧾 JSONL schema</a></big> |
-  <big><a href="docs/javadoc-reference-policy.md">🔗 Javadoc</a></big> |
-  <big><a href="docs/symbol-model.md">🧭 Symbols</a></big> |
-  <big><a href="CITATION.cff">✏️ Cite us!</a></big>
+  <a href="#quickstart">🚀 Quickstart</a> |
+  <a href="docs/usage.md">📘 Usage</a> |
+  <a href="schemas/README.md">🧾 JSONL schema</a> |
+  <a href="CITATION.cff">✏️ Cite us!</a>
 </p>
 
 ---
