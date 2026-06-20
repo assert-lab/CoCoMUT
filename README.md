@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href=""><img alt="Paper" src="https://img.shields.io/badge/📃-Arxiv-b31b1b?style=for-the-badge"></a>
-  <a href=""><img alt="YouTube" src="https://img.shields.io/badge/YouTube-red?style=for-the-badge&logo=youtube&logoColor=white"></a>
+  <a href=""><img alt="Demo" src="https://img.shields.io/badge/YouTube-red?style=for-the-badge&logo=youtube&logoColor=white"></a>
   <a href="https://www.apache.org/licenses/LICENSE-2.0.txt"><img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-blue?style=for-the-badge"></a>
   <img alt="Java" src="https://img.shields.io/badge/Java-17%2B-orange?style=for-the-badge">
 </p>
