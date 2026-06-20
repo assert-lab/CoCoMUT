@@ -1,173 +1,57 @@
-# CoCoX
+# 🥥 CoCoX
 
-CoCoX (Code Context Extractor) is a tool for extracting method-level context from Java systems.
+<p align="center">
+  <strong>Code Context Extractor for Java documentation research.</strong>
+</p>
 
-For each method, it writes one **JSONL record** containing:
+<p align="center">
+  <a href="https://github.com/assert-lab/Code-Context-Extractor/actions"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/assert-lab/Code-Context-Extractor/ci.yml?branch=main&label=CI"></a>
+  <a href="https://www.apache.org/licenses/LICENSE-2.0.txt"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
+  <img alt="Java" src="https://img.shields.io/badge/Java-17%2B-orange">
+  <img alt="Output" src="https://img.shields.io/badge/output-JSONL-0b7285">
+</p>
 
-- method URI, name, signature, source code, Javadoc, class Javadoc, and class hierarchy;
-- structured parameters, annotations, thrown exceptions, field usage, overload groups, dynamic-feature hints, and documentation metrics;
-- optional SootUp caller/callee context when bytecode is available;
-- provenance metadata describing how context was extracted.
+<p align="center">
+  <a href="#quickstart">🚀 Quickstart</a> |
+  <a href="docs/usage.md">📘 Usage</a> |
+  <a href="schemas/README.md">🧾 Schema</a> |
+  <a href="docs/javadoc-reference-policy.md">🔗 Javadoc references</a> |
+  <a href="docs/symbol-model.md">🧭 Symbol model</a> |
+  <a href="">🎥 Video</a> |
+  <a href="">📄 Paper</a> |
+  <a href="CITATION.cff">✏️ Citation</a>
+</p>
 
-CoCoX analyzes source code and, when requested, compiled bytecode. It does not
-execute the analyzed program.
+---
 
-## Repository Shape
+CoCoX extracts method-level context from Java repositories. For every method it
+writes one JSONL record with source code, Javadoc, type context, documentation
+metadata, provenance, and optional call-graph context.
 
-```text
-analyzer-core/   Java library and extraction API
-cocox-cli/       Standalone Picocli command-line application
-analyzer-tests/  unit and integration tests
-examples/        small API usage example
-docs/            product notes, symbol model, and research-run reports
-schemas/         machine-readable schema drafts and schema documentation
-scripts/         release/testing helpers
-```
+It is designed for documentation mining and documentation-generation research:
+static, reproducible, source-first, and explicit about failure modes.
 
-## Javadoc Standards Basis
+## Why CoCoX?
 
-CoCoX parses common Javadoc tags against the official Oracle/JDK doc-comment
-syntax and standard doclet model, not against project-specific conventions. In
-particular, `@see`, `{@link ...}`, and `{@linkplain ...}` follow the standard
-program-element reference forms documented by the JDK. Project-local references
-may be resolved to CoCoX URIs; external JDK/library references are kept as
-symbol-level metadata only, without fetching external Javadoc text.
+- **Source-first extraction** with Spoon, including no-classpath fallback for
+  imperfect public repositories.
+- **Stable method identity** using path, qualified type, erased parameter types,
+  and erased return type.
+- **Javadoc-aware context** for `@see`, `{@link ...}`, `{@inheritDoc}`,
+  structured tags, documentation metrics, and referenced project symbols.
+- **Optional call graph** through SootUp CHA/RTA when bytecode is available.
+- **Research-friendly output** as JSONL plus an extraction report and a
+  dependency-free web viewer.
 
-See [docs/javadoc-reference-policy.md](docs/javadoc-reference-policy.md) for
-the full policy, supported forms, and official sources.
-
-## Build
+## Quickstart
 
 ```bash
+git clone https://github.com/assert-lab/Code-Context-Extractor.git
+cd Code-Context-Extractor
 ./mvnw test
 ```
 
-If Maven cannot write to your global `~/.m2`, use a local repository:
-
-```bash
-./mvnw -Dmaven.repo.local=.m2/repository test
-```
-
-To run only the test module and the required reactor modules:
-
-```bash
-./mvnw -pl analyzer-tests -am test
-```
-
-CoCoX requires Java 17 or newer at runtime and uses Maven compiler target
-Java 17.
-
-Build the standalone CLI jar:
-
-```bash
-scripts/build_release_jar.sh
-```
-
-The script runs tests, packages all modules, and writes:
-
-```text
-dist/cocox-cli.jar
-```
-
-## Method Identity
-
-CoCoX identifies methods by URI.
-
-Format:
-
-```text
-relative/path/ToFile.java#qualified.DeclaringClass.method(erasedParamTypes):erasedReturnType
-```
-
-Example:
-
-```text
-src/main/java/com/example/Hello.java#com.example.Hello.greet(java.lang.String):java.lang.String
-```
-
-This is important because overloaded methods need more than a method name. A reliable locator needs:
-
-- the `.java` source path;
-- the declaring class and method/constructor name;
-- the erased parameter types;
-- the erased return type.
-
-For the broader symbol model, including `type_uri` and `package_uri`
-selection, see [docs/symbol-model.md](docs/symbol-model.md).
-
-## CLI Usage
-
-The CLI can be run through `bin/cocox` from the repository root:
-
-```bash
-./bin/cocox --project /path/to/java/project --scope entry-points --call-graph none
-```
-
-`bin/cocox` uses `dist/cocox-cli.jar` when it exists. If the jar has not been built yet, it builds and runs the shaded development jar from `cocox-cli/target/`.
-
-You can also run the standalone jar directly:
-
-```bash
-java -jar dist/cocox-cli.jar \
-  --project /path/to/java/project \
-  --scope entry-points \
-  --call-graph none
-```
-
-`cocox` has one public operation: extraction. Running `cocox` with the
-options below is the extraction command; there is no extra `extract`,
-`validate`, or `schema` command layer.
-
-Run exact method-URI selection:
-
-```bash
-./bin/cocox \
-  --project /path/to/java/project \
-  --method-uri 'src/main/java/com/example/Hello.java#com.example.Hello.greet(java.lang.String):java.lang.String' \
-  --call-graph none
-```
-
-Useful options:
-
-```text
---scope all|entry-points       Method scope for source scanning: all extracts
-                                every discovered method; entry-points keeps
-                                public/protected API-like methods
---call-graph none|cha|rta|auto Optional SootUp call graph mode
---resolution noclasspath|classpath|auto
-                                Spoon source-resolution mode
---output-dir DIR               Directory for generated artifacts
---max-methods N                Limit methods for smoke tests
---max-source-files N           Limit parsed Java files for low-memory smoke tests
---source-set all|main|test|integration_test|generated|example|unknown
-                                Filter methods by source set
---package NAME                 Include package prefix, repeatable/comma-separated
---class NAME                   Include fully qualified or simple class name
---method NAME                  Include method name or method URI substring
---target-uri KIND:URI          Exact target URI, where KIND is method, type,
-                                package, or project
---method-uri URI               Exact method URI target
---type-uri URI                 Exact type URI target: path#qualified.Type
---class-uri URI                Alias for --type-uri
---package-uri URI              Exact package URI target
---visibility public|protected|package-private|private
-                                Include methods with matching visibility
---include-path GLOB            Include source path glob relative to project root
---exclude-path GLOB            Exclude source path glob relative to project root
---compile                      Attempt Maven/Gradle compilation before analysis
-```
-
-`--resolution auto` attempts bounded build/classpath discovery when useful,
-tries Spoon classpath-aware extraction only when the discovered classpath is
-usable and coverage-preserving, and falls back to no-classpath source
-extraction when compilation is unavailable, incomplete, too expensive, or loses
-method coverage.
-
-`--call-graph auto` asks SootUp for an RTA call graph when compiled class
-directories are available. If bytecode is unavailable or unusable, CoCoX records
-the call graph as unavailable and still emits source/Javadoc contexts.
-
-For documentation datasets, prefer:
+Run CoCoX on a Java project:
 
 ```bash
 ./bin/cocox \
@@ -177,174 +61,62 @@ For documentation datasets, prefer:
   --call-graph none
 ```
 
-`--call-graph none` is the safest default for large documentation-mining runs:
-it avoids build/classpath failures and focuses the output on source and Javadoc
-context. Use `--call-graph auto`, `rta`, or `cha` when caller/callee context is
-part of the study design.
-
-`--source-set main` excludes public methods found under test, generated,
-example, integration-test, or unknown source roots. Use `--source-set all` or
-omit the flag to preserve the default behavior.
-
-Layered selection is available when you do not want the whole repository:
-
-```bash
-./bin/cocox \
-  --project /path/to/java/project \
-  --package org.example.api \
-  --class PublicApi \
-  --method parse \
-  --visibility public \
-  --include-path 'src/main/java/**/*.java' \
-  --exclude-path '**/generated/**'
-```
-
-Repository-wide extraction writes `method_contexts.jsonl`. Package, class, or
-method-filtered extraction writes a distinguishable JSONL filename based on the
-selected target, for example `package__org.example.api.jsonl`,
-`class__org.example.PublicApi.jsonl`, or `method__parse.jsonl`.
-
-CoCoX supports both filter-based package/class/method selection and exact URI
-targets through `--target-uri`, `--method-uri`, `--type-uri` / `--class-uri`,
-and `--package-uri`; see [docs/symbol-model.md](docs/symbol-model.md).
-
-Examples:
-
-```bash
-./bin/cocox \
-  --project /path/to/java/project \
-  --type-uri 'src/main/java/org/example/Foo.java#org.example.Foo'
-
-./bin/cocox \
-  --project /path/to/java/project \
-  --package-uri 'src/main/java/org/example/package-info.java#org.example'
-```
-
-By default, generated artifacts are written outside the analyzed project under
-`./cocox_output/<project-name>/`, relative to the directory where you run
-`cocox`:
+The default output goes to:
 
 ```text
-./cocox_output/<project-name>/
-  method_contexts.jsonl
-  extraction_report.json
-  Output_CallGraph_CHA.txt     when CHA is effectively used
-  Output_CallGraph_RTA.txt     when RTA is effectively used
-  method_context_failures.jsonl only when some methods fail context extraction
+./cocox_output/<project-name>/method_contexts.jsonl
 ```
 
-Use `--output-dir` to choose an explicit destination:
+Open the JSONL viewer:
 
 ```bash
-./bin/cocox --project /path/to/java/project --output-dir ./results/project-name
+python3 scripts/method_contexts_viewer.py ./cocox_output
 ```
 
-Failure artifacts are written next to the normal outputs:
+## Output At A Glance
+
+Each JSONL row contains:
+
+- method URI, signature, source, Javadoc, parameters, return type, annotations,
+  thrown exceptions, and source position;
+- type context, class Javadoc, hierarchy, fields, overloads, siblings, and
+  documentation metrics;
+- resolved Javadoc references with target kind, domain, and scope taxonomy;
+- optional callers/callees when bytecode call-graph extraction is available;
+- provenance fields describing backend mode, resolution confidence, failures,
+  and selected target.
+
+See [schemas/README.md](schemas/README.md) for the full schema.
+
+## Documentation Map
+
+| Topic | Where |
+| --- | --- |
+| CLI, build, API, viewer | [docs/usage.md](docs/usage.md) |
+| JSONL schema | [schemas/README.md](schemas/README.md) |
+| Method/type/package URIs | [docs/symbol-model.md](docs/symbol-model.md) |
+| Javadoc reference policy | [docs/javadoc-reference-policy.md](docs/javadoc-reference-policy.md) |
+| OE25 plus representative study | [docs/oe25-plus-representative-study.md](docs/oe25-plus-representative-study.md) |
+| Field-test notes | [docs/research/FIELD_TEST_RESULTS.md](docs/research/FIELD_TEST_RESULTS.md) |
+| Documentation-context notes | [docs/research/DOC_CONTEXT_RETRIEVAL_NOTES.md](docs/research/DOC_CONTEXT_RETRIEVAL_NOTES.md) |
+| Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| Citation | [CITATION.cff](CITATION.cff) |
+
+## Repository Shape
 
 ```text
-method_context_failures.jsonl  when a discovered method cannot be contextualized
+analyzer-core/   Java library and extraction API
+cocox-cli/       Picocli command-line application
+analyzer-tests/  unit and integration tests
+examples/        small API usage example
+docs/            product notes and research-run reports
+schemas/         JSON schema documentation
+scripts/         release, viewer, and field-test helpers
 ```
 
-## JSONL Viewer
+## Status
 
-For manual inspection of generated method contexts, CoCoX ships a dependency-free
-research viewer:
-
-```bash
-python3 scripts/method_contexts_viewer.py /path/to/method_contexts.jsonl
-```
-
-You can also pass an output directory; the viewer recursively finds `*.jsonl`
-files:
-
-```bash
-python3 scripts/method_contexts_viewer.py /path/to/cocox_output
-```
-
-The viewer indexes JSONL by byte offset, so large outputs can be browsed without
-loading the whole file into memory. It displays method source, Javadoc,
-selection provenance, source context, Javadoc references, call graph context,
-documentation metrics, and the raw record.
-
-## API Usage
-
-Add the dependency after installing the project locally:
-
-```bash
-mvn install
-```
-
-```xml
-<dependency>
-  <groupId>org.assertlab.cocox</groupId>
-  <artifactId>analyzer-core</artifactId>
-  <version>1.0-SNAPSHOT</version>
-</dependency>
-```
-
-Minimal Java API:
-
-```java
-import org.assertlab.cocox.CallGraphGenerator;
-import org.assertlab.cocox.ContextExtractorService;
-import org.assertlab.cocox.ContextRequest;
-import org.assertlab.cocox.ExtractionReport;
-
-import java.nio.file.Path;
-
-class Example {
-    public static void main(String[] args) throws Exception {
-        ContextRequest request = ContextRequest.builder()
-                .projectRoot(Path.of("/path/to/java/project"))
-                .scope(ContextRequest.Scope.ENTRY_POINTS)
-                .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
-                .maxSourceFiles(500) // optional low-memory smoke-run cap
-                .build();
-
-        ExtractionReport report = ContextExtractorService.createDefault().extract(request);
-        System.out.println(report.status());
-        System.out.println(report.jsonlFile());
-    }
-}
-```
-
-A runnable toy API project is in:
-
-```text
-examples/api-toy-project/
-```
-
-Run it from the repository root:
-
-```bash
-mvn install
-cd examples/api-toy-project
-mvn compile exec:java -Dexec.mainClass=example.RunCoCoX
-```
-
-To analyze another project:
-
-```bash
-mvn compile exec:java \
-  -Dexec.mainClass=example.RunCoCoX \
-  -Dexec.args="/path/to/java/project"
-```
-
-## Static Analysis Boundaries
-
-CoCoX does not perform dynamic analysis. It does not execute tests, run application code, observe runtime values, or resolve reflection dynamically.
-
-Current static-analysis boundaries:
-
-- source extraction uses Spoon; auto mode keeps no-classpath extraction as the coverage baseline and uses classpath-aware extraction when it is available and coverage-preserving;
-- call graph extraction uses optional SootUp `CHA` or `RTA`;
-- call graph quality depends on compiled class directories and classpath resolution;
-- build-tool compilation is explicit via `--compile` or opportunistic through `--resolution auto` / `--call-graph auto`; otherwise CoCoX only reuses existing class files;
-- reflection, proxies, generated code, Lombok, service loaders, and dependency injection can reduce precision, but common dynamic-feature hints are labeled in JSON;
-- generated methods from Lombok/annotation processors are not visible unless generated source or bytecode is available.
-
-The JSONL output schema is summarized in `schemas/README.md`. Javadoc reference
-handling is documented in `docs/javadoc-reference-policy.md`. Field-test results
-and current static-analysis limitations are recorded in
-`docs/research/FIELD_TEST_RESULTS.md`. Documentation-context retrieval notes are
-recorded in `docs/research/DOC_CONTEXT_RETRIEVAL_NOTES.md`.
+CoCoX currently targets Java 17+ and performs static analysis only. It does not
+execute the analyzed program. When classpath or bytecode is unavailable, it
+continues with source/Javadoc extraction and records that provenance in the
+output.
