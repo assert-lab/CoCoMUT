@@ -1,6 +1,6 @@
 # Symbol and Reference Model
 
-This note documents two product concepts that are easy to confuse:
+This note documents two product concepts:
 
 - how CoCoX names selected Java program elements;
 - how CoCoX resolves Javadoc references such as `@see`, `{@link ...}`, and
@@ -284,8 +284,9 @@ Commons Lang rule and not a Javadoc syntax rule.
 
 ## Implicit `java.lang.*`
 
-Java implicitly imports `java.lang.*` into every source file. This is language
-defined, so it is safe to resolve simple names such as:
+Java implicitly imports the public top-level types of `java.lang` into every
+compilation unit. CoCoX therefore checks `java.lang` before heuristic JDK
+probing when a Javadoc reference uses a simple type name such as:
 
 ```java
 @see Long#MIN_VALUE
@@ -301,37 +302,9 @@ java.lang.Throwable#addSuppressed(Throwable)
 java.lang.SecurityManager
 ```
 
-This rule should be applied before heuristic JDK probing.
+The resolution is still symbol-checked against the active JDK/runtime. If a
+`java.lang` type is unavailable, CoCoX does not treat it as resolved.
 
-## Common JDK Package Probing
-
-Some Commons Lang examples use simple JDK names without explicit package names:
-
-```java
-@see Pattern#DOTALL
-@see Collectors
-@see Locale
-```
-
-These are not implicitly imported by Java. CoCoX should not blindly guess them.
-The safer rule is:
-
-1. resolve explicit imports;
-2. resolve `java.lang.*`;
-3. resolve wildcard imports only when classpath/JDK symbols are available;
-4. optionally probe common JDK packages only when symbols are available and
-   record lower confidence.
-
-Examples of packages that may be probed only with symbol evidence:
-
-```text
-java.util
-java.util.regex
-java.util.stream
-java.time
-java.text
-java.io
-```
 
 ## External Method vs External Field
 
