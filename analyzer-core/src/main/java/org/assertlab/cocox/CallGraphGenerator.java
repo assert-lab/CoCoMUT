@@ -44,6 +44,8 @@ public class CallGraphGenerator {
 
     // Reverse lookup: SootUp signature string → project methodUri
     private Map<String, String> signatureToMethodUri;
+    private Map<SourceMethodKey, List<MethodInfo>> sourceMethodsByKey;
+    private Set<String> projectSourceClasses;
 
     // Class hierarchy cache
     private final Map<String, ClassHierarchyInfo> hierarchyCache = new HashMap<>();
@@ -92,6 +94,8 @@ public class CallGraphGenerator {
         this.algorithm = Objects.requireNonNull(algorithm, "algorithm cannot be null");
         this.cache = new HashMap<>();
         this.signatureToMethodUri = new HashMap<>();
+        this.sourceMethodsByKey = new HashMap<>();
+        this.projectSourceClasses = new HashSet<>();
         this.initialized = false;
     }
 
@@ -232,6 +236,17 @@ public class CallGraphGenerator {
     }
 
     private void indexMethodSignatures(List<MethodInfo> methods) {
+        sourceMethodsByKey = new HashMap<>();
+        projectSourceClasses = new HashSet<>();
+        for (MethodInfo method : methods) {
+            projectSourceClasses.add(method.getClassname());
+            SourceMethodKey key = SourceMethodKey.from(method);
+            sourceMethodsByKey.computeIfAbsent(key, ignored -> new ArrayList<>()).add(method);
+        }
+        sourceMethodsByKey.replaceAll((key, value) -> value.stream()
+                .sorted(Comparator.comparing(MethodInfo::getMethodUri))
+                .toList());
+
         for (MethodInfo method : methods) {
             MethodSignature sig = findMethodSignature(method);
             if (sig != null) {
@@ -248,7 +263,150 @@ public class CallGraphGenerator {
         if (methodUri != null && !methodUri.isBlank()) {
             return CallGraphEdge.resolved(methodUri, raw, declaringClass, methodName);
         }
-        return CallGraphEdge.unresolved(raw, declaringClass, methodName);
+        return resolveSootSignature(sig)
+                .orElseGet(() -> CallGraphEdge.unresolved(raw, declaringClass, methodName,
+                        targetKindFor(raw, declaringClass, methodName), unresolvedReason(sig)));
+    }
+
+    private Optional<CallGraphEdge> resolveSootSignature(MethodSignature sig) {
+        if (sourceMethodsByKey == null || sourceMethodsByKey.isEmpty()) {
+            return Optional.empty();
+        }
+
+        String raw = sig.toString();
+        String declaringClass = sig.getDeclClassType() != null ? sig.getDeclClassType().toString() : "";
+        String methodName = sig.getName();
+        BytecodeMethodKey exactKey = BytecodeMethodKey.from(sig, true);
+        BytecodeMethodKey returnAgnosticKey = BytecodeMethodKey.from(sig, false);
+
+        List<MethodInfo> exactCandidates = sourceMethodsByKey
+                .getOrDefault(SourceMethodKey.from(exactKey), List.of());
+        if (exactCandidates.size() == 1) {
+            MethodInfo method = exactCandidates.get(0);
+            signatureToMethodUri.put(raw, method.getMethodUri());
+            return Optional.of(CallGraphEdge.resolved(method.getMethodUri(), raw, declaringClass,
+                    methodName, "resolved_normalized_exact"));
+        }
+        if (exactCandidates.size() > 1) {
+            return Optional.of(CallGraphEdge.ambiguous(raw, declaringClass, methodName,
+                    methodUris(exactCandidates), "multiple_source_methods_match_normalized_exact_signature"));
+        }
+
+        List<MethodInfo> returnAgnosticCandidates = sourceMethodsByKey.entrySet().stream()
+                .filter(entry -> entry.getKey().sameClassNameParams(returnAgnosticKey))
+                .flatMap(entry -> entry.getValue().stream())
+                .sorted(Comparator.comparing(MethodInfo::getMethodUri))
+                .toList();
+        if (returnAgnosticCandidates.size() == 1) {
+            MethodInfo method = returnAgnosticCandidates.get(0);
+            signatureToMethodUri.put(raw, method.getMethodUri());
+            return Optional.of(CallGraphEdge.resolved(method.getMethodUri(), raw, declaringClass,
+                    methodName, "resolved_return_mismatch_unique"));
+        }
+        if (returnAgnosticCandidates.size() > 1) {
+            return Optional.of(CallGraphEdge.ambiguous(raw, declaringClass, methodName,
+                    methodUris(returnAgnosticCandidates), "multiple_source_methods_match_name_and_parameters"));
+        }
+
+        List<MethodInfo> sameNameCandidates = sourceMethodsByKey.entrySet().stream()
+                .filter(entry -> entry.getKey().sameClassName(returnAgnosticKey))
+                .flatMap(entry -> entry.getValue().stream())
+                .sorted(Comparator.comparing(MethodInfo::getMethodUri))
+                .toList();
+        if (sameNameCandidates.size() == 1 && parametersCompatibleForSingleCandidate(sig, sameNameCandidates.get(0))) {
+            MethodInfo method = sameNameCandidates.get(0);
+            signatureToMethodUri.put(raw, method.getMethodUri());
+            return Optional.of(CallGraphEdge.resolved(method.getMethodUri(), raw, declaringClass,
+                    methodName, "resolved_parameter_normalized_unique"));
+        }
+        if (sameNameCandidates.size() > 1) {
+            List<MethodInfo> compatible = sameNameCandidates.stream()
+                    .filter(method -> parametersCompatibleForSingleCandidate(sig, method))
+                    .toList();
+            if (compatible.size() == 1) {
+                MethodInfo method = compatible.get(0);
+                signatureToMethodUri.put(raw, method.getMethodUri());
+                return Optional.of(CallGraphEdge.resolved(method.getMethodUri(), raw, declaringClass,
+                        methodName, "resolved_parameter_normalized_unique"));
+            }
+            if (compatible.size() > 1) {
+                return Optional.of(CallGraphEdge.ambiguous(raw, declaringClass, methodName,
+                        methodUris(compatible), "multiple_source_methods_match_normalized_parameters"));
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static List<String> methodUris(List<MethodInfo> methods) {
+        return methods.stream()
+                .map(MethodInfo::getMethodUri)
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    private String unresolvedReason(MethodSignature sig) {
+        String declaringClass = sig.getDeclClassType() != null ? sig.getDeclClassType().toString() : "";
+        String methodName = sig.getName();
+        if (declaringClass.startsWith("sootup.dummy.InvokeDynamic")) {
+            return "invokedynamic_or_lambda_bytecode_artifact";
+        }
+        if (isJdkOrPlatformClass(declaringClass)) {
+            return "jdk_or_platform_method_outside_project_source";
+        }
+        if (declaringClass.matches(".*\\$\\d+(\\D.*)?$")) {
+            return "anonymous_or_local_class_bytecode";
+        }
+        if (outerSourceClass(declaringClass).isPresent()) {
+            return "nested_bytecode_class_without_unique_source_method";
+        }
+        if (projectSourceClasses.contains(declaringClass)) {
+            return sourceMethodsByKey.keySet().stream()
+                    .anyMatch(key -> key.className().equals(declaringClass) && key.methodName().equals(methodName))
+                    ? "project_method_name_present_but_signature_not_unique_or_compatible"
+                    : "project_class_present_method_absent";
+        }
+        return "external_or_unmodeled_bytecode_method";
+    }
+
+    private String targetKindFor(String raw, String declaringClass, String methodName) {
+        if (raw.contains("sootup.dummy.InvokeDynamic")) {
+            return "invokedynamic_method";
+        }
+        if (methodName != null && (methodName.startsWith("access$")
+                || methodName.startsWith("lambda$")
+                || methodName.contains("$default$"))) {
+            return "synthetic_or_compiler_method";
+        }
+        if (isJdkOrPlatformClass(declaringClass)) {
+            return "jdk_method";
+        }
+        if (projectSourceClasses.contains(declaringClass) || outerSourceClass(declaringClass).isPresent()) {
+            return "unresolved_project_method";
+        }
+        return "external_method";
+    }
+
+    private Optional<String> outerSourceClass(String declaringClass) {
+        String current = declaringClass;
+        while (current.contains("$")) {
+            current = current.substring(0, current.lastIndexOf('$'));
+            if (projectSourceClasses.contains(current)) {
+                return Optional.of(current);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static boolean isJdkOrPlatformClass(String declaringClass) {
+        return declaringClass != null
+                && (declaringClass.startsWith("java.")
+                || declaringClass.startsWith("javax.")
+                || declaringClass.startsWith("jdk.")
+                || declaringClass.startsWith("sun.")
+                || declaringClass.startsWith("com.sun.")
+                || declaringClass.startsWith("org.w3c.dom.")
+                || declaringClass.startsWith("org.xml.sax."));
     }
 
     // ---- Class hierarchy queries ----
@@ -408,6 +566,172 @@ public class CallGraphGenerator {
         int lastDot = base.lastIndexOf('.');
         String simple = (lastDot >= 0) ? base.substring(lastDot + 1) : base;
         return isArray ? simple + "[]" : simple;
+    }
+
+    private static boolean parametersCompatibleForSingleCandidate(MethodSignature sig, MethodInfo method) {
+        List<String> bytecodeParams = BytecodeMethodKey.from(sig, false).parameterTypes();
+        List<String> sourceParams = SourceMethodKey.from(method).parameterTypes();
+        if (bytecodeParams.size() != sourceParams.size()) {
+            return false;
+        }
+        for (int i = 0; i < bytecodeParams.size(); i++) {
+            String left = bytecodeParams.get(i);
+            String right = sourceParams.get(i);
+            if (left.equals(right)) {
+                continue;
+            }
+            if (simpleType(left).equals(simpleType(right))) {
+                continue;
+            }
+            if ("java.lang.Object".equals(left) || "java.lang.Object".equals(right)
+                    || "Object".equals(left) || "Object".equals(right)) {
+                continue;
+            }
+            return false;
+        }
+        return true;
+    }
+
+    private record SourceMethodKey(String className, String methodName,
+                                   List<String> parameterTypes, String returnType) {
+        private SourceMethodKey {
+            parameterTypes = parameterTypes == null ? List.of() : List.copyOf(parameterTypes);
+            returnType = normalizeType(returnType);
+        }
+
+        private static SourceMethodKey from(MethodInfo method) {
+            return new SourceMethodKey(method.getClassname(), method.getMethodName(),
+                    normalizeSourceParameters(method.getMethodSignature()),
+                    normalizeType(method.getErasedReturnType()));
+        }
+
+        private static SourceMethodKey from(BytecodeMethodKey key) {
+            return new SourceMethodKey(key.className(), key.methodName(), key.parameterTypes(), key.returnType());
+        }
+
+        private boolean sameClassNameParams(BytecodeMethodKey key) {
+            return className.equals(key.className())
+                    && methodName.equals(key.methodName())
+                    && parameterTypes.equals(key.parameterTypes());
+        }
+
+        private boolean sameClassName(BytecodeMethodKey key) {
+            return className.equals(key.className()) && methodName.equals(key.methodName());
+        }
+    }
+
+    private record BytecodeMethodKey(String className, String methodName,
+                                     List<String> parameterTypes, String returnType) {
+        private BytecodeMethodKey {
+            parameterTypes = parameterTypes == null ? List.of() : List.copyOf(parameterTypes);
+            returnType = normalizeType(returnType);
+        }
+
+        private static BytecodeMethodKey from(MethodSignature signature, boolean includeReturn) {
+            String owner = signature.getDeclClassType() != null ? signature.getDeclClassType().toString() : "";
+            List<String> params = signature.getParameterTypes().stream()
+                    .map(Object::toString)
+                    .map(CallGraphGenerator::normalizeType)
+                    .toList();
+            String ret = includeReturn ? normalizeType(signature.getType().toString()) : "";
+            return new BytecodeMethodKey(owner, signature.getName(), params, ret);
+        }
+    }
+
+    private static List<String> normalizeSourceParameters(String methodSignature) {
+        if (methodSignature == null) {
+            return List.of();
+        }
+        int open = methodSignature.indexOf('(');
+        int close = methodSignature.lastIndexOf(')');
+        if (open < 0 || close <= open) {
+            return List.of();
+        }
+        String raw = methodSignature.substring(open + 1, close).trim();
+        if (raw.isEmpty()) {
+            return List.of();
+        }
+        List<String> params = new ArrayList<>();
+        for (String param : splitTopLevelCommas(raw)) {
+            String type = stripParameterName(param);
+            params.add(normalizeType(type));
+        }
+        return params;
+    }
+
+    private static List<String> splitTopLevelCommas(String raw) {
+        List<String> parts = new ArrayList<>();
+        int depth = 0;
+        int start = 0;
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            if (c == '<' || c == '(' || c == '[') {
+                depth++;
+            } else if (c == '>' || c == ')' || c == ']') {
+                depth = Math.max(0, depth - 1);
+            } else if (c == ',' && depth == 0) {
+                parts.add(raw.substring(start, i));
+                start = i + 1;
+            }
+        }
+        parts.add(raw.substring(start));
+        return parts;
+    }
+
+    private static String stripParameterName(String rawParam) {
+        String s = rawParam == null ? "" : rawParam.trim();
+        s = s.replaceAll("@[\\w.$]+(?:\\s*\\([^)]*\\))?", " ");
+        s = s.replaceAll("\\b(final|volatile)\\b", " ").trim();
+        s = s.replace("...", "[]");
+        String[] tokens = s.trim().split("\\s+");
+        if (tokens.length <= 1) {
+            return s;
+        }
+        String last = tokens[tokens.length - 1];
+        if (last.matches("[A-Za-z_$][\\w$]*")) {
+            return s.substring(0, s.lastIndexOf(last)).trim();
+        }
+        return s;
+    }
+
+    private static String normalizeType(String type) {
+        if (type == null || type.isBlank()) {
+            return "";
+        }
+        String t = type.trim().replace("...", "[]").replace('$', '.');
+        String previous;
+        do {
+            previous = t;
+            t = t.replaceAll("<[^<>]*>", "");
+        } while (!previous.equals(t));
+        t = t.replaceAll("\\s+", "");
+        return primitiveDescriptorToJava(t);
+    }
+
+    private static String primitiveDescriptorToJava(String t) {
+        return switch (t) {
+            case "Z" -> "boolean";
+            case "B" -> "byte";
+            case "C" -> "char";
+            case "S" -> "short";
+            case "I" -> "int";
+            case "J" -> "long";
+            case "F" -> "float";
+            case "D" -> "double";
+            case "V" -> "void";
+            default -> t;
+        };
+    }
+
+    private static String simpleType(String type) {
+        String t = normalizeType(type);
+        String suffix = "";
+        while (t.endsWith("[]")) {
+            suffix += "[]";
+            t = t.substring(0, t.length() - 2);
+        }
+        int dot = t.lastIndexOf('.');
+        return (dot >= 0 ? t.substring(dot + 1) : t) + suffix;
     }
 
     private static boolean isSpecialMethod(MethodSignature sig) {

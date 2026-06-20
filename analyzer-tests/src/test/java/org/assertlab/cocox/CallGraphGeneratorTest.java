@@ -1,5 +1,7 @@
 package org.assertlab.cocox;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
@@ -11,6 +13,8 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import org.junit.Before;
 import org.junit.Test;
+import sootup.core.signatures.MethodSignature;
+import sootup.java.core.JavaIdentifierFactory;
 
 /**
  * Test suite for {@link CallGraphGenerator} (Phase 3).
@@ -263,5 +267,126 @@ public class CallGraphGeneratorTest {
         assertEquals("Should have 1 caller", 1, result.getCallerCount());
         assertEquals("Should have 1 callee", 1, result.getCalleeCount());
         assertEquals("Should have algorithm", "CHA", result.getAlgorithm());
+    }
+
+    @Test
+    public void testCallGraphEdgeExposesBytecodeTargetUri() {
+        CallGraphEdge edge = CallGraphEdge.unresolved(
+                "<java.lang.Math: int max(int,int)>",
+                "java.lang.Math",
+                "max");
+
+        assertEquals("method_uri remains empty for unresolved non-project edges", "", edge.methodUri());
+        assertEquals("jdk_method", edge.targetKind());
+        assertEquals("bytecode://java.lang.Math.max(int,int):int", edge.targetUri());
+        assertEquals("jdk_or_platform_method_outside_project_source", edge.unresolvedReason());
+    }
+
+    @Test
+    public void testAmbiguousCallGraphEdgeCarriesCandidates() {
+        CallGraphEdge edge = CallGraphEdge.ambiguous(
+                "<com.example.Foo: java.lang.Object get()>",
+                "com.example.Foo",
+                "get",
+                List.of(
+                        "src/main/java/com/example/Foo.java#com.example.Foo.get():java.lang.String",
+                        "src/main/java/com/example/Foo.java#com.example.Foo.get():java.lang.Object"),
+                "multiple_source_methods_match_name_and_parameters");
+
+        assertFalse("Ambiguous edges are not resolved source methods", edge.resolved());
+        assertEquals("ambiguous_project_method", edge.kind());
+        assertEquals("ambiguous", edge.resolution());
+        assertEquals(2, edge.candidateMethodUris().size());
+        assertEquals("multiple_source_methods_match_name_and_parameters", edge.unresolvedReason());
+    }
+
+    @Test
+    public void testReturnMismatchResolvesWhenClassNameAndParametersAreUnique() throws Exception {
+        MethodInfo sourceMethod = new MethodInfo.Builder()
+                .methodUri("src/main/java/com/example/Box.java#com.example.Box.get():java.lang.String")
+                .classname("com.example.Box")
+                .methodName("get")
+                .methodSignature("get()")
+                .returnType("java.lang.String")
+                .erasedReturnType("java.lang.String")
+                .sourceFile(Paths.get("Box.java"))
+                .lineNumber(10)
+                .build();
+
+        CallGraphEdge edge = resolveEdgeFor(List.of(sourceMethod),
+                "<com.example.Box: java.lang.Object get()>");
+
+        assertEquals("src/main/java/com/example/Box.java#com.example.Box.get():java.lang.String",
+                edge.methodUri());
+        assertEquals("resolved_return_mismatch_unique", edge.resolution());
+    }
+
+    @Test
+    public void testParameterNormalizationResolvesUniqueVarargsCandidate() throws Exception {
+        MethodInfo sourceMethod = new MethodInfo.Builder()
+                .methodUri("src/main/java/com/example/Log.java#com.example.Log.log(java.lang.String[]):void")
+                .classname("com.example.Log")
+                .methodName("log")
+                .methodSignature("log(String... messages)")
+                .returnType("void")
+                .erasedReturnType("void")
+                .sourceFile(Paths.get("Log.java"))
+                .lineNumber(12)
+                .build();
+
+        CallGraphEdge edge = resolveEdgeFor(List.of(sourceMethod),
+                "<com.example.Log: void log(java.lang.String[])>");
+
+        assertEquals("src/main/java/com/example/Log.java#com.example.Log.log(java.lang.String[]):void",
+                edge.methodUri());
+        assertEquals("resolved_parameter_normalized_unique", edge.resolution());
+    }
+
+    @Test
+    public void testParameterNormalizationReportsAmbiguousOverload() throws Exception {
+        MethodInfo first = new MethodInfo.Builder()
+                .methodUri("src/main/java/com/example/Foo.java#com.example.Foo.f(java.lang.String):void")
+                .classname("com.example.Foo")
+                .methodName("f")
+                .methodSignature("f(String value)")
+                .returnType("void")
+                .erasedReturnType("void")
+                .sourceFile(Paths.get("Foo.java"))
+                .lineNumber(20)
+                .build();
+        MethodInfo second = new MethodInfo.Builder()
+                .methodUri("src/main/java/com/example/Foo.java#com.example.Foo.f(java.lang.Object):void")
+                .classname("com.example.Foo")
+                .methodName("f")
+                .methodSignature("f(Object value)")
+                .returnType("void")
+                .erasedReturnType("void")
+                .sourceFile(Paths.get("Foo.java"))
+                .lineNumber(24)
+                .build();
+
+        CallGraphEdge edge = resolveEdgeFor(List.of(first, second),
+                "<com.example.Foo: void f(java.lang.Object)>");
+
+        assertEquals("", edge.methodUri());
+        assertEquals("ambiguous", edge.resolution());
+        assertEquals("multiple_source_methods_match_normalized_parameters", edge.unresolvedReason());
+        assertEquals(2, edge.candidateMethodUris().size());
+    }
+
+    private CallGraphEdge resolveEdgeFor(List<MethodInfo> methods, String rawSignature) throws Exception {
+        CallGraphGenerator localGenerator = new CallGraphGenerator(projectMetadata);
+        Field methodsByClass = CallGraphGenerator.class.getDeclaredField("methodsByClass");
+        methodsByClass.setAccessible(true);
+        methodsByClass.set(localGenerator, Map.of());
+
+        Method index = CallGraphGenerator.class.getDeclaredMethod("indexMethodSignatures", List.class);
+        index.setAccessible(true);
+        index.invoke(localGenerator, methods);
+
+        Method edgeFor = CallGraphGenerator.class.getDeclaredMethod("edgeFor", MethodSignature.class);
+        edgeFor.setAccessible(true);
+        MethodSignature signature = JavaIdentifierFactory.getInstance().parseMethodSignature(rawSignature);
+        return (CallGraphEdge) edgeFor.invoke(localGenerator, signature);
     }
 }

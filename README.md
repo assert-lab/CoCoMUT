@@ -96,6 +96,7 @@ See [schemas/README.md](schemas/README.md) for the full schema.
 | OE25 plus representative study | [docs/oe25-plus-representative-study.md](docs/oe25-plus-representative-study.md) |
 | Field-test notes | [docs/research/FIELD_TEST_RESULTS.md](docs/research/FIELD_TEST_RESULTS.md) |
 | Documentation-context notes | [docs/research/DOC_CONTEXT_RETRIEVAL_NOTES.md](docs/research/DOC_CONTEXT_RETRIEVAL_NOTES.md) |
+| Call-edge resolution notes | [docs/research/CALL_EDGE_RESOLUTION_REPORT.md](docs/research/CALL_EDGE_RESOLUTION_REPORT.md) |
 | Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Machine-readable citation metadata | [CITATION.cff](CITATION.cff) |
 

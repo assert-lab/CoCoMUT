@@ -123,17 +123,39 @@ method URIs instead of guessing. When a target includes parameters, for example
 `@see #parse(String, int)`, CoCoX matches those parameter types against source
 and erased parameter types.
 
-Call graph arrays are normalized edge objects, not raw strings:
+Call graph arrays are normalized edge objects, not raw strings. CoCoX keeps
+source-backed method identity separate from bytecode-level edge identity:
 
 ```text
-kind                      project_method|unresolved_method|synthetic_or_compiler_method
-method_uri                CoCoX method URI when the edge resolves to a project method
+kind                      project_method|ambiguous_project_method|
+                          unresolved_project_method|jdk_method|external_method|
+                          bytecode_method|invokedynamic_method|
+                          synthetic_or_compiler_method
+method_uri                CoCoX source method URI only when the edge resolves
+                          to a unique extracted project method
+target_uri                Universal bytecode-level URI derived from the SootUp
+                          signature, present even when method_uri is empty
+target_kind               project_method|unresolved_project_method|jdk_method|
+                          external_method|bytecode_method|invokedynamic_method|
+                          synthetic_or_compiler_method
 raw_signature             SootUp bytecode signature retained as provenance
 declaring_class           Declaring class reported by SootUp
 method_name               Method name reported by SootUp
-resolution                resolved|unresolved|synthetic_or_compiler_generated
+resolution                resolved|resolved_normalized_exact|
+                          resolved_return_mismatch_unique|
+                          resolved_parameter_normalized_unique|
+                          ambiguous|unresolved|
+                          synthetic_or_compiler_generated
+candidate_method_uris     Candidate source method URIs when a project edge is
+                          plausible but not uniquely resolvable
+unresolved_reason         Deterministic reason why method_uri is empty
 context                   Optional method node when method_uri resolves to an extracted context
 ```
+
+`target_uri` lets downstream tools identify every SootUp edge. `method_uri`
+remains stricter: it is populated only when the bytecode edge maps to one unique
+source method in the CoCoX/Spoon model. This avoids treating JDK, dependency,
+synthetic, ambiguous, or bytecode-only targets as source-backed methods.
 
 ## Versioning
 
