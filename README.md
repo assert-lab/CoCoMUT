@@ -7,7 +7,6 @@
 <p align="center">
   <a href="https://www.apache.org/licenses/LICENSE-2.0.txt"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
   <img alt="Java" src="https://img.shields.io/badge/Java-17%2B-orange">
-  <img alt="Output" src="https://img.shields.io/badge/output-JSONL-0b7285">
 </p>
 
 <p align="center">
