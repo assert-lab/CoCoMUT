@@ -100,7 +100,7 @@ public class JsonGenerator {
 
         // Metadata
         ObjectNode metadata = objectMapper.createObjectNode();
-        metadata.put("schema_version", "0.3.0");
+        metadata.put("schema_version", "0.4.0");
         metadata.put("source_backend", context.getSourceBackend());
         metadata.put("source_backend_mode", context.getSourceBackendMode());
         metadata.put("method_identity", "uri");
@@ -200,10 +200,18 @@ public class JsonGenerator {
             ObjectNode edgeNode = objectMapper.createObjectNode();
             edgeNode.put("kind", edge.kind());
             edgeNode.put("method_uri", edge.methodUri());
+            edgeNode.put("target_uri", edge.targetUri());
+            edgeNode.put("target_kind", edge.targetKind());
             edgeNode.put("raw_signature", edge.rawSignature());
             edgeNode.put("declaring_class", edge.declaringClass());
             edgeNode.put("method_name", edge.methodName());
             edgeNode.put("resolution", edge.resolution());
+            if (!edge.candidateMethodUris().isEmpty()) {
+                edgeNode.set("candidate_method_uris", objectMapper.valueToTree(edge.candidateMethodUris()));
+            }
+            if (!edge.unresolvedReason().isBlank()) {
+                edgeNode.put("unresolved_reason", edge.unresolvedReason());
+            }
 
             MethodContext ctx = edge.resolved() ? allContexts.get(edge.methodUri()) : null;
             if (ctx != null) {

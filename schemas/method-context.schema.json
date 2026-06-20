@@ -124,14 +124,33 @@
   "$defs": {
     "callGraphEdge": {
       "type": "object",
-      "required": ["kind", "method_uri", "raw_signature", "declaring_class", "method_name", "resolution"],
+      "required": [
+        "kind",
+        "method_uri",
+        "target_uri",
+        "target_kind",
+        "raw_signature",
+        "declaring_class",
+        "method_name",
+        "resolution"
+      ],
       "properties": {
         "kind": {"type": "string"},
         "method_uri": {"type": "string"},
+        "target_uri": {
+          "type": "string",
+          "description": "Universal bytecode-level target URI derived from the SootUp signature."
+        },
+        "target_kind": {
+          "type": "string",
+          "description": "project_method|unresolved_project_method|jdk_method|external_method|bytecode_method|invokedynamic_method|synthetic_or_compiler_method"
+        },
         "raw_signature": {"type": "string"},
         "declaring_class": {"type": "string"},
         "method_name": {"type": "string"},
         "resolution": {"type": "string"},
+        "candidate_method_uris": {"type": "array", "items": {"type": "string"}},
+        "unresolved_reason": {"type": "string"},
         "context": {"type": "object"}
       },
       "additionalProperties": true
