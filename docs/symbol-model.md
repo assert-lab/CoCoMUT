@@ -42,6 +42,33 @@ erased return:    int
 The erased return type is included because generic overload-like declarations
 can otherwise collapse to the same apparent parameter identity during mining.
 
+## Call Graph Target URIs
+
+Call graph targets use a different namespace from source symbols. SootUp reports
+bytecode-level signatures, so CoCoX records them as `target_uri` values:
+
+```text
+bytecode://org.example.Foo.parse(java.lang.String):int
+```
+
+This is not a selectable source URI. It is bytecode provenance for a caller or
+callee edge.
+
+When CoCoX can join that bytecode target to one unique project source method,
+the edge also contains a source-backed `method_uri`:
+
+```text
+method_uri exists  => source-backed CoCoX method identity
+target_uri exists  => bytecode-level SootUp target identity
+```
+
+So `method_uri` implies `target_uri`, but `target_uri` does not imply
+`method_uri`. For example, JDK calls, dependency calls, lambdas, synthetic
+methods, and ambiguous overloads can have a `target_uri` without a `method_uri`.
+
+The `target_kind` taxonomy is defined in
+[schemas/README.md](../schemas/README.md#call-graph-target-taxonomy).
+
 ## Type URIs
 
 CoCoX uses "type" instead of "class" internally because Java has several type

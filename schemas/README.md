@@ -157,6 +157,67 @@ remains stricter: it is populated only when the bytecode edge maps to one unique
 source method in the CoCoX/Spoon model. This avoids treating JDK, dependency,
 synthetic, ambiguous, or bytecode-only targets as source-backed methods.
 
+### Call Graph Target Taxonomy
+
+`target_kind` classifies the bytecode target reported by SootUp. It is not the
+same as `reference_target_kind`, which is used for Javadoc references.
+
+```text
+target_kind                   Meaning
+----------------------------  ------------------------------------------------
+project_method                SootUp target resolved to one unique CoCoX/Spoon
+                              project source method. method_uri is present.
+unresolved_project_method     Target appears to belong to a project class, but
+                              CoCoX could not identify one unique source method.
+jdk_method                    Target belongs to JDK/platform classes such as
+                              java.*, javax.*, jdk.*, sun.*, com.sun.*,
+                              org.w3c.dom.*, or org.xml.sax.*.
+external_method               Target belongs to a dependency or otherwise
+                              unmodeled external class.
+bytecode_method               Generic bytecode target when CoCoX cannot classify
+                              the edge more specifically.
+invokedynamic_method          Lambda, method-handle, or invokedynamic bytecode
+                              artifact rather than a normal source declaration.
+synthetic_or_compiler_method  Compiler-generated helper such as access$...,
+                              lambda$..., or similar synthetic bytecode method.
+```
+
+For every call edge:
+
+```text
+target_uri exists  => SootUp reported a bytecode-level target
+method_uri exists  => that target was joined to one unique project source method
+```
+
+Therefore `method_uri` implies `target_uri`, but `target_uri` does not imply
+`method_uri`.
+
+Common non-mapping examples:
+
+```json
+{
+  "method_uri": "",
+  "target_uri": "bytecode://java.util.Objects.requireNonNull(java.lang.Object):java.lang.Object",
+  "target_kind": "jdk_method",
+  "resolution": "unresolved",
+  "unresolved_reason": "jdk_or_platform_method_outside_project_source"
+}
+```
+
+```json
+{
+  "method_uri": "",
+  "target_uri": "bytecode://com.example.Foo.f(java.lang.Object):void",
+  "target_kind": "project_method",
+  "resolution": "ambiguous",
+  "candidate_method_uris": [
+    "src/main/java/com/example/Foo.java#com.example.Foo.f(java.lang.String):void",
+    "src/main/java/com/example/Foo.java#com.example.Foo.f(java.lang.Object):void"
+  ],
+  "unresolved_reason": "multiple_source_methods_match_normalized_parameters"
+}
+```
+
 ## Versioning
 
 Generated method-context rows include:
