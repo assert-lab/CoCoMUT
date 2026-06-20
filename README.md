@@ -15,7 +15,7 @@
   <a href="#quickstart">🚀 Quickstart</a> |
   <a href="docs/usage.md">📘 Usage</a> |
   <a href="schemas/README.md">🧾 JSONL schema</a> |
-  <a href="CITATION.cff">✏️ Cite us!</a>
+  <a href="#citation">✏️ Cite us!</a>
 </p>
 
 ---
@@ -84,6 +84,21 @@ Each JSONL row contains:
 
 See [schemas/README.md](schemas/README.md) for the full schema.
 
+## Citation
+
+Publication metadata is still a placeholder and will be updated when the paper
+is available.
+
+```bibtex
+@misc{cocox2026,
+  title        = {CoCoX: Code Context Extractor for Java},
+  author       = {{ASSERT Lab}},
+  year         = {2026},
+  howpublished = {\url{https://github.com/assert-lab/Code-Context-Extractor}},
+  note         = {Version 1.0-SNAPSHOT}
+}
+```
+
 ## Documentation Map
 
 | Topic | Where |
@@ -96,7 +111,7 @@ See [schemas/README.md](schemas/README.md) for the full schema.
 | Field-test notes | [docs/research/FIELD_TEST_RESULTS.md](docs/research/FIELD_TEST_RESULTS.md) |
 | Documentation-context notes | [docs/research/DOC_CONTEXT_RETRIEVAL_NOTES.md](docs/research/DOC_CONTEXT_RETRIEVAL_NOTES.md) |
 | Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
-| Citation | [CITATION.cff](CITATION.cff) |
+| Machine-readable citation metadata | `CITATION.cff` |
 
 ## Repository Shape
 
