@@ -38,6 +38,43 @@ The script runs tests, packages all modules, and writes:
 dist/cocox-cli.jar
 ```
 
+## Release Entry Points
+
+Public users normally interact with CoCoX in one of three ways.
+
+Run from a source checkout during development:
+
+```bash
+./bin/cocox \
+  --project /path/to/java/project \
+  --scope entry-points \
+  --source-set main \
+  --call-graph none
+```
+
+Run the standalone shaded JAR after building or downloading a release artifact:
+
+```bash
+java -jar dist/cocox-cli.jar \
+  --project /path/to/java/project \
+  --scope entry-points \
+  --source-set main \
+  --call-graph none
+```
+
+Use the Java API when embedding extraction in another JVM tool:
+
+```java
+ContextRequest request = ContextRequest.builder()
+        .projectRoot(Path.of("/path/to/java/project"))
+        .entryPoints()
+        .sourceSet("main")
+        .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
+        .build();
+
+ExtractionReport report = ContextExtractorService.createDefault().extract(request);
+```
+
 ## CLI
 
 The CLI can be run through `bin/cocox` from the repository root:
@@ -195,6 +232,13 @@ Use `--output-dir` to choose an explicit destination:
 ./bin/cocox --project /path/to/java/project --output-dir ./results/project-name
 ```
 
+A tiny fixture-generated example is checked in at:
+
+```text
+examples/sample-output/minimal-method-context.jsonl
+examples/sample-output/minimal-extraction-report.json
+```
+
 ## JSONL Viewer
 
 For manual inspection of generated method contexts, CoCoX ships a
@@ -228,7 +272,7 @@ Add the dependency after installing the project locally:
 <dependency>
   <groupId>org.assertlab.cocox</groupId>
   <artifactId>analyzer-core</artifactId>
-  <version>1.0-SNAPSHOT</version>
+  <version>0.1.0</version>
 </dependency>
 ```
 

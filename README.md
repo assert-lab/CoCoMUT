@@ -90,6 +90,7 @@ See [schemas/README.md](schemas/README.md) for the full schema.
 | --- | --- |
 | CLI, build, API, viewer | [docs/usage.md](docs/usage.md) |
 | JSONL schema | [schemas/README.md](schemas/README.md) |
+| Example JSONL output | [examples/sample-output/minimal-method-context.jsonl](examples/sample-output/minimal-method-context.jsonl) |
 | Method/type/package URIs | [docs/symbol-model.md](docs/symbol-model.md) |
 | Javadoc reference policy | [docs/javadoc-reference-policy.md](docs/javadoc-reference-policy.md) |
 | OE25 plus representative study | [docs/oe25-plus-representative-study.md](docs/oe25-plus-representative-study.md) |
@@ -121,7 +122,7 @@ is available.
   author       = {{ASSERT Lab}},
   year         = {2026},
   howpublished = {\url{https://github.com/assert-lab/Code-Context-Extractor}},
-  note         = {Version 1.0-SNAPSHOT}
+  note         = {Version 0.1.0}
 }
 ```
 

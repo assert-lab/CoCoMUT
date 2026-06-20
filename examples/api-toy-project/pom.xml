@@ -5,7 +5,7 @@
 
     <groupId>org.assertlab.cocox.examples</groupId>
     <artifactId>cocox-api-toy-project</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
@@ -17,7 +17,7 @@
         <dependency>
             <groupId>org.assertlab.cocox</groupId>
             <artifactId>analyzer-core</artifactId>
-            <version>1.0-SNAPSHOT</version>
+            <version>0.1.0</version>
         </dependency>
     </dependencies>
 </project>

@@ -4,7 +4,7 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROJECT_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 JAR="$PROJECT_ROOT/dist/cocox-cli.jar"
-DEV_JAR="$PROJECT_ROOT/cocox-cli/target/cocox-cli-1.0-SNAPSHOT-all.jar"
+DEV_JAR="$PROJECT_ROOT/cocox-cli/target/cocox-cli-0.1.0-all.jar"
 
 if [ -f "$JAR" ]; then
   exec java -jar "$JAR" "$@"

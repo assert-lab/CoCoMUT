@@ -7,11 +7,11 @@
 
     <groupId>org.assertlab.cocox</groupId>
     <artifactId>cocox</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <packaging>pom</packaging>
     <name>CoCoX — Parent</name>
     <description>Static Java method-context extraction for documentation research and documentation-generation systems.</description>
-    <url>https://github.com/assert-lab/CoCoX</url>
+    <url>https://github.com/assert-lab/Code-Context-Extractor</url>
 
     <licenses>
         <license>
@@ -30,15 +30,15 @@
     </developers>
 
     <scm>
-        <connection>scm:git:https://github.com/assert-lab/CoCoX.git</connection>
-        <developerConnection>scm:git:https://github.com/assert-lab/CoCoX.git</developerConnection>
-        <url>https://github.com/assert-lab/CoCoX</url>
+        <connection>scm:git:https://github.com/assert-lab/Code-Context-Extractor.git</connection>
+        <developerConnection>scm:git:https://github.com/assert-lab/Code-Context-Extractor.git</developerConnection>
+        <url>https://github.com/assert-lab/Code-Context-Extractor</url>
         <tag>HEAD</tag>
     </scm>
 
     <issueManagement>
         <system>GitHub Issues</system>
-        <url>https://github.com/assert-lab/CoCoX/issues</url>
+        <url>https://github.com/assert-lab/Code-Context-Extractor/issues</url>
     </issueManagement>
 
     <modules>

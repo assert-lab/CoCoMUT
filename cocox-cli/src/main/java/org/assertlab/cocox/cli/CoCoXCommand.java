@@ -17,7 +17,7 @@ import java.util.concurrent.Callable;
 @Command(
         name = "cocox",
         mixinStandardHelpOptions = true,
-        version = "CoCoX 1.0-SNAPSHOT",
+        version = "CoCoX 0.1.0",
         description = "Extract static Java method contexts from a Java project.")
 public final class CoCoXCommand implements Callable<Integer> {
     public static void main(String[] args) {

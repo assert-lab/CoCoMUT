@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use CoCoX in academic work, please cite it. Publication metadata is currently a placeholder and will be updated after the paper/video are available."
 title: "CoCoX: Code Context Extractor for Java"
-version: "1.0-SNAPSHOT"
+version: "0.1.0"
 date-released: "2026-06-20"
 repository-code: "https://github.com/assert-lab/Code-Context-Extractor"
 url: "https://github.com/assert-lab/Code-Context-Extractor"

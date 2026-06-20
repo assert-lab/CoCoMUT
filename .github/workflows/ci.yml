@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ["main", "refactor/minimization"]
+    branches: ["main"]
   pull_request:
 
 jobs:
@@ -27,9 +27,9 @@ jobs:
 
       - name: CLI smoke test
         run: |
-          java -jar cocox-cli/target/cocox-cli-1.0-SNAPSHOT-all.jar --help
+          java -jar cocox-cli/target/cocox-cli-0.1.0-all.jar --help
           rm -rf /tmp/cocox-ci-smoke
-          java -jar cocox-cli/target/cocox-cli-1.0-SNAPSHOT-all.jar \
+          java -jar cocox-cli/target/cocox-cli-0.1.0-all.jar \
             --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project \
             --scope entry-points \
             --source-set main \
