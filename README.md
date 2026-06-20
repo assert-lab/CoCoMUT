@@ -84,21 +84,6 @@ Each JSONL row contains:
 
 See [schemas/README.md](schemas/README.md) for the full schema.
 
-## Citation
-
-Publication metadata is still a placeholder and will be updated when the paper
-is available.
-
-```bibtex
-@misc{cocox2026,
-  title        = {CoCoX: Code Context Extractor for Java},
-  author       = {{ASSERT Lab}},
-  year         = {2026},
-  howpublished = {\url{https://github.com/assert-lab/Code-Context-Extractor}},
-  note         = {Version 1.0-SNAPSHOT}
-}
-```
-
 ## Documentation Map
 
 | Topic | Where |
@@ -123,6 +108,21 @@ examples/        small API usage example
 docs/            product notes and research-run reports
 schemas/         JSON schema documentation
 scripts/         release, viewer, and field-test helpers
+```
+
+## Citation
+
+Publication metadata is still a placeholder and will be updated when the paper
+is available.
+
+```bibtex
+@misc{cocox2026,
+  title        = {CoCoX: Code Context Extractor for Java},
+  author       = {{ASSERT Lab}},
+  year         = {2026},
+  howpublished = {\url{https://github.com/assert-lab/Code-Context-Extractor}},
+  note         = {Version 1.0-SNAPSHOT}
+}
 ```
 
 ## Status
