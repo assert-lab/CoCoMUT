@@ -1,7 +1,7 @@
-# 🥥 CoCoX
+# CoCoX 🥥
 
 <p align="center">
-  <strong>Code Context Extractor for Java documentation research.</strong>
+  <strong>Code Context Extractor for Java.</strong>
 </p>
 
 <p align="center">
