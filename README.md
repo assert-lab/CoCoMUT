@@ -5,7 +5,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/assert-lab/Code-Context-Extractor/actions"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/assert-lab/Code-Context-Extractor/ci.yml?branch=main&label=CI"></a>
   <a href="https://www.apache.org/licenses/LICENSE-2.0.txt"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
   <img alt="Java" src="https://img.shields.io/badge/Java-17%2B-orange">
   <img alt="Output" src="https://img.shields.io/badge/output-JSONL-0b7285">
@@ -14,12 +13,8 @@
 <p align="center">
   <a href="#quickstart">🚀 Quickstart</a> |
   <a href="docs/usage.md">📘 Usage</a> |
-  <a href="schemas/README.md">🧾 Schema</a> |
-  <a href="docs/javadoc-reference-policy.md">🔗 Javadoc references</a> |
-  <a href="docs/symbol-model.md">🧭 Symbol model</a> |
-  <a href="">🎥 Video</a> |
-  <a href="">📄 Paper</a> |
-  <a href="CITATION.cff">✏️ Citation</a>
+  <a href="schemas/README.md">🧾 JSONL schema</a> |
+  <a href="CITATION.cff">✏️ Cite us!</a>
 </p>
 
 ---
