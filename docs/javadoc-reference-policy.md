@@ -56,6 +56,20 @@ Project-local references may be resolved to CoCoX URIs. External JDK or library
 references are kept as symbol-level metadata only; CoCoX does not fetch external
 Javadoc text.
 
+Each resolved reference also gets derived taxonomy fields for empirical
+analysis:
+
+- `reference_target_kind`: `method`, `field`, `type`, `url`, `text`,
+  `method_or_field`, or `unknown`;
+- `reference_domain`: `project`, `external_jdk`, `external_library`,
+  `external_web`, `text`, or `unresolved`;
+- `reference_scope`: `same_type`, `same_package`, `same_module`, `external`,
+  `text`, or `unknown`.
+
+These taxonomy fields summarize CoCoX's resolution result. They are not
+additional Javadoc syntax and should not replace canonical method/type/field
+URIs when a project-local target is resolved.
+
 ## Resolution Policy
 
 CoCoX resolves project-local references in this order:

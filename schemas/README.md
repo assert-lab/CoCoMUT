@@ -81,6 +81,9 @@ resolution                resolved_type|resolved_method|resolved_field|
                           resolved_inherited_method|resolved_inherited_field|
                           overload_ambiguous|ambiguous_field|external_symbol|
                           external|text|unresolved
+reference_target_kind     method|field|type|url|text|method_or_field|unknown
+reference_domain          project|external_jdk|external_library|external_web|text|unresolved
+reference_scope           same_type|same_package|same_module|external|text|unknown
 method_uri                Canonical CoCoX URI for resolved project methods
 field_uri                 Canonical CoCoX URI for resolved project fields
 type_uri                  Canonical CoCoX URI for resolved project types
@@ -95,6 +98,13 @@ external_resolution       qualified_symbol|explicit_import|implicit_java_lang|
                           wildcard_import_symbol|common_jdk_probe|unresolved
 external_member_kind      method|field|unknown for external members
 ```
+
+`reference_target_kind`, `reference_domain`, and `reference_scope` are derived
+taxonomy fields for empirical analysis. They summarize the resolved reference
+without replacing the lower-level `kind`, `resolution`, URI, and context fields.
+`same_type` means the target is in the declaring type of the documented method;
+`same_package` means another project type in the same package; `same_module`
+means project-local but in a different package.
 
 CoCoX recognizes the standard doclet `@see` forms: quoted text entries,
 HTML anchor links, and program-element references such as

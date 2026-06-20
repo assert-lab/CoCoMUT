@@ -29,8 +29,8 @@ Common workflow:
     1. Run CoCoX and generate method_contexts.jsonl.
     2. Start this viewer with the JSONL file or the containing output directory.
     3. Use filters to inspect tags, reference resolution, source set,
-       visibility, backend mode, call graph, method size, and documentation
-       presence.
+       reference scope/domain/target kind, source set, visibility, backend
+       mode, call graph, method size, and documentation presence.
 
 The viewer accepts any mix of JSONL files and directories. Directories are
 searched recursively for *.jsonl files, so it works for project-wide,
@@ -429,6 +429,40 @@ HTML_PAGE = r"""<!DOCTYPE html>
       <option value="unresolved">unresolved</option>
     </select>
   </label>
+  <label>Reference scope
+    <select id="filterReferenceScope">
+      <option value="">Any</option>
+      <option value="same_type">same_type</option>
+      <option value="same_package">same_package</option>
+      <option value="same_module">same_module</option>
+      <option value="external">external</option>
+      <option value="text">text</option>
+      <option value="unknown">unknown</option>
+    </select>
+  </label>
+  <label>Reference domain
+    <select id="filterReferenceDomain">
+      <option value="">Any</option>
+      <option value="project">project</option>
+      <option value="external_jdk">external_jdk</option>
+      <option value="external_library">external_library</option>
+      <option value="external_web">external_web</option>
+      <option value="text">text</option>
+      <option value="unresolved">unresolved</option>
+    </select>
+  </label>
+  <label>Reference target
+    <select id="filterReferenceTargetKind">
+      <option value="">Any</option>
+      <option value="method">method</option>
+      <option value="field">field</option>
+      <option value="type">type</option>
+      <option value="url">url</option>
+      <option value="text">text</option>
+      <option value="method_or_field">method_or_field</option>
+      <option value="unknown">unknown</option>
+    </select>
+  </label>
   <label>Source set
     <select id="filterSourceSet">
       <option value="">Any</option>
@@ -715,6 +749,9 @@ function collectFilters() {
     tags: Array.from(document.querySelectorAll('input[name="filterTag"]:checked')).map((input) => input.value),
     tag_mode: $("filterTagMode").value,
     resolution: $("filterResolution").value,
+    reference_scope: $("filterReferenceScope").value,
+    reference_domain: $("filterReferenceDomain").value,
+    reference_target_kind: $("filterReferenceTargetKind").value,
     source_set: $("filterSourceSet").value,
     visibility: $("filterVisibility").value,
     backend: $("filterBackend").value,
@@ -899,7 +936,16 @@ $("clearFiltersBtn").addEventListener("click", () => {
     input.checked = false;
   }
   $("filterTagMode").value = "or";
-  for (const id of ["filterResolution", "filterSourceSet", "filterVisibility", "filterBackend", "filterCallGraph"]) {
+  for (const id of [
+    "filterResolution",
+    "filterReferenceScope",
+    "filterReferenceDomain",
+    "filterReferenceTargetKind",
+    "filterSourceSet",
+    "filterVisibility",
+    "filterBackend",
+    "filterCallGraph"
+  ]) {
     $(id).value = "";
   }
   for (const id of ["filterMinLoc", "filterMinCc"]) {
@@ -910,7 +956,17 @@ $("clearFiltersBtn").addEventListener("click", () => {
   }
   applyFilters(0).catch((e) => showStatus(e.message));
 });
-for (const id of ["filterTagMode", "filterResolution", "filterSourceSet", "filterVisibility", "filterBackend", "filterCallGraph"]) {
+for (const id of [
+  "filterTagMode",
+  "filterResolution",
+  "filterReferenceScope",
+  "filterReferenceDomain",
+  "filterReferenceTargetKind",
+  "filterSourceSet",
+  "filterVisibility",
+  "filterBackend",
+  "filterCallGraph"
+]) {
   $(id).addEventListener("change", () => applyFilters(0).catch((e) => showStatus(e.message)));
 }
 for (const input of document.querySelectorAll('input[name="filterTag"]')) {
@@ -1097,6 +1153,9 @@ def normalize_filters(filters: dict[str, Any] | None) -> dict[str, Any]:
         "q",
         "tag_mode",
         "resolution",
+        "reference_scope",
+        "reference_domain",
+        "reference_target_kind",
         "source_set",
         "visibility",
         "backend",
@@ -1141,6 +1200,13 @@ def line_matches_filters(line: str, filters: dict[str, Any]) -> bool:
         elif not any(tag_matches):
             return False
     if filters.get("resolution") and not has_reference_resolution(javadoc_meta, filters["resolution"]):
+        return False
+    if filters.get("reference_scope") and not has_reference_field(javadoc_meta, "reference_scope", filters["reference_scope"]):
+        return False
+    if filters.get("reference_domain") and not has_reference_field(javadoc_meta, "reference_domain", filters["reference_domain"]):
+        return False
+    if filters.get("reference_target_kind") and not has_reference_field(
+            javadoc_meta, "reference_target_kind", filters["reference_target_kind"]):
         return False
     if filters.get("source_set") and mut.get("source_set") != filters["source_set"]:
         return False
@@ -1211,6 +1277,11 @@ def has_javadoc_tag(tag: str, metrics: dict[str, Any], javadoc_meta: dict[str, A
 def has_reference_resolution(javadoc_meta: dict[str, Any], resolution: str) -> bool:
     refs = javadoc_meta.get("javadoc_references") or []
     return any(isinstance(ref, dict) and ref.get("resolution") == resolution for ref in refs)
+
+
+def has_reference_field(javadoc_meta: dict[str, Any], field: str, value: str) -> bool:
+    refs = javadoc_meta.get("javadoc_references") or []
+    return any(isinstance(ref, dict) and ref.get(field) == value for ref in refs)
 
 
 def matches_call_graph_filter(call_graph: dict[str, Any], metadata: dict[str, Any], wanted: str) -> bool:

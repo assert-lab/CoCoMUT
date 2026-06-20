@@ -273,6 +273,13 @@ public class SourceModelEdgeCaseTest {
                     public class Helper {
                     }
                     """);
+            write(project.resolve("src/main/java/demo/other/OtherHelper.java"), """
+                    package demo.other;
+
+                    /** Other package helper docs. */
+                    public class OtherHelper {
+                    }
+                    """);
             write(project.resolve("src/main/java/demo/Child.java"), """
                     package demo;
 
@@ -286,6 +293,7 @@ public class SourceModelEdgeCaseTest {
                          * @see #sameName(String)
                          * @see #TOKEN
                          * @see Helper
+                         * @see demo.other.OtherHelper
                          * @see #inherited(CharSequence)
                          * @see java.util.List#add(Object)
                          * @see java.base/java.util.List#remove(Object)
@@ -330,6 +338,9 @@ public class SourceModelEdgeCaseTest {
 
             Map<String, Object> exactOverload = referenceByTarget(refs, "#sameName(String)");
             assertEquals("resolved_method", exactOverload.get("resolution"));
+            assertEquals("method", exactOverload.get("reference_target_kind"));
+            assertEquals("project", exactOverload.get("reference_domain"));
+            assertEquals("same_type", exactOverload.get("reference_scope"));
             assertTrue(exactOverload.get("method_uri").toString()
                     .contains("sameName(java.lang.String):void"));
             @SuppressWarnings("unchecked")
@@ -340,19 +351,34 @@ public class SourceModelEdgeCaseTest {
             Map<String, Object> inheritedField = referenceByTarget(refs, "#TOKEN");
             assertEquals("field_reference", inheritedField.get("kind"));
             assertEquals("resolved_inherited_field", inheritedField.get("resolution"));
+            assertEquals("field", inheritedField.get("reference_target_kind"));
+            assertEquals("project", inheritedField.get("reference_domain"));
+            assertEquals("same_package", inheritedField.get("reference_scope"));
             assertEquals("java.lang.String", inheritedField.get("field_erased_type"));
             assertTrue(inheritedField.get("field_uri").toString().contains("Base.TOKEN:java.lang.String"));
             assertTrue(inheritedField.get("field_javadoc").toString().contains("Token field docs"));
 
             Map<String, Object> type = referenceByTarget(refs, "Helper");
             assertEquals("resolved_type", type.get("resolution"));
+            assertEquals("type", type.get("reference_target_kind"));
+            assertEquals("project", type.get("reference_domain"));
+            assertEquals("same_package", type.get("reference_scope"));
             assertTrue(type.get("type_uri").toString().contains("Helper.java#demo.Helper"));
             assertTrue(type.get("class_javadoc").toString().contains("Helper type docs"));
             assertTrue(type.containsKey("class_hierarchy"));
 
+            Map<String, Object> otherPackageType = referenceByTarget(refs, "demo.other.OtherHelper");
+            assertEquals("resolved_type", otherPackageType.get("resolution"));
+            assertEquals("type", otherPackageType.get("reference_target_kind"));
+            assertEquals("project", otherPackageType.get("reference_domain"));
+            assertEquals("same_module", otherPackageType.get("reference_scope"));
+
             Map<String, Object> inheritedMethod = referenceByTarget(refs, "#inherited(CharSequence)");
             assertEquals("resolved_inherited_method", inheritedMethod.get("resolution"));
             assertEquals("demo.Base", inheritedMethod.get("inherited_from"));
+            assertEquals("method", inheritedMethod.get("reference_target_kind"));
+            assertEquals("project", inheritedMethod.get("reference_domain"));
+            assertEquals("same_package", inheritedMethod.get("reference_scope"));
             assertTrue(inheritedMethod.get("method_uri").toString()
                     .contains("Base.inherited(java.lang.CharSequence):java.lang.CharSequence"));
             @SuppressWarnings("unchecked")
@@ -362,6 +388,9 @@ public class SourceModelEdgeCaseTest {
 
             Map<String, Object> external = referenceByTarget(refs, "java.util.List#add(Object)");
             assertEquals("external_symbol", external.get("resolution"));
+            assertEquals("method", external.get("reference_target_kind"));
+            assertEquals("external_jdk", external.get("reference_domain"));
+            assertEquals("external", external.get("reference_scope"));
             assertEquals("java.util.List", external.get("external_class"));
             assertEquals("add(Object)", external.get("external_member"));
             assertEquals("method", external.get("external_member_kind"));
@@ -395,6 +424,9 @@ public class SourceModelEdgeCaseTest {
             Map<String, Object> textReference = referenceByTarget(refs, "\"Reference text without a generated link\"");
             assertEquals("text_reference", textReference.get("kind"));
             assertEquals("text", textReference.get("resolution"));
+            assertEquals("text", textReference.get("reference_target_kind"));
+            assertEquals("text", textReference.get("reference_domain"));
+            assertEquals("text", textReference.get("reference_scope"));
             assertEquals("Reference text without a generated link", textReference.get("text"));
         } finally {
             deleteRecursively(project);

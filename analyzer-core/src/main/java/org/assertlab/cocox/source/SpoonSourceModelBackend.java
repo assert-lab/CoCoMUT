@@ -991,6 +991,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             ref.put("kind", "text_reference");
             ref.put("text", target.replaceAll("^\"|\"$", ""));
             ref.put("resolution", "text");
+            enrichReferenceTaxonomy(parsed, owner, ref);
             return ref;
         }
 
@@ -1000,6 +1001,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             ref.put("url", anchor.group(1).trim());
             ref.put("label", anchor.group(2).replaceAll("\\s+", " ").trim());
             ref.put("resolution", "external");
+            enrichReferenceTaxonomy(parsed, owner, ref);
             return ref;
         }
 
@@ -1007,6 +1009,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             ref.put("kind", "external_url");
             ref.put("url", target);
             ref.put("resolution", "external");
+            enrichReferenceTaxonomy(parsed, owner, ref);
             return ref;
         }
 
@@ -1014,6 +1017,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         if (cleaned.isBlank()) {
             ref.put("kind", "unknown");
             ref.put("resolution", "empty_target");
+            enrichReferenceTaxonomy(parsed, owner, ref);
             return ref;
         }
 
@@ -1022,7 +1026,147 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         } else {
             resolveTypeReference(parsed, owner, cleaned, ref);
         }
+        enrichReferenceTaxonomy(parsed, owner, ref);
         return ref;
+    }
+
+    private static void enrichReferenceTaxonomy(ParsedProject parsed, CtType<?> owner, Map<String, Object> ref) {
+        ref.put("reference_target_kind", referenceTargetKind(ref));
+        ref.put("reference_domain", referenceDomain(ref));
+        ref.put("reference_scope", referenceScope(parsed, owner, ref));
+    }
+
+    private static String referenceTargetKind(Map<String, Object> ref) {
+        String kind = stringValue(ref.get("kind"));
+        String resolution = stringValue(ref.get("resolution"));
+        if ("resolved_method".equals(resolution) || "resolved_inherited_method".equals(resolution)
+                || "overload_ambiguous".equals(resolution)) {
+            return "method";
+        }
+        if ("resolved_field".equals(resolution) || "resolved_inherited_field".equals(resolution)
+                || "ambiguous_field".equals(resolution)) {
+            return "field";
+        }
+        if ("resolved_type".equals(resolution)) {
+            return "type";
+        }
+        if ("member_reference".equals(kind)) {
+            String memberKind = stringValue(ref.get("external_member_kind"));
+            return memberKind.isBlank() || "unknown".equals(memberKind) ? "method_or_field" : memberKind;
+        }
+        if ("field_reference".equals(kind)) {
+            return "field";
+        }
+        if ("type_reference".equals(kind)) {
+            return "type";
+        }
+        if ("external_url".equals(kind)) {
+            return "url";
+        }
+        if ("text_reference".equals(kind)) {
+            return "text";
+        }
+        return "unknown";
+    }
+
+    private static String referenceDomain(Map<String, Object> ref) {
+        String kind = stringValue(ref.get("kind"));
+        String resolution = stringValue(ref.get("resolution"));
+        if ("external_url".equals(kind)) {
+            return "external_web";
+        }
+        if ("text_reference".equals(kind)) {
+            return "text";
+        }
+        if ("external_symbol".equals(resolution)) {
+            String externalClass = stringValue(ref.get("external_class"));
+            if (externalClass.startsWith("java.") || externalClass.startsWith("javax.")) {
+                return "external_jdk";
+            }
+            return "external_library";
+        }
+        if (stringValue(ref.get("method_uri")).isBlank()
+                && stringValue(ref.get("field_uri")).isBlank()
+                && stringValue(ref.get("type_uri")).isBlank()) {
+            return "unresolved";
+        }
+        return "project";
+    }
+
+    private static String referenceScope(ParsedProject parsed, CtType<?> owner, Map<String, Object> ref) {
+        String domain = referenceDomain(ref);
+        if ("external_web".equals(domain) || domain.startsWith("external_")) {
+            return "external";
+        }
+        if ("text".equals(domain)) {
+            return "text";
+        }
+        if (!"project".equals(domain)) {
+            return "unknown";
+        }
+
+        String ownerType = owner != null ? owner.getQualifiedName() : "";
+        String targetType = referencedProjectType(parsed, ref);
+        if (ownerType.isBlank() || targetType.isBlank()) {
+            return "unknown";
+        }
+        if (ownerType.equals(targetType)) {
+            return "same_type";
+        }
+
+        String ownerPackage = packageName(ownerType);
+        String targetPackage = packageName(targetType);
+        if (!ownerPackage.isBlank() && ownerPackage.equals(targetPackage)) {
+            return "same_package";
+        }
+        return "same_module";
+    }
+
+    private static String referencedProjectType(ParsedProject parsed, Map<String, Object> ref) {
+        String inheritedFrom = stringValue(ref.get("inherited_from"));
+        if (!inheritedFrom.isBlank()) {
+            return inheritedFrom;
+        }
+        String resolvedClass = stringValue(ref.get("resolved_class"));
+        if (!resolvedClass.isBlank()) {
+            return resolvedClass;
+        }
+        String methodUri = stringValue(ref.get("method_uri"));
+        if (!methodUri.isBlank()) {
+            SourceMethod method = parsed.methodsByUri().get(methodUri);
+            if (method != null) {
+                return method.className();
+            }
+        }
+        String fieldUri = stringValue(ref.get("field_uri"));
+        if (!fieldUri.isBlank()) {
+            return parsed.fieldsByClassName().values().stream()
+                    .flatMap(List::stream)
+                    .filter(field -> field.fieldUri().equals(fieldUri))
+                    .map(SourceField::className)
+                    .findFirst()
+                    .orElse("");
+        }
+        String typeUri = stringValue(ref.get("type_uri"));
+        if (!typeUri.isBlank()) {
+            int hash = typeUri.indexOf('#');
+            return hash >= 0 && hash + 1 < typeUri.length() ? typeUri.substring(hash + 1) : "";
+        }
+        return "";
+    }
+
+    private static String packageName(String qualifiedTypeName) {
+        if (qualifiedTypeName == null || qualifiedTypeName.isBlank()) {
+            return "";
+        }
+        int nested = qualifiedTypeName.indexOf('$');
+        String value = nested >= 0 ? qualifiedTypeName.substring(0, nested) : qualifiedTypeName;
+        int dot = value.lastIndexOf('.');
+        return dot > 0 ? value.substring(0, dot) : "";
+    }
+
+    private static String stringValue(Object value) {
+        return value == null ? "" : String.valueOf(value);
     }
 
     private static void resolveMemberReference(ParsedProject parsed, CtType<?> owner,
