@@ -24,7 +24,7 @@ CoCoX extracts method-level context from Java repositories. For every method it
 writes one JSONL record with source code, Javadoc, type context, documentation
 metadata, provenance, and optional call-graph context.
 
-It is designed for documentation mining and documentation-generation research:
+It is designed for documentation related research:
 static, reproducible, source-first, and explicit about failure modes.
 
 ## Why CoCoX?
