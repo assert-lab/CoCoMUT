@@ -167,6 +167,16 @@ public final class ContextRequest {
             return this;
         }
 
+        public Builder entryPoints() {
+            this.scope = Scope.ENTRY_POINTS;
+            return this;
+        }
+
+        public Builder allMethods() {
+            this.scope = Scope.ALL;
+            return this;
+        }
+
         public Builder callGraphAlgorithm(CallGraphGenerator.Algorithm callGraphAlgorithm) {
             this.callGraphAlgorithm = Objects.requireNonNull(callGraphAlgorithm, "callGraphAlgorithm cannot be null");
             return this;
@@ -207,13 +217,32 @@ public final class ContextRequest {
             return this;
         }
 
+        public Builder packageName(String packageName) {
+            addNonBlank(this.packages, packageName);
+            return this;
+        }
+
         public Builder classes(Set<String> classes) {
             this.classes = normalizeNonBlank(classes);
             return this;
         }
 
+        public Builder className(String className) {
+            addNonBlank(this.classes, className);
+            return this;
+        }
+
+        public Builder typeName(String typeName) {
+            return className(typeName);
+        }
+
         public Builder methods(Set<String> methods) {
             this.methods = normalizeNonBlank(methods);
+            return this;
+        }
+
+        public Builder methodName(String methodName) {
+            addNonBlank(this.methods, methodName);
             return this;
         }
 
@@ -222,13 +251,28 @@ public final class ContextRequest {
             return this;
         }
 
+        public Builder visibility(String visibility) {
+            this.visibilities = normalizeVisibilities(addToCopy(this.visibilities, visibility));
+            return this;
+        }
+
         public Builder includePathGlobs(Set<String> includePathGlobs) {
             this.includePathGlobs = normalizeNonBlank(includePathGlobs);
             return this;
         }
 
+        public Builder includePathGlob(String includePathGlob) {
+            addNonBlank(this.includePathGlobs, includePathGlob);
+            return this;
+        }
+
         public Builder excludePathGlobs(Set<String> excludePathGlobs) {
             this.excludePathGlobs = normalizeNonBlank(excludePathGlobs);
+            return this;
+        }
+
+        public Builder excludePathGlob(String excludePathGlob) {
+            addNonBlank(this.excludePathGlobs, excludePathGlob);
             return this;
         }
 
@@ -263,6 +307,10 @@ public final class ContextRequest {
                 this.targets.add(SymbolTarget.type(typeUri));
             }
             return this;
+        }
+
+        public Builder classUri(String classUri) {
+            return typeUri(classUri);
         }
 
         public Builder packageUri(String packageUri) {
@@ -313,6 +361,18 @@ public final class ContextRequest {
                 }
             }
             return normalized;
+        }
+
+        private static void addNonBlank(Set<String> values, String value) {
+            if (value != null && !value.isBlank()) {
+                values.add(value.trim());
+            }
+        }
+
+        private static Set<String> addToCopy(Set<String> values, String value) {
+            LinkedHashSet<String> copy = new LinkedHashSet<>(values == null ? Set.of() : values);
+            addNonBlank(copy, value);
+            return copy;
         }
 
         private static Set<String> normalizeVisibilities(Set<String> values) {

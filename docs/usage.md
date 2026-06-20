@@ -63,6 +63,13 @@ java -jar dist/cocox-cli.jar \
 below is the extraction command; there is no extra `extract`, `validate`, or
 `schema` command layer.
 
+The shell script and standalone JAR expose the same interface. `bin/cocox` is a
+launcher that eventually executes the same Picocli entry point as:
+
+```bash
+java -jar dist/cocox-cli.jar ...
+```
+
 Run exact method-URI selection:
 
 ```bash
@@ -239,7 +246,7 @@ class Example {
     public static void main(String[] args) throws Exception {
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(Path.of("/path/to/java/project"))
-                .scope(ContextRequest.Scope.ENTRY_POINTS)
+                .entryPoints()
                 .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                 .maxSourceFiles(500)
                 .build();
@@ -272,6 +279,49 @@ mvn compile exec:java \
   -Dexec.mainClass=example.RunCoCoX \
   -Dexec.args="/path/to/java/project"
 ```
+
+## Entrypoint Parity
+
+CoCoX has three public entrypoint shapes:
+
+```text
+./bin/cocox ...                 shell launcher
+java -jar dist/cocox-cli.jar ... standalone JAR
+ContextExtractorService.extract  Java API
+```
+
+The shell launcher and JAR are functionally identical: both run
+`org.assertlab.cocox.cli.CoCoXCommand`. The Java API uses the same extraction
+pipeline through `ContextRequest` and `ContextExtractorService`.
+
+| Capability | CLI / JAR | Java API |
+| --- | --- | --- |
+| Project root | `--project PATH` | `.projectRoot(Path.of(...))` |
+| All methods | `--scope all` | `.allMethods()` or `.scope(Scope.ALL)` |
+| Entry points | `--scope entry-points`, `--entry-points` | `.entryPoints()` or `.scope(Scope.ENTRY_POINTS)` |
+| Call graph | `--call-graph none\|cha\|rta\|auto` | `.callGraphAlgorithm(Algorithm.NONE/CHA/RTA/AUTO)` |
+| Source resolution | `--resolution noclasspath\|classpath\|auto` | `.sourceResolution(SourceResolution.NOCLASSPATH/CLASSPATH/AUTO)` |
+| Compile attempt | `--compile` | `.attemptCompile(true)` |
+| Output directory | `--output-dir DIR` | `.outputDirectory(Path.of(...))` |
+| Method cap | `--max-methods N` | `.maxMethods(N)` |
+| Source-file cap | `--max-source-files N` | `.maxSourceFiles(N)` |
+| Source set | `--source-set main,test` | `.sourceSet("main")` or `.sourceSets(Set.of(...))` |
+| Package filter | `--package org.example` | `.packageName("org.example")` or `.packages(Set.of(...))` |
+| Type/class filter | `--class Foo` | `.typeName("Foo")`, `.className("Foo")`, or `.classes(Set.of(...))` |
+| Method-name filter | `--method parse` | `.methodName("parse")` or `.methods(Set.of(...))` |
+| Exact target URI | `--target-uri method:...` | `.targetUri("method:...")` or `.target(SymbolTarget...)` |
+| Exact method URI | `--method-uri URI` | `.methodUri("URI")` |
+| Exact type URI | `--type-uri URI`, `--class-uri URI` | `.typeUri("URI")` or `.classUri("URI")` |
+| Exact package URI | `--package-uri URI` | `.packageUri("URI")` |
+| Visibility filter | `--visibility public` | `.visibility("public")` or `.visibilities(Set.of(...))` |
+| Include path glob | `--include-path GLOB` | `.includePathGlob("GLOB")` or `.includePathGlobs(Set.of(...))` |
+| Exclude path glob | `--exclude-path GLOB` | `.excludePathGlob("GLOB")` or `.excludePathGlobs(Set.of(...))` |
+
+Default behavior is aligned as well: both CLI/JAR and API default to all
+methods, no-classpath source extraction, automatic call-graph mode, and the
+same output directory policy. When `AUTO` source resolution or `AUTO` call graph
+is selected, the pipeline may attempt bounded build/classpath discovery before
+falling back to source-only extraction.
 
 ## Static Analysis Boundaries
 
