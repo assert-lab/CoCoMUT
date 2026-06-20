@@ -96,7 +96,7 @@ See [schemas/README.md](schemas/README.md) for the full schema.
 | Field-test notes | [docs/research/FIELD_TEST_RESULTS.md](docs/research/FIELD_TEST_RESULTS.md) |
 | Documentation-context notes | [docs/research/DOC_CONTEXT_RETRIEVAL_NOTES.md](docs/research/DOC_CONTEXT_RETRIEVAL_NOTES.md) |
 | Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
-| Machine-readable citation metadata | `CITATION.cff` |
+| Machine-readable citation metadata | [CITATION.cff](CITATION.cff) |
 
 ## Repository Shape
 
