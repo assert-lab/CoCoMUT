@@ -183,6 +183,9 @@ kind                 type_reference|member_reference|field_reference|external_ur
 resolution           resolved_method|resolved_type|resolved_field|
                      resolved_inherited_method|resolved_inherited_field|
                      overload_ambiguous|external_symbol|external|text|unresolved
+reference_target_kind method|field|type|url|text|method_or_field|unknown
+reference_domain    project|external_jdk|external_library|external_web|text|unresolved
+reference_scope     same_type|same_package|same_module|external|text|unknown
 method_uri           present for resolved project methods
 field_uri            present for resolved project fields
 type_uri             present for resolved project types
@@ -193,6 +196,13 @@ external_class       present for external symbols
 external_member      present for external member symbols
 candidate_method_uris present when overload resolution is ambiguous
 ```
+
+The reference taxonomy fields are derived from the detailed resolution result.
+They are intended for aggregate analysis of documentation links: for example,
+whether `@see` points to the same type, another type in the same package, a
+different project package, an external JDK/library symbol, a web URL, or a text
+reference. They do not replace canonical CoCoX URIs for resolved project
+symbols.
 
 For project-local method references, `referenced_method` intentionally embeds a
 compact method context rather than only an excerpt. It includes the referenced
