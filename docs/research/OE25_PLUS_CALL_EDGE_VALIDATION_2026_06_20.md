@@ -266,10 +266,20 @@ GraphBasedCallGraph(0) is empty
 
 and no JSONL row had callers/callees.
 
-This is a reporting nuance in the underlying extraction pipeline: phase 3
-created an RTA artifact, but the artifact had no usable edges. For call-edge
-validation, the reliable metric is serialized edge count, not only
+This run exposed a reporting nuance in the underlying extraction pipeline:
+phase 3 created an RTA artifact, but the artifact had no usable edges. For this
+historical run, the reliable metric is serialized edge count, not only
 `phase_3_available`.
+
+Current CoCoMUT reporting distinguishes this case explicitly:
+
+```text
+phase_3_available=false
+phase_3_call_graphs_generated=<per-method result count>
+phase_3_non_empty_call_graphs=0
+phase_3_call_edges_generated=0
+failure_codes=[CALL_GRAPH_EMPTY]
+```
 
 ## Fallback And Scalability Cases
 
@@ -349,4 +359,3 @@ study runner:
    - resolve if unique;
    - emit candidate URIs if ambiguous;
    - keep bytecode-only `target_uri` when source identity is unavailable.
-

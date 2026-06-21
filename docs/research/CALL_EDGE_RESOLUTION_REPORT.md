@@ -247,6 +247,25 @@ CoCoMUT does not yet map anonymous/local class methods into source-level
 synthetic URIs. That would require a separate model for bytecode-only source
 locations and would risk creating unstable identifiers.
 
+## Empty Call-Graph Artifacts
+
+SootUp can initialize and CoCoMUT can create a call-graph artifact even when the
+artifact contains no caller/callee edges. This is different from an unresolved
+edge: there are no edges to resolve.
+
+Current reporting separates these concepts:
+
+```text
+phase_3_call_graphs_generated      per-method call-graph result objects
+phase_3_non_empty_call_graphs      result objects with at least one edge
+phase_3_call_edges_generated       total caller + callee edges
+phase_3_available                  true only when phase_3_call_edges_generated > 0
+CALL_GRAPH_EMPTY                   degradation code for generated but edge-empty graphs
+```
+
+For call-edge validation, prefer `phase_3_call_edges_generated` and serialized
+JSONL edge counts over `phase_3_call_graphs_generated`.
+
 ## Verified Commons Lang Impact
 
 The implementation was compared against `origin/main` on the same Apache

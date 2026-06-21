@@ -291,6 +291,12 @@ final class Orchestrator {
             }
 
             callGraphResults = callGraphGenerator.generateForMethods(methodInfos);
+            int callGraphEdgeCount = callGraphResults.values().stream()
+                    .mapToInt(result -> result.getCallerCount() + result.getCalleeCount())
+                    .sum();
+            long nonEmptyCallGraphResults = callGraphResults.values().stream()
+                    .filter(result -> result.getCallerCount() > 0 || result.getCalleeCount() > 0)
+                    .count();
 
             String cgText = callGraphGenerator.getCallGraphText();
             if (!cgText.isEmpty()) {
@@ -300,10 +306,18 @@ final class Orchestrator {
                 executionReport.put("phase_3_call_graph_file", cgOutputPath.toString());
             }
 
-            executionReport.put("phase_3_available", true);
+            boolean hasUsableEdges = callGraphEdgeCount > 0;
+            if (!hasUsableEdges) {
+                failureCodes.add(FailureCode.CALL_GRAPH_EMPTY);
+                executionReport.put("phase_3_warning",
+                        "Call graph generated but contained no usable caller/callee edges");
+            }
+            executionReport.put("phase_3_available", hasUsableEdges);
             executionReport.put("phase_3_algorithm", callGraphAlgorithm.toString());
             executionReport.put("phase_3_effective_algorithm", effectiveAlgorithm.toString());
             executionReport.put("phase_3_call_graphs_generated", callGraphResults.size());
+            executionReport.put("phase_3_non_empty_call_graphs", nonEmptyCallGraphResults);
+            executionReport.put("phase_3_call_edges_generated", callGraphEdgeCount);
             return true;
         } catch (Exception e) {
             executionReport.put("phase_3_error", e.getMessage());
