@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run CoCoX on OE25 plus the representative public-repo checkouts.
+"""Run CoCoMUT on OE25 plus the representative public-repo checkouts.
 
 The script writes all new artifacts under a fresh experiment directory and never
 deletes or overwrites these protected folders:
@@ -204,7 +204,7 @@ def clone_oe25_target(root: Path, output_dir: Path, repo: str, timeout: int,
     return Target("oe25", repo, checkout)
 
 
-def run_cocox(
+def run_cocomut(
     root: Path,
     target: Target,
     artifact_dir: Path,
@@ -221,7 +221,7 @@ def run_cocox(
     shutil.rmtree(artifact_dir, ignore_errors=True)
     artifact_dir.mkdir(parents=True, exist_ok=True)
     command = [
-        str(root / "bin" / "cocox"),
+        str(root / "bin" / "cocomut"),
         "--project",
         str(target.project_path),
         "--scope",
@@ -258,7 +258,7 @@ def failed_or_unstable(status: int | None, tail: str) -> bool:
 def has_frontend_package_manager(project_path: Path) -> bool:
     """Return true for Java repos whose compile may trigger JS package setup.
 
-    CoCoX is a Java static-analysis tool. For field testing, we avoid invoking
+    CoCoMUT is a Java static-analysis tool. For field testing, we avoid invoking
     build steps that commonly install or build frontend dependencies as a side
     effect of Maven/Gradle compilation. Source-only extraction can still run.
     """
@@ -423,12 +423,12 @@ def run_target(root: Path, output_dir: Path, target: Target, args: argparse.Name
     env = os.environ.copy()
     env.setdefault("MAVEN_OPTS", f"-Xmx{args.heap_gb}g")
     env.setdefault("JAVA_TOOL_OPTIONS", f"-Xmx{args.heap_gb}g")
-    env.setdefault("COCOX_COMPILE_TIMEOUT_SECONDS", str(args.compile_timeout))
+    env.setdefault("COCOMUT_COMPILE_TIMEOUT_SECONDS", str(args.compile_timeout))
     start = time.time()
     compile_project = not has_frontend_package_manager(target.project_path)
 
-    log_path = logs / f"{target.dataset}__{target.safe_name}.cocox.log"
-    status, report, tail = run_cocox(
+    log_path = logs / f"{target.dataset}__{target.safe_name}.cocomut.log"
+    status, report, tail = run_cocomut(
         root,
         target,
         artifact_dir,
@@ -447,7 +447,7 @@ def run_target(root: Path, output_dir: Path, target: Target, args: argparse.Name
     if failed_or_unstable(status, tail) and not timeout_or_memory_failure(status, tail):
         retry_mode = "no_call_graph"
         retry_log = logs / f"{target.dataset}__{target.safe_name}.retry-no-callgraph.log"
-        status, report, tail = run_cocox(
+        status, report, tail = run_cocomut(
             root,
             target,
             artifact_dir,
@@ -473,7 +473,7 @@ def run_target(root: Path, output_dir: Path, target: Target, args: argparse.Name
             else f"{retry_mode};source_only_bounded"
         )
         retry_log = logs / f"{target.dataset}__{target.safe_name}.retry-source-only.log"
-        status, report, tail = run_cocox(
+        status, report, tail = run_cocomut(
             root,
             target,
             artifact_dir,
@@ -580,7 +580,7 @@ def write_summary(output_dir: Path, results_path: Path) -> None:
     lines = [
         "# OE25 Plus Representative Study",
         "",
-        "This run tests CoCoX on the OE25 repository list plus the representative",
+        "This run tests CoCoMUT on the OE25 repository list plus the representative",
         "public-repository checkouts. It is intentionally written to a separate",
         "experiment directory and does not overwrite the previous experiment folders.",
         "",
@@ -607,7 +607,7 @@ def write_summary(output_dir: Path, results_path: Path) -> None:
         "",
         "`target_uri` is bytecode identity and should be present for every SootUp edge.",
         "`method_uri` is source identity and is present only when the SootUp target",
-        "joins to one unique CoCoX/Spoon project method.",
+        "joins to one unique CoCoMUT/Spoon project method.",
         "",
         "Target-kind counts:",
         "",

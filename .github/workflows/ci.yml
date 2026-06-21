@@ -27,13 +27,13 @@ jobs:
 
       - name: CLI smoke test
         run: |
-          java -jar cocox-cli/target/cocox-cli-0.1.0-all.jar --help
-          rm -rf /tmp/cocox-ci-smoke
-          java -jar cocox-cli/target/cocox-cli-0.1.0-all.jar \
+          java -jar cocomut-cli/target/cocomut-cli-0.1.0-all.jar --help
+          rm -rf /tmp/cocomut-ci-smoke
+          java -jar cocomut-cli/target/cocomut-cli-0.1.0-all.jar \
             --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project \
             --scope entry-points \
             --source-set main \
             --call-graph none \
             --max-methods 1 \
-            --output-dir /tmp/cocox-ci-smoke
-          test -s /tmp/cocox-ci-smoke/method_contexts.jsonl
+            --output-dir /tmp/cocomut-ci-smoke
+          test -s /tmp/cocomut-ci-smoke/method_contexts.jsonl

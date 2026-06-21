@@ -4,8 +4,8 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROJECT_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 DIST_DIR="$PROJECT_ROOT/dist"
-TARGET_JAR="$PROJECT_ROOT/cocox-cli/target/cocox-cli-0.1.0-all.jar"
-DIST_JAR="$DIST_DIR/cocox-cli.jar"
+TARGET_JAR="$PROJECT_ROOT/cocomut-cli/target/cocomut-cli-0.1.0-all.jar"
+DIST_JAR="$DIST_DIR/cocomut-cli.jar"
 
 cd "$PROJECT_ROOT"
 

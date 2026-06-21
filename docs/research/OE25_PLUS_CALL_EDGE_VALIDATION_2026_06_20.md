@@ -1,6 +1,6 @@
 # OE25 Plus Representative Call-Edge Validation
 
-This report validates CoCoX call-edge matching after the Spoon/SootUp glue
+This report validates CoCoMUT call-edge matching after the Spoon/SootUp glue
 changes that introduced bytecode `target_uri`, source `method_uri`, and the
 call-edge target taxonomy.
 
@@ -86,7 +86,7 @@ ambiguous call edges: 336
 Interpretation:
 
 - `target_uri` is bytecode identity. It exists for every serialized SootUp edge.
-- `method_uri` is source identity. It exists only when CoCoX can join the
+- `method_uri` is source identity. It exists only when CoCoMUT can join the
   bytecode target to one unique Spoon project method.
 - Edges without `method_uri` are not all failures. Many are JDK methods,
   external library methods, invokedynamic/lambda artifacts, compiler-generated
@@ -119,7 +119,7 @@ invokedynamic_method / all edges: 1.35%
 The main product claim is not that every bytecode target maps to source. The
 stronger and more defensible claim is:
 
-> CoCoX gives every serialized call edge a stable bytecode `target_uri`, and
+> CoCoMUT gives every serialized call edge a stable bytecode `target_uri`, and
 > upgrades the edge to a source `method_uri` when it can deterministically join
 > that bytecode target to exactly one project method.
 
@@ -142,7 +142,7 @@ used in the field:
 - 1,101 edges were recovered by parameter normalization;
 - 336 edges were explicitly marked ambiguous instead of guessed.
 
-This is the intended behavior. CoCoX should prefer deterministic joins and
+This is the intended behavior. CoCoMUT should prefer deterministic joins and
 explicit ambiguity over probabilistic matching.
 
 ## Unresolved Reasons
@@ -200,7 +200,7 @@ FluentIterable.of(java.lang.Object)
 FluentIterable.of(java.lang.Object[])
 ```
 
-Because multiple source candidates remain after normalization, CoCoX reports
+Because multiple source candidates remain after normalization, CoCoMUT reports
 candidate URIs rather than selecting one arbitrarily.
 
 ### Nested And Anonymous Bytecode

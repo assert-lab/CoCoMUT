@@ -6,13 +6,13 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>org.assertlab.cocox</groupId>
-        <artifactId>cocox</artifactId>
+        <groupId>org.assertlab.cocomut</groupId>
+        <artifactId>cocomut</artifactId>
         <version>0.1.0</version>
     </parent>
 
     <artifactId>analyzer-core</artifactId>
-    <name>CoCoX — Analyzer Core</name>
+    <name>CoCoMUT — Analyzer Core</name>
 
     <!--
         Explicit compiler properties here (inherited from parent, but repeated so that

@@ -1,6 +1,6 @@
 # Contributing
 
-CoCoX is a Java 17 Maven project.
+CoCoMUT is a Java 17 Maven project.
 
 ## Build
 
@@ -18,13 +18,13 @@ scripts/build_release_jar.sh
 ## CLI Smoke Test
 
 ```bash
-./bin/cocox --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project --scope entry-points --call-graph none
+./bin/cocomut --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project --scope entry-points --call-graph none
 ```
 
 ## Development Notes
 
 - Keep core extraction code in `analyzer-core`.
-- Keep CLI-specific code in `cocox-cli`.
+- Keep CLI-specific code in `cocomut-cli`.
 - Keep generated outputs out of git.
 - Add focused tests for parser, method identity, JSON output, and CLI behavior.
 - Do not add benchmark repositories or generated research artifacts to the product repository.

@@ -39,8 +39,8 @@
   "phase_3_warning" : "Call graph disabled by configuration",
   "phase_3_call_graphs_generated" : 0,
   "phase_4_contexts_extracted" : 1,
-  "output_directory" : "cocox_output/minimal-maven-project",
-  "phase_5_jsonl_file" : "cocox_output/minimal-maven-project/method_contexts.jsonl",
+  "output_directory" : "cocomut_output/minimal-maven-project",
+  "phase_5_jsonl_file" : "cocomut_output/minimal-maven-project/method_contexts.jsonl",
   "phase_5_jsonl_rows" : 1,
   "phase_5_files_generated" : 1,
   "status" : "SUCCESS",
@@ -48,5 +48,5 @@
   "duration_ms" : 668,
   "end_time" : 1781920365507,
   "failure_codes" : [ "CALL_GRAPH_DISABLED" ],
-  "extraction_report_file" : "cocox_output/minimal-maven-project/extraction_report.json"
+  "extraction_report_file" : "cocomut_output/minimal-maven-project/extraction_report.json"
 }

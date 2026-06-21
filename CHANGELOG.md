@@ -11,7 +11,7 @@
   intentionally extensible through `additionalProperties` while the top-level
   record shape remains documented.
 - Added public-repository field-test evidence for 541 filtered Java repositories.
-- Moved Java packages to `org.assertlab.cocox`.
+- Moved Java packages to `org.assertlab.cocomut`.
 - Added Maven wrapper, GitHub Actions CI, contributor docs, and citation metadata.
 - Added `--max-source-files` for low-memory smoke runs.
 - Added `--max-methods` and bounded retry guidance for very large repositories.
@@ -19,4 +19,4 @@
 - Hardened optional Spoon context extraction against recursive generic type-resolution failures.
 - Added JSONL failure artifacts for method-context extraction misses.
 - Removed `methods.csv` generation from the product extraction path.
-- Removed validation and schema subcommands; `cocox` now runs extraction directly.
+- Removed validation and schema subcommands; `cocomut` now runs extraction directly.

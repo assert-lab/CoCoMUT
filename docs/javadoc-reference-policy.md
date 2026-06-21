@@ -1,13 +1,13 @@
 # Javadoc Reference Policy
 
-CoCoX parses common Javadoc tags using the official Oracle/JDK doc-comment
+CoCoMUT parses common Javadoc tags using the official Oracle/JDK doc-comment
 syntax and standard doclet model. The implementation should not add
 repository-specific parsing rules for a single project such as Apache Commons
 Lang.
 
 ## Supported Tags
 
-CoCoX extracts structured metadata for common block and inline tags used in
+CoCoMUT extracts structured metadata for common block and inline tags used in
 method documentation:
 
 - `@param`
@@ -28,7 +28,7 @@ method documentation:
 
 ## Reference Forms
 
-For `@see`, `{@link ...}`, and `{@linkplain ...}`, CoCoX follows the standard
+For `@see`, `{@link ...}`, and `{@linkplain ...}`, CoCoMUT follows the standard
 program-element reference form:
 
 ```text
@@ -45,15 +45,15 @@ package.Type#member(parameter.Types)
 module/package.Type#member(parameter.Types) label text
 ```
 
-CoCoX also recognizes the standard non-program-element `@see` forms:
+CoCoMUT also recognizes the standard non-program-element `@see` forms:
 
 ```text
 @see "text"
 @see <a href="https://example.org">label</a>
 ```
 
-Project-local references may be resolved to CoCoX URIs. External JDK or library
-references are kept as symbol-level metadata only; CoCoX does not fetch external
+Project-local references may be resolved to CoCoMUT URIs. External JDK or library
+references are kept as symbol-level metadata only; CoCoMUT does not fetch external
 Javadoc text.
 
 Each resolved reference also gets derived taxonomy fields for empirical
@@ -66,13 +66,13 @@ analysis:
 - `reference_scope`: `same_type`, `same_package`, `same_module`, `external`,
   `text`, or `unknown`.
 
-These taxonomy fields summarize CoCoX's resolution result. They are not
+These taxonomy fields summarize CoCoMUT's resolution result. They are not
 additional Javadoc syntax and should not replace canonical method/type/field
 URIs when a project-local target is resolved.
 
 ## Resolution Policy
 
-CoCoX resolves project-local references in this order:
+CoCoMUT resolves project-local references in this order:
 
 1. Direct same-type member references such as `#parse(String)`.
 2. Imported or fully qualified type references such as `Parser#parse(String)`.
@@ -82,7 +82,7 @@ CoCoX resolves project-local references in this order:
    direct members.
 
 When a target omits parameter types and more than one project method could
-match, CoCoX records an overload ambiguity instead of guessing.
+match, CoCoMUT records an overload ambiguity instead of guessing.
 
 External JDK/library references are classified as external method, external
 field, or external type symbols when possible. They are not expanded into
@@ -102,6 +102,6 @@ The reference behavior is based on these JDK documents:
 These specifications are versioned with the JDK. The core block tags, inline
 tags, `@see`, and `{@link ...}` forms are long-standing and stable. Newer JDKs
 add or extend features such as module prefixes, inline `{@return ...}`,
-`{@snippet ...}`, and Markdown documentation comments; CoCoX treats
+`{@snippet ...}`, and Markdown documentation comments; CoCoMUT treats
 version-specific features explicitly instead of inferring rules from one
 repository.

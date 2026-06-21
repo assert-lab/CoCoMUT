@@ -2,8 +2,8 @@
 
 This note documents two product concepts:
 
-- how CoCoX names selected Java program elements;
-- how CoCoX resolves Javadoc references such as `@see`, `{@link ...}`, and
+- how CoCoMUT names selected Java program elements;
+- how CoCoMUT resolves Javadoc references such as `@see`, `{@link ...}`, and
   `{@linkplain ...}`.
 
 The current implementation uses canonical method URIs, supports type/package
@@ -11,7 +11,7 @@ URI selection, and emits best-effort Javadoc reference metadata.
 
 ## Symbol URIs
 
-CoCoX should use one URI grammar for every selectable Java symbol:
+CoCoMUT should use one URI grammar for every selectable Java symbol:
 
 ```text
 relative/source/path#qualified.java.symbol
@@ -23,7 +23,7 @@ identifies the Java symbol inside that source location.
 ## Method URIs
 
 Methods need parameter and return-type identity because Java supports overloads.
-CoCoX therefore uses erased parameter types and erased return type:
+CoCoMUT therefore uses erased parameter types and erased return type:
 
 ```text
 src/main/java/org/example/Foo.java#org.example.Foo.parse(java.lang.String):int
@@ -45,7 +45,7 @@ can otherwise collapse to the same apparent parameter identity during mining.
 ## Call Graph Target URIs
 
 Call graph targets use a different namespace from source symbols. SootUp reports
-bytecode-level signatures, so CoCoX records them as `target_uri` values:
+bytecode-level signatures, so CoCoMUT records them as `target_uri` values:
 
 ```text
 bytecode://org.example.Foo.parse(java.lang.String):int
@@ -54,11 +54,11 @@ bytecode://org.example.Foo.parse(java.lang.String):int
 This is not a selectable source URI. It is bytecode provenance for a caller or
 callee edge.
 
-When CoCoX can join that bytecode target to one unique project source method,
+When CoCoMUT can join that bytecode target to one unique project source method,
 the edge also contains a source-backed `method_uri`:
 
 ```text
-method_uri exists  => source-backed CoCoX method identity
+method_uri exists  => source-backed CoCoMUT method identity
 target_uri exists  => bytecode-level SootUp target identity
 ```
 
@@ -71,7 +71,7 @@ The `target_kind` taxonomy is defined in
 
 ## Type URIs
 
-CoCoX uses "type" instead of "class" internally because Java has several type
+CoCoMUT uses "type" instead of "class" internally because Java has several type
 kinds:
 
 ```java
@@ -131,17 +131,17 @@ Current CLI selection supports both filters and first-class target URIs:
 The URI selector form is:
 
 ```bash
-cocox --project /repo --target-uri method:src/main/java/org/example/Foo.java#org.example.Foo.parse(java.lang.String):int
-cocox --project /repo --target-uri type:src/main/java/org/example/Foo.java#org.example.Foo
-cocox --project /repo --target-uri package:src/main/java/org/example/package-info.java#org.example
+cocomut --project /repo --target-uri method:src/main/java/org/example/Foo.java#org.example.Foo.parse(java.lang.String):int
+cocomut --project /repo --target-uri type:src/main/java/org/example/Foo.java#org.example.Foo
+cocomut --project /repo --target-uri package:src/main/java/org/example/package-info.java#org.example
 ```
 
 Equivalent explicit flags are also supported:
 
 ```bash
-cocox --project /repo --method-uri  ...
-cocox --project /repo --type-uri    ...
-cocox --project /repo --package-uri ...
+cocomut --project /repo --method-uri  ...
+cocomut --project /repo --type-uri    ...
+cocomut --project /repo --package-uri ...
 ```
 
 Generated JSONL should record the selected target:
@@ -168,7 +168,7 @@ For a repository-wide run, provenance should state:
 
 ## Javadoc References
 
-CoCoX follows the Oracle/JDK standard doclet syntax for Javadoc references.
+CoCoMUT follows the Oracle/JDK standard doclet syntax for Javadoc references.
 This is a Java/Javadoc convention, not an Apache Commons Lang-specific rule.
 The important official forms are:
 
@@ -191,14 +191,14 @@ The program-element form can point to several symbol kinds:
 @see java.util.regex.Matcher#replaceAll(String)
 ```
 
-CoCoX stores these under `javadoc_metadata.javadoc_references`.
+CoCoMUT stores these under `javadoc_metadata.javadoc_references`.
 
 Primary references:
 
 - JDK documentation-comment specification for the standard doclet.
 - Javadoc tool reference.
 
-These documents are versioned with the JDK. CoCoX implements the stable
+These documents are versioned with the JDK. CoCoMUT implements the stable
 traditional Javadoc reference forms used by `@see`, `{@link ...}`, and
 `{@linkplain ...}`; it does not currently implement newer Markdown
 documentation-comment syntax as a separate parser mode.
@@ -228,17 +228,17 @@ The reference taxonomy fields are derived from the detailed resolution result.
 They are intended for aggregate analysis of documentation links: for example,
 whether `@see` points to the same type, another type in the same package, a
 different project package, an external JDK/library symbol, a web URL, or a text
-reference. They do not replace canonical CoCoX URIs for resolved project
+reference. They do not replace canonical CoCoMUT URIs for resolved project
 symbols.
 
 For project-local method references, `referenced_method` intentionally embeds a
 compact method context rather than only an excerpt. It includes the referenced
 method URI, signature, source code without leading Javadoc, method Javadoc,
 parameters, return type, thrown exceptions, annotations, source set, and source
-line. CoCoX does not recursively embed that referenced method's callers/callees
+line. CoCoMUT does not recursively embed that referenced method's callers/callees
 inside the Javadoc reference object, to avoid unbounded nested output.
 
-For project-local class/type and field references, CoCoX stores the full
+For project-local class/type and field references, CoCoMUT stores the full
 available Javadoc text as `class_javadoc` or `field_javadoc`. External
 JDK/library symbols remain symbol-only.
 
@@ -250,7 +250,7 @@ Same-class references omit the class:
 @see #isBlank(CharSequence)
 ```
 
-CoCoX resolves this against the declaring type of the documented method.
+CoCoMUT resolves this against the declaring type of the documented method.
 
 Typed-class references name the class/type:
 
@@ -259,7 +259,7 @@ Typed-class references name the class/type:
 @see java.util.regex.Matcher#replaceAll(String)
 ```
 
-CoCoX first tries project-local type lookup. If the type is not in the parsed
+CoCoMUT first tries project-local type lookup. If the type is not in the parsed
 project, the reference becomes an external symbol unless it can be resolved
 through imports, language-defined `java.lang.*`, wildcard imports, or cautious
 JDK symbol probing. External documentation text is not fetched.
@@ -305,14 +305,14 @@ single-type import:
 external_resolution: wildcard_import_symbol
 ```
 
-CoCoX also has a small `common_jdk_probe` fallback for common JDK packages.
+CoCoMUT also has a small `common_jdk_probe` fallback for common JDK packages.
 That fallback is a pragmatic symbol-classification heuristic, not an Apache
 Commons Lang rule and not a Javadoc syntax rule.
 
 ## Implicit `java.lang.*`
 
 Java implicitly imports the public top-level types of `java.lang` into every
-compilation unit. CoCoX therefore checks `java.lang` before heuristic JDK
+compilation unit. CoCoMUT therefore checks `java.lang` before heuristic JDK
 probing when a Javadoc reference uses a simple type name such as:
 
 ```java
@@ -330,7 +330,7 @@ java.lang.SecurityManager
 ```
 
 The resolution is still symbol-checked against the active JDK/runtime. If a
-`java.lang` type is unavailable, CoCoX does not treat it as resolved.
+`java.lang` type is unavailable, CoCoMUT does not treat it as resolved.
 
 
 ## External Method vs External Field
@@ -348,8 +348,8 @@ A target without parentheses may be a field or a method with omitted params:
 @see Class#getConstructor
 ```
 
-For project-local symbols, CoCoX can inspect the source model and distinguish
-fields from methods. For external symbols, CoCoX currently records symbol-only
+For project-local symbols, CoCoMUT can inspect the source model and distinguish
+fields from methods. For external symbols, CoCoMUT currently records symbol-only
 metadata. The next step is to classify external members more precisely when JDK
 or dependency symbols are available:
 
@@ -366,9 +366,9 @@ instead of treating all external `Class#member` refs as generic member refs.
 
 ## External Reference Limitation
 
-CoCoX intentionally stops external references at symbol identity. For example,
+CoCoMUT intentionally stops external references at symbol identity. For example,
 `@see java.util.regex.Matcher#replaceAll(String)` may be classified as an
-external method reference, but CoCoX does not try to load JDK/dependency source
+external method reference, but CoCoMUT does not try to load JDK/dependency source
 jars or generated Javadoc pages to attach the referenced documentation text.
 
 This is a product boundary, not a parser failure. External documentation

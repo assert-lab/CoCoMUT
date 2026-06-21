@@ -3,14 +3,14 @@
 This note documents the bytecode-to-source call-edge matching work introduced
 for schema `0.4.0`.
 
-CoCoX uses Spoon to build source-backed method contexts and SootUp to build
+CoCoMUT uses Spoon to build source-backed method contexts and SootUp to build
 optional bytecode call graphs. Those two worlds do not use the same identity:
 
-- Spoon identifies source declarations with CoCoX method URIs.
+- Spoon identifies source declarations with CoCoMUT method URIs.
 - SootUp reports bytecode signatures such as
   `<java.lang.Math: int max(int,int)>`.
 
-The join between those two representations must be deterministic. CoCoX should
+The join between those two representations must be deterministic. CoCoMUT should
 map a SootUp edge to a source `method_uri` only when there is one unique source
 method candidate. If not, the edge is still useful context, but it must stay
 bytecode-level.
@@ -76,7 +76,7 @@ an erased return such as `java.lang.Object get()`.
 Fix:
 
 If declaring class, method name, and normalized parameter list match exactly and
-there is one source candidate, CoCoX resolves the edge even when the return type
+there is one source candidate, CoCoMUT resolves the edge even when the return type
 differs:
 
 ```text
@@ -91,7 +91,7 @@ a representation mismatch rather than a separate overload.
 
 Boundary:
 
-If multiple source candidates remain, CoCoX does not guess. It emits
+If multiple source candidates remain, CoCoMUT does not guess. It emits
 `resolution = ambiguous` and `candidate_method_uris`.
 
 ### Priority 2: Parameter Normalization Mismatch
@@ -117,7 +117,7 @@ looks like `log(java.lang.String[])`.
 
 Fix:
 
-CoCoX now normalizes parameters before matching:
+CoCoMUT now normalizes parameters before matching:
 
 - strips parameter names and common modifiers;
 - strips source annotations from parameter declarations;
@@ -134,7 +134,7 @@ resolution = resolved_parameter_normalized_unique
 
 Boundary:
 
-If more than one compatible overload remains, CoCoX records:
+If more than one compatible overload remains, CoCoMUT records:
 
 ```json
 {
@@ -156,7 +156,7 @@ used a different normalization path from the source-method index.
 
 Fix:
 
-CoCoX now builds a normalized source-method index and uses the same key family
+CoCoMUT now builds a normalized source-method index and uses the same key family
 for lookup. This adds a second exact normalized path before looser matching:
 
 ```text
@@ -178,11 +178,11 @@ it is mixed. It can contain:
 - enum/record generated methods;
 - methods filtered out by source-set or bounded extraction;
 - Lombok or annotation-processor generated methods;
-- real CoCoX indexing misses.
+- real CoCoMUT indexing misses.
 
 Fix:
 
-CoCoX does not blindly resolve this bucket. It now emits deterministic
+CoCoMUT does not blindly resolve this bucket. It now emits deterministic
 diagnostic reasons:
 
 ```text
@@ -209,7 +209,7 @@ local classes differently.
 
 Fix:
 
-CoCoX now distinguishes:
+CoCoMUT now distinguishes:
 
 ```text
 nested_bytecode_class_without_unique_source_method
@@ -219,12 +219,12 @@ synthetic_or_compiler_generated
 ```
 
 When an outer source class exists but the nested bytecode target cannot be
-mapped uniquely, CoCoX keeps the bytecode `target_uri` and leaves `method_uri`
+mapped uniquely, CoCoMUT keeps the bytecode `target_uri` and leaves `method_uri`
 empty.
 
 Boundary:
 
-CoCoX does not yet map anonymous/local class methods into source-level
+CoCoMUT does not yet map anonymous/local class methods into source-level
 synthetic URIs. That would require a separate model for bytecode-only source
 locations and would risk creating unstable identifiers.
 
@@ -287,9 +287,9 @@ multiple_source_methods_match_normalized_parameters   5
   OE25 plus representative suite should be rerun before claiming aggregate
   recovery rates.
 - `target_uri` is bytecode identity, not source identity. It is stable for a
-  SootUp signature, but it should not be used as a replacement for CoCoX
+  SootUp signature, but it should not be used as a replacement for CoCoMUT
   `method_uri`.
-- External and JDK targets remain symbol-level only. CoCoX does not fetch
+- External and JDK targets remain symbol-level only. CoCoMUT does not fetch
   external source or Javadoc text for call graph edges.
 - Synthetic, bridge, enum-generated, record-generated, anonymous, and local
   class methods are classified conservatively unless they map to one unique
@@ -305,7 +305,7 @@ multiple_source_methods_match_normalized_parameters   5
 For documentation mining, callers and callees now have clearer provenance:
 
 - use `method_uri` when you need actual source/Javadoc context from the same
-  CoCoX output;
+  CoCoMUT output;
 - use `target_uri` when you need to count or inspect every bytecode edge;
 - use `target_kind`, `resolution`, and `unresolved_reason` to filter noisy call
   graph context before feeding it to downstream models.

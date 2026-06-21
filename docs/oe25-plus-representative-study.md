@@ -55,7 +55,7 @@ timeout/OOM/StackOverflow  -> retry source-only, bounded by source files/methods
 The runner also skips compilation for Java repositories whose root contains
 frontend package-manager markers such as `package.json`, `yarn.lock`,
 `package-lock.json`, or `pnpm-lock.yaml`. This is a field-test safety policy:
-CoCoX should not trigger unrelated frontend dependency installation while
+CoCoMUT should not trigger unrelated frontend dependency installation while
 testing Java source extraction.
 
 ## Results
@@ -74,7 +74,7 @@ Aggregate result:
 repositories attempted:        55
 OE25 repositories:             25
 representative repositories:   30
-successful CoCoX outputs:      55
+successful CoCoMUT outputs:      55
 methods identified:            204,789
 JSONL rows emitted:            204,789
 @see references observed:      10,367
@@ -164,10 +164,10 @@ for `@see`, `{@link ...}`, and `{@linkplain ...}` program-element references.
 
 - `unresolved` and `class_resolved_member_unresolved` `@see` cases are the next
   best sample for parser improvements.
-- `overload_ambiguous` cases should be reviewed to confirm that CoCoX reports
+- `overload_ambiguous` cases should be reviewed to confirm that CoCoMUT reports
   ambiguity only when the target omits enough information to make overload
   selection unsafe.
-- External symbols are intentionally symbol-level only; CoCoX does not fetch
+- External symbols are intentionally symbol-level only; CoCoMUT does not fetch
   external Javadoc text.
 - Several large Gradle/Maven projects require bounded source-only extraction on
   this 16 GB machine. That is field-test evidence about resource policy, not a
