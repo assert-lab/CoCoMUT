@@ -92,6 +92,17 @@ RESULT_FIELDS = [
     "call_graph_available",
     "call_graph_effective_algorithm",
     "call_graphs_generated",
+    "call_edges",
+    "call_edges_with_target_uri",
+    "call_edges_with_method_uri",
+    "call_edge_source_match_rate",
+    "call_edge_project_jdk_external_edges",
+    "call_edge_project_jdk_external_rate",
+    "call_edge_target_kind_counts",
+    "call_edge_resolution_counts",
+    "call_edge_unresolved_reason_counts",
+    "call_edge_ambiguous_edges",
+    "call_edge_candidate_edges",
     "methods",
     "jsonl_rows",
     "see_methods",
@@ -154,9 +165,11 @@ def read_tail(path: Path, max_chars: int = 6000) -> str:
     return path.read_text(encoding="utf-8", errors="replace")[-max_chars:]
 
 
-def discover_representative_targets(root: Path) -> list[Target]:
-    checkout_root = root / "experiments" / "expanded-public-repos-auto-main-representative" / "checkouts"
+def discover_representative_targets(root: Path, checkout_root: Path | None = None) -> list[Target]:
+    checkout_root = checkout_root or root / "experiments" / "expanded-public-repos-auto-main-representative" / "checkouts"
     targets: list[Target] = []
+    if not checkout_root.is_dir():
+        return targets
     for checkout in sorted(checkout_root.iterdir()):
         if not checkout.is_dir():
             continue
@@ -165,8 +178,13 @@ def discover_representative_targets(root: Path) -> list[Target]:
     return targets
 
 
-def clone_oe25_target(root: Path, output_dir: Path, repo: str, timeout: int) -> Target:
+def clone_oe25_target(root: Path, output_dir: Path, repo: str, timeout: int,
+                      existing_checkout_root: Path | None = None) -> Target:
     checkout = output_dir / "checkouts" / repo.replace("/", "__")
+    if existing_checkout_root is not None:
+        existing = existing_checkout_root / repo.replace("/", "__")
+        if existing.is_dir() and any(existing.iterdir()):
+            return Target("oe25", repo, existing)
     checkout.parent.mkdir(parents=True, exist_ok=True)
     logs = output_dir / "logs"
     logs.mkdir(parents=True, exist_ok=True)
@@ -276,6 +294,14 @@ def inspect_jsonl(artifact_dir: Path) -> dict[str, str]:
     inline_link_references = 0
     inheritdoc_methods = 0
     inheritdoc_with_candidates = 0
+    call_edges = 0
+    call_edges_with_target_uri = 0
+    call_edges_with_method_uri = 0
+    call_edge_target_kind_counts: Counter[str] = Counter()
+    call_edge_resolution_counts: Counter[str] = Counter()
+    call_edge_unresolved_reason_counts: Counter[str] = Counter()
+    call_edge_ambiguous_edges = 0
+    call_edge_candidate_edges = 0
     for jsonl in jsonl_files:
         with jsonl.open(encoding="utf-8", errors="replace") as handle:
             for line in handle:
@@ -289,6 +315,22 @@ def inspect_jsonl(artifact_dir: Path) -> dict[str, str]:
                 mode = metadata.get("source_backend_mode")
                 if mode:
                     source_modes.add(str(mode))
+                for edge in (row.get("callers") or []) + (row.get("callees") or []):
+                    if not isinstance(edge, dict):
+                        continue
+                    call_edges += 1
+                    if edge.get("target_uri"):
+                        call_edges_with_target_uri += 1
+                    if edge.get("method_uri"):
+                        call_edges_with_method_uri += 1
+                    call_edge_target_kind_counts[str(edge.get("target_kind") or edge.get("kind") or "missing")] += 1
+                    call_edge_resolution_counts[str(edge.get("resolution") or "missing")] += 1
+                    if edge.get("unresolved_reason"):
+                        call_edge_unresolved_reason_counts[str(edge.get("unresolved_reason"))] += 1
+                    if edge.get("resolution") == "ambiguous":
+                        call_edge_ambiguous_edges += 1
+                    if edge.get("candidate_method_uris"):
+                        call_edge_candidate_edges += 1
                 javadoc = row.get("javadoc_metadata") or {}
                 if javadoc.get("see"):
                     see_methods += 1
@@ -307,8 +349,24 @@ def inspect_jsonl(artifact_dir: Path) -> dict[str, str]:
                     inheritdoc_methods += 1
                     if javadoc.get("inherited_javadoc_candidates"):
                         inheritdoc_with_candidates += 1
+    project_jdk_external = (
+        call_edge_target_kind_counts.get("project_method", 0)
+        + call_edge_target_kind_counts.get("jdk_method", 0)
+        + call_edge_target_kind_counts.get("external_method", 0)
+    )
     return {
         "source_backend_modes": ",".join(sorted(source_modes)),
+        "call_edges": str(call_edges),
+        "call_edges_with_target_uri": str(call_edges_with_target_uri),
+        "call_edges_with_method_uri": str(call_edges_with_method_uri),
+        "call_edge_source_match_rate": percent_string(call_edges_with_method_uri, call_edges),
+        "call_edge_project_jdk_external_edges": str(project_jdk_external),
+        "call_edge_project_jdk_external_rate": percent_string(project_jdk_external, call_edges),
+        "call_edge_target_kind_counts": json.dumps(dict(sorted(call_edge_target_kind_counts.items())), sort_keys=True),
+        "call_edge_resolution_counts": json.dumps(dict(sorted(call_edge_resolution_counts.items())), sort_keys=True),
+        "call_edge_unresolved_reason_counts": json.dumps(dict(sorted(call_edge_unresolved_reason_counts.items())), sort_keys=True),
+        "call_edge_ambiguous_edges": str(call_edge_ambiguous_edges),
+        "call_edge_candidate_edges": str(call_edge_candidate_edges),
         "see_methods": str(see_methods),
         "see_references": str(see_references),
         "see_resolution_counts": json.dumps(dict(sorted(see_resolution_counts.items())), sort_keys=True),
@@ -318,6 +376,36 @@ def inspect_jsonl(artifact_dir: Path) -> dict[str, str]:
         "inheritdoc_methods": str(inheritdoc_methods),
         "inheritdoc_with_candidates": str(inheritdoc_with_candidates),
     }
+
+
+def percent_string(numerator: int, denominator: int) -> str:
+    if denominator <= 0:
+        return ""
+    return f"{100.0 * numerator / denominator:.2f}%"
+
+
+def mem_available_gb() -> float:
+    try:
+        for line in Path("/proc/meminfo").read_text(encoding="utf-8").splitlines():
+            if line.startswith("MemAvailable:"):
+                return int(line.split()[1]) / (1024 * 1024)
+    except OSError:
+        return 999.0
+    return 999.0
+
+
+def wait_for_resources(args: argparse.Namespace) -> None:
+    while True:
+        available = mem_available_gb()
+        load_1m = os.getloadavg()[0] if hasattr(os, "getloadavg") else 0.0
+        if available >= args.min_available_gb and load_1m <= args.max_load:
+            return
+        print(
+            f"resource-wait available_gb={available:.2f} load_1m={load_1m:.2f} "
+            f"thresholds=({args.min_available_gb:.2f}GB,{args.max_load:.2f})",
+            flush=True,
+        )
+        time.sleep(args.resource_check_interval)
 
 
 def run_target(root: Path, output_dir: Path, target: Target, args: argparse.Namespace) -> dict[str, str]:
@@ -419,6 +507,17 @@ def run_target(root: Path, output_dir: Path, target: Target, args: argparse.Name
         "call_graph_available": report.get("phase_3_available", ""),
         "call_graph_effective_algorithm": report.get("phase_3_effective_algorithm", ""),
         "call_graphs_generated": report.get("phase_3_call_graphs_generated", ""),
+        "call_edges": stats.get("call_edges", ""),
+        "call_edges_with_target_uri": stats.get("call_edges_with_target_uri", ""),
+        "call_edges_with_method_uri": stats.get("call_edges_with_method_uri", ""),
+        "call_edge_source_match_rate": stats.get("call_edge_source_match_rate", ""),
+        "call_edge_project_jdk_external_edges": stats.get("call_edge_project_jdk_external_edges", ""),
+        "call_edge_project_jdk_external_rate": stats.get("call_edge_project_jdk_external_rate", ""),
+        "call_edge_target_kind_counts": stats.get("call_edge_target_kind_counts", ""),
+        "call_edge_resolution_counts": stats.get("call_edge_resolution_counts", ""),
+        "call_edge_unresolved_reason_counts": stats.get("call_edge_unresolved_reason_counts", ""),
+        "call_edge_ambiguous_edges": stats.get("call_edge_ambiguous_edges", ""),
+        "call_edge_candidate_edges": stats.get("call_edge_candidate_edges", ""),
         "methods": report.get("phase_2_methods_identified", ""),
         "jsonl_rows": report.get("phase_5_jsonl_rows", ""),
         "see_methods": stats.get("see_methods", ""),
@@ -452,6 +551,24 @@ def write_summary(output_dir: Path, results_path: Path) -> None:
     compile_counts = Counter(row["compiles"] for row in rows)
     total_methods = sum(int(row["methods"] or 0) for row in rows if (row["methods"] or "").isdigit())
     total_rows = sum(int(row["jsonl_rows"] or 0) for row in rows if (row["jsonl_rows"] or "").isdigit())
+    total_call_edges = sum(int(row["call_edges"] or 0) for row in rows if (row["call_edges"] or "").isdigit())
+    total_target_uri_edges = sum(int(row["call_edges_with_target_uri"] or 0) for row in rows if (row["call_edges_with_target_uri"] or "").isdigit())
+    total_method_uri_edges = sum(int(row["call_edges_with_method_uri"] or 0) for row in rows if (row["call_edges_with_method_uri"] or "").isdigit())
+    total_project_jdk_external_edges = sum(int(row["call_edge_project_jdk_external_edges"] or 0) for row in rows if (row["call_edge_project_jdk_external_edges"] or "").isdigit())
+    total_ambiguous_edges = sum(int(row["call_edge_ambiguous_edges"] or 0) for row in rows if (row["call_edge_ambiguous_edges"] or "").isdigit())
+    target_kind_counts: Counter[str] = Counter()
+    resolution_counts: Counter[str] = Counter()
+    unresolved_reason_counts: Counter[str] = Counter()
+    for row in rows:
+        for field, counter in [
+            ("call_edge_target_kind_counts", target_kind_counts),
+            ("call_edge_resolution_counts", resolution_counts),
+            ("call_edge_unresolved_reason_counts", unresolved_reason_counts),
+        ]:
+            try:
+                counter.update(json.loads(row.get(field) or "{}"))
+            except json.JSONDecodeError:
+                pass
     total_see_refs = sum(int(row["see_references"] or 0) for row in rows if (row["see_references"] or "").isdigit())
     total_inheritdoc = sum(int(row["inheritdoc_methods"] or 0) for row in rows if (row["inheritdoc_methods"] or "").isdigit())
     attention = [
@@ -478,12 +595,47 @@ def write_summary(output_dir: Path, results_path: Path) -> None:
         f"- call graph availability counts: `{dict(call_graph_counts)}`",
         f"- methods identified: {total_methods}",
         f"- JSONL rows emitted: {total_rows}",
+        f"- call edges observed: {total_call_edges}",
+        f"- call edges with `target_uri`: {total_target_uri_edges} ({percent_string(total_target_uri_edges, total_call_edges) or '-'})",
+        f"- call edges joined to source `method_uri`: {total_method_uri_edges} ({percent_string(total_method_uri_edges, total_call_edges) or '-'})",
+        f"- call edges classified as project/JDK/external method targets: {total_project_jdk_external_edges} ({percent_string(total_project_jdk_external_edges, total_call_edges) or '-'})",
+        f"- ambiguous call edges: {total_ambiguous_edges}",
         f"- `@see` references observed: {total_see_refs}",
         f"- methods using `{{@inheritDoc}}`: {total_inheritdoc}",
         "",
+        "## Call-Edge Matching",
+        "",
+        "`target_uri` is bytecode identity and should be present for every SootUp edge.",
+        "`method_uri` is source identity and is present only when the SootUp target",
+        "joins to one unique CoCoX/Spoon project method.",
+        "",
+        "Target-kind counts:",
+        "",
+        "```text",
+    ]
+    lines.extend(f"{key}: {value}" for key, value in sorted(target_kind_counts.items()))
+    lines.extend([
+        "```",
+        "",
+        "Resolution counts:",
+        "",
+        "```text",
+    ])
+    lines.extend(f"{key}: {value}" for key, value in sorted(resolution_counts.items()))
+    lines.extend([
+        "```",
+        "",
+        "Unresolved-reason counts:",
+        "",
+        "```text",
+    ])
+    lines.extend(f"{key}: {value}" for key, value in sorted(unresolved_reason_counts.items()))
+    lines.extend([
+        "```",
+        "",
         "## Attention Cases",
         "",
-    ]
+    ])
     if attention:
         lines.extend([
             "| Set | Repository | Status | Retry | Failure codes | Note |",
@@ -520,6 +672,16 @@ def main() -> int:
     parser.add_argument("--heap-gb", type=int, default=2)
     parser.add_argument("--retry-max-source-files", type=int, default=1500)
     parser.add_argument("--retry-max-methods", type=int, default=5000)
+    parser.add_argument("--oe25-checkouts-dir", type=Path, default=None,
+                        help="Optional existing OE25 checkout directory keyed by owner__repo.")
+    parser.add_argument("--representative-checkouts-dir", type=Path, default=None,
+                        help="Optional representative checkout directory keyed by owner__repo.")
+    parser.add_argument("--min-available-gb", type=float, default=3.0,
+                        help="Wait before each target until MemAvailable is at least this value.")
+    parser.add_argument("--max-load", type=float, default=6.0,
+                        help="Wait before each target until 1-minute load is at most this value.")
+    parser.add_argument("--resource-check-interval", type=int, default=30,
+                        help="Seconds between resource guard checks.")
     parser.add_argument("--limit", type=int, default=0, help="Limit total targets for smoke testing. 0 means all.")
     args = parser.parse_args()
 
@@ -532,8 +694,10 @@ def main() -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "logs").mkdir(exist_ok=True)
 
-    representative_targets = discover_representative_targets(root)
-    oe25_targets = [clone_oe25_target(root, output_dir, repo, args.clone_timeout) for repo in OE25_REPOS]
+    representative_root = args.representative_checkouts_dir.resolve() if args.representative_checkouts_dir else None
+    oe25_root = args.oe25_checkouts_dir.resolve() if args.oe25_checkouts_dir else None
+    representative_targets = discover_representative_targets(root, representative_root)
+    oe25_targets = [clone_oe25_target(root, output_dir, repo, args.clone_timeout, oe25_root) for repo in OE25_REPOS]
     targets = oe25_targets + representative_targets
     if args.limit and args.limit > 0:
         targets = targets[: args.limit]
@@ -560,6 +724,7 @@ def main() -> int:
         key = (target.dataset, target.repo)
         if key in completed:
             continue
+        wait_for_resources(args)
         row = run_target(root, output_dir, target, args)
         write_row(results_path, row)
         write_summary(output_dir, results_path)
