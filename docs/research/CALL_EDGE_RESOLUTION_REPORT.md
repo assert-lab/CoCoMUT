@@ -58,7 +58,11 @@ source-backed project method.
 
 Problem:
 
-SootUp may report a return type that does not textually match the source model.
+SootUp may report a return type that does not textually match a source
+declaration. CoCoMUT already stores both source return type and erased return
+type, and the canonical `method_uri` uses the erased return type. This fix is
+about joining a SootUp bytecode edge to the correct Spoon/CoCoMUT source method
+when the bytecode return and the stored source identity still differ textually.
 Common causes are generic erasure, bridge methods, covariant returns, and
 source/bytecode normalization differences.
 
@@ -70,8 +74,23 @@ class Box<T> {
 }
 ```
 
-The source model can expose `T get()`, while bytecode-oriented analysis can see
-an erased return such as `java.lang.Object get()`.
+Spoon can expose the source return as `T`, while CoCoMUT stores the source method
+with an erased-return URI such as:
+
+```text
+src/main/java/example/Box.java#example.Box.get():java.lang.Object
+```
+
+SootUp reports the bytecode target separately, for example:
+
+```text
+bytecode://example.Box.get():java.lang.Object
+```
+
+In normal cases these erased forms match directly. The `resolved_return_mismatch_unique`
+path covers the remaining cases where the declaring class, method name, and
+parameters identify one source method but the return string still differs due to
+bridge/covariant/source-bytecode representation differences.
 
 Fix:
 
@@ -309,4 +328,3 @@ For documentation mining, callers and callees now have clearer provenance:
 - use `target_uri` when you need to count or inspect every bytecode edge;
 - use `target_kind`, `resolution`, and `unresolved_reason` to filter noisy call
   graph context before feeding it to downstream models.
-
