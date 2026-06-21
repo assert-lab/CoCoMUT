@@ -150,7 +150,10 @@
         "method_name": {"type": "string"},
         "resolution": {"type": "string"},
         "candidate_method_uris": {"type": "array", "items": {"type": "string"}},
-        "unresolved_reason": {"type": "string"},
+        "unresolved_reason": {
+          "type": "string",
+          "description": "Deterministic reason why method_uri is empty, for example project_class_present_method_absent_record_component_accessor or jdk_or_platform_method_outside_project_source."
+        },
         "context": {"type": "object"}
       },
       "additionalProperties": true

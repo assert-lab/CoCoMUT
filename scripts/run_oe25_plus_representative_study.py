@@ -91,9 +91,11 @@ RESULT_FIELDS = [
     "call_graph_requested",
     "call_graph_available",
     "call_graph_effective_algorithm",
+    "call_graph_artifact_exists",
     "call_graphs_generated",
     "call_graph_non_empty_results",
     "call_graph_edges_generated",
+    "jsonl_call_edges_serialized",
     "call_edges",
     "call_edges_with_target_uri",
     "call_edges_with_method_uri",
@@ -103,6 +105,7 @@ RESULT_FIELDS = [
     "call_edge_target_kind_counts",
     "call_edge_resolution_counts",
     "call_edge_unresolved_reason_counts",
+    "call_edge_project_method_absent_subreason_counts",
     "call_edge_ambiguous_edges",
     "call_edge_candidate_edges",
     "methods",
@@ -302,6 +305,7 @@ def inspect_jsonl(artifact_dir: Path) -> dict[str, str]:
     call_edge_target_kind_counts: Counter[str] = Counter()
     call_edge_resolution_counts: Counter[str] = Counter()
     call_edge_unresolved_reason_counts: Counter[str] = Counter()
+    call_edge_project_method_absent_subreason_counts: Counter[str] = Counter()
     call_edge_ambiguous_edges = 0
     call_edge_candidate_edges = 0
     for jsonl in jsonl_files:
@@ -328,7 +332,10 @@ def inspect_jsonl(artifact_dir: Path) -> dict[str, str]:
                     call_edge_target_kind_counts[str(edge.get("target_kind") or edge.get("kind") or "missing")] += 1
                     call_edge_resolution_counts[str(edge.get("resolution") or "missing")] += 1
                     if edge.get("unresolved_reason"):
-                        call_edge_unresolved_reason_counts[str(edge.get("unresolved_reason"))] += 1
+                        reason = str(edge.get("unresolved_reason"))
+                        call_edge_unresolved_reason_counts[reason] += 1
+                        if reason.startswith("project_class_present_method_absent"):
+                            call_edge_project_method_absent_subreason_counts[reason] += 1
                     if edge.get("resolution") == "ambiguous":
                         call_edge_ambiguous_edges += 1
                     if edge.get("candidate_method_uris"):
@@ -367,6 +374,7 @@ def inspect_jsonl(artifact_dir: Path) -> dict[str, str]:
         "call_edge_target_kind_counts": json.dumps(dict(sorted(call_edge_target_kind_counts.items())), sort_keys=True),
         "call_edge_resolution_counts": json.dumps(dict(sorted(call_edge_resolution_counts.items())), sort_keys=True),
         "call_edge_unresolved_reason_counts": json.dumps(dict(sorted(call_edge_unresolved_reason_counts.items())), sort_keys=True),
+        "call_edge_project_method_absent_subreason_counts": json.dumps(dict(sorted(call_edge_project_method_absent_subreason_counts.items())), sort_keys=True),
         "call_edge_ambiguous_edges": str(call_edge_ambiguous_edges),
         "call_edge_candidate_edges": str(call_edge_candidate_edges),
         "see_methods": str(see_methods),
@@ -508,9 +516,11 @@ def run_target(root: Path, output_dir: Path, target: Target, args: argparse.Name
         "call_graph_requested": report.get("phase_3_algorithm", ""),
         "call_graph_available": report.get("phase_3_available", ""),
         "call_graph_effective_algorithm": report.get("phase_3_effective_algorithm", ""),
+        "call_graph_artifact_exists": report.get("phase_3_call_graph_artifact_exists", ""),
         "call_graphs_generated": report.get("phase_3_call_graphs_generated", ""),
         "call_graph_non_empty_results": report.get("phase_3_non_empty_call_graphs", ""),
         "call_graph_edges_generated": report.get("phase_3_call_edges_generated", ""),
+        "jsonl_call_edges_serialized": report.get("phase_5_call_edges_serialized", ""),
         "call_edges": stats.get("call_edges", ""),
         "call_edges_with_target_uri": stats.get("call_edges_with_target_uri", ""),
         "call_edges_with_method_uri": stats.get("call_edges_with_method_uri", ""),
@@ -520,6 +530,7 @@ def run_target(root: Path, output_dir: Path, target: Target, args: argparse.Name
         "call_edge_target_kind_counts": stats.get("call_edge_target_kind_counts", ""),
         "call_edge_resolution_counts": stats.get("call_edge_resolution_counts", ""),
         "call_edge_unresolved_reason_counts": stats.get("call_edge_unresolved_reason_counts", ""),
+        "call_edge_project_method_absent_subreason_counts": stats.get("call_edge_project_method_absent_subreason_counts", ""),
         "call_edge_ambiguous_edges": stats.get("call_edge_ambiguous_edges", ""),
         "call_edge_candidate_edges": stats.get("call_edge_candidate_edges", ""),
         "methods": report.get("phase_2_methods_identified", ""),
@@ -563,11 +574,13 @@ def write_summary(output_dir: Path, results_path: Path) -> None:
     target_kind_counts: Counter[str] = Counter()
     resolution_counts: Counter[str] = Counter()
     unresolved_reason_counts: Counter[str] = Counter()
+    absent_subreason_counts: Counter[str] = Counter()
     for row in rows:
         for field, counter in [
             ("call_edge_target_kind_counts", target_kind_counts),
             ("call_edge_resolution_counts", resolution_counts),
             ("call_edge_unresolved_reason_counts", unresolved_reason_counts),
+            ("call_edge_project_method_absent_subreason_counts", absent_subreason_counts),
         ]:
             try:
                 counter.update(json.loads(row.get(field) or "{}"))
@@ -637,6 +650,14 @@ def write_summary(output_dir: Path, results_path: Path) -> None:
     lines.extend([
         "```",
         "",
+        "`project_class_present_method_absent*` subreasons:",
+        "",
+        "```text",
+    ])
+    lines.extend(f"{key}: {value}" for key, value in sorted(absent_subreason_counts.items()))
+    lines.extend([
+        "```",
+        "",
         "## Attention Cases",
         "",
     ])
@@ -687,6 +708,10 @@ def main() -> int:
     parser.add_argument("--resource-check-interval", type=int, default=30,
                         help="Seconds between resource guard checks.")
     parser.add_argument("--limit", type=int, default=0, help="Limit total targets for smoke testing. 0 means all.")
+    parser.add_argument("--repo", action="append", default=[],
+                        help="Restrict to one repository slug. Can be repeated, e.g. --repo apache/commons-jexl.")
+    parser.add_argument("--extra-repo", action="append", default=[],
+                        help="Additional public repository slug to clone and analyze outside the OE25 list.")
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parents[1]
@@ -701,8 +726,12 @@ def main() -> int:
     representative_root = args.representative_checkouts_dir.resolve() if args.representative_checkouts_dir else None
     oe25_root = args.oe25_checkouts_dir.resolve() if args.oe25_checkouts_dir else None
     representative_targets = discover_representative_targets(root, representative_root)
-    oe25_targets = [clone_oe25_target(root, output_dir, repo, args.clone_timeout, oe25_root) for repo in OE25_REPOS]
+    oe25_repos = list(dict.fromkeys(OE25_REPOS + args.extra_repo))
+    oe25_targets = [clone_oe25_target(root, output_dir, repo, args.clone_timeout, oe25_root) for repo in oe25_repos]
     targets = oe25_targets + representative_targets
+    if args.repo:
+        requested = set(args.repo)
+        targets = [target for target in targets if target.repo in requested]
     if args.limit and args.limit > 0:
         targets = targets[: args.limit]
 

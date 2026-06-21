@@ -259,7 +259,10 @@ final class Orchestrator {
                 executionReport.put("phase_3_available", false);
                 executionReport.put("phase_3_algorithm", "NONE");
                 executionReport.put("phase_3_warning", "Call graph disabled by configuration");
+                executionReport.put("phase_3_call_graph_artifact_exists", false);
                 executionReport.put("phase_3_call_graphs_generated", 0);
+                executionReport.put("phase_3_non_empty_call_graphs", 0);
+                executionReport.put("phase_3_call_edges_generated", 0);
                 return true;
             }
 
@@ -273,7 +276,10 @@ final class Orchestrator {
                 executionReport.put("phase_3_effective_algorithm", "NONE");
                 executionReport.put("phase_3_warning",
                         "Call graph auto disabled because compiled class directories are unavailable");
+                executionReport.put("phase_3_call_graph_artifact_exists", false);
                 executionReport.put("phase_3_call_graphs_generated", 0);
+                executionReport.put("phase_3_non_empty_call_graphs", 0);
+                executionReport.put("phase_3_call_edges_generated", 0);
                 return true;
             }
 
@@ -286,7 +292,10 @@ final class Orchestrator {
                 executionReport.put("phase_3_effective_algorithm", effectiveAlgorithm.toString());
                 executionReport.put("phase_3_warning",
                         "Call graph unavailable; continuing with source-only context");
+                executionReport.put("phase_3_call_graph_artifact_exists", false);
                 executionReport.put("phase_3_call_graphs_generated", 0);
+                executionReport.put("phase_3_non_empty_call_graphs", 0);
+                executionReport.put("phase_3_call_edges_generated", 0);
                 return true;
             }
 
@@ -306,6 +315,7 @@ final class Orchestrator {
                 executionReport.put("phase_3_call_graph_file", cgOutputPath.toString());
             }
 
+            boolean artifactExists = !cgText.isEmpty() || !callGraphResults.isEmpty();
             boolean hasUsableEdges = callGraphEdgeCount > 0;
             if (!hasUsableEdges) {
                 failureCodes.add(FailureCode.CALL_GRAPH_EMPTY);
@@ -315,6 +325,7 @@ final class Orchestrator {
             executionReport.put("phase_3_available", hasUsableEdges);
             executionReport.put("phase_3_algorithm", callGraphAlgorithm.toString());
             executionReport.put("phase_3_effective_algorithm", effectiveAlgorithm.toString());
+            executionReport.put("phase_3_call_graph_artifact_exists", artifactExists);
             executionReport.put("phase_3_call_graphs_generated", callGraphResults.size());
             executionReport.put("phase_3_non_empty_call_graphs", nonEmptyCallGraphResults);
             executionReport.put("phase_3_call_edges_generated", callGraphEdgeCount);
@@ -464,6 +475,7 @@ final class Orchestrator {
             executionReport.put("phase_5_jsonl_file", jsonlPath.toString());
             executionReport.put("phase_5_jsonl_rows", jsonlRows);
             executionReport.put("phase_5_files_generated", jsonlRows);
+            executionReport.put("phase_5_call_edges_serialized", serializedCallEdgeCount(methodContexts));
             if (jsonlRows < methodContexts.size()) {
                 failureCodes.add(FailureCode.JSON_GENERATION_FAILED);
             }
@@ -473,6 +485,17 @@ final class Orchestrator {
             failureCodes.add(FailureCode.JSON_GENERATION_FAILED);
             return false;
         }
+    }
+
+    private static int serializedCallEdgeCount(Map<String, MethodContext> contexts) {
+        if (contexts == null || contexts.isEmpty()) {
+            return 0;
+        }
+        return contexts.values().stream()
+                .map(MethodContext::getCallGraph)
+                .filter(Objects::nonNull)
+                .mapToInt(callGraph -> callGraph.getCallerCount() + callGraph.getCalleeCount())
+                .sum();
     }
 
     public Map<String, Object> getExecutionReport() {

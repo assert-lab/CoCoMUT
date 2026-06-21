@@ -182,6 +182,39 @@ synthetic_or_compiler_method  Compiler-generated helper such as access$...,
                               lambda$..., or similar synthetic bytecode method.
 ```
 
+Common unresolved reasons:
+
+```text
+unresolved_reason                                      Meaning
+-----------------------------------------------------  -----------------------
+jdk_or_platform_method_outside_project_source          JDK/platform method.
+external_or_unmodeled_bytecode_method                  Dependency or unmodeled method.
+invokedynamic_or_lambda_bytecode_artifact              Lambda/invokedynamic artifact.
+anonymous_or_local_class_bytecode                      Anonymous/local class bytecode.
+nested_bytecode_class_without_unique_source_method     Nested bytecode class could not be
+                                                       joined to one source method.
+project_method_name_present_but_signature_not_unique_or_compatible
+                                                       Project class and method name exist,
+                                                       but signature matching is not unique.
+multiple_source_methods_match_normalized_parameters    Normalization found multiple source
+                                                       candidates; see candidate_method_uris.
+project_class_present_method_absent_synthetic_or_compiler_method
+                                                       Project class exists; bytecode target is
+                                                       a compiler helper such as access$...
+project_class_present_method_absent_enum_generated_method
+                                                       Project enum exists; bytecode target is a
+                                                       generated enum method such as values().
+project_class_present_method_absent_record_component_accessor
+                                                       Project record exists; bytecode target is
+                                                       a generated component accessor.
+project_class_present_method_absent_bytecode_method_not_selected
+                                                       SootUp sees the method in bytecode but it
+                                                       is not in the selected source-method set.
+project_class_present_method_absent_no_matching_bytecode_method
+                                                       Project class exists, but CoCoMUT cannot
+                                                       find a matching source or bytecode method.
+```
+
 For every call edge:
 
 ```text
