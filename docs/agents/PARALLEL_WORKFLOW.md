@@ -104,6 +104,9 @@ PR link if opened
 Do not rely on chat memory as the source of truth. The repo should contain the
 important decisions.
 
+Open pull requests as ready for review unless the user explicitly asks for a
+draft PR.
+
 ## Keeping Branches Fresh
 
 Before opening a PR:
@@ -162,4 +165,3 @@ For more than three agents:
 - require every branch to state which schema/API fields it changes;
 - merge foundational model/schema branches before downstream docs/viewer
   branches.
-
