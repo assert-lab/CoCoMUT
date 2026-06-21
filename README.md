@@ -1,7 +1,7 @@
 # CoCoMUT 🥥
 
 <p align="center">
-  <strong>Context Construction for MUT.</strong>
+  <strong>Context Constructor for MUT.</strong>
 </p>
 
 <p align="center">
@@ -121,7 +121,7 @@ is available.
 
 ```bibtex
 @misc{cocomut2026,
-  title        = {CoCoMUT: Context Construction for MUT},
+  title        = {CoCoMUT: Context Constructor for MUT},
   author       = {{ASSERT Lab}},
   year         = {2026},
   howpublished = {\url{https://github.com/assert-lab/Code-Context-Extractor}},

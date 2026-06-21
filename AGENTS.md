@@ -6,7 +6,7 @@ branch status in `docs/agents/CURRENT_STATE.md` instead.
 
 ## Project Purpose
 
-CoCoMUT, Context Construction for MUT, is a static Java context extraction tool for
+CoCoMUT, Context Constructor for MUT, is a static Java context extraction tool for
 documentation-mining research and reusable Java repository analysis.
 
 CoCoMUT is not a generic Java static-analysis framework, not a build tool, and

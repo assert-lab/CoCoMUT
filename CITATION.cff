@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use CoCoMUT in academic work, please cite it. Publication metadata is currently a placeholder and will be updated after the paper/video are available."
-title: "CoCoMUT: Context Construction for MUT"
+title: "CoCoMUT: Context Constructor for MUT"
 version: "0.1.0"
 date-released: "2026-06-20"
 repository-code: "https://github.com/assert-lab/Code-Context-Extractor"
@@ -11,7 +11,7 @@ authors:
 license: "Apache-2.0"
 preferred-citation:
   type: generic
-  title: "CoCoMUT: Context Construction for MUT"
+  title: "CoCoMUT: Context Constructor for MUT"
   authors:
     - name: "ASSERT Lab"
   year: 2026
