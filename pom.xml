@@ -5,11 +5,11 @@
                               http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.assertlab.cocox</groupId>
-    <artifactId>cocox</artifactId>
+    <groupId>org.assertlab.cocomut</groupId>
+    <artifactId>cocomut</artifactId>
     <version>0.1.0</version>
     <packaging>pom</packaging>
-    <name>CoCoX — Parent</name>
+    <name>CoCoMUT — Parent</name>
     <description>Static Java method-context extraction for documentation research and documentation-generation systems.</description>
     <url>https://github.com/assert-lab/Code-Context-Extractor</url>
 
@@ -43,7 +43,7 @@
 
     <modules>
         <module>analyzer-core</module>
-        <module>cocox-cli</module>
+        <module>cocomut-cli</module>
         <module>analyzer-tests</module>
     </modules>
 
@@ -102,13 +102,13 @@
             </dependency>
             <!-- Internal: analyzer-tests depends on analyzer-core -->
             <dependency>
-                <groupId>org.assertlab.cocox</groupId>
+                <groupId>org.assertlab.cocomut</groupId>
                 <artifactId>analyzer-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>org.assertlab.cocox</groupId>
-                <artifactId>cocox-cli</artifactId>
+                <groupId>org.assertlab.cocomut</groupId>
+                <artifactId>cocomut-cli</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>
@@ -123,7 +123,7 @@
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>3.0.0-M9</version>
                     <configuration>
-                        <excludedGroups>org.assertlab.cocox.SlowTests</excludedGroups>
+                        <excludedGroups>org.assertlab.cocomut.SlowTests</excludedGroups>
                     </configuration>
                 </plugin>
                 <plugin>
@@ -181,7 +181,7 @@
                             <artifactId>maven-surefire-plugin</artifactId>
                             <version>3.0.0-M9</version>
                             <configuration>
-                                <groups>org.assertlab.cocox.SlowTests</groups>
+                                <groups>org.assertlab.cocomut.SlowTests</groups>
                                 <excludedGroups/>
                             </configuration>
                         </plugin>

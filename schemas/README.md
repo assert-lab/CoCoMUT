@@ -1,6 +1,6 @@
 # Schemas
 
-This directory contains the machine-readable contracts for CoCoX outputs.
+This directory contains the machine-readable contracts for CoCoMUT outputs.
 Schemas are repository files, not a separate CLI command.
 
 ## Files
@@ -11,10 +11,10 @@ method-context.schema.json     JSON Schema for one method-context JSONL row
 
 ## Method Context Rows
 
-CoCoX writes JSONL. Each line in a generated `*.jsonl` file is one complete
+CoCoMUT writes JSONL. Each line in a generated `*.jsonl` file is one complete
 method-context object that follows `method-context.schema.json`.
 
-The schema is intentionally permissive with `additionalProperties: true` so CoCoX
+The schema is intentionally permissive with `additionalProperties: true` so CoCoMUT
 can add research fields without breaking older consumers. Consumers should rely
 on the documented stable fields and ignore unknown fields by default.
 
@@ -52,7 +52,7 @@ class_hierarchy           Source hierarchy and resolution confidence
 source_context            Field reads/writes, overload group, sibling methods
 ```
 
-CoCoX uses the same `path#symbol` convention for method, type, and package
+CoCoMUT uses the same `path#symbol` convention for method, type, and package
 selection. See
 [../docs/symbol-model.md](../docs/symbol-model.md).
 
@@ -84,9 +84,9 @@ resolution                resolved_type|resolved_method|resolved_field|
 reference_target_kind     method|field|type|url|text|method_or_field|unknown
 reference_domain          project|external_jdk|external_library|external_web|text|unresolved
 reference_scope           same_type|same_package|same_module|external|text|unknown
-method_uri                Canonical CoCoX URI for resolved project methods
-field_uri                 Canonical CoCoX URI for resolved project fields
-type_uri                  Canonical CoCoX URI for resolved project types
+method_uri                Canonical CoCoMUT URI for resolved project methods
+field_uri                 Canonical CoCoMUT URI for resolved project fields
+type_uri                  Canonical CoCoMUT URI for resolved project types
 referenced_method         Compact method context for resolved project methods:
                           URI, signature, source, Javadoc, params, return, throws
 field_javadoc             Full field Javadoc for resolved project fields
@@ -106,24 +106,24 @@ without replacing the lower-level `kind`, `resolution`, URI, and context fields.
 `same_package` means another project type in the same package; `same_module`
 means project-local but in a different package.
 
-CoCoX recognizes the standard doclet `@see` forms: quoted text entries,
+CoCoMUT recognizes the standard doclet `@see` forms: quoted text entries,
 HTML anchor links, and program-element references such as
 `module/package.Type#member label`. Module prefixes are normalized before
 symbol lookup.
 
 External references are intentionally symbol-level only in the current schema.
-CoCoX does not fetch JDK/dependency source jars or generated Javadoc pages for
+CoCoMUT does not fetch JDK/dependency source jars or generated Javadoc pages for
 external `@see` / `{@link ...}` targets, because that behavior depends heavily
 on local build artifacts and would make dataset provenance noisier.
 
-When a target omits parameters, for example `@see #parse`, CoCoX resolves it
+When a target omits parameters, for example `@see #parse`, CoCoMUT resolves it
 only if there is a single project method named `parse` in the target class. If
 multiple overloads exist, it reports `overload_ambiguous` and emits candidate
 method URIs instead of guessing. When a target includes parameters, for example
-`@see #parse(String, int)`, CoCoX matches those parameter types against source
+`@see #parse(String, int)`, CoCoMUT matches those parameter types against source
 and erased parameter types.
 
-Call graph arrays are normalized edge objects, not raw strings. CoCoX keeps
+Call graph arrays are normalized edge objects, not raw strings. CoCoMUT keeps
 source-backed method identity separate from bytecode-level edge identity:
 
 ```text
@@ -131,7 +131,7 @@ kind                      project_method|ambiguous_project_method|
                           unresolved_project_method|jdk_method|external_method|
                           bytecode_method|invokedynamic_method|
                           synthetic_or_compiler_method
-method_uri                CoCoX source method URI only when the edge resolves
+method_uri                CoCoMUT source method URI only when the edge resolves
                           to a unique extracted project method
 target_uri                Universal bytecode-level URI derived from the SootUp
                           signature, present even when method_uri is empty
@@ -154,7 +154,7 @@ context                   Optional method node when method_uri resolves to an ex
 
 `target_uri` lets downstream tools identify every SootUp edge. `method_uri`
 remains stricter: it is populated only when the bytecode edge maps to one unique
-source method in the CoCoX/Spoon model. This avoids treating JDK, dependency,
+source method in the CoCoMUT/Spoon model. This avoids treating JDK, dependency,
 synthetic, ambiguous, or bytecode-only targets as source-backed methods.
 
 ### Call Graph Target Taxonomy
@@ -165,16 +165,16 @@ same as `reference_target_kind`, which is used for Javadoc references.
 ```text
 target_kind                   Meaning
 ----------------------------  ------------------------------------------------
-project_method                SootUp target resolved to one unique CoCoX/Spoon
+project_method                SootUp target resolved to one unique CoCoMUT/Spoon
                               project source method. method_uri is present.
 unresolved_project_method     Target appears to belong to a project class, but
-                              CoCoX could not identify one unique source method.
+                              CoCoMUT could not identify one unique source method.
 jdk_method                    Target belongs to JDK/platform classes such as
                               java.*, javax.*, jdk.*, sun.*, com.sun.*,
                               org.w3c.dom.*, or org.xml.sax.*.
 external_method               Target belongs to a dependency or otherwise
                               unmodeled external class.
-bytecode_method               Generic bytecode target when CoCoX cannot classify
+bytecode_method               Generic bytecode target when CoCoMUT cannot classify
                               the edge more specifically.
 invokedynamic_method          Lambda, method-handle, or invokedynamic bytecode
                               artifact rather than a normal source declaration.

@@ -6,7 +6,7 @@ agent rule, copy the short version there too.
 
 ## Deterministic Identity Matching
 
-CoCoX must resolve source identities deterministically.
+CoCoMUT must resolve source identities deterministically.
 
 Decision:
 

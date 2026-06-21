@@ -1,7 +1,7 @@
-# CoCoX 🥥
+# CoCoMUT 🥥
 
 <p align="center">
-  <strong>Code Context Extractor for Java.</strong>
+  <strong>Context Construction for MUT.</strong>
 </p>
 
 <p align="center">
@@ -20,14 +20,14 @@
 
 ---
 
-CoCoX extracts method-level context from Java repositories. For every method it
+CoCoMUT extracts method-level context from Java repositories. For every method it
 writes one JSONL record with source code, Javadoc, type context, documentation
 metadata, provenance, and optional call-graph context.
 
 It is designed for documentation related research:
 static, reproducible, source-first, and explicit about failure modes.
 
-## Why CoCoX?
+## Why CoCoMUT?
 
 - **Source-first extraction** with Spoon, including no-classpath fallback for
   imperfect public repositories.
@@ -47,10 +47,10 @@ cd Code-Context-Extractor
 ./mvnw test
 ```
 
-Run CoCoX on a Java project:
+Run CoCoMUT on a Java project:
 
 ```bash
-./bin/cocox \
+./bin/cocomut \
   --project /path/to/java/project \
   --scope entry-points \
   --source-set main \
@@ -60,13 +60,13 @@ Run CoCoX on a Java project:
 The default output goes to:
 
 ```text
-./cocox_output/<project-name>/method_contexts.jsonl
+./cocomut_output/<project-name>/method_contexts.jsonl
 ```
 
 Open the JSONL viewer:
 
 ```bash
-python3 scripts/method_contexts_viewer.py ./cocox_output
+python3 scripts/method_contexts_viewer.py ./cocomut_output
 ```
 
 ## Output At A Glance
@@ -106,7 +106,7 @@ See [schemas/README.md](schemas/README.md) for the full schema.
 
 ```text
 analyzer-core/   Java library and extraction API
-cocox-cli/       Picocli command-line application
+cocomut-cli/     Picocli command-line application
 analyzer-tests/  unit and integration tests
 examples/        small API usage example
 docs/            product notes and research-run reports
@@ -120,8 +120,8 @@ Publication metadata is still a placeholder and will be updated when the paper
 is available.
 
 ```bibtex
-@misc{cocox2026,
-  title        = {CoCoX: Code Context Extractor for Java},
+@misc{cocomut2026,
+  title        = {CoCoMUT: Context Construction for MUT},
   author       = {{ASSERT Lab}},
   year         = {2026},
   howpublished = {\url{https://github.com/assert-lab/Code-Context-Extractor}},
@@ -131,7 +131,7 @@ is available.
 
 ## Status
 
-CoCoX currently targets Java 17+ and performs static analysis only. It does not
+CoCoMUT currently targets Java 17+ and performs static analysis only. It does not
 execute the analyzed program. When classpath or bytecode is unavailable, it
 continues with source/Javadoc extraction and records that provenance in the
 output.

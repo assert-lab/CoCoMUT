@@ -1,4 +1,4 @@
-# CoCoX Usage
+# CoCoMUT Usage
 
 This page contains the longer operational notes that are intentionally kept out
 of the README landing page.
@@ -23,7 +23,7 @@ Run only the test module and the required reactor modules:
 ./mvnw -pl analyzer-tests -am test
 ```
 
-CoCoX requires Java 17 or newer at runtime and uses Maven compiler target
+CoCoMUT requires Java 17 or newer at runtime and uses Maven compiler target
 Java 17.
 
 Build the standalone CLI jar:
@@ -35,17 +35,17 @@ scripts/build_release_jar.sh
 The script runs tests, packages all modules, and writes:
 
 ```text
-dist/cocox-cli.jar
+dist/cocomut-cli.jar
 ```
 
 ## Release Entry Points
 
-Public users normally interact with CoCoX in one of three ways.
+Public users normally interact with CoCoMUT in one of three ways.
 
 Run from a source checkout during development:
 
 ```bash
-./bin/cocox \
+./bin/cocomut \
   --project /path/to/java/project \
   --scope entry-points \
   --source-set main \
@@ -55,7 +55,7 @@ Run from a source checkout during development:
 Run the standalone shaded JAR after building or downloading a release artifact:
 
 ```bash
-java -jar dist/cocox-cli.jar \
+java -jar dist/cocomut-cli.jar \
   --project /path/to/java/project \
   --scope entry-points \
   --source-set main \
@@ -77,40 +77,40 @@ ExtractionReport report = ContextExtractorService.createDefault().extract(reques
 
 ## CLI
 
-The CLI can be run through `bin/cocox` from the repository root:
+The CLI can be run through `bin/cocomut` from the repository root:
 
 ```bash
-./bin/cocox --project /path/to/java/project --scope entry-points --call-graph none
+./bin/cocomut --project /path/to/java/project --scope entry-points --call-graph none
 ```
 
-`bin/cocox` uses `dist/cocox-cli.jar` when it exists. If the jar has not been
+`bin/cocomut` uses `dist/cocomut-cli.jar` when it exists. If the jar has not been
 built yet, it builds and runs the shaded development jar from
-`cocox-cli/target/`.
+`cocomut-cli/target/`.
 
 You can also run the standalone jar directly:
 
 ```bash
-java -jar dist/cocox-cli.jar \
+java -jar dist/cocomut-cli.jar \
   --project /path/to/java/project \
   --scope entry-points \
   --call-graph none
 ```
 
-`cocox` has one public operation: extraction. Running `cocox` with the options
+`cocomut` has one public operation: extraction. Running `cocomut` with the options
 below is the extraction command; there is no extra `extract`, `validate`, or
 `schema` command layer.
 
-The shell script and standalone JAR expose the same interface. `bin/cocox` is a
+The shell script and standalone JAR expose the same interface. `bin/cocomut` is a
 launcher that eventually executes the same Picocli entry point as:
 
 ```bash
-java -jar dist/cocox-cli.jar ...
+java -jar dist/cocomut-cli.jar ...
 ```
 
 Run exact method-URI selection:
 
 ```bash
-./bin/cocox \
+./bin/cocomut \
   --project /path/to/java/project \
   --method-uri 'src/main/java/com/example/Hello.java#com.example.Hello.greet(java.lang.String):java.lang.String' \
   --call-graph none
@@ -153,13 +153,13 @@ extraction when compilation is unavailable, incomplete, too expensive, or loses
 method coverage.
 
 `--call-graph auto` asks SootUp for an RTA call graph when compiled class
-directories are available. If bytecode is unavailable or unusable, CoCoX records
+directories are available. If bytecode is unavailable or unusable, CoCoMUT records
 the call graph as unavailable and still emits source/Javadoc contexts.
 
 For documentation datasets, prefer:
 
 ```bash
-./bin/cocox \
+./bin/cocomut \
   --project /path/to/java/project \
   --scope entry-points \
   --source-set main \
@@ -180,7 +180,7 @@ omit the flag to preserve the default behavior.
 Layered selection is available when you do not want the whole repository:
 
 ```bash
-./bin/cocox \
+./bin/cocomut \
   --project /path/to/java/project \
   --package org.example.api \
   --class PublicApi \
@@ -195,18 +195,18 @@ method-filtered extraction writes a distinguishable JSONL filename based on the
 selected target, for example `package__org.example.api.jsonl`,
 `class__org.example.PublicApi.jsonl`, or `method__parse.jsonl`.
 
-CoCoX supports both filter-based package/class/method selection and exact URI
+CoCoMUT supports both filter-based package/class/method selection and exact URI
 targets through `--target-uri`, `--method-uri`, `--type-uri` / `--class-uri`,
 and `--package-uri`; see [symbol-model.md](symbol-model.md).
 
 Examples:
 
 ```bash
-./bin/cocox \
+./bin/cocomut \
   --project /path/to/java/project \
   --type-uri 'src/main/java/org/example/Foo.java#org.example.Foo'
 
-./bin/cocox \
+./bin/cocomut \
   --project /path/to/java/project \
   --package-uri 'src/main/java/org/example/package-info.java#org.example'
 ```
@@ -214,11 +214,11 @@ Examples:
 ## Output Directory
 
 By default, generated artifacts are written outside the analyzed project under
-`./cocox_output/<project-name>/`, relative to the directory where you run
-`cocox`:
+`./cocomut_output/<project-name>/`, relative to the directory where you run
+`cocomut`:
 
 ```text
-./cocox_output/<project-name>/
+./cocomut_output/<project-name>/
   method_contexts.jsonl
   extraction_report.json
   Output_CallGraph_CHA.txt     when CHA is effectively used
@@ -229,7 +229,7 @@ By default, generated artifacts are written outside the analyzed project under
 Use `--output-dir` to choose an explicit destination:
 
 ```bash
-./bin/cocox --project /path/to/java/project --output-dir ./results/project-name
+./bin/cocomut --project /path/to/java/project --output-dir ./results/project-name
 ```
 
 A tiny fixture-generated example is checked in at:
@@ -241,7 +241,7 @@ examples/sample-output/minimal-extraction-report.json
 
 ## JSONL Viewer
 
-For manual inspection of generated method contexts, CoCoX ships a
+For manual inspection of generated method contexts, CoCoMUT ships a
 dependency-free research viewer:
 
 ```bash
@@ -252,7 +252,7 @@ You can also pass an output directory; the viewer recursively finds `*.jsonl`
 files:
 
 ```bash
-python3 scripts/method_contexts_viewer.py /path/to/cocox_output
+python3 scripts/method_contexts_viewer.py /path/to/cocomut_output
 ```
 
 The viewer indexes JSONL by byte offset, so large outputs can be browsed
@@ -270,7 +270,7 @@ Add the dependency after installing the project locally:
 
 ```xml
 <dependency>
-  <groupId>org.assertlab.cocox</groupId>
+  <groupId>org.assertlab.cocomut</groupId>
   <artifactId>analyzer-core</artifactId>
   <version>0.1.0</version>
 </dependency>
@@ -279,10 +279,10 @@ Add the dependency after installing the project locally:
 Minimal Java API:
 
 ```java
-import org.assertlab.cocox.CallGraphGenerator;
-import org.assertlab.cocox.ContextExtractorService;
-import org.assertlab.cocox.ContextRequest;
-import org.assertlab.cocox.ExtractionReport;
+import org.assertlab.cocomut.CallGraphGenerator;
+import org.assertlab.cocomut.ContextExtractorService;
+import org.assertlab.cocomut.ContextRequest;
+import org.assertlab.cocomut.ExtractionReport;
 
 import java.nio.file.Path;
 
@@ -313,29 +313,29 @@ Run it from the repository root:
 ```bash
 ./mvnw install
 cd examples/api-toy-project
-mvn compile exec:java -Dexec.mainClass=example.RunCoCoX
+mvn compile exec:java -Dexec.mainClass=example.RunCoCoMUT
 ```
 
 To analyze another project:
 
 ```bash
 mvn compile exec:java \
-  -Dexec.mainClass=example.RunCoCoX \
+  -Dexec.mainClass=example.RunCoCoMUT \
   -Dexec.args="/path/to/java/project"
 ```
 
 ## Entrypoint Parity
 
-CoCoX has three public entrypoint shapes:
+CoCoMUT has three public entrypoint shapes:
 
 ```text
-./bin/cocox ...                 shell launcher
-java -jar dist/cocox-cli.jar ... standalone JAR
+./bin/cocomut ...                 shell launcher
+java -jar dist/cocomut-cli.jar ... standalone JAR
 ContextExtractorService.extract  Java API
 ```
 
 The shell launcher and JAR are functionally identical: both run
-`org.assertlab.cocox.cli.CoCoXCommand`. The Java API uses the same extraction
+`org.assertlab.cocomut.cli.CoCoMUTCommand`. The Java API uses the same extraction
 pipeline through `ContextRequest` and `ContextExtractorService`.
 
 | Capability | CLI / JAR | Java API |
@@ -369,7 +369,7 @@ falling back to source-only extraction.
 
 ## Static Analysis Boundaries
 
-CoCoX does not perform dynamic analysis. It does not execute tests, run
+CoCoMUT does not perform dynamic analysis. It does not execute tests, run
 application code, observe runtime values, or resolve reflection dynamically.
 
 Current static-analysis boundaries:
@@ -381,7 +381,7 @@ Current static-analysis boundaries:
 - call graph quality depends on compiled class directories and classpath
   resolution;
 - build-tool compilation is explicit via `--compile` or opportunistic through
-  `--resolution auto` / `--call-graph auto`; otherwise CoCoX only reuses
+  `--resolution auto` / `--call-graph auto`; otherwise CoCoMUT only reuses
   existing class files;
 - reflection, proxies, generated code, Lombok, service loaders, and dependency
   injection can reduce precision, but common dynamic-feature hints are labeled
@@ -391,7 +391,7 @@ Current static-analysis boundaries:
 
 ## Method Identity
 
-CoCoX identifies methods by URI.
+CoCoMUT identifies methods by URI.
 
 Format:
 

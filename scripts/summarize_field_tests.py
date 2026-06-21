@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Summarize CoCoX public-repository field-test TSV evidence."""
+"""Summarize CoCoMUT public-repository field-test TSV evidence."""
 
 from __future__ import annotations
 

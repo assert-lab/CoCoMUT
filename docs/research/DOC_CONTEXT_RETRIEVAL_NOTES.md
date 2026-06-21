@@ -12,7 +12,7 @@ The inspection targeted:
 - The expanded public-repository checkouts under
   `experiments/expanded-public-repos-auto-main/checkouts/`.
 
-The official Javadoc sources are versioned with the JDK. CoCoX follows the
+The official Javadoc sources are versioned with the JDK. CoCoMUT follows the
 stable traditional reference forms for `@see`, `{@link ...}`, and
 `{@linkplain ...}`. Newer JDK documentation features such as Markdown
 documentation comments are treated as future scope unless they also use the
@@ -50,7 +50,7 @@ doc-files/images/html references   39268
   - external URLs;
   - project type references with `type_uri`, source path, full class Javadoc,
     and hierarchy metadata;
-  - project method references resolved to CoCoX method URIs plus compact
+  - project method references resolved to CoCoMUT method URIs plus compact
     referenced-method context: source, Javadoc, signature, params, return,
     throws, annotations, and source location;
   - project field references resolved to `field_uri`, type, modifiers, and
@@ -105,20 +105,20 @@ external types           26
 unknown external members  3
 ```
 
-External references are intentionally symbol-level only. CoCoX does not attempt
+External references are intentionally symbol-level only. CoCoMUT does not attempt
 to retrieve external Javadoc/source excerpts from JDK or dependency archives.
 
 ## Still Missing
 
-- Deep semantic rendering for external JDK/library references. CoCoX resolves
+- Deep semantic rendering for external JDK/library references. CoCoMUT resolves
   many of these as external symbols, but it intentionally does not retrieve
   external source/Javadoc text in the current product scope.
-- Full Javadoc doclet rendering semantics. CoCoX parses useful source-level
+- Full Javadoc doclet rendering semantics. CoCoMUT parses useful source-level
   context; it does not attempt to exactly reproduce generated Javadoc HTML.
 - Rich resolution for all label variants in handwritten `@see` text. The
   resolver handles common `target label` patterns, but unusual prose-heavy
   references remain best-effort.
-- Full auxiliary-file ingestion. CoCoX records referenced file paths and small
+- Full auxiliary-file ingestion. CoCoMUT records referenced file paths and small
   text excerpts, but it does not embed binary images or large HTML files.
 - Full `{@value}` constant resolution and rendered `{@code}`/`{@literal}`
   text normalization. These are counted as common but currently remain raw

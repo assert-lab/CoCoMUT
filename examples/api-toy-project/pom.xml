@@ -3,8 +3,8 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>org.assertlab.cocox.examples</groupId>
-    <artifactId>cocox-api-toy-project</artifactId>
+    <groupId>org.assertlab.cocomut.examples</groupId>
+    <artifactId>cocomut-api-toy-project</artifactId>
     <version>0.1.0</version>
 
     <properties>
@@ -15,7 +15,7 @@
 
     <dependencies>
         <dependency>
-            <groupId>org.assertlab.cocox</groupId>
+            <groupId>org.assertlab.cocomut</groupId>
             <artifactId>analyzer-core</artifactId>
             <version>0.1.0</version>
         </dependency>

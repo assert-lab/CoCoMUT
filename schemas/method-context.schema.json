@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://assert-lab.github.io/cocox/schemas/method-context.schema.json",
-  "title": "CoCoX Method Context",
+  "$id": "https://assert-lab.github.io/cocomut/schemas/method-context.schema.json",
+  "title": "CoCoMUT Method Context",
   "type": "object",
   "required": ["MUT", "metadata", "provenance", "documentation_metrics", "javadoc_metadata", "dynamic_features"],
   "properties": {
@@ -24,7 +24,7 @@
       "properties": {
         "method_uri": {
           "type": "string",
-          "description": "Canonical CoCoX method URI: relative/path.java#qualified.Class.method(erasedParamTypes):erasedReturnType"
+          "description": "Canonical CoCoMUT method URI: relative/path.java#qualified.Class.method(erasedParamTypes):erasedReturnType"
         },
         "method_name": {"type": "string"},
         "source_set": {"type": "string"},

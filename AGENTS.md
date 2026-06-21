@@ -1,15 +1,15 @@
 # Agent Instructions
 
 This file is the shared operating guide for Codex or other coding agents
-working on CoCoX. Keep it stable, technical, and repo-specific. Put temporary
+working on CoCoMUT. Keep it stable, technical, and repo-specific. Put temporary
 branch status in `docs/agents/CURRENT_STATE.md` instead.
 
 ## Project Purpose
 
-CoCoX, Code Context Extractor, is a static Java context extraction tool for
+CoCoMUT, Context Construction for MUT, is a static Java context extraction tool for
 documentation-mining research and reusable Java repository analysis.
 
-CoCoX is not a generic Java static-analysis framework, not a build tool, and
+CoCoMUT is not a generic Java static-analysis framework, not a build tool, and
 not a benchmark-specific script collection. New work should strengthen the
 source/Javadoc/context extraction product rather than expanding the repository
 into unrelated static-analysis infrastructure.
@@ -21,7 +21,7 @@ The tool combines:
 - optional SootUp CHA/RTA call graphs when compiled bytecode is available;
 - JSONL output designed for downstream empirical analysis and model prompts.
 
-CoCoX must remain a product-style tool, not an experiment dump. Prefer small,
+CoCoMUT must remain a product-style tool, not an experiment dump. Prefer small,
 documented, deterministic features over project-specific heuristics.
 
 ## Protected Product Paths
@@ -57,7 +57,7 @@ documented, and tested.
 - Keep generated analysis artifacts out of analyzed repositories by default.
 - Do not delete or rewrite existing experiment folders unless the user
   explicitly asks for it.
-- Do not commit generated test output such as `analyzer-tests/cocox_output/`.
+- Do not commit generated test output such as `analyzer-tests/cocomut_output/`.
 
 ## Engineering Quality Rules
 
@@ -80,14 +80,14 @@ documented, and tested.
 
 ## Public Entry Points
 
-The main user-facing entry point is `cocox extract`. Running `cocox` without a
+The main user-facing entry point is `cocomut extract`. Running `cocomut` without a
 subcommand should behave like extraction.
 
 Useful local entry points:
 
 ```bash
-./bin/cocox --project /path/to/java/repo --source-set main --scope all
-java -jar dist/cocox-cli.jar --project /path/to/java/repo --source-set main
+./bin/cocomut --project /path/to/java/repo --source-set main --scope all
+java -jar dist/cocomut-cli.jar --project /path/to/java/repo --source-set main
 ```
 
 API usage should go through the public service/request model, not direct
@@ -117,7 +117,7 @@ When changing output fields:
 
 ## URI Model
 
-CoCoX source-backed URIs are documented in `docs/symbol-model.md`.
+CoCoMUT source-backed URIs are documented in `docs/symbol-model.md`.
 
 Canonical source identities:
 
@@ -143,13 +143,13 @@ formatting-only changes.
 ## Call Graph Model
 
 SootUp reports bytecode-level signatures. Spoon reports source-level methods.
-CoCoX joins them only when the match is deterministic and unique.
+CoCoMUT joins them only when the match is deterministic and unique.
 
 Call-edge identity fields:
 
 - `target_uri`: bytecode-level URI derived from the SootUp signature. Present
   for every call graph edge.
-- `method_uri`: source-level CoCoX method URI. Present only when a unique
+- `method_uri`: source-level CoCoMUT method URI. Present only when a unique
   project source method is identified.
 - `target_kind`: taxonomy for the bytecode target.
 - `resolution`: how the edge was resolved or why it stayed unresolved.
@@ -166,11 +166,11 @@ Call-edge resolution work is documented in:
 Do not collapse `target_uri` and `method_uri`. They answer different questions:
 
 - `target_uri`: what bytecode target did SootUp report?
-- `method_uri`: can CoCoX attach project source/Javadoc context to that target?
+- `method_uri`: can CoCoMUT attach project source/Javadoc context to that target?
 
 ## Javadoc Reference Model
 
-CoCoX follows official Javadoc syntax, not project-specific style.
+CoCoMUT follows official Javadoc syntax, not project-specific style.
 
 Reference docs:
 
@@ -205,7 +205,7 @@ setup.
 
 ## Selection Semantics
 
-CoCoX supports layered selection:
+CoCoMUT supports layered selection:
 
 - project;
 - package;
@@ -249,9 +249,9 @@ If classpath/build behavior changes, also test a small Maven fixture or known
 compiled repository with:
 
 ```bash
-./bin/cocox --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project \
+./bin/cocomut --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project \
   --compile --resolution auto --call-graph none --source-set main --scope all \
-  --output-dir /tmp/cocox-minimal-source-test
+  --output-dir /tmp/cocomut-minimal-source-test
 ```
 
 ### Javadoc Extraction Or Reference Changes
@@ -353,9 +353,9 @@ physical checkout.
 Recommended sibling worktree layout from the parent directory:
 
 ```bash
-git -C Code-Context-Extractor worktree add ../cocox-task-callgraph -b task/callgraph main
-git -C Code-Context-Extractor worktree add ../cocox-task-docs -b task/docs main
-git -C Code-Context-Extractor worktree add ../cocox-task-viewer -b task/viewer main
+git -C Code-Context-Extractor worktree add ../cocomut-task-callgraph -b task/callgraph main
+git -C Code-Context-Extractor worktree add ../cocomut-task-docs -b task/docs main
+git -C Code-Context-Extractor worktree add ../cocomut-task-viewer -b task/viewer main
 ```
 
 Rules:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract @see and {@inheritDoc} cases from CoCoX field-test JSONL outputs."""
+"""Extract @see and {@inheritDoc} cases from CoCoMUT field-test JSONL outputs."""
 
 from __future__ import annotations
 

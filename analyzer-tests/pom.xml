@@ -6,13 +6,13 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>org.assertlab.cocox</groupId>
-        <artifactId>cocox</artifactId>
+        <groupId>org.assertlab.cocomut</groupId>
+        <artifactId>cocomut</artifactId>
         <version>0.1.0</version>
     </parent>
 
     <artifactId>analyzer-tests</artifactId>
-    <name>CoCoX — Analyzer Tests</name>
+    <name>CoCoMUT — Analyzer Tests</name>
 
     <!--
         This module has no src/main/java — only src/test/java.
@@ -23,13 +23,13 @@
     <dependencies>
         <!-- Bring in all production code + its transitive deps -->
         <dependency>
-            <groupId>org.assertlab.cocox</groupId>
+            <groupId>org.assertlab.cocomut</groupId>
             <artifactId>analyzer-core</artifactId>
             <!-- compile scope so test classes can reference production classes -->
         </dependency>
         <dependency>
-            <groupId>org.assertlab.cocox</groupId>
-            <artifactId>cocox-cli</artifactId>
+            <groupId>org.assertlab.cocomut</groupId>
+            <artifactId>cocomut-cli</artifactId>
         </dependency>
         <!-- Test framework -->
         <dependency>

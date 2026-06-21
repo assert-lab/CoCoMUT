@@ -1,6 +1,6 @@
 # Parallel Agent Workflow
 
-Use Git worktrees when multiple Codex instances work on CoCoX at the same time.
+Use Git worktrees when multiple Codex instances work on CoCoMUT at the same time.
 A worktree gives each agent its own directory and branch while sharing the same
 underlying Git repository.
 
@@ -22,17 +22,17 @@ From `/home/ale/repos/repo_mining_trials`:
 git -C Code-Context-Extractor fetch origin
 
 git -C Code-Context-Extractor worktree add \
-  ../cocox-task-callgraph \
+  ../cocomut-task-callgraph \
   -b task/callgraph-resolution \
   origin/main
 
 git -C Code-Context-Extractor worktree add \
-  ../cocox-task-docs \
+  ../cocomut-task-docs \
   -b task/docs-polish \
   origin/main
 
 git -C Code-Context-Extractor worktree add \
-  ../cocox-task-viewer \
+  ../cocomut-task-viewer \
   -b task/viewer-ux \
   origin/main
 ```
@@ -40,9 +40,9 @@ git -C Code-Context-Extractor worktree add \
 Then start one Codex instance per directory:
 
 ```bash
-cd /home/ale/repos/repo_mining_trials/cocox-task-callgraph
-cd /home/ale/repos/repo_mining_trials/cocox-task-docs
-cd /home/ale/repos/repo_mining_trials/cocox-task-viewer
+cd /home/ale/repos/repo_mining_trials/cocomut-task-callgraph
+cd /home/ale/repos/repo_mining_trials/cocomut-task-docs
+cd /home/ale/repos/repo_mining_trials/cocomut-task-viewer
 ```
 
 Each agent should read:
@@ -133,7 +133,7 @@ git -C Code-Context-Extractor worktree list
 Remove a finished worktree after its branch is merged:
 
 ```bash
-git -C Code-Context-Extractor worktree remove ../cocox-task-docs
+git -C Code-Context-Extractor worktree remove ../cocomut-task-docs
 git -C Code-Context-Extractor branch -d task/docs-polish
 ```
 
