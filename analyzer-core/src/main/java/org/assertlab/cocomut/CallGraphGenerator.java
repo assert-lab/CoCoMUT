@@ -46,6 +46,8 @@ public class CallGraphGenerator {
     private Map<String, String> signatureToMethodUri;
     private Map<SourceMethodKey, List<MethodInfo>> sourceMethodsByKey;
     private Set<String> projectSourceClasses;
+    private Map<String, List<MethodInfo>> sourceMethodsByClass;
+    private Map<String, SourceClassSummary> sourceClassSummaries;
 
     // Class hierarchy cache
     private final Map<String, ClassHierarchyInfo> hierarchyCache = new HashMap<>();
@@ -96,6 +98,8 @@ public class CallGraphGenerator {
         this.signatureToMethodUri = new HashMap<>();
         this.sourceMethodsByKey = new HashMap<>();
         this.projectSourceClasses = new HashSet<>();
+        this.sourceMethodsByClass = new HashMap<>();
+        this.sourceClassSummaries = new HashMap<>();
         this.initialized = false;
     }
 
@@ -238,14 +242,23 @@ public class CallGraphGenerator {
     private void indexMethodSignatures(List<MethodInfo> methods) {
         sourceMethodsByKey = new HashMap<>();
         projectSourceClasses = new HashSet<>();
+        sourceMethodsByClass = new HashMap<>();
+        sourceClassSummaries = new HashMap<>();
         for (MethodInfo method : methods) {
             projectSourceClasses.add(method.getClassname());
+            sourceMethodsByClass.computeIfAbsent(method.getClassname(), ignored -> new ArrayList<>()).add(method);
             SourceMethodKey key = SourceMethodKey.from(method);
             sourceMethodsByKey.computeIfAbsent(key, ignored -> new ArrayList<>()).add(method);
         }
+        sourceMethodsByClass.replaceAll((key, value) -> value.stream()
+                .sorted(Comparator.comparing(MethodInfo::getMethodUri))
+                .toList());
         sourceMethodsByKey.replaceAll((key, value) -> value.stream()
                 .sorted(Comparator.comparing(MethodInfo::getMethodUri))
                 .toList());
+        for (Map.Entry<String, List<MethodInfo>> entry : sourceMethodsByClass.entrySet()) {
+            sourceClassSummaries.put(entry.getKey(), SourceClassSummary.from(entry.getValue()));
+        }
 
         for (MethodInfo method : methods) {
             MethodSignature sig = findMethodSignature(method);
@@ -364,9 +377,53 @@ public class CallGraphGenerator {
             return sourceMethodsByKey.keySet().stream()
                     .anyMatch(key -> key.className().equals(declaringClass) && key.methodName().equals(methodName))
                     ? "project_method_name_present_but_signature_not_unique_or_compatible"
-                    : "project_class_present_method_absent";
+                    : projectMethodAbsentReason(sig, declaringClass, methodName);
         }
         return "external_or_unmodeled_bytecode_method";
+    }
+
+    private String projectMethodAbsentReason(MethodSignature sig, String declaringClass, String methodName) {
+        if (isSyntheticMethodName(methodName)) {
+            return "project_class_present_method_absent_synthetic_or_compiler_method";
+        }
+        SourceClassSummary summary = sourceClassSummaries.get(declaringClass);
+        if (summary != null) {
+            if (summary.kind() == SourceClassKind.ENUM && isEnumGeneratedMethod(methodName, sig)) {
+                return "project_class_present_method_absent_enum_generated_method";
+            }
+            if (summary.kind() == SourceClassKind.RECORD && summary.recordComponents().contains(methodName)) {
+                return "project_class_present_method_absent_record_component_accessor";
+            }
+        }
+        if (bytecodeMethodNameExists(declaringClass, methodName)) {
+            return "project_class_present_method_absent_bytecode_method_not_selected";
+        }
+        return "project_class_present_method_absent_no_matching_bytecode_method";
+    }
+
+    private static boolean isSyntheticMethodName(String methodName) {
+        return methodName != null
+                && (methodName.startsWith("access$")
+                || methodName.startsWith("lambda$")
+                || methodName.contains("$default$")
+                || methodName.startsWith("$"));
+    }
+
+    private static boolean isEnumGeneratedMethod(String methodName, MethodSignature sig) {
+        if ("values".equals(methodName) && sig.getParameterTypes().isEmpty()) {
+            return true;
+        }
+        return "valueOf".equals(methodName)
+                && sig.getParameterTypes().size() == 1
+                && "java.lang.String".equals(normalizeType(sig.getParameterTypes().get(0).toString()));
+    }
+
+    private boolean bytecodeMethodNameExists(String declaringClass, String methodName) {
+        if (methodsByClass == null || methodName == null) {
+            return false;
+        }
+        return methodsByClass.getOrDefault(declaringClass, List.of()).stream()
+                .anyMatch(method -> methodName.equals(method.getName()));
     }
 
     private String targetKindFor(String raw, String declaringClass, String methodName) {
@@ -635,6 +692,111 @@ public class CallGraphGenerator {
                     .toList();
             String ret = includeReturn ? normalizeType(signature.getType().toString()) : "";
             return new BytecodeMethodKey(owner, signature.getName(), params, ret);
+        }
+    }
+
+    private enum SourceClassKind {
+        CLASS, INTERFACE, ENUM, RECORD, ANNOTATION, UNKNOWN
+    }
+
+    private record SourceClassSummary(SourceClassKind kind, Set<String> recordComponents) {
+        private static SourceClassSummary from(List<MethodInfo> methods) {
+            if (methods == null || methods.isEmpty()) {
+                return new SourceClassSummary(SourceClassKind.UNKNOWN, Set.of());
+            }
+            Path sourceFile = methods.get(0).getSourceFile();
+            if (sourceFile == null || !Files.isRegularFile(sourceFile)) {
+                return new SourceClassSummary(SourceClassKind.UNKNOWN, Set.of());
+            }
+            try {
+                String source = Files.readString(sourceFile);
+                String simpleName = simpleClassName(methods.get(0).getClassname());
+                SourceClassKind kind = inferSourceClassKind(source, simpleName);
+                Set<String> components = kind == SourceClassKind.RECORD
+                        ? inferRecordComponents(source, simpleName)
+                        : Set.of();
+                return new SourceClassSummary(kind, components);
+            } catch (Exception ignored) {
+                return new SourceClassSummary(SourceClassKind.UNKNOWN, Set.of());
+            }
+        }
+
+        private static String simpleClassName(String className) {
+            if (className == null || className.isBlank()) {
+                return "";
+            }
+            String simple = className.substring(className.lastIndexOf('.') + 1);
+            int nested = simple.lastIndexOf('$');
+            return nested >= 0 ? simple.substring(nested + 1) : simple;
+        }
+
+        private static SourceClassKind inferSourceClassKind(String source, String simpleName) {
+            if (source == null || simpleName == null || simpleName.isBlank()) {
+                return SourceClassKind.UNKNOWN;
+            }
+            String name = java.util.regex.Pattern.quote(simpleName);
+            if (source.matches("(?s).*\\b@interface\\s+" + name + "\\b.*")) {
+                return SourceClassKind.ANNOTATION;
+            }
+            if (source.matches("(?s).*\\benum\\s+" + name + "\\b.*")) {
+                return SourceClassKind.ENUM;
+            }
+            if (source.matches("(?s).*\\brecord\\s+" + name + "\\s*\\(.*")) {
+                return SourceClassKind.RECORD;
+            }
+            if (source.matches("(?s).*\\binterface\\s+" + name + "\\b.*")) {
+                return SourceClassKind.INTERFACE;
+            }
+            if (source.matches("(?s).*\\bclass\\s+" + name + "\\b.*")) {
+                return SourceClassKind.CLASS;
+            }
+            return SourceClassKind.UNKNOWN;
+        }
+
+        private static Set<String> inferRecordComponents(String source, String simpleName) {
+            int recordIndex = source.indexOf("record " + simpleName);
+            if (recordIndex < 0) {
+                return Set.of();
+            }
+            int open = source.indexOf('(', recordIndex);
+            if (open < 0) {
+                return Set.of();
+            }
+            int close = matchingParen(source, open);
+            if (close <= open) {
+                return Set.of();
+            }
+            Set<String> names = new LinkedHashSet<>();
+            for (String component : splitTopLevelCommas(source.substring(open + 1, close))) {
+                String normalized = component
+                        .replaceAll("@[\\w.$]+(?:\\s*\\([^)]*\\))?", " ")
+                        .replaceAll("\\b(final)\\b", " ")
+                        .trim();
+                String[] tokens = normalized.split("\\s+");
+                if (tokens.length >= 2) {
+                    String candidate = tokens[tokens.length - 1].replace("...", "").trim();
+                    if (candidate.matches("[A-Za-z_$][\\w$]*")) {
+                        names.add(candidate);
+                    }
+                }
+            }
+            return Set.copyOf(names);
+        }
+
+        private static int matchingParen(String source, int open) {
+            int depth = 0;
+            for (int i = open; i < source.length(); i++) {
+                char c = source.charAt(i);
+                if (c == '(') {
+                    depth++;
+                } else if (c == ')') {
+                    depth--;
+                    if (depth == 0) {
+                        return i;
+                    }
+                }
+            }
+            return -1;
         }
     }
 

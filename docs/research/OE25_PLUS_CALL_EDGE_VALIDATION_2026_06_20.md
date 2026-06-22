@@ -160,8 +160,8 @@ multiple_source_methods_match_normalized_parameters: 336
 
 ### Main Remaining Internal Bucket
 
-`project_class_present_method_absent` is the largest internal-ish unresolved
-bucket.
+`project_class_present_method_absent` was the largest internal-ish unresolved
+bucket in the original run.
 
 It means:
 
@@ -178,8 +178,20 @@ This bucket is high volume, but it is mixed. It can contain:
 - methods from source roots that were not selected;
 - source/bytecode model drift in large multi-module projects.
 
-This is not safe to fix with a broad fuzzy rule. It needs further subdivision
-before product logic changes.
+This is not safe to fix with a broad fuzzy rule. CoCoMUT now subdivides it into
+deterministic subreasons when possible:
+
+```text
+project_class_present_method_absent_synthetic_or_compiler_method
+project_class_present_method_absent_enum_generated_method
+project_class_present_method_absent_record_component_accessor
+project_class_present_method_absent_bytecode_method_not_selected
+project_class_present_method_absent_no_matching_bytecode_method
+```
+
+These labels improve diagnosis but do not create source `method_uri` values.
+The deterministic policy remains: resolve only if unique, emit candidates if
+ambiguous, and preserve bytecode-only `target_uri` otherwise.
 
 ### Ambiguity Bucket
 
@@ -340,11 +352,10 @@ study runner:
 
 ## Recommended Next Work
 
-1. Subdivide `project_class_present_method_absent`.
-   This is the only unresolved bucket large enough to justify deeper work.
-   Do not fix it with fuzzy matching.
+1. Continue subdividing `project_class_present_method_absent*` after inspecting
+   concrete low source-join repositories. Do not fix it with fuzzy matching.
 
-2. Add a report-level distinction between:
+2. Keep the report-level distinction between:
    - call graph artifact exists;
    - call graph artifact has at least one edge;
    - JSONL contains serialized edges.
