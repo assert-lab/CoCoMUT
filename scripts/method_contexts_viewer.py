@@ -487,9 +487,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
     <select id="filterBackend">
       <option value="">Any</option>
       <option value="classpath">classpath</option>
-      <option value="noclasspath">noclasspath</option>
-      <option value="noclasspath_fallback">noclasspath_fallback</option>
-      <option value="auto">auto</option>
+      <option value="classpath_limited">classpath_limited</option>
     </select>
   </label>
   <label>Call graph

@@ -4,7 +4,7 @@ import org.assertlab.cocomut.ContextRequest;
 
 public final class SourceBackends {
     private static final ThreadLocal<ContextRequest.SourceResolution> RESOLUTION =
-            ThreadLocal.withInitial(() -> ContextRequest.SourceResolution.NOCLASSPATH);
+            ThreadLocal.withInitial(() -> ContextRequest.SourceResolution.CLASSPATH);
     private static final SourceModelBackend SPOON_NOCLASSPATH =
             new SpoonSourceModelBackend(ContextRequest.SourceResolution.NOCLASSPATH);
     private static final SourceModelBackend SPOON_CLASSPATH =
@@ -16,7 +16,7 @@ public final class SourceBackends {
     }
 
     public static void configure(ContextRequest.SourceResolution resolution) {
-        RESOLUTION.set(resolution != null ? resolution : ContextRequest.SourceResolution.NOCLASSPATH);
+        RESOLUTION.set(resolution != null ? resolution : ContextRequest.SourceResolution.CLASSPATH);
     }
 
     public static void clearConfiguration() {

@@ -1,6 +1,5 @@
 package example;
 
-import org.assertlab.cocomut.CallGraphGenerator;
 import org.assertlab.cocomut.ContextExtractorService;
 import org.assertlab.cocomut.ContextRequest;
 import org.assertlab.cocomut.ExtractionReport;
@@ -18,7 +17,6 @@ public class RunCoCoMUT {
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(project)
                 .scope(ContextRequest.Scope.ENTRY_POINTS)
-                .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                 .build();
 
         ExtractionReport report = ContextExtractorService.createDefault().extract(request);

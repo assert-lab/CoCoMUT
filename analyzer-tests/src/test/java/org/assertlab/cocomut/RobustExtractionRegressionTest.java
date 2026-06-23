@@ -7,6 +7,8 @@ import org.junit.Test;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -25,11 +27,11 @@ public class RobustExtractionRegressionTest {
                     "package demo; public class A { public void a() {} }");
             write(project.resolve("src/main/java/demo/B.java"),
                     "package demo; public class B { public void b() {} }");
+            compileProject(project);
 
             ExtractionReport report = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
                     .scope(ContextRequest.Scope.ALL)
-                    .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                     .maxSourceFiles(1)
                     .build());
 
@@ -50,17 +52,16 @@ public class RobustExtractionRegressionTest {
                     "package demo; public class MainApi { public void api() {} }");
             write(project.resolve("module-test/src/test/java/demo/MainApiTest.java"),
                     "package demo; public class MainApiTest { public void testApi() {} }");
+            compileProject(project);
 
             ExtractionReport all = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
                     .scope(ContextRequest.Scope.ENTRY_POINTS)
-                    .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                     .build());
 
             ExtractionReport mainOnly = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
                     .scope(ContextRequest.Scope.ENTRY_POINTS)
-                    .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                     .sourceSet("main")
                     .build());
 
@@ -86,11 +87,11 @@ public class RobustExtractionRegressionTest {
                     "package demo.api; public class PublicApi { public void keep() {} private void hidden() {} }");
             write(project.resolve("src/main/java/demo/internal/InternalApi.java"),
                     "package demo.internal; public class InternalApi { public void drop() {} }");
+            compileProject(project);
 
             ExtractionReport report = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
                     .scope(ContextRequest.Scope.ALL)
-                    .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                     .outputDirectory(output)
                     .packages(Set.of("demo.api"))
                     .classes(Set.of("PublicApi"))
@@ -136,12 +137,12 @@ public class RobustExtractionRegressionTest {
                         public void drop() {}
                     }
                     """);
+            compileProject(project);
 
             String typeUri = "src/main/java/demo/api/PublicApi.java#demo.api.PublicApi";
             ExtractionReport typeReport = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
                     .scope(ContextRequest.Scope.ALL)
-                    .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                     .outputDirectory(output.resolve("type"))
                     .typeUri(typeUri)
                     .build());
@@ -159,7 +160,6 @@ public class RobustExtractionRegressionTest {
             ExtractionReport packageReport = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
                     .scope(ContextRequest.Scope.ALL)
-                    .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                     .outputDirectory(output.resolve("package"))
                     .packageUri(packageUri)
                     .build());
@@ -182,6 +182,37 @@ public class RobustExtractionRegressionTest {
     private static void write(Path path, String text) throws Exception {
         Files.createDirectories(path.getParent());
         Files.writeString(path, text, StandardCharsets.UTF_8);
+    }
+
+    private static void compileProject(Path project) throws Exception {
+        Path classes = project.resolve("classes");
+        Files.createDirectories(classes);
+        List<String> command = new ArrayList<>();
+        command.add(javac());
+        command.add("-d");
+        command.add(classes.toString());
+        try (var walk = Files.walk(project)) {
+            walk.filter(path -> path.toString().endsWith(".java"))
+                    .sorted(Comparator.comparing(Path::toString))
+                    .map(Path::toString)
+                    .forEach(command::add);
+        }
+        ProcessBuilder builder = new ProcessBuilder(command);
+        builder.redirectErrorStream(true);
+        Process process = builder.start();
+        if (!process.waitFor(60, java.util.concurrent.TimeUnit.SECONDS)) {
+            process.destroyForcibly();
+            throw new AssertionError("javac timed out for " + project);
+        }
+        if (process.exitValue() != 0) {
+            throw new AssertionError("javac failed for " + project);
+        }
+    }
+
+    private static String javac() {
+        Path javac = Path.of(System.getProperty("java.home"), "bin",
+                System.getProperty("os.name", "").toLowerCase().contains("win") ? "javac.exe" : "javac");
+        return Files.isRegularFile(javac) ? javac.toString() : "javac";
     }
 
     private static void deleteRecursively(Path root) throws Exception {

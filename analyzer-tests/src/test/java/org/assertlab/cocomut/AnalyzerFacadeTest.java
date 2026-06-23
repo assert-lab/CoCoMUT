@@ -64,7 +64,6 @@ public class AnalyzerFacadeTest {
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(fixtureRoot)
                 .scope(ContextRequest.Scope.ENTRY_POINTS)
-                .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                 .build();
 
         ExtractionReport report = ContextExtractorService.createDefault().extract(request);
@@ -75,8 +74,8 @@ public class AnalyzerFacadeTest {
         assertEquals(1, report.contextsExtracted());
         assertEquals(1, report.jsonlRows());
         assertNotNull("JSONL output path should be available", report.jsonlFile());
-        assertTrue("Failure codes should record disabled call graph",
-                report.failureCodes().contains("CALL_GRAPH_DISABLED"));
+        assertTrue("Static bytecode analysis should be available",
+                Boolean.TRUE.equals(report.asMap().get("phase_3_available")));
     }
 
     @Test
@@ -84,15 +83,13 @@ public class AnalyzerFacadeTest {
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(fixtureRoot)
                 .scope(ContextRequest.Scope.ENTRY_POINTS)
-                .callGraphAlgorithm(CallGraphGenerator.Algorithm.AUTO)
-                .sourceResolution(ContextRequest.SourceResolution.AUTO)
                 .maxMethods(1)
                 .build();
 
         ExtractionReport report = ContextExtractorService.createDefault().extract(request);
 
         assertTrue(report.successful());
-        assertEquals("AUTO", report.asMap().get("phase_3_algorithm"));
+        assertEquals("RTA", report.asMap().get("phase_3_algorithm"));
         assertEquals("RTA", report.asMap().get("phase_3_effective_algorithm"));
     }
 

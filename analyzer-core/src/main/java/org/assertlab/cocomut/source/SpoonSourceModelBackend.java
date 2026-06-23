@@ -42,10 +42,8 @@ import java.util.regex.Pattern;
 /**
  * Spoon-backed source model.
  *
- * <p>The backend uses no-classpath mode by default. That is a deliberate mining
- * choice: CoCoMUT should extract source/Javadoc context from imperfect public
- * repositories and record unresolved type precision in provenance rather than
- * failing just because dependencies are unavailable.
+ * <p>The product pipeline uses classpath-aware extraction against compiled
+ * projects and does not fall back to source-only parsing.
  */
 final class SpoonSourceModelBackend implements SourceModelBackend {
     private static final Pattern PARAM_TAG = Pattern.compile("(?m)^\\s*\\*?\\s*@param\\s+(\\S+)");
@@ -78,7 +76,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     SpoonSourceModelBackend(ContextRequest.SourceResolution requestedResolution) {
         this.requestedResolution = requestedResolution != null
                 ? requestedResolution
-                : ContextRequest.SourceResolution.NOCLASSPATH;
+                : ContextRequest.SourceResolution.CLASSPATH;
     }
 
     @Override
@@ -165,32 +163,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     }
 
     private ParsedProject parse(ProjectModel project) throws IOException {
-        Integer maxSourceFiles = maxSourceFiles();
-        if (requestedResolution == ContextRequest.SourceResolution.AUTO
-                && maxSourceFiles == null
-                && hasClasspathEvidence(project)) {
-            ParsedProject classpath = null;
-            try {
-                classpath = buildParsedProject(project,
-                        new ParsedModels(parseModels(project, false), "classpath"));
-            } catch (RuntimeException ignored) {
-                // Fall through to the no-classpath coverage baseline.
-            }
-            ParsedProject noClasspath = buildParsedProject(project,
-                    new ParsedModels(parseModels(project, true), "noclasspath_fallback"));
-            if (classpath != null && preservesCoverage(classpath, noClasspath)) {
-                return classpath;
-            }
-            return noClasspath;
-        }
         return buildParsedProject(project, parseModels(project));
-    }
-
-    private static boolean preservesCoverage(ParsedProject candidate, ParsedProject baseline) {
-        if (baseline.methods().isEmpty()) {
-            return true;
-        }
-        return candidate.methods().size() >= Math.ceil(baseline.methods().size() * 0.8);
     }
 
     private ParsedProject buildParsedProject(ProjectModel project, ParsedModels parsedModels) {
@@ -252,14 +225,15 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         Integer maxSourceFiles = maxSourceFiles();
         if (maxSourceFiles != null) {
             return new ParsedModels(parseJavaFilesWithLimit(project.sourceRoots(),
-                    complianceLevel(project.javaVersion()), maxSourceFiles, true), "noclasspath_limited");
+                    complianceLevel(project.javaVersion()), maxSourceFiles, false), "classpath_limited");
         }
 
-        if (requestedResolution == ContextRequest.SourceResolution.CLASSPATH) {
+        if (requestedResolution == ContextRequest.SourceResolution.CLASSPATH
+                || requestedResolution == ContextRequest.SourceResolution.AUTO) {
             return new ParsedModels(parseModels(project, false), "classpath");
         }
 
-        return new ParsedModels(parseModels(project, true), "noclasspath");
+        throw new IllegalStateException("CoCoMUT requires classpath-aware source extraction.");
     }
 
     private List<CtModel> parseModels(ProjectModel project, boolean noClasspath) throws IOException {
@@ -283,11 +257,6 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             }
             return models;
         }
-    }
-
-    private static boolean hasClasspathEvidence(ProjectModel project) {
-        return !project.classOutputDirs().isEmpty() || !project.dependencyJars().isEmpty()
-                || project.compileSucceeded();
     }
 
     private List<CtModel> parseJavaFilesWithLimit(List<Path> roots, int complianceLevel, int maxSourceFiles,

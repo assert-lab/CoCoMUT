@@ -1,5 +1,10 @@
 # OE25 Plus Representative Study
 
+> Historical note: this report describes a pre-mandatory-bytecode experiment.
+> Mentions of no-classpath, source-only, skipped compilation, or disabled
+> call-graph retries are preserved as provenance for that run and are not
+> current CoCoMUT behavior.
+
 This branch adds a reproducible field-test runner for the OE25 repository set
 plus the 30 representative public-repository checkouts already present under
 `experiments/expanded-public-repos-auto-main-representative/checkouts/`.

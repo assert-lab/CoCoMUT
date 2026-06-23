@@ -142,11 +142,11 @@ public final class ContextRequest {
     public static final class Builder {
         private Path projectRoot;
         private Scope scope = Scope.ALL;
-        private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.AUTO;
+        private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.RTA;
         private Integer maxMethods;
         private Integer maxSourceFiles;
-        private boolean attemptCompile;
-        private SourceResolution sourceResolution = SourceResolution.NOCLASSPATH;
+        private boolean attemptCompile = true;
+        private SourceResolution sourceResolution = SourceResolution.CLASSPATH;
         private Set<String> sourceSets = new LinkedHashSet<>();
         private Set<String> packages = new LinkedHashSet<>();
         private Set<String> classes = new LinkedHashSet<>();
@@ -326,6 +326,15 @@ public final class ContextRequest {
         }
 
         public ContextRequest build() {
+            if (callGraphAlgorithm == CallGraphGenerator.Algorithm.NONE) {
+                throw new IllegalArgumentException("CoCoMUT requires static bytecode analysis; call graph cannot be disabled.");
+            }
+            if (!attemptCompile) {
+                throw new IllegalArgumentException("CoCoMUT requires compilation or pre-existing bytecode artifacts.");
+            }
+            if (sourceResolution != SourceResolution.CLASSPATH) {
+                throw new IllegalArgumentException("CoCoMUT requires classpath-aware source extraction.");
+            }
             return new ContextRequest(this);
         }
 

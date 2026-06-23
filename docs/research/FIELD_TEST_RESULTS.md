@@ -1,5 +1,10 @@
 # Field Test Results
 
+> Historical note: the measurements below were produced before CoCoMUT made
+> compiled bytecode a hard precondition for extraction. Mentions of
+> no-classpath, source-only, or disabled call-graph modes describe that older
+> experiment configuration, not the current product interface.
+
 Field tests use repositories selected from `../cleaned_mined_repos.csv`.
 
 Use the reproducible wrapper for new runs:

@@ -48,8 +48,7 @@ Run from a source checkout during development:
 ./bin/cocomut \
   --project /path/to/java/project \
   --scope entry-points \
-  --source-set main \
-  --call-graph none
+  --source-set main
 ```
 
 Run the standalone shaded JAR after building or downloading a release artifact:
@@ -58,8 +57,7 @@ Run the standalone shaded JAR after building or downloading a release artifact:
 java -jar dist/cocomut-cli.jar \
   --project /path/to/java/project \
   --scope entry-points \
-  --source-set main \
-  --call-graph none
+  --source-set main
 ```
 
 Use the Java API when embedding extraction in another JVM tool:
@@ -69,7 +67,6 @@ ContextRequest request = ContextRequest.builder()
         .projectRoot(Path.of("/path/to/java/project"))
         .entryPoints()
         .sourceSet("main")
-        .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
         .build();
 
 ExtractionReport report = ContextExtractorService.createDefault().extract(request);
@@ -80,7 +77,7 @@ ExtractionReport report = ContextExtractorService.createDefault().extract(reques
 The CLI can be run through `bin/cocomut` from the repository root:
 
 ```bash
-./bin/cocomut --project /path/to/java/project --scope entry-points --call-graph none
+./bin/cocomut --project /path/to/java/project --scope entry-points --source-set main
 ```
 
 `bin/cocomut` uses `dist/cocomut-cli.jar` when it exists. If the jar has not been
@@ -93,7 +90,7 @@ You can also run the standalone jar directly:
 java -jar dist/cocomut-cli.jar \
   --project /path/to/java/project \
   --scope entry-points \
-  --call-graph none
+  --source-set main
 ```
 
 `cocomut` has one public operation: extraction. Running `cocomut` with the options
@@ -112,8 +109,7 @@ Run exact method-URI selection:
 ```bash
 ./bin/cocomut \
   --project /path/to/java/project \
-  --method-uri 'src/main/java/com/example/Hello.java#com.example.Hello.greet(java.lang.String):java.lang.String' \
-  --call-graph none
+  --method-uri 'src/main/java/com/example/Hello.java#com.example.Hello.greet(java.lang.String):java.lang.String'
 ```
 
 Useful options:
@@ -122,9 +118,6 @@ Useful options:
 --scope all|entry-points       Method scope for source scanning: all extracts
                                 every discovered method; entry-points keeps
                                 public/protected API-like methods
---call-graph none|cha|rta|auto Optional SootUp call graph mode
---resolution noclasspath|classpath|auto
-                                Spoon source-resolution mode
 --output-dir DIR               Directory for generated artifacts
 --max-methods N                Limit methods for smoke tests
 --max-source-files N           Limit parsed Java files for low-memory smoke tests
@@ -143,33 +136,22 @@ Useful options:
                                 Include methods with matching visibility
 --include-path GLOB            Include source path glob relative to project root
 --exclude-path GLOB            Exclude source path glob relative to project root
---compile                      Attempt Maven/Gradle compilation before analysis
 ```
 
-`--resolution auto` attempts bounded build/classpath discovery when useful,
-tries Spoon classpath-aware extraction only when the discovered classpath is
-usable and coverage-preserving, and falls back to no-classpath source
-extraction when compilation is unavailable, incomplete, too expensive, or loses
-method coverage.
+CoCoMUT performs static bytecode analysis. The analyzed checkout must compile,
+or it must already contain usable class directories, build outputs, or classpath
+JARs. Maven and Gradle projects are compiled during phase 1 when their build
+files are present; plain Java projects must provide class files or a compatible
+build layout.
 
-`--call-graph auto` asks SootUp for an RTA call graph when compiled class
-directories are available. If bytecode is unavailable or unusable, CoCoMUT records
-the call graph as unavailable and still emits source/Javadoc contexts.
-
-For documentation datasets, prefer:
+For documentation datasets, prefer a precise source-set and scope:
 
 ```bash
 ./bin/cocomut \
   --project /path/to/java/project \
   --scope entry-points \
-  --source-set main \
-  --call-graph none
+  --source-set main
 ```
-
-`--call-graph none` is the safest default for large documentation-mining runs:
-it avoids build/classpath failures and focuses the output on source and Javadoc
-context. Use `--call-graph auto`, `rta`, or `cha` when caller/callee context is
-part of the study design.
 
 `--source-set main` excludes public methods found under test, generated,
 example, integration-test, or unknown source roots. Use `--source-set all` or
@@ -279,7 +261,6 @@ Add the dependency after installing the project locally:
 Minimal Java API:
 
 ```java
-import org.assertlab.cocomut.CallGraphGenerator;
 import org.assertlab.cocomut.ContextExtractorService;
 import org.assertlab.cocomut.ContextRequest;
 import org.assertlab.cocomut.ExtractionReport;
@@ -291,7 +272,6 @@ class Example {
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(Path.of("/path/to/java/project"))
                 .entryPoints()
-                .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                 .maxSourceFiles(500)
                 .build();
 
@@ -343,9 +323,6 @@ pipeline through `ContextRequest` and `ContextExtractorService`.
 | Project root | `--project PATH` | `.projectRoot(Path.of(...))` |
 | All methods | `--scope all` | `.allMethods()` or `.scope(Scope.ALL)` |
 | Entry points | `--scope entry-points`, `--entry-points` | `.entryPoints()` or `.scope(Scope.ENTRY_POINTS)` |
-| Call graph | `--call-graph none\|cha\|rta\|auto` | `.callGraphAlgorithm(Algorithm.NONE/CHA/RTA/AUTO)` |
-| Source resolution | `--resolution noclasspath\|classpath\|auto` | `.sourceResolution(SourceResolution.NOCLASSPATH/CLASSPATH/AUTO)` |
-| Compile attempt | `--compile` | `.attemptCompile(true)` |
 | Output directory | `--output-dir DIR` | `.outputDirectory(Path.of(...))` |
 | Method cap | `--max-methods N` | `.maxMethods(N)` |
 | Source-file cap | `--max-source-files N` | `.maxSourceFiles(N)` |
@@ -362,10 +339,8 @@ pipeline through `ContextRequest` and `ContextExtractorService`.
 | Exclude path glob | `--exclude-path GLOB` | `.excludePathGlob("GLOB")` or `.excludePathGlobs(Set.of(...))` |
 
 Default behavior is aligned as well: both CLI/JAR and API default to all
-methods, no-classpath source extraction, automatic call-graph mode, and the
-same output directory policy. When `AUTO` source resolution or `AUTO` call graph
-is selected, the pipeline may attempt bounded build/classpath discovery before
-falling back to source-only extraction.
+methods, classpath-aware source extraction, static bytecode analysis, build
+attempts for supported build systems, and the same output directory policy.
 
 ## Static Analysis Boundaries
 
@@ -374,15 +349,12 @@ application code, observe runtime values, or resolve reflection dynamically.
 
 Current static-analysis boundaries:
 
-- source extraction uses Spoon; auto mode keeps no-classpath extraction as the
-  coverage baseline and uses classpath-aware extraction when it is available and
-  coverage-preserving;
-- call graph extraction uses optional SootUp `CHA` or `RTA`;
-- call graph quality depends on compiled class directories and classpath
-  resolution;
-- build-tool compilation is explicit via `--compile` or opportunistic through
-  `--resolution auto` / `--call-graph auto`; otherwise CoCoMUT only reuses
-  existing class files;
+- source extraction uses Spoon with classpath evidence from the compiled
+  project;
+- call context comes from static bytecode analysis over compiled class
+  directories and classpath artifacts;
+- build-tool compilation is part of phase 1 for supported Maven/Gradle projects;
+  otherwise CoCoMUT requires pre-existing class files or bytecode artifacts;
 - reflection, proxies, generated code, Lombok, service loaders, and dependency
   injection can reduce precision, but common dynamic-feature hints are labeled
   in JSON;

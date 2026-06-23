@@ -1,5 +1,10 @@
 # OE25 Plus Representative Call-Edge Validation
 
+> Historical note: this validation run used the older evaluation runner that
+> could retry without bytecode-backed call context. The aggregate measurements
+> remain useful as historical evidence, but current CoCoMUT runs require
+> compilation or supplied bytecode artifacts.
+
 This report validates CoCoMUT call-edge matching after the Spoon/SootUp glue
 changes that introduced bytecode `target_uri`, source `method_uri`, and the
 call-edge target taxonomy.
@@ -349,4 +354,3 @@ study runner:
    - resolve if unique;
    - emit candidate URIs if ambiguous;
    - keep bytecode-only `target_uri` when source identity is unavailable.
-

@@ -234,7 +234,7 @@ The implementation was compared against `origin/main` on the same Apache
 Commons Lang checkout with:
 
 ```bash
---compile --resolution auto --call-graph auto --source-set main --scope all
+--source-set main --scope all
 ```
 
 Strict A/B result:
@@ -309,4 +309,3 @@ For documentation mining, callers and callees now have clearer provenance:
 - use `target_uri` when you need to count or inspect every bytecode edge;
 - use `target_kind`, `resolution`, and `unresolved_reason` to filter noisy call
   graph context before feeding it to downstream models.
-

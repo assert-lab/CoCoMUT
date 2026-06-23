@@ -248,11 +248,7 @@ public class ProjectAnalyzer {
             classpath.add(sourceRoot);
         }
 
-        // Add target/classes for compiled classes
-        Path targetClasses = projectPath.resolve("target/classes");
-        if (Files.exists(targetClasses)) {
-            classpath.add(targetClasses);
-        }
+        classpath.addAll(existingClassOutputDirs(buildSystem));
 
         // Multi-module fallback: only descend into directories that the root pom
         // declares as <modules>. This avoids accidentally picking up unrelated nested
@@ -432,27 +428,33 @@ public class ProjectAnalyzer {
      * conventional output directory.
      */
     private boolean hasExistingCompiledArtifacts(String buildSystem) {
+        return !existingClassOutputDirs(buildSystem).isEmpty();
+    }
+
+    private List<Path> existingClassOutputDirs(String buildSystem) {
+        List<Path> dirs = new ArrayList<>();
         String relative;
         if ("maven".equals(buildSystem)) {
             relative = "target/classes";
         } else if ("gradle".equals(buildSystem)) {
             relative = "build/classes";
         } else {
-            // "none": plain/pre-compiled project — scan common output dirs for .class.
+            // "none": plain/pre-compiled project. Accept common bytecode output
+            // folders, but only when they already contain .class files.
             for (String candidate : List.of("target/classes", "build/classes",
                     "out/production", "bin", "classes")) {
                 Path dir = projectPath.resolve(candidate);
                 if (Files.isDirectory(dir) && containsClassFile(dir)) {
-                    return true;
+                    dirs.add(dir);
                 }
             }
-            return false;
+            return dirs;
         }
 
         // Check root output dir first.
         Path rootOutput = projectPath.resolve(relative);
         if (Files.isDirectory(rootOutput) && containsClassFile(rootOutput)) {
-            return true;
+            dirs.add(rootOutput);
         }
 
         // Multi-module fallback: only check directories declared as <modules> in the
@@ -461,11 +463,11 @@ public class ProjectAnalyzer {
             for (Path module : collectMavenModuleDirs(projectPath)) {
                 Path moduleClasses = module.resolve("target/classes");
                 if (Files.isDirectory(moduleClasses) && containsClassFile(moduleClasses)) {
-                    return true;
+                    dirs.add(moduleClasses);
                 }
             }
         }
-        return false;
+        return dirs;
     }
 
     private boolean containsClassFile(Path dir) {

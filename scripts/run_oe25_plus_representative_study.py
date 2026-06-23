@@ -10,11 +10,9 @@ deletes or overwrites these protected folders:
 
 Default extraction policy:
 
-- try classpath-aware source extraction and SootUp call graph with
-  ``--compile --resolution auto --call-graph auto``;
-- if that fails, retry without call graph;
-- if that still fails or runs out of memory, retry source-only with bounded
-  source files/methods.
+- run the default bytecode-backed extraction once per target;
+- require compilation or pre-existing bytecode/classpath artifacts;
+- record build, timeout, and analysis failures as evaluation evidence.
 
 Examples:
 
@@ -212,9 +210,6 @@ def run_cocomut(
     timeout: int,
     env: dict[str, str],
     *,
-    compile_project: bool,
-    resolution: str,
-    call_graph: str,
     max_source_files: int | None = None,
     max_methods: int | None = None,
 ) -> tuple[int | None, dict[str, str], str]:
@@ -228,57 +223,15 @@ def run_cocomut(
         "entry-points",
         "--source-set",
         "main",
-        "--resolution",
-        resolution,
-        "--call-graph",
-        call_graph,
         "--output-dir",
         str(artifact_dir),
     ]
-    if compile_project:
-        command.append("--compile")
     if max_source_files and max_source_files > 0:
         command.extend(["--max-source-files", str(max_source_files)])
     if max_methods and max_methods > 0:
         command.extend(["--max-methods", str(max_methods)])
     status = run_command(command, root, log_path, timeout, env)
     return status, parse_report(log_path), read_tail(log_path)
-
-
-def failed_or_unstable(status: int | None, tail: str) -> bool:
-    return (
-        status is None
-        or status != 0
-        or "Java heap space" in tail
-        or "OutOfMemoryError" in tail
-        or "StackOverflowError" in tail
-    )
-
-
-def has_frontend_package_manager(project_path: Path) -> bool:
-    """Return true for Java repos whose compile may trigger JS package setup.
-
-    CoCoMUT is a Java static-analysis tool. For field testing, we avoid invoking
-    build steps that commonly install or build frontend dependencies as a side
-    effect of Maven/Gradle compilation. Source-only extraction can still run.
-    """
-    frontend_markers = {
-        "package.json",
-        "yarn.lock",
-        "package-lock.json",
-        "pnpm-lock.yaml",
-        "bun.lockb",
-    }
-    return any((project_path / marker).exists() for marker in frontend_markers)
-
-
-def timeout_or_memory_failure(status: int | None, tail: str) -> bool:
-    return (
-        status is None
-        or "Java heap space" in tail
-        or "OutOfMemoryError" in tail
-        or "StackOverflowError" in tail
-    )
 
 
 def inspect_jsonl(artifact_dir: Path) -> dict[str, str]:
@@ -425,7 +378,6 @@ def run_target(root: Path, output_dir: Path, target: Target, args: argparse.Name
     env.setdefault("JAVA_TOOL_OPTIONS", f"-Xmx{args.heap_gb}g")
     env.setdefault("COCOMUT_COMPILE_TIMEOUT_SECONDS", str(args.compile_timeout))
     start = time.time()
-    compile_project = not has_frontend_package_manager(target.project_path)
 
     log_path = logs / f"{target.dataset}__{target.safe_name}.cocomut.log"
     status, report, tail = run_cocomut(
@@ -435,58 +387,11 @@ def run_target(root: Path, output_dir: Path, target: Target, args: argparse.Name
         log_path,
         args.timeout,
         env,
-        compile_project=compile_project,
-        resolution="auto",
-        call_graph="auto",
     )
     retry_mode = "none"
     note = "" if status == 0 else f"exit {status}"
-    if not compile_project:
-        note = "compile skipped: frontend package-manager marker"
-
-    if failed_or_unstable(status, tail) and not timeout_or_memory_failure(status, tail):
-        retry_mode = "no_call_graph"
-        retry_log = logs / f"{target.dataset}__{target.safe_name}.retry-no-callgraph.log"
-        status, report, tail = run_cocomut(
-            root,
-            target,
-            artifact_dir,
-            retry_log,
-            args.timeout,
-            env,
-            compile_project=compile_project,
-            resolution="auto",
-            call_graph="none",
-        )
-        note = (
-            "retry without call graph"
-            if status == 0
-            else f"retry no-callgraph exit {status}"
-        )
-        if not compile_project:
-            note += "; compile skipped: frontend package-manager marker"
-
-    if failed_or_unstable(status, tail):
-        retry_mode = (
-            "source_only_bounded"
-            if retry_mode == "none"
-            else f"{retry_mode};source_only_bounded"
-        )
-        retry_log = logs / f"{target.dataset}__{target.safe_name}.retry-source-only.log"
-        status, report, tail = run_cocomut(
-            root,
-            target,
-            artifact_dir,
-            retry_log,
-            args.timeout,
-            env,
-            compile_project=False,
-            resolution="noclasspath",
-            call_graph="none",
-            max_source_files=args.retry_max_source_files,
-            max_methods=args.retry_max_methods,
-        )
-        note = "retry source-only bounded" if status == 0 else f"retry source-only exit {status}"
+    if status is None:
+        note = "analysis timeout"
 
     duration_ms = str(int((time.time() - start) * 1000))
     stats = inspect_jsonl(artifact_dir)
@@ -575,7 +480,7 @@ def write_summary(output_dir: Path, results_path: Path) -> None:
         row for row in rows
         if row["status"] != "SUCCESS"
         or row["retry_mode"] != "none"
-        or row["failure_codes"] not in {"", "[NONE]", "[CALL_GRAPH_DISABLED]"}
+        or row["failure_codes"] not in {"", "[NONE]"}
     ]
     lines = [
         "# OE25 Plus Representative Study",
@@ -584,8 +489,8 @@ def write_summary(output_dir: Path, results_path: Path) -> None:
         "public-repository checkouts. It is intentionally written to a separate",
         "experiment directory and does not overwrite the previous experiment folders.",
         "",
-        "Default policy: `--compile --resolution auto --call-graph auto`, with",
-        "fallbacks to no-call-graph and bounded source-only extraction when needed.",
+        "Default policy: one mandatory bytecode-backed extraction attempt per",
+        "target. Build, timeout, and analysis failures are recorded as evidence.",
         "",
         "## Summary",
         "",
@@ -605,8 +510,8 @@ def write_summary(output_dir: Path, results_path: Path) -> None:
         "",
         "## Call-Edge Matching",
         "",
-        "`target_uri` is bytecode identity and should be present for every SootUp edge.",
-        "`method_uri` is source identity and is present only when the SootUp target",
+        "`target_uri` is bytecode identity and should be present for every call edge.",
+        "`method_uri` is source identity and is present only when the bytecode target",
         "joins to one unique CoCoMUT/Spoon project method.",
         "",
         "Target-kind counts:",
@@ -670,8 +575,6 @@ def main() -> int:
     parser.add_argument("--clone-timeout", type=int, default=600)
     parser.add_argument("--compile-timeout", type=int, default=180)
     parser.add_argument("--heap-gb", type=int, default=2)
-    parser.add_argument("--retry-max-source-files", type=int, default=1500)
-    parser.add_argument("--retry-max-methods", type=int, default=5000)
     parser.add_argument("--oe25-checkouts-dir", type=Path, default=None,
                         help="Optional existing OE25 checkout directory keyed by owner__repo.")
     parser.add_argument("--representative-checkouts-dir", type=Path, default=None,

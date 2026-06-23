@@ -140,7 +140,7 @@ public class OrchestratorTest {
     }
 
     @Test
-    public void testSourceOnlyProjectContinuesWithoutBuildOrCallGraph() throws Exception {
+    public void testSourceOnlyProjectFailsWithoutBytecode() throws Exception {
         Path project = Files.createTempDirectory("cocomut-source-only-");
         try {
             Path sourceDir = project.resolve("src/main/java/example");
@@ -162,15 +162,14 @@ public class OrchestratorTest {
                     """);
 
             Orchestrator sourceOnly = new Orchestrator(project);
-            assertTrue("Source-only project should still complete", sourceOnly.execute());
+            assertFalse("Source-only project should fail without compiled bytecode", sourceOnly.execute());
 
             Map<String, Object> report = sourceOnly.getExecutionReport();
-            assertEquals("SUCCESS", report.get("status"));
+            assertEquals("FAILED", report.get("status"));
+            assertEquals(1, report.get("failed_at_phase"));
             assertEquals(false, report.get("phase_1_compiles"));
             assertEquals(true, report.get("phase_1_source_available"));
-            assertEquals(false, report.get("phase_3_available"));
-            assertEquals(1, ((Number) report.get("phase_5_jsonl_rows")).intValue());
-            assertTrue(Files.isRegularFile(Path.of(String.valueOf(report.get("phase_5_jsonl_file")))));
+            assertTrue(String.valueOf(report.get("phase_1_error")).contains("compiled project bytecode"));
             assertTrue(Files.isRegularFile(Path.of(String.valueOf(report.get("extraction_report_file")))));
         } finally {
             deleteRecursively(project);

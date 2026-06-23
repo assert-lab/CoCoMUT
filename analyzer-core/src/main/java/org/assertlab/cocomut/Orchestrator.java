@@ -17,7 +17,7 @@ import java.util.*;
  * Orchestrates the extraction phases in sequence:
  * Phase 1: ProjectAnalyzer - Detect project, build system, Java version, classpath
  * Phase 2: MethodIdentifier - Scan Java files, extract methods, generate URI identities
- * Phase 3: CallGraphGenerator - Generate call graphs for methods when configured
+ * Phase 3: CallGraphGenerator - Generate call graphs for methods
  * Phase 4: ContextExtractor - Extract method bodies, javadocs, class hierarchy
  * Phase 5: JsonGenerator - Generate JSONL output
  *
@@ -30,11 +30,11 @@ final class Orchestrator {
     private final Path projectPath;
     private final Map<String, Object> executionReport;
     private ContextRequest.Scope scope = ContextRequest.Scope.ALL;
-    private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.AUTO;
+    private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.RTA;
     private Integer maxMethods;
     private Integer maxSourceFiles;
-    private boolean attemptCompile;
-    private ContextRequest.SourceResolution sourceResolution = ContextRequest.SourceResolution.NOCLASSPATH;
+    private boolean attemptCompile = true;
+    private ContextRequest.SourceResolution sourceResolution = ContextRequest.SourceResolution.CLASSPATH;
     private Set<String> sourceSets = Set.of();
     private Set<String> packageFilters = Set.of();
     private Set<String> classFilters = Set.of();
@@ -81,7 +81,11 @@ final class Orchestrator {
     }
 
     Orchestrator setCallGraphAlgorithm(CallGraphGenerator.Algorithm algorithm) {
-        this.callGraphAlgorithm = Objects.requireNonNull(algorithm, "algorithm cannot be null");
+        CallGraphGenerator.Algorithm selected = Objects.requireNonNull(algorithm, "algorithm cannot be null");
+        if (selected == CallGraphGenerator.Algorithm.NONE) {
+            throw new IllegalArgumentException("CoCoMUT requires static bytecode analysis; call graph cannot be disabled.");
+        }
+        this.callGraphAlgorithm = selected;
         return this;
     }
 
@@ -96,12 +100,19 @@ final class Orchestrator {
     }
 
     Orchestrator setAttemptCompile(boolean attemptCompile) {
+        if (!attemptCompile) {
+            throw new IllegalArgumentException("CoCoMUT requires compilation or pre-existing bytecode artifacts.");
+        }
         this.attemptCompile = attemptCompile;
         return this;
     }
 
     Orchestrator setSourceResolution(ContextRequest.SourceResolution sourceResolution) {
-        this.sourceResolution = Objects.requireNonNull(sourceResolution, "sourceResolution cannot be null");
+        ContextRequest.SourceResolution selected = Objects.requireNonNull(sourceResolution, "sourceResolution cannot be null");
+        if (selected != ContextRequest.SourceResolution.CLASSPATH) {
+            throw new IllegalArgumentException("CoCoMUT requires classpath-aware source extraction.");
+        }
+        this.sourceResolution = selected;
         return this;
     }
 
@@ -189,9 +200,7 @@ final class Orchestrator {
 
     private boolean executePhase1() {
         try {
-            boolean effectiveAttemptCompile = attemptCompile
-                    || sourceResolution == ContextRequest.SourceResolution.AUTO
-                    || callGraphAlgorithm == CallGraphGenerator.Algorithm.AUTO;
+            boolean effectiveAttemptCompile = true;
             ProjectAnalyzer analyzer = new ProjectAnalyzer(projectPath, true, "auto", effectiveAttemptCompile);
             projectMetadata = analyzer.analyze();
             SourceBackends.configure(sourceResolution);
@@ -211,13 +220,15 @@ final class Orchestrator {
             executionReport.put("phase_1_dependency_jars", model.dependencyJars().size());
 
             if (!projectMetadata.isCompiles()) {
-                if (model.sourceAvailable()) {
-                    failureCodes.add(FailureCode.BUILD_FAILED);
-                    executionReport.put("phase_1_warning",
-                            "Project did not compile; continuing with source-only context");
-                    return true;
-                }
-                failureCodes.add(FailureCode.NO_SOURCE_ROOT);
+                failureCodes.add(FailureCode.BUILD_FAILED);
+                executionReport.put("phase_1_error",
+                        "CoCoMUT requires compiled project bytecode. Build the project or provide compiled class files.");
+                return false;
+            }
+            if (model.classOutputDirs().isEmpty()) {
+                failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
+                executionReport.put("phase_1_error",
+                        "CoCoMUT requires compiled class directories for static bytecode analysis.");
                 return false;
             }
 
@@ -252,31 +263,7 @@ final class Orchestrator {
      */
     private boolean executePhase3() {
         try {
-            if (callGraphAlgorithm == CallGraphGenerator.Algorithm.NONE) {
-                callGraphGenerator = new CallGraphGenerator(projectMetadata);
-                callGraphResults = new HashMap<>();
-                failureCodes.add(FailureCode.CALL_GRAPH_DISABLED);
-                executionReport.put("phase_3_available", false);
-                executionReport.put("phase_3_algorithm", "NONE");
-                executionReport.put("phase_3_warning", "Call graph disabled by configuration");
-                executionReport.put("phase_3_call_graphs_generated", 0);
-                return true;
-            }
-
             CallGraphGenerator.Algorithm effectiveAlgorithm = effectiveCallGraphAlgorithm();
-            if (effectiveAlgorithm == CallGraphGenerator.Algorithm.NONE) {
-                callGraphGenerator = new CallGraphGenerator(projectMetadata);
-                callGraphResults = new HashMap<>();
-                failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
-                executionReport.put("phase_3_available", false);
-                executionReport.put("phase_3_algorithm", callGraphAlgorithm.toString());
-                executionReport.put("phase_3_effective_algorithm", "NONE");
-                executionReport.put("phase_3_warning",
-                        "Call graph auto disabled because compiled class directories are unavailable");
-                executionReport.put("phase_3_call_graphs_generated", 0);
-                return true;
-            }
-
             callGraphGenerator = new CallGraphGenerator(projectMetadata, effectiveAlgorithm);
             if (!callGraphGenerator.initialize()) {
                 callGraphResults = new HashMap<>();
@@ -284,10 +271,10 @@ final class Orchestrator {
                 executionReport.put("phase_3_available", false);
                 executionReport.put("phase_3_algorithm", callGraphAlgorithm.toString());
                 executionReport.put("phase_3_effective_algorithm", effectiveAlgorithm.toString());
-                executionReport.put("phase_3_warning",
-                        "Call graph unavailable; continuing with source-only context");
+                executionReport.put("phase_3_error",
+                        "Static bytecode analysis could not be initialized.");
                 executionReport.put("phase_3_call_graphs_generated", 0);
-                return true;
+                return false;
             }
 
             callGraphResults = callGraphGenerator.generateForMethods(methodInfos);
@@ -320,7 +307,7 @@ final class Orchestrator {
         if (!model.classOutputDirs().isEmpty()) {
             return CallGraphGenerator.Algorithm.RTA;
         }
-        return CallGraphGenerator.Algorithm.NONE;
+        return CallGraphGenerator.Algorithm.RTA;
     }
 
     /**

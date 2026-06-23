@@ -1,6 +1,5 @@
 package org.assertlab.cocomut;
 
-import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.List;
 
@@ -18,14 +17,15 @@ public class MethodIdentifierTest {
     private MethodIdentifier identifier;
 
     @Before
-    public void setUp() throws IOException {
-        ProjectAnalyzer analyzer = new ProjectAnalyzer(Paths.get(System.getProperty("user.dir")));
+    public void setUp() throws Exception {
+        TestFixtures.ensureMinimalMavenProjectCompiled();
+        ProjectAnalyzer analyzer = new ProjectAnalyzer(TestFixtures.minimalMavenProjectRoot());
         projectMetadata = analyzer.analyze();
         identifier = new MethodIdentifier(projectMetadata);
     }
 
     @Test
-    public void identifiesMethodsWithUriIdentity() throws IOException {
+    public void identifiesMethodsWithUriIdentity() throws Exception {
         List<MethodInfo> methods = identifier.identify();
         assertNotNull("Methods list should not be null", methods);
         assertTrue("Should find at least some methods", methods.size() > 0);
@@ -38,7 +38,7 @@ public class MethodIdentifierTest {
     }
 
     @Test
-    public void methodInfoFieldsArePopulated() throws IOException {
+    public void methodInfoFieldsArePopulated() throws Exception {
         List<MethodInfo> methods = identifier.identify();
 
         assertTrue("Should find at least one method", methods.size() > 0);

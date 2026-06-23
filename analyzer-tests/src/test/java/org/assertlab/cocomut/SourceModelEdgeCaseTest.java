@@ -9,6 +9,8 @@ import org.junit.Test;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -49,7 +51,10 @@ public class SourceModelEdgeCaseTest {
                         @Override
                         public String transform(final String input) throws IOException {
                             this.last = input;
-                            Class.forName("demo.Generated");
+                            try {
+                                Class.forName("demo.Generated");
+                            } catch (ClassNotFoundException ignored) {
+                            }
                             return input.trim();
                         }
 
@@ -76,6 +81,7 @@ public class SourceModelEdgeCaseTest {
                     }
                     """);
 
+            compileProject(project);
             ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
             List<SourceMethod> methods = SourceBackends.spoon().findMethods(model);
 
@@ -142,11 +148,12 @@ public class SourceModelEdgeCaseTest {
                     .buildSystem("none")
                     .javaVersion("17")
                     .sourceRoot(project)
-                    .classpath(List.of())
-                    .compiles(false)
-                    .compileStatus("BUILD NOT ATTEMPTED")
+                    .classpath(List.of(project.resolve("classes")))
+                    .compiles(true)
+                    .compileStatus("BUILD SUCCESS")
                     .build();
 
+            compileProject(project);
             ProjectModel model = ProjectModel.from(metadata);
             List<SourceMethod> methods = SourceBackends.spoon().findMethods(model);
             long matching = methods.stream()
@@ -181,6 +188,7 @@ public class SourceModelEdgeCaseTest {
                     }
                     """);
 
+            compileProject(project);
             ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
             List<SourceMethod> methods = SourceBackends.spoon().findMethods(model).stream()
                     .filter(method -> method.className().equals("demo.GenericOverloads"))
@@ -225,6 +233,7 @@ public class SourceModelEdgeCaseTest {
                     }
                     """);
 
+            compileProject(project);
             ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
             SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
                     .filter(method -> method.methodName().equals("value"))
@@ -315,6 +324,7 @@ public class SourceModelEdgeCaseTest {
                     }
                     """);
 
+            compileProject(project);
             ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
             SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
                     .filter(method -> method.className().equals("demo.Child"))
@@ -456,6 +466,44 @@ public class SourceModelEdgeCaseTest {
     private static void write(Path path, String text) throws Exception {
         Files.createDirectories(path.getParent());
         Files.writeString(path, text, StandardCharsets.UTF_8);
+    }
+
+    private static void compileProject(Path project) throws Exception {
+        Path classes = project.resolve("classes");
+        Files.createDirectories(classes);
+        List<String> command = new ArrayList<>();
+        command.add(javac());
+        command.add("-d");
+        command.add(classes.toString());
+        try (var walk = Files.walk(project.resolve("src/main/java"))) {
+            walk.filter(path -> path.toString().endsWith(".java"))
+                    .sorted(Comparator.comparing(Path::toString))
+                    .forEach(path -> command.add(path.toString()));
+        }
+        Process process = new ProcessBuilder(command)
+                .directory(project.toFile())
+                .redirectErrorStream(true)
+                .start();
+        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        int exit = process.waitFor();
+        if (exit != 0) {
+            throw new AssertionError("javac failed:\n" + output);
+        }
+    }
+
+    private static String javac() {
+        Path javaHome = Path.of(System.getProperty("java.home"));
+        Path javac = javaHome.resolve("bin").resolve("javac");
+        if (Files.isRegularFile(javac)) {
+            return javac.toString();
+        }
+        Path parentJavac = javaHome.getParent() == null
+                ? null
+                : javaHome.getParent().resolve("bin").resolve("javac");
+        if (parentJavac != null && Files.isRegularFile(parentJavac)) {
+            return parentJavac.toString();
+        }
+        return "javac";
     }
 
     private static Map<String, Object> referenceByTarget(List<Map<String, Object>> references, String target) {
