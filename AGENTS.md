@@ -369,3 +369,25 @@ Rules:
   classes unless coordination is explicit.
 
 Use `docs/agents/CURRENT_STATE.md` for active coordination among agents.
+
+## Shared SSH Worker
+
+Heavy compilation, call-graph validation, and long repository sweeps should run
+on the SSH worker when possible instead of the laptop. The worker is shared by
+multiple agents and has 16 logical CPUs, so reserve resources explicitly and
+avoid surprise parallel builds.
+
+Before using the worker, read:
+
+- `docs/agents/worker-coordination.md`
+
+Minimum worker rules:
+
+- create one `~/agent-runs/<task-name>/` directory per task;
+- write `AGENT_PROCESS.md` before long jobs;
+- check existing markers and live processes before starting heavy work;
+- keep total claimed CPU slots at or below 12 unless the user asked for maximum
+  throughput and no other agent is active;
+- avoid parallel Maven/Gradle builds unless memory and CPU are clearly free;
+- copy compact results back with `rsync`, but do not commit bulky experiment
+  folders unless explicitly requested.

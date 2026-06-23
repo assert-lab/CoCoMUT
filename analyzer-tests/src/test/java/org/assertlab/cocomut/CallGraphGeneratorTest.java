@@ -374,6 +374,74 @@ public class CallGraphGeneratorTest {
         assertEquals(2, edge.candidateMethodUris().size());
     }
 
+    @Test
+    public void testProjectMethodAbsentSubdividesSyntheticCompilerMethod() throws Exception {
+        MethodInfo sourceMethod = new MethodInfo.Builder()
+                .methodUri("src/main/java/com/example/Widget.java#com.example.Widget.visible():void")
+                .classname("com.example.Widget")
+                .methodName("visible")
+                .methodSignature("visible()")
+                .returnType("void")
+                .erasedReturnType("void")
+                .sourceFile(Paths.get("Widget.java"))
+                .lineNumber(10)
+                .build();
+
+        CallGraphEdge edge = resolveEdgeFor(List.of(sourceMethod),
+                "<com.example.Widget: void access$000()>");
+
+        assertEquals("", edge.methodUri());
+        assertEquals("synthetic_or_compiler_method", edge.targetKind());
+        assertEquals("project_class_present_method_absent_synthetic_or_compiler_method",
+                edge.unresolvedReason());
+    }
+
+    @Test
+    public void testProjectMethodAbsentSubdividesEnumGeneratedMethod() throws Exception {
+        java.nio.file.Path source = java.nio.file.Files.createTempFile("Color", ".java");
+        java.nio.file.Files.writeString(source, "package com.example; enum Color { RED, BLUE }\n");
+        MethodInfo sourceMethod = new MethodInfo.Builder()
+                .methodUri("src/main/java/com/example/Color.java#com.example.Color.name():java.lang.String")
+                .classname("com.example.Color")
+                .methodName("name")
+                .methodSignature("name()")
+                .returnType("java.lang.String")
+                .erasedReturnType("java.lang.String")
+                .sourceFile(source)
+                .lineNumber(1)
+                .build();
+
+        CallGraphEdge edge = resolveEdgeFor(List.of(sourceMethod),
+                "<com.example.Color: com.example.Color[] values()>");
+
+        assertEquals("", edge.methodUri());
+        assertEquals("project_class_present_method_absent_enum_generated_method",
+                edge.unresolvedReason());
+    }
+
+    @Test
+    public void testProjectMethodAbsentSubdividesRecordComponentAccessor() throws Exception {
+        java.nio.file.Path source = java.nio.file.Files.createTempFile("Point", ".java");
+        java.nio.file.Files.writeString(source, "package com.example; public record Point(int x, int y) {}\n");
+        MethodInfo sourceMethod = new MethodInfo.Builder()
+                .methodUri("src/main/java/com/example/Point.java#com.example.Point.distance():int")
+                .classname("com.example.Point")
+                .methodName("distance")
+                .methodSignature("distance()")
+                .returnType("int")
+                .erasedReturnType("int")
+                .sourceFile(source)
+                .lineNumber(1)
+                .build();
+
+        CallGraphEdge edge = resolveEdgeFor(List.of(sourceMethod),
+                "<com.example.Point: int x()>");
+
+        assertEquals("", edge.methodUri());
+        assertEquals("project_class_present_method_absent_record_component_accessor",
+                edge.unresolvedReason());
+    }
+
     private CallGraphEdge resolveEdgeFor(List<MethodInfo> methods, String rawSignature) throws Exception {
         CallGraphGenerator localGenerator = new CallGraphGenerator(projectMetadata);
         Field methodsByClass = CallGraphGenerator.class.getDeclaredField("methodsByClass");

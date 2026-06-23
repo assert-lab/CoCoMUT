@@ -252,7 +252,7 @@ final class Orchestrator {
             executionReport.put("phase_2_methods_identified", methodInfos.size());
             return true;
         } catch (Exception e) {
-                executionReport.put("phase_2_error", e.getMessage());
+            executionReport.put("phase_2_error", e.getMessage());
             failureCodes.add(FailureCode.PARSE_ERROR);
             return false;
         }
@@ -273,11 +273,20 @@ final class Orchestrator {
                 executionReport.put("phase_3_effective_algorithm", effectiveAlgorithm.toString());
                 executionReport.put("phase_3_error",
                         "Static bytecode analysis could not be initialized.");
+                executionReport.put("phase_3_call_graph_artifact_exists", false);
                 executionReport.put("phase_3_call_graphs_generated", 0);
+                executionReport.put("phase_3_non_empty_call_graphs", 0);
+                executionReport.put("phase_3_call_edges_generated", 0);
                 return false;
             }
 
             callGraphResults = callGraphGenerator.generateForMethods(methodInfos);
+            int callGraphEdgeCount = callGraphResults.values().stream()
+                    .mapToInt(result -> result.getCallerCount() + result.getCalleeCount())
+                    .sum();
+            long nonEmptyCallGraphResults = callGraphResults.values().stream()
+                    .filter(result -> result.getCallerCount() > 0 || result.getCalleeCount() > 0)
+                    .count();
 
             String cgText = callGraphGenerator.getCallGraphText();
             if (!cgText.isEmpty()) {
@@ -287,10 +296,20 @@ final class Orchestrator {
                 executionReport.put("phase_3_call_graph_file", cgOutputPath.toString());
             }
 
-            executionReport.put("phase_3_available", true);
+            boolean artifactExists = !cgText.isEmpty() || !callGraphResults.isEmpty();
+            boolean hasUsableEdges = callGraphEdgeCount > 0;
+            if (!hasUsableEdges) {
+                failureCodes.add(FailureCode.CALL_GRAPH_EMPTY);
+                executionReport.put("phase_3_warning",
+                        "Call graph generated but contained no usable caller/callee edges");
+            }
+            executionReport.put("phase_3_available", hasUsableEdges);
             executionReport.put("phase_3_algorithm", callGraphAlgorithm.toString());
             executionReport.put("phase_3_effective_algorithm", effectiveAlgorithm.toString());
+            executionReport.put("phase_3_call_graph_artifact_exists", artifactExists);
             executionReport.put("phase_3_call_graphs_generated", callGraphResults.size());
+            executionReport.put("phase_3_non_empty_call_graphs", nonEmptyCallGraphResults);
+            executionReport.put("phase_3_call_edges_generated", callGraphEdgeCount);
             return true;
         } catch (Exception e) {
             executionReport.put("phase_3_error", e.getMessage());
@@ -437,6 +456,7 @@ final class Orchestrator {
             executionReport.put("phase_5_jsonl_file", jsonlPath.toString());
             executionReport.put("phase_5_jsonl_rows", jsonlRows);
             executionReport.put("phase_5_files_generated", jsonlRows);
+            executionReport.put("phase_5_call_edges_serialized", serializedCallEdgeCount(methodContexts));
             if (jsonlRows < methodContexts.size()) {
                 failureCodes.add(FailureCode.JSON_GENERATION_FAILED);
             }
@@ -446,6 +466,17 @@ final class Orchestrator {
             failureCodes.add(FailureCode.JSON_GENERATION_FAILED);
             return false;
         }
+    }
+
+    private static int serializedCallEdgeCount(Map<String, MethodContext> contexts) {
+        if (contexts == null || contexts.isEmpty()) {
+            return 0;
+        }
+        return contexts.values().stream()
+                .map(MethodContext::getCallGraph)
+                .filter(Objects::nonNull)
+                .mapToInt(callGraph -> callGraph.getCallerCount() + callGraph.getCalleeCount())
+                .sum();
     }
 
     public Map<String, Object> getExecutionReport() {
