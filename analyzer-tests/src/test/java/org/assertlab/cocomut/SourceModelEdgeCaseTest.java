@@ -444,19 +444,19 @@ public class SourceModelEdgeCaseTest {
     }
 
     @Test
-    public void spoonAutoResolutionUsesClasspathWhenCompiledClassesExist() throws Exception {
+    public void spoonBackendUsesClasspathWhenCompiledClassesExist() throws Exception {
         TestFixtures.ensureMinimalMavenProjectCompiled();
         ProjectMetadata metadata = new ProjectAnalyzer(TestFixtures.minimalMavenProjectRoot()).analyze();
         ProjectModel model = ProjectModel.from(metadata);
 
-        SourceMethod focal = SourceBackends.spoon(ContextRequest.SourceResolution.AUTO)
+        SourceMethod focal = SourceBackends.spoon()
                 .findMethods(model)
                 .stream()
                 .filter(method -> method.methodName().equals("greet"))
                 .findFirst()
                 .orElseThrow();
 
-        SourceContext context = SourceBackends.spoon(ContextRequest.SourceResolution.AUTO)
+        SourceContext context = SourceBackends.spoon()
                 .extractContext(model, focal.methodUri())
                 .orElseThrow();
 

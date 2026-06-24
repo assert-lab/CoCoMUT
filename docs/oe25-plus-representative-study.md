@@ -1,9 +1,9 @@
 # OE25 Plus Representative Study
 
 > Historical note: this report describes a pre-mandatory-bytecode experiment.
-> Mentions of no-classpath, source-only, skipped compilation, or disabled
-> call-graph retries are preserved as provenance for that run and are not
-> current CoCoMUT behavior.
+> Mentions of legacy source-only, skipped compilation, or disabled call-graph
+> retries are preserved as provenance for that run and are not current CoCoMUT
+> behavior.
 
 This branch adds a reproducible field-test runner for the OE25 repository set
 plus the 30 representative public-repository checkouts already present under
@@ -44,13 +44,13 @@ timeout/OOM/stack-overflow cases directly to bounded source-only extraction.
 
 ## Policy
 
-Default extraction attempts:
+Legacy default extraction attempts:
 
 ```text
---compile --resolution auto --call-graph auto --source-set main --scope entry-points
+pre-mandatory-bytecode optional compile/source-resolution/call-graph modes
 ```
 
-Fallbacks:
+Legacy fallbacks:
 
 ```text
 ordinary nonzero exit      -> retry with --call-graph none
@@ -97,13 +97,13 @@ call graph unavailable/none:   18
 bounded source-only fallback:  11
 ```
 
-Source backend modes observed:
+Historical source backend modes observed:
 
 ```text
-noclasspath_fallback:          30
+legacy source-only fallback:   30
 classpath:                     13
-noclasspath_limited:           11
-noclasspath:                   1
+legacy bounded source-only:    11
+legacy source-only:            1
 ```
 
 ## Javadoc Reference Breakdown

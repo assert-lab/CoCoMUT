@@ -7,7 +7,6 @@ public enum FailureCode {
     NONE,
     NO_SOURCE_ROOT,
     BUILD_FAILED,
-    CALL_GRAPH_DISABLED,
     CALL_GRAPH_UNAVAILABLE,
     CALL_GRAPH_EMPTY,
     PARSE_ERROR,

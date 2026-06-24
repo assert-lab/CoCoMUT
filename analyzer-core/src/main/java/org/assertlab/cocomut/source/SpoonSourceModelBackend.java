@@ -1,6 +1,5 @@
 package org.assertlab.cocomut.source;
 
-import org.assertlab.cocomut.ContextRequest;
 import spoon.Launcher;
 import spoon.reflect.CtModel;
 import spoon.reflect.code.CtFieldRead;
@@ -70,14 +69,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             "java.time",
             "java.text",
             "java.io");
-    private final ContextRequest.SourceResolution requestedResolution;
     private final Map<String, ParsedProject> cache = new ConcurrentHashMap<>();
-
-    SpoonSourceModelBackend(ContextRequest.SourceResolution requestedResolution) {
-        this.requestedResolution = requestedResolution != null
-                ? requestedResolution
-                : ContextRequest.SourceResolution.CLASSPATH;
-    }
 
     @Override
     public String name() {
@@ -86,11 +78,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
 
     @Override
     public String mode() {
-        return switch (requestedResolution) {
-            case CLASSPATH -> "classpath";
-            case AUTO -> "auto";
-            case NOCLASSPATH -> "noclasspath";
-        };
+        return "classpath";
     }
 
     @Override
@@ -157,7 +145,6 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 .reduce((a, b) -> a + ";" + b)
                 .orElse("");
         return project.projectPath().toAbsolutePath().normalize()
-                + "::resolution=" + requestedResolution
                 + "::roots=" + roots
                 + "::maxSourceFiles=" + limit;
     }
@@ -225,31 +212,26 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         Integer maxSourceFiles = maxSourceFiles();
         if (maxSourceFiles != null) {
             return new ParsedModels(parseJavaFilesWithLimit(project.sourceRoots(),
-                    complianceLevel(project.javaVersion()), maxSourceFiles, false), "classpath_limited");
+                    complianceLevel(project.javaVersion()), maxSourceFiles), "classpath_limited");
         }
 
-        if (requestedResolution == ContextRequest.SourceResolution.CLASSPATH
-                || requestedResolution == ContextRequest.SourceResolution.AUTO) {
-            return new ParsedModels(parseModels(project, false), "classpath");
-        }
-
-        throw new IllegalStateException("CoCoMUT requires classpath-aware source extraction.");
+        return new ParsedModels(parseCtModels(project), "classpath");
     }
 
-    private List<CtModel> parseModels(ProjectModel project, boolean noClasspath) throws IOException {
+    private List<CtModel> parseCtModels(ProjectModel project) throws IOException {
         if (project.sourceRoots().isEmpty()) {
-            return List.of(buildModel(List.of(), complianceLevel(project.javaVersion()), project, noClasspath));
+            return List.of(buildModel(List.of(), complianceLevel(project.javaVersion()), project));
         }
 
         try {
-            return List.of(buildModel(project.sourceRoots(), complianceLevel(project.javaVersion()), project, noClasspath));
+            return List.of(buildModel(project.sourceRoots(), complianceLevel(project.javaVersion()), project));
         } catch (RuntimeException combinedFailure) {
             List<CtModel> models = new ArrayList<>();
             for (Path root : project.sourceRoots()) {
                 try {
-                    models.add(buildModel(List.of(root), complianceLevel(project.javaVersion()), project, noClasspath));
+                    models.add(buildModel(List.of(root), complianceLevel(project.javaVersion()), project));
                 } catch (RuntimeException rootFailure) {
-                    models.addAll(parseJavaFilesIndividually(root, complianceLevel(project.javaVersion()), project, noClasspath));
+                    models.addAll(parseJavaFilesIndividually(root, complianceLevel(project.javaVersion()), project));
                 }
             }
             if (models.isEmpty()) {
@@ -259,11 +241,10 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
     }
 
-    private List<CtModel> parseJavaFilesWithLimit(List<Path> roots, int complianceLevel, int maxSourceFiles,
-                                                  boolean noClasspath)
+    private List<CtModel> parseJavaFilesWithLimit(List<Path> roots, int complianceLevel, int maxSourceFiles)
             throws IOException {
         if (roots.isEmpty()) {
-            return List.of(buildModel(List.of(), complianceLevel, null, noClasspath));
+            return List.of(buildModel(List.of(), complianceLevel, null));
         }
         List<CtModel> models = new ArrayList<>();
         int parsedFiles = 0;
@@ -284,23 +265,22 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                     }
                     parsedFiles++;
                     try {
-                        models.add(buildModel(List.of(file), complianceLevel, null, noClasspath));
+                        models.add(buildModel(List.of(file), complianceLevel, null));
                     } catch (RuntimeException ignored) {
                         // A few invalid/newer-syntax files should not drop a capped smoke run.
                     }
                 }
             }
         }
-        return models.isEmpty() ? List.of(buildModel(List.of(), complianceLevel, null, noClasspath)) : models;
+        return models.isEmpty() ? List.of(buildModel(List.of(), complianceLevel, null)) : models;
     }
 
-    private List<CtModel> parseJavaFilesIndividually(Path root, int complianceLevel, ProjectModel project,
-                                                     boolean noClasspath) throws IOException {
+    private List<CtModel> parseJavaFilesIndividually(Path root, int complianceLevel, ProjectModel project) throws IOException {
         List<CtModel> models = new ArrayList<>();
         try (var walk = Files.walk(root)) {
             for (Path file : walk.filter(path -> path.toString().endsWith(".java")).toList()) {
                 try {
-                    models.add(buildModel(List.of(file), complianceLevel, project, noClasspath));
+                    models.add(buildModel(List.of(file), complianceLevel, project));
                 } catch (RuntimeException ignored) {
                     // A few invalid/newer-syntax files should not drop an entire repository.
                 }
@@ -309,30 +289,28 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return models;
     }
 
-    private CtModel buildModel(List<Path> inputs, int complianceLevel, ProjectModel project, boolean noClasspath) {
+    private CtModel buildModel(List<Path> inputs, int complianceLevel, ProjectModel project) {
         try {
-            return launcher(inputs, complianceLevel, project, noClasspath).buildModel();
+            return launcher(inputs, complianceLevel, project).buildModel();
         } catch (RuntimeException firstFailure) {
             if (complianceLevel == 17) {
                 throw firstFailure;
             }
-            return launcher(inputs, 17, project, noClasspath).buildModel();
+            return launcher(inputs, 17, project).buildModel();
         }
     }
 
-    private Launcher launcher(List<Path> inputs, int complianceLevel, ProjectModel project, boolean noClasspath) {
+    private Launcher launcher(List<Path> inputs, int complianceLevel, ProjectModel project) {
         Launcher launcher = new Launcher();
-        launcher.getEnvironment().setNoClasspath(noClasspath);
+        launcher.getEnvironment().setNoClasspath(false);
         launcher.getEnvironment().setCommentEnabled(true);
         launcher.getEnvironment().setIgnoreDuplicateDeclarations(true);
         launcher.getEnvironment().setIgnoreSyntaxErrors(true);
         launcher.getEnvironment().setShouldCompile(false);
         launcher.getEnvironment().setComplianceLevel(complianceLevel);
-        if (!noClasspath) {
-            List<String> classpath = classpathEntries(project);
-            if (!classpath.isEmpty()) {
-                launcher.getEnvironment().setSourceClasspath(classpath.toArray(String[]::new));
-            }
+        List<String> classpath = classpathEntries(project);
+        if (!classpath.isEmpty()) {
+            launcher.getEnvironment().setSourceClasspath(classpath.toArray(String[]::new));
         }
 
         if (inputs.isEmpty()) {
@@ -627,7 +605,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 String signature = name + "(" + parameterSignature(parameters(executable), false) + ")";
                 methods.put(signature, signature);
             } catch (Exception | StackOverflowError ignored) {
-                // Some no-classpath generic declarations can recurse inside Spoon resolution.
+                // Some generic declarations can recurse inside Spoon resolution.
                 // Class/sibling method context is optional, so keep the focal method.
             }
             if (methods.size() >= MAX_CLASS_METHOD_CONTEXT) {

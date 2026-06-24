@@ -2,8 +2,8 @@
 
 > Historical note: the measurements below were produced before CoCoMUT made
 > compiled bytecode a hard precondition for extraction. Mentions of
-> no-classpath, source-only, or disabled call-graph modes describe that older
-> experiment configuration, not the current product interface.
+> legacy source-only or disabled call-graph modes describe that older experiment
+> configuration, not the current product interface.
 
 Field tests use repositories selected from `../cleaned_mined_repos.csv`.
 
@@ -32,8 +32,7 @@ scripts/field_test_public_repos.py \
   --timeout 420 \
   --include-android \
   --max-size-kb 300000 \
-  --resolution auto \
-  --call-graph auto \
+  [legacy resolution and call-graph flags removed] \
   --compile-timeout 60 \
   --retry-max-source-files 1500 \
   --retry-max-methods 5000 \
@@ -43,7 +42,11 @@ scripts/field_test_public_repos.py \
   --output-dir experiments/expanded-public-repos-auto-main
 ```
 
-This run attempts Maven/Gradle compilation when useful, uses Spoon classpath-aware extraction only when classpath evidence is usable, falls back to Spoon no-classpath extraction when build/classpath resolution is incomplete, and asks SootUp for RTA call graphs when compiled class directories exist.
+This historical run used the old optional bytecode policy. It attempted
+Maven/Gradle compilation when useful, retained classpath-aware source extraction
+when classpath evidence was usable, and used legacy source-only fallback modes
+when build/classpath resolution was incomplete. Current CoCoMUT runs require
+compiled classes, dependency bytecode, or supplied JAR/classpath artifacts.
 
 The new wrapper uses the same workflow plus `--source-set main` by default and writes local evidence under:
 
@@ -103,9 +106,11 @@ Non-success repositories:
 | --- | --- | --- |
 | - | - | - |
 
-## Auto Behavior
+## Historical Auto Behavior
 
-The sweep did not require repositories to compile. Compilation is opportunistic:
+This sweep used the old policy where compilation was opportunistic. Current
+CoCoMUT extraction requires compiled project bytecode, dependency bytecode, or
+supplied JAR/classpath artifacts.
 
 | Signal | Count |
 | --- | ---: |
@@ -114,21 +119,22 @@ The sweep did not require repositories to compile. Compilation is opportunistic:
 | Call graph available | 231 repositories |
 | Call graph unavailable | 310 repositories |
 
-Source backend mode distribution over generated method contexts:
+Historical source backend mode distribution over generated method contexts:
 
 | Source backend mode | Method contexts |
 | --- | ---: |
-| `noclasspath_fallback` | 1186464 |
-| `noclasspath_limited` | 595000 |
-| `noclasspath` | 90063 |
+| legacy source-only fallback | 1186464 |
+| legacy bounded source-only | 595000 |
+| legacy source-only | 90063 |
 | `classpath` | 42454 |
 
-Interpretation:
+Historical interpretation:
 
 - `classpath` means Spoon classpath-aware extraction was retained.
-- `noclasspath_fallback` means auto mode tried or considered stronger resolution but used no-classpath as the coverage-preserving baseline.
-- `noclasspath_limited` means bounded source-file or method caps were active.
-- `noclasspath` means normal source-only extraction.
+- legacy source-only fallback means the old auto mode tried or considered stronger
+  resolution but used source-only parsing as the coverage-preserving baseline.
+- legacy bounded source-only means bounded source-file or method caps were active.
+- legacy source-only means the old normal source-only extraction path.
 
 ## Bounded Retry Cases
 
@@ -139,7 +145,7 @@ Retry distribution:
 | `none` | 435 | Completed without field-test caps. |
 | `max_source_files=1500` | 85 | Completed after limiting parsed source files. |
 | `max_source_files=1500;max_methods=5000;source_set=main,unknown` | 17 | Completed as a bounded 5,000-method run after allowing unknown source roots for nonstandard layouts. |
-| `max_source_files=1500;smoke_resolution=noclasspath;smoke_call_graph=none;smoke_max_source_files=100;smoke_max_methods=250` | 4 | Completed as last-resort source-only smoke runs for very large/slow repositories. |
+| `max_source_files=1500;legacy_source_only_smoke;smoke_max_source_files=100;smoke_max_methods=250` | 4 | Completed as last-resort source-only smoke runs for very large/slow repositories. |
 
 Large successful examples include:
 

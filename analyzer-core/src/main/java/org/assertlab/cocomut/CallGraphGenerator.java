@@ -53,7 +53,7 @@ public class CallGraphGenerator {
     private final Map<String, ClassHierarchyInfo> hierarchyCache = new HashMap<>();
 
     public enum Algorithm {
-        NONE, CHA, RTA, AUTO
+        CHA, RTA
     }
 
     /**

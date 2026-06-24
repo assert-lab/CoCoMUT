@@ -1,13 +1,11 @@
 {
-  "start_time" : 1782190436047,
+  "start_time" : 1782269710566,
   "pipeline_phases" : 5,
   "phase_1_project" : "minimal-maven-project",
   "phase_1_build_system" : "maven",
   "phase_1_java_version" : "17",
   "phase_1_compiles" : true,
   "phase_1_compile_status" : "BUILD SUCCESS",
-  "phase_1_compile_attempted" : true,
-  "phase_1_source_resolution_requested" : "CLASSPATH",
   "phase_1_source_available" : true,
   "phase_1_source_roots" : 1,
   "phase_1_test_source_roots" : 0,
@@ -50,8 +48,8 @@
   "phase_5_call_edges_serialized" : 3,
   "status" : "SUCCESS",
   "completed_phases" : 5,
-  "duration_ms" : 877,
-  "end_time" : 1782190436924,
+  "duration_ms" : 966,
+  "end_time" : 1782269711532,
   "failure_codes" : [ "NONE" ],
   "extraction_report_file" : "examples/sample-output/extraction_report.json"
 }

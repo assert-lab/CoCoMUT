@@ -8,7 +8,6 @@ import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 @Category(FastTests.class)
 public class ContextRequestTest {
@@ -54,46 +53,15 @@ public class ContextRequestTest {
                 .build();
 
         assertEquals(CallGraphGenerator.Algorithm.RTA, request.callGraphAlgorithm());
-        assertEquals(ContextRequest.SourceResolution.CLASSPATH, request.sourceResolution());
-        assertTrue(request.attemptCompile());
     }
 
     @Test
-    public void builderRejectsDisabledCallGraph() {
-        try {
-            ContextRequest.builder()
-                    .projectRoot(Path.of("."))
-                    .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
-                    .build();
-            fail("Expected disabled call graph to be rejected");
-        } catch (IllegalArgumentException expected) {
-            assertTrue(expected.getMessage().contains("bytecode analysis"));
-        }
-    }
+    public void builderAcceptsChaBytecodeAnalysis() {
+        ContextRequest request = ContextRequest.builder()
+                .projectRoot(Path.of("."))
+                .callGraphAlgorithm(CallGraphGenerator.Algorithm.CHA)
+                .build();
 
-    @Test
-    public void builderRejectsNoClasspathExtraction() {
-        try {
-            ContextRequest.builder()
-                    .projectRoot(Path.of("."))
-                    .sourceResolution(ContextRequest.SourceResolution.NOCLASSPATH)
-                    .build();
-            fail("Expected no-classpath extraction to be rejected");
-        } catch (IllegalArgumentException expected) {
-            assertTrue(expected.getMessage().contains("classpath-aware"));
-        }
-    }
-
-    @Test
-    public void builderRejectsDisabledCompilation() {
-        try {
-            ContextRequest.builder()
-                    .projectRoot(Path.of("."))
-                    .attemptCompile(false)
-                    .build();
-            fail("Expected disabled compilation to be rejected");
-        } catch (IllegalArgumentException expected) {
-            assertTrue(expected.getMessage().contains("bytecode"));
-        }
+        assertEquals(CallGraphGenerator.Algorithm.CHA, request.callGraphAlgorithm());
     }
 }

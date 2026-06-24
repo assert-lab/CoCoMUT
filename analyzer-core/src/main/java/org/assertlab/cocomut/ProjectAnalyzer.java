@@ -30,14 +30,13 @@ public class ProjectAnalyzer {
     private final Path projectPath;
     private final boolean autoDetectJavaVersion;
     private final String buildSystem;
-    private final boolean attemptCompile;
 
     /**
      * Create a ProjectAnalyzer for the given project path
      * @param projectPath Absolute path to project root
      */
     public ProjectAnalyzer(Path projectPath) {
-        this(projectPath, true, "auto", false);
+        this(projectPath, true, "auto");
     }
 
     /**
@@ -47,14 +46,9 @@ public class ProjectAnalyzer {
      * @param buildSystem Build system override ("auto", "maven", or "gradle")
      */
     public ProjectAnalyzer(Path projectPath, boolean autoDetectJavaVersion, String buildSystem) {
-        this(projectPath, autoDetectJavaVersion, buildSystem, false);
-    }
-
-    public ProjectAnalyzer(Path projectPath, boolean autoDetectJavaVersion, String buildSystem, boolean attemptCompile) {
         this.projectPath = Objects.requireNonNull(projectPath, "projectPath cannot be null");
         this.autoDetectJavaVersion = autoDetectJavaVersion;
         this.buildSystem = buildSystem;
-        this.attemptCompile = attemptCompile;
 
         if (!Files.isDirectory(projectPath)) {
             throw new IllegalArgumentException("Project path must be a directory: " + projectPath);
@@ -83,7 +77,7 @@ public class ProjectAnalyzer {
                 .sourceRoot(sourceRoot)
                 .classpath(classpath)
                 .compiles(compiles)
-                .compileStatus(compiles ? "BUILD SUCCESS" : (attemptCompile ? "BUILD FAILED" : "BUILD NOT ATTEMPTED"))
+                .compileStatus(compiles ? "BUILD SUCCESS" : "BUILD FAILED")
                 .build();
     }
 
@@ -354,10 +348,6 @@ public class ProjectAnalyzer {
 
         if (hasExistingCompiledArtifacts(buildSystem)) {
             return true;
-        }
-
-        if (!attemptCompile) {
-            return false;
         }
 
         try {

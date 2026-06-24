@@ -51,8 +51,9 @@ python3 scripts/run_oe25_plus_representative_study.py \
 
 Execution policy:
 
-- primary attempt: `--compile --resolution auto --call-graph auto`;
-- fallback: no-call-graph or bounded no-classpath extraction when needed;
+- legacy primary attempt: optional compile/source-resolution/call-graph modes
+  from the pre-mandatory-bytecode CLI;
+- legacy fallback: no-call-graph or bounded source-only extraction when needed;
 - sequential execution only, with a memory/load guard before each target;
 - Baloo file indexing was temporarily suspended during the run because it was
   consuming several GiB while indexing generated experiment output.

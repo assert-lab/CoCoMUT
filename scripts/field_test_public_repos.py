@@ -40,14 +40,12 @@ FIELDS = [
     "clone_status",
     "status",
     "build_system",
-    "compile_attempted",
     "compiles",
     "compile_status",
     "source_roots",
     "test_source_roots",
     "class_output_dirs",
     "dependency_jars",
-    "source_resolution",
     "source_set_filter",
     "source_backend_modes",
     "call_graph_requested",
@@ -311,8 +309,8 @@ def run_repo(
         note = "retry capped source files and methods" if status == 0 else f"retry max-methods exit {status}"
 
     if source_set == "main" and status != 0 and filtered_all_methods(data):
-        fallback_source_set = "main,unknown"
-        retry_mode = f"{retry_mode};source_set={fallback_source_set}"
+        expanded_source_set = "main,unknown"
+        retry_mode = f"{retry_mode};source_set={expanded_source_set}"
         retry_log = logs / f"{safe}.cocomut.retry-source-set.log"
         status, data, retry_tail = run_extraction(
             root,
@@ -323,7 +321,7 @@ def run_repo(
             env,
             retry_max_source_files,
             retry_max_methods,
-            fallback_source_set,
+            expanded_source_set,
         )
         tail = retry_tail
         note = (
@@ -349,14 +347,12 @@ def run_repo(
         "clone_status": "OK",
         "status": data.get("status", f"EXIT_{status}"),
         "build_system": data.get("phase_1_build_system", ""),
-        "compile_attempted": data.get("phase_1_compile_attempted", ""),
         "compiles": data.get("phase_1_compiles", ""),
         "compile_status": data.get("phase_1_compile_status", ""),
         "source_roots": data.get("phase_1_source_roots", ""),
         "test_source_roots": data.get("phase_1_test_source_roots", ""),
         "class_output_dirs": data.get("phase_1_class_output_dirs", ""),
         "dependency_jars": data.get("phase_1_dependency_jars", ""),
-        "source_resolution": data.get("phase_1_source_resolution_requested", ""),
         "source_set_filter": data.get("phase_2_source_set_filter", source_set),
         "source_backend_modes": javadoc_counts.get("source_backend_modes", ""),
         "call_graph_requested": data.get("phase_3_algorithm", ""),

@@ -140,8 +140,8 @@ public class OrchestratorTest {
     }
 
     @Test
-    public void testSourceOnlyProjectFailsWithoutBytecode() throws Exception {
-        Path project = Files.createTempDirectory("cocomut-source-only-");
+    public void testUncompiledProjectFailsWithoutBytecode() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-uncompiled-");
         try {
             Path sourceDir = project.resolve("src/main/java/example");
             Files.createDirectories(sourceDir);

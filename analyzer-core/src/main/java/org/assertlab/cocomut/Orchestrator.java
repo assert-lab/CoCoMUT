@@ -1,7 +1,6 @@
 package org.assertlab.cocomut;
 
 import org.assertlab.cocomut.source.ProjectModel;
-import org.assertlab.cocomut.source.SourceBackends;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
@@ -33,8 +32,6 @@ final class Orchestrator {
     private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.RTA;
     private Integer maxMethods;
     private Integer maxSourceFiles;
-    private boolean attemptCompile = true;
-    private ContextRequest.SourceResolution sourceResolution = ContextRequest.SourceResolution.CLASSPATH;
     private Set<String> sourceSets = Set.of();
     private Set<String> packageFilters = Set.of();
     private Set<String> classFilters = Set.of();
@@ -67,8 +64,6 @@ final class Orchestrator {
         this.callGraphAlgorithm = request.callGraphAlgorithm();
         this.maxMethods = request.maxMethods();
         this.maxSourceFiles = request.maxSourceFiles();
-        this.attemptCompile = request.attemptCompile();
-        this.sourceResolution = request.sourceResolution();
         this.sourceSets = request.sourceSets();
         this.packageFilters = request.packages();
         this.classFilters = request.classes();
@@ -81,11 +76,7 @@ final class Orchestrator {
     }
 
     Orchestrator setCallGraphAlgorithm(CallGraphGenerator.Algorithm algorithm) {
-        CallGraphGenerator.Algorithm selected = Objects.requireNonNull(algorithm, "algorithm cannot be null");
-        if (selected == CallGraphGenerator.Algorithm.NONE) {
-            throw new IllegalArgumentException("CoCoMUT requires static bytecode analysis; call graph cannot be disabled.");
-        }
-        this.callGraphAlgorithm = selected;
+        this.callGraphAlgorithm = Objects.requireNonNull(algorithm, "algorithm cannot be null");
         return this;
     }
 
@@ -96,23 +87,6 @@ final class Orchestrator {
 
     Orchestrator setMaxSourceFiles(Integer maxSourceFiles) {
         this.maxSourceFiles = maxSourceFiles;
-        return this;
-    }
-
-    Orchestrator setAttemptCompile(boolean attemptCompile) {
-        if (!attemptCompile) {
-            throw new IllegalArgumentException("CoCoMUT requires compilation or pre-existing bytecode artifacts.");
-        }
-        this.attemptCompile = attemptCompile;
-        return this;
-    }
-
-    Orchestrator setSourceResolution(ContextRequest.SourceResolution sourceResolution) {
-        ContextRequest.SourceResolution selected = Objects.requireNonNull(sourceResolution, "sourceResolution cannot be null");
-        if (selected != ContextRequest.SourceResolution.CLASSPATH) {
-            throw new IllegalArgumentException("CoCoMUT requires classpath-aware source extraction.");
-        }
-        this.sourceResolution = selected;
         return this;
     }
 
@@ -194,24 +168,19 @@ final class Orchestrator {
                     : failureCodes.stream().map(Enum::toString).toList());
             writeExecutionReportIfPossible();
             restoreSourceFileLimit();
-            SourceBackends.clearConfiguration();
         }
     }
 
     private boolean executePhase1() {
         try {
-            boolean effectiveAttemptCompile = true;
-            ProjectAnalyzer analyzer = new ProjectAnalyzer(projectPath, true, "auto", effectiveAttemptCompile);
+            ProjectAnalyzer analyzer = new ProjectAnalyzer(projectPath, true, "auto");
             projectMetadata = analyzer.analyze();
-            SourceBackends.configure(sourceResolution);
 
             executionReport.put("phase_1_project", projectMetadata.getProjectName());
             executionReport.put("phase_1_build_system", projectMetadata.getBuildSystem());
             executionReport.put("phase_1_java_version", projectMetadata.getJavaVersion());
             executionReport.put("phase_1_compiles", projectMetadata.isCompiles());
             executionReport.put("phase_1_compile_status", projectMetadata.getCompileStatus());
-            executionReport.put("phase_1_compile_attempted", effectiveAttemptCompile);
-            executionReport.put("phase_1_source_resolution_requested", sourceResolution.toString());
             ProjectModel model = ProjectModel.from(projectMetadata);
             executionReport.put("phase_1_source_available", model.sourceAvailable());
             executionReport.put("phase_1_source_roots", model.sourceRoots().size());
@@ -263,7 +232,7 @@ final class Orchestrator {
      */
     private boolean executePhase3() {
         try {
-            CallGraphGenerator.Algorithm effectiveAlgorithm = effectiveCallGraphAlgorithm();
+            CallGraphGenerator.Algorithm effectiveAlgorithm = callGraphAlgorithm;
             callGraphGenerator = new CallGraphGenerator(projectMetadata, effectiveAlgorithm);
             if (!callGraphGenerator.initialize()) {
                 callGraphResults = new HashMap<>();
@@ -316,17 +285,6 @@ final class Orchestrator {
             failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
             return false;
         }
-    }
-
-    private CallGraphGenerator.Algorithm effectiveCallGraphAlgorithm() {
-        if (callGraphAlgorithm != CallGraphGenerator.Algorithm.AUTO) {
-            return callGraphAlgorithm;
-        }
-        ProjectModel model = ProjectModel.from(projectMetadata);
-        if (!model.classOutputDirs().isEmpty()) {
-            return CallGraphGenerator.Algorithm.RTA;
-        }
-        return CallGraphGenerator.Algorithm.RTA;
     }
 
     /**
