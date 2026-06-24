@@ -64,4 +64,22 @@ public class ContextRequestTest {
 
         assertEquals(CallGraphGenerator.Algorithm.CHA, request.callGraphAlgorithm());
     }
+
+    @Test
+    public void builderAcceptsExplicitArtifactInputs() {
+        ContextRequest request = ContextRequest.builder()
+                .projectRoot(Path.of("."))
+                .skipBuild(true)
+                .classOutputDir(Path.of("target/classes"))
+                .projectJar(Path.of("target/example.jar"))
+                .dependencyJar(Path.of("lib/dependency.jar"))
+                .classpathFile(Path.of("classpath.txt"))
+                .build();
+
+        assertTrue(request.skipBuild());
+        assertTrue(request.classOutputDirs().contains(Path.of("target/classes").toAbsolutePath().normalize()));
+        assertTrue(request.projectJars().contains(Path.of("target/example.jar").toAbsolutePath().normalize()));
+        assertTrue(request.dependencyJars().contains(Path.of("lib/dependency.jar").toAbsolutePath().normalize()));
+        assertTrue(request.classpathFiles().contains(Path.of("classpath.txt").toAbsolutePath().normalize()));
+    }
 }

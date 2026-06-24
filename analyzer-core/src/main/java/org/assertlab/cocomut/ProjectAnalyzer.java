@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -31,6 +32,12 @@ public class ProjectAnalyzer {
     private final boolean autoDetectJavaVersion;
     private final String buildSystem;
     private final boolean includeTests;
+    private final boolean skipBuild;
+    private final Set<Path> explicitClassOutputDirs;
+    private final Set<Path> explicitProjectJars;
+    private final Set<Path> explicitDependencyJars;
+    private final Set<Path> explicitClasspathFiles;
+    private boolean lastBuildAttempted;
 
     /**
      * Create a ProjectAnalyzer for the given project path
@@ -51,10 +58,37 @@ public class ProjectAnalyzer {
     }
 
     public ProjectAnalyzer(Path projectPath, boolean autoDetectJavaVersion, String buildSystem, boolean includeTests) {
+        this(projectPath, autoDetectJavaVersion, buildSystem, includeTests,
+                false, Set.of(), Set.of(), Set.of(), Set.of());
+    }
+
+    public ProjectAnalyzer(ContextRequest request) {
+        this(request.projectRoot(), true, "auto", includeTestBytecode(request),
+                request.skipBuild(),
+                request.classOutputDirs(),
+                request.projectJars(),
+                request.dependencyJars(),
+                request.classpathFiles());
+    }
+
+    public ProjectAnalyzer(Path projectPath,
+                           boolean autoDetectJavaVersion,
+                           String buildSystem,
+                           boolean includeTests,
+                           boolean skipBuild,
+                           Set<Path> explicitClassOutputDirs,
+                           Set<Path> explicitProjectJars,
+                           Set<Path> explicitDependencyJars,
+                           Set<Path> explicitClasspathFiles) {
         this.projectPath = Objects.requireNonNull(projectPath, "projectPath cannot be null");
         this.autoDetectJavaVersion = autoDetectJavaVersion;
         this.buildSystem = buildSystem;
         this.includeTests = includeTests;
+        this.skipBuild = skipBuild;
+        this.explicitClassOutputDirs = explicitClassOutputDirs == null ? Set.of() : Set.copyOf(explicitClassOutputDirs);
+        this.explicitProjectJars = explicitProjectJars == null ? Set.of() : Set.copyOf(explicitProjectJars);
+        this.explicitDependencyJars = explicitDependencyJars == null ? Set.of() : Set.copyOf(explicitDependencyJars);
+        this.explicitClasspathFiles = explicitClasspathFiles == null ? Set.of() : Set.copyOf(explicitClasspathFiles);
 
         if (!Files.isDirectory(projectPath)) {
             throw new IllegalArgumentException("Project path must be a directory: " + projectPath);
@@ -70,13 +104,22 @@ public class ProjectAnalyzer {
         String detectedBuildSystem = detectBuildSystem();
         String javaVersion = detectJavaVersion(detectedBuildSystem);
         Path sourceRoot = findSourceRoot();
+        List<Path> sourceRoots = findSourceRoots();
+        List<Path> testSourceRoots = includeTests ? findTestSourceRoots() : List.of();
+        List<Path> classpathFileEntries = readClasspathFiles();
         boolean compiles = validateProjectCompiles();
-        List<Path> mainClassOutputs = existingMainClassOutputDirs(detectedBuildSystem);
+        List<Path> mainClassOutputs = mergePaths(existingMainClassOutputDirs(detectedBuildSystem),
+                existingClassDirs(explicitClassOutputDirs),
+                existingClassDirsFromClasspathFile(classpathFileEntries));
         List<Path> testClassOutputs = includeTests ? existingTestClassOutputDirs(detectedBuildSystem) : List.of();
-        List<Path> dependencyClasspath = buildDependencyClasspath(detectedBuildSystem);
-        List<Path> projectArtifactJars = existingProjectArtifactJars(detectedBuildSystem);
+        List<Path> dependencyClasspath = mergePaths(buildDependencyClasspath(detectedBuildSystem),
+                existingJars(explicitDependencyJars),
+                existingJarsFromClasspathFile(classpathFileEntries));
+        List<Path> projectArtifactJars = mergePaths(existingProjectArtifactJars(detectedBuildSystem),
+                existingJars(explicitProjectJars));
         List<Path> classpath = combinedClasspath(sourceRoot, mainClassOutputs, testClassOutputs,
                 projectArtifactJars, dependencyClasspath);
+        compiles = compiles || !mainClassOutputs.isEmpty() || !projectArtifactJars.isEmpty();
 
         String projectName = projectPath.getFileName().toString();
 
@@ -86,14 +129,36 @@ public class ProjectAnalyzer {
                 .buildSystem(detectedBuildSystem)
                 .javaVersion(javaVersion)
                 .sourceRoot(sourceRoot)
+                .sourceRoots(sourceRoots)
+                .testSourceRoots(testSourceRoots)
                 .classpath(classpath)
                 .mainClassOutputs(mainClassOutputs)
                 .testClassOutputs(testClassOutputs)
                 .projectArtifactJars(projectArtifactJars)
                 .dependencyClasspath(dependencyClasspath)
                 .compiles(compiles)
-                .compileStatus(compiles ? "BUILD SUCCESS" : "BUILD FAILED")
+                .compileStatus(compileStatus(compiles))
+                .buildAttempted(lastBuildAttempted)
+                .buildSkipped(skipBuild)
+                .buildSandboxed(false)
+                .explicitClassOutputDirs(new ArrayList<>(explicitClassOutputDirs))
+                .explicitProjectJars(new ArrayList<>(explicitProjectJars))
+                .explicitDependencyJars(new ArrayList<>(explicitDependencyJars))
+                .explicitClasspathFiles(new ArrayList<>(explicitClasspathFiles))
                 .build();
+    }
+
+    private static boolean includeTestBytecode(ContextRequest request) {
+        Set<String> sourceSets = request.sourceSets();
+        return sourceSets == null || sourceSets.isEmpty()
+                || sourceSets.stream().anyMatch(set -> !"main".equals(set));
+    }
+
+    private String compileStatus(boolean compiles) {
+        if (skipBuild) {
+            return compiles ? "BUILD SKIPPED; EXISTING ARTIFACTS FOUND" : "BUILD SKIPPED; NO PROJECT ARTIFACTS FOUND";
+        }
+        return compiles ? "BUILD SUCCESS" : "BUILD FAILED";
     }
 
     /**
@@ -284,6 +349,41 @@ public class ProjectAnalyzer {
         return projectPath;
     }
 
+    private List<Path> findSourceRoots() throws IOException {
+        LinkedHashSet<Path> roots = new LinkedHashSet<>();
+        addIfDirectory(roots, projectPath.resolve("src/main/java"));
+        for (Path module : collectMavenModuleDirs(projectPath)) {
+            addIfDirectory(roots, module.resolve("src/main/java"));
+        }
+        addConventionSourceRoots(roots, "src/main/java");
+        if (roots.isEmpty()) {
+            addIfDirectory(roots, findSourceRoot());
+        }
+        return new ArrayList<>(roots);
+    }
+
+    private List<Path> findTestSourceRoots() throws IOException {
+        LinkedHashSet<Path> roots = new LinkedHashSet<>();
+        addIfDirectory(roots, projectPath.resolve("src/test/java"));
+        for (Path module : collectMavenModuleDirs(projectPath)) {
+            addIfDirectory(roots, module.resolve("src/test/java"));
+        }
+        addConventionSourceRoots(roots, "src/test/java");
+        return new ArrayList<>(roots);
+    }
+
+    private void addConventionSourceRoots(Set<Path> roots, String suffix) {
+        try (var walk = Files.walk(projectPath, 7)) {
+            for (Path dir : walk.filter(Files::isDirectory)
+                    .filter(path -> path.endsWith(Path.of(suffix)))
+                    .toList()) {
+                addIfDirectory(roots, dir);
+            }
+        } catch (IOException ignored) {
+            // Source-root discovery is best-effort; parsing reports exact failures.
+        }
+    }
+
     /**
      * Build classpath from Maven dependencies or Gradle configuration
      * @param buildSystem "maven" or "gradle"
@@ -331,6 +431,9 @@ public class ProjectAnalyzer {
     }
 
     private List<Path> buildDependencyClasspath(String buildSystem) throws IOException {
+        if (skipBuild) {
+            return List.of();
+        }
         if ("maven".equals(buildSystem)) {
             return buildMavenClasspath();
         }
@@ -454,6 +557,14 @@ public class ProjectAnalyzer {
      * @return true if compiled artifacts exist or the build succeeds
      */
     private boolean validateProjectCompiles() {
+        lastBuildAttempted = false;
+        if (skipBuild) {
+            try {
+                return hasExistingCompiledArtifacts(detectBuildSystem());
+            } catch (IOException e) {
+                return hasExistingCompiledArtifacts(buildSystem);
+            }
+        }
         String buildSystem;
         try {
             buildSystem = detectBuildSystem();
@@ -466,6 +577,7 @@ public class ProjectAnalyzer {
         }
 
         try {
+            lastBuildAttempted = true;
             boolean isWindows = System.getProperty("os.name", "")
                     .toLowerCase()
                     .contains("win");
@@ -580,9 +692,14 @@ public class ProjectAnalyzer {
     private boolean hasExistingCompiledArtifacts(String buildSystem) {
         try {
             return !existingMainClassOutputDirs(buildSystem).isEmpty()
-                    || !existingProjectArtifactJars(buildSystem).isEmpty();
+                    || !existingProjectArtifactJars(buildSystem).isEmpty()
+                    || !existingClassDirs(explicitClassOutputDirs).isEmpty()
+                    || !existingJars(explicitProjectJars).isEmpty()
+                    || !existingClassDirsFromClasspathFile(readClasspathFiles()).isEmpty();
         } catch (IOException e) {
-            return !existingMainClassOutputDirs(buildSystem).isEmpty();
+            return !existingMainClassOutputDirs(buildSystem).isEmpty()
+                    || !existingClassDirs(explicitClassOutputDirs).isEmpty()
+                    || !existingJars(explicitProjectJars).isEmpty();
         }
     }
 
@@ -701,6 +818,101 @@ public class ProjectAnalyzer {
             return stream.anyMatch(p -> p.toString().endsWith(".class"));
         } catch (IOException e) {
             return false;
+        }
+    }
+
+    private static List<Path> mergePaths(List<Path>... lists) {
+        LinkedHashSet<Path> merged = new LinkedHashSet<>();
+        for (List<Path> list : lists) {
+            if (list == null) {
+                continue;
+            }
+            for (Path path : list) {
+                if (path != null) {
+                    merged.add(path.toAbsolutePath().normalize());
+                }
+            }
+        }
+        return new ArrayList<>(merged);
+    }
+
+    private List<Path> readClasspathFiles() throws IOException {
+        List<Path> entries = new ArrayList<>();
+        for (Path file : explicitClasspathFiles) {
+            if (!Files.isRegularFile(file)) {
+                continue;
+            }
+            for (String line : Files.readString(file, StandardCharsets.UTF_8).split("\\R")) {
+                String trimmed = line.strip();
+                if (trimmed.isBlank() || trimmed.startsWith("#")) {
+                    continue;
+                }
+                entries.addAll(parsePathList(trimmed, file.getParent()));
+            }
+        }
+        return new ArrayList<>(new LinkedHashSet<>(entries));
+    }
+
+    private static List<Path> parsePathList(String raw, Path baseDir) {
+        if (raw == null || raw.isBlank()) {
+            return List.of();
+        }
+        List<Path> paths = new ArrayList<>();
+        for (String item : raw.strip().split(Pattern.quote(java.io.File.pathSeparator))) {
+            if (!item.isBlank()) {
+                Path path = Path.of(item.strip());
+                if (!path.isAbsolute() && baseDir != null) {
+                    path = baseDir.resolve(path).normalize();
+                }
+                if (Files.exists(path)) {
+                    paths.add(path.toAbsolutePath().normalize());
+                }
+            }
+        }
+        return paths;
+    }
+
+    private List<Path> existingClassDirs(Set<Path> dirs) {
+        List<Path> existing = new ArrayList<>();
+        for (Path dir : dirs) {
+            addClassDir(existing, dir);
+        }
+        return new ArrayList<>(new LinkedHashSet<>(existing));
+    }
+
+    private List<Path> existingClassDirsFromClasspathFile(List<Path> entries) {
+        List<Path> existing = new ArrayList<>();
+        for (Path entry : entries) {
+            if (Files.isDirectory(entry)) {
+                addClassDir(existing, entry);
+            }
+        }
+        return new ArrayList<>(new LinkedHashSet<>(existing));
+    }
+
+    private static List<Path> existingJars(Set<Path> jars) {
+        List<Path> existing = new ArrayList<>();
+        for (Path jar : jars) {
+            if (jar != null && jar.toString().endsWith(".jar") && Files.isRegularFile(jar)) {
+                existing.add(jar.toAbsolutePath().normalize());
+            }
+        }
+        return new ArrayList<>(new LinkedHashSet<>(existing));
+    }
+
+    private static List<Path> existingJarsFromClasspathFile(List<Path> entries) {
+        List<Path> existing = new ArrayList<>();
+        for (Path entry : entries) {
+            if (entry.toString().endsWith(".jar") && Files.isRegularFile(entry)) {
+                existing.add(entry.toAbsolutePath().normalize());
+            }
+        }
+        return new ArrayList<>(new LinkedHashSet<>(existing));
+    }
+
+    private static void addIfDirectory(Set<Path> dirs, Path path) {
+        if (path != null && Files.isDirectory(path)) {
+            dirs.add(path.toAbsolutePath().normalize());
         }
     }
 

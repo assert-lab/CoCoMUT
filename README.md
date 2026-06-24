@@ -140,5 +140,6 @@ is available.
 CoCoMUT currently targets Java 17+ and performs static analysis only. It does not
 execute application code or tests, but supported Maven and Gradle builds execute
 the subject repository's build scripts during phase 1. The analyzed project must
-compile, or provide usable project bytecode in a conventional build layout,
-before extraction can succeed.
+compile, provide usable project bytecode in a conventional build layout, or use
+explicit artifact inputs such as `--class-output` / `--project-jar` with
+`--skip-build` before extraction can succeed.

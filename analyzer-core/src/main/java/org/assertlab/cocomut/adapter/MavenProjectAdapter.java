@@ -1,5 +1,6 @@
 package org.assertlab.cocomut.adapter;
 
+import org.assertlab.cocomut.ContextRequest;
 import org.assertlab.cocomut.ProjectAnalyzer;
 import org.assertlab.cocomut.ProjectMetadata;
 
@@ -36,5 +37,10 @@ public class MavenProjectAdapter implements ProjectAdapter {
     @Override
     public ProjectMetadata toMetadata() throws IOException {
         return new ProjectAnalyzer(projectPath).analyze();
+    }
+
+    @Override
+    public ProjectMetadata toMetadata(ContextRequest request) throws IOException {
+        return new ProjectAnalyzer(request).analyze();
     }
 }

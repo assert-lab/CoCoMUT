@@ -33,6 +33,11 @@ public final class ContextRequest {
     private final Set<String> excludePathGlobs;
     private final Set<SymbolTarget> targets;
     private final Path outputDirectory;
+    private final boolean skipBuild;
+    private final Set<Path> classOutputDirs;
+    private final Set<Path> projectJars;
+    private final Set<Path> dependencyJars;
+    private final Set<Path> classpathFiles;
 
     private ContextRequest(Builder builder) {
         this.projectRoot = Objects.requireNonNull(builder.projectRoot, "projectRoot cannot be null")
@@ -54,6 +59,11 @@ public final class ContextRequest {
         this.outputDirectory = builder.outputDirectory != null
                 ? builder.outputDirectory.toAbsolutePath().normalize()
                 : null;
+        this.skipBuild = builder.skipBuild;
+        this.classOutputDirs = normalizePaths(builder.classOutputDirs);
+        this.projectJars = normalizePaths(builder.projectJars);
+        this.dependencyJars = normalizePaths(builder.dependencyJars);
+        this.classpathFiles = normalizePaths(builder.classpathFiles);
     }
 
     public static Builder builder() {
@@ -120,6 +130,26 @@ public final class ContextRequest {
         return outputDirectory;
     }
 
+    public boolean skipBuild() {
+        return skipBuild;
+    }
+
+    public Set<Path> classOutputDirs() {
+        return classOutputDirs;
+    }
+
+    public Set<Path> projectJars() {
+        return projectJars;
+    }
+
+    public Set<Path> dependencyJars() {
+        return dependencyJars;
+    }
+
+    public Set<Path> classpathFiles() {
+        return classpathFiles;
+    }
+
     public static final class Builder {
         private Path projectRoot;
         private Scope scope = Scope.ALL;
@@ -135,6 +165,11 @@ public final class ContextRequest {
         private Set<String> excludePathGlobs = new LinkedHashSet<>();
         private Set<SymbolTarget> targets = new LinkedHashSet<>();
         private Path outputDirectory;
+        private boolean skipBuild;
+        private Set<Path> classOutputDirs = new LinkedHashSet<>();
+        private Set<Path> projectJars = new LinkedHashSet<>();
+        private Set<Path> dependencyJars = new LinkedHashSet<>();
+        private Set<Path> classpathFiles = new LinkedHashSet<>();
 
         public Builder projectRoot(Path projectRoot) {
             this.projectRoot = projectRoot;
@@ -294,6 +329,51 @@ public final class ContextRequest {
             return this;
         }
 
+        public Builder skipBuild(boolean skipBuild) {
+            this.skipBuild = skipBuild;
+            return this;
+        }
+
+        public Builder classOutputDirs(Set<Path> classOutputDirs) {
+            this.classOutputDirs = classOutputDirs == null ? new LinkedHashSet<>() : new LinkedHashSet<>(classOutputDirs);
+            return this;
+        }
+
+        public Builder classOutputDir(Path classOutputDir) {
+            addPath(this.classOutputDirs, classOutputDir);
+            return this;
+        }
+
+        public Builder projectJars(Set<Path> projectJars) {
+            this.projectJars = projectJars == null ? new LinkedHashSet<>() : new LinkedHashSet<>(projectJars);
+            return this;
+        }
+
+        public Builder projectJar(Path projectJar) {
+            addPath(this.projectJars, projectJar);
+            return this;
+        }
+
+        public Builder dependencyJars(Set<Path> dependencyJars) {
+            this.dependencyJars = dependencyJars == null ? new LinkedHashSet<>() : new LinkedHashSet<>(dependencyJars);
+            return this;
+        }
+
+        public Builder dependencyJar(Path dependencyJar) {
+            addPath(this.dependencyJars, dependencyJar);
+            return this;
+        }
+
+        public Builder classpathFiles(Set<Path> classpathFiles) {
+            this.classpathFiles = classpathFiles == null ? new LinkedHashSet<>() : new LinkedHashSet<>(classpathFiles);
+            return this;
+        }
+
+        public Builder classpathFile(Path classpathFile) {
+            addPath(this.classpathFiles, classpathFile);
+            return this;
+        }
+
         public ContextRequest build() {
             return new ContextRequest(this);
         }
@@ -355,5 +435,24 @@ public final class ContextRequest {
             }
             return normalized;
         }
+
+        private static void addPath(Set<Path> values, Path value) {
+            if (value != null) {
+                values.add(value);
+            }
+        }
+    }
+
+    private static Set<Path> normalizePaths(Set<Path> values) {
+        if (values == null || values.isEmpty()) {
+            return Set.of();
+        }
+        LinkedHashSet<Path> normalized = new LinkedHashSet<>();
+        for (Path value : values) {
+            if (value != null) {
+                normalized.add(value.toAbsolutePath().normalize());
+            }
+        }
+        return Collections.unmodifiableSet(normalized);
     }
 }

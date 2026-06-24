@@ -133,6 +133,34 @@ public class AnalyzerFacadeTest {
         assertEquals("RTA", report.asMap().get("phase_3_effective_algorithm"));
     }
 
+    @Test
+    public void skipBuildUsesExplicitClassOutputAndWritesManifest() throws Exception {
+        Path output = Files.createTempDirectory("cocomut-skip-build-output");
+        ContextRequest request = ContextRequest.builder()
+                .projectRoot(fixtureRoot)
+                .scope(ContextRequest.Scope.ENTRY_POINTS)
+                .sourceSet("main")
+                .skipBuild(true)
+                .classOutputDir(fixtureRoot.resolve("target/classes"))
+                .outputDirectory(output)
+                .build();
+
+        ExtractionReport report = ContextExtractorService.createDefault().extract(request);
+
+        assertTrue("Precompiled fixture should extract without running Maven", report.successful());
+        assertEquals(Boolean.TRUE, report.asMap().get("phase_1_build_skipped"));
+        assertEquals(Boolean.FALSE, report.asMap().get("phase_1_build_attempted"));
+        assertEquals(1, ((Number) report.asMap().get("phase_1_explicit_class_outputs")).intValue());
+        Path manifest = Path.of(String.valueOf(report.asMap().get("extraction_manifest_file")));
+        assertTrue("Manifest should be written", Files.isRegularFile(manifest));
+        JsonNode manifestJson = new ObjectMapper().readTree(manifest.toFile());
+        assertTrue("Manifest should record skipped build policy",
+                manifestJson.path("build").path("skipped").asBoolean());
+        assertEquals("skip", manifestJson.path("build").path("policy").asText());
+        assertFalse("Manifest should include project bytecode hash",
+                manifestJson.path("hashes").path("project_bytecode_sha256").asText().isBlank());
+    }
+
     private JsonNode findJsonlRowForMethod(Path jsonl, String methodName) throws Exception {
         assertTrue("Expected JSONL output at " + jsonl, Files.exists(jsonl));
         ObjectMapper mapper = new ObjectMapper();

@@ -83,6 +83,26 @@ public final class CoCoMUTCommand implements Callable<Integer> {
     @Option(names = "--exclude-path", split = ",", description = "Exclude source path glob relative to project root.")
     private Set<String> excludePaths;
 
+    @Option(names = "--skip-build",
+            description = "Do not execute Maven/Gradle. Use existing or explicitly supplied class/JAR artifacts.")
+    private boolean skipBuild;
+
+    @Option(names = "--class-output", split = ",",
+            description = "Project class-output directory to analyze. May be repeated or comma-separated.")
+    private Set<Path> classOutputs;
+
+    @Option(names = "--project-jar", split = ",",
+            description = "Project artifact JAR to analyze. May be repeated or comma-separated.")
+    private Set<Path> projectJars;
+
+    @Option(names = "--dependency-jar", split = ",",
+            description = "Dependency JAR for source/type resolution. May be repeated or comma-separated.")
+    private Set<Path> dependencyJars;
+
+    @Option(names = "--classpath-file", split = ",",
+            description = "File containing classpath entries, one per line or path-separated.")
+    private Set<Path> classpathFiles;
+
     @Override
     public Integer call() throws Exception {
         ContextRequest.Scope selectedScope = toScope(entryPoints ? "entry-points" : scope);
@@ -101,6 +121,11 @@ public final class CoCoMUTCommand implements Callable<Integer> {
                 .visibilities(emptyIfNull(visibilities))
                 .includePathGlobs(emptyIfNull(includePaths))
                 .excludePathGlobs(emptyIfNull(excludePaths))
+                .skipBuild(skipBuild)
+                .classOutputDirs(emptyPathSetIfNull(classOutputs))
+                .projectJars(emptyPathSetIfNull(projectJars))
+                .dependencyJars(emptyPathSetIfNull(dependencyJars))
+                .classpathFiles(emptyPathSetIfNull(classpathFiles))
                 .outputDirectory(outputDir)
                 .build();
 
@@ -136,6 +161,10 @@ public final class CoCoMUTCommand implements Callable<Integer> {
     }
 
     private static Set<String> emptyIfNull(Set<String> values) {
+        return values == null ? Set.of() : values;
+    }
+
+    private static Set<Path> emptyPathSetIfNull(Set<Path> values) {
         return values == null ? Set.of() : values;
     }
 

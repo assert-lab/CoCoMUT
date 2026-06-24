@@ -1,5 +1,6 @@
 package org.assertlab.cocomut.adapter;
 
+import org.assertlab.cocomut.ContextRequest;
 import org.assertlab.cocomut.ProjectAnalyzer;
 import org.assertlab.cocomut.ProjectMetadata;
 
@@ -36,6 +37,16 @@ public class GenericJavaAdapter implements ProjectAdapter {
     @Override
     public ProjectMetadata toMetadata() throws IOException {
         ProjectMetadata base = new ProjectAnalyzer(projectPath).analyze();
+        return withSourceWarning(base);
+    }
+
+    @Override
+    public ProjectMetadata toMetadata(ContextRequest request) throws IOException {
+        ProjectMetadata base = new ProjectAnalyzer(request).analyze();
+        return withSourceWarning(base);
+    }
+
+    private ProjectMetadata withSourceWarning(ProjectMetadata base) {
 
         if (hasJavaSource(base.getSourceRoot())) {
             return base;

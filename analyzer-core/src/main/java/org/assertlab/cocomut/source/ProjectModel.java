@@ -48,6 +48,8 @@ public final class ProjectModel {
         Set<Path> dependencyJars = new LinkedHashSet<>();
 
         addIfDirectory(sourceRoots, metadata.getSourceRoot());
+        metadata.getSourceRoots().forEach(path -> addIfDirectory(sourceRoots, path));
+        metadata.getTestSourceRoots().forEach(path -> addIfDirectory(testSourceRoots, path));
         addStandardRoots(projectRoot, sourceRoots, testSourceRoots, classOutputDirs);
 
         metadata.getMainClassOutputs().forEach(path -> addIfClassDirectory(classOutputDirs, path));

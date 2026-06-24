@@ -27,7 +27,8 @@ final class AnalyzerFacade {
                 adapter.getClass().getSimpleName(),
                 request.scope());
 
-        Orchestrator orchestrator = new Orchestrator(request);
+        ProjectMetadata metadata = adapter.toMetadata(request);
+        Orchestrator orchestrator = new Orchestrator(request, metadata);
         orchestrator.execute();
         return orchestrator.getExecutionReport();
     }

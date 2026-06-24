@@ -1,0 +1,59 @@
+{
+  "schema_version" : "0.1.0",
+  "generated_at" : "2026-06-24T20:07:24.539603096Z",
+  "tool" : "CoCoMUT",
+  "tool_version" : "0.1.0",
+  "request_hash" : "226f81b1",
+  "selection" : {
+    "scope" : "entry_points",
+    "source_sets" : [ "main" ],
+    "packages" : [ ],
+    "classes" : [ ],
+    "methods" : [ ],
+    "visibilities" : [ ],
+    "include_paths" : [ ],
+    "exclude_paths" : [ ],
+    "max_methods" : null,
+    "max_source_files" : null,
+    "kind" : "project",
+    "uri" : "project://minimal-maven-project",
+    "project_name" : "minimal-maven-project",
+    "selector" : "project"
+  },
+  "jsonl_file" : "method_contexts__226f81b1.jsonl",
+  "project" : {
+    "name" : "minimal-maven-project",
+    "path" : "analyzer-tests/src/test/resources/fixtures/minimal-maven-project",
+    "build_system" : "maven",
+    "java_version" : "17",
+    "git" : {
+      "remote_url" : "https://github.com/assert-lab/Code-Context-Extractor.git",
+      "commit" : "2a58c3b5c0c2ab53fb00e45959ce0418f937fa80",
+      "dirty" : "false"
+    }
+  },
+  "build" : {
+    "attempted" : true,
+    "skipped" : false,
+    "sandboxed" : false,
+    "status" : "BUILD SUCCESS",
+    "policy" : "allow_unsandboxed"
+  },
+  "artifacts" : {
+    "source_roots" : [ "src/main/java" ],
+    "test_source_roots" : [ ],
+    "main_class_outputs" : [ "target/classes" ],
+    "test_class_outputs" : [ ],
+    "project_jars" : [ ],
+    "dependency_classpath" : [ ],
+    "explicit_class_output_dirs" : [ ],
+    "explicit_project_jars" : [ ],
+    "explicit_dependency_jars" : [ ],
+    "explicit_classpath_files" : [ ]
+  },
+  "hashes" : {
+    "classpath_sha256" : "da02c8b6915d31cf59987ec6ec0ce2edc0bcafdf42e0748d990a0889f1cf11af",
+    "project_bytecode_sha256" : "fb628e64657fda07508ebc1bd29835933840027f651069a167c52d561526bf3f",
+    "dependency_classpath_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

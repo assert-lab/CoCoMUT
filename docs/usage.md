@@ -137,6 +137,14 @@ Useful options:
                                 Include methods with matching visibility
 --include-path GLOB            Include source path glob relative to project root
 --exclude-path GLOB            Exclude source path glob relative to project root
+--skip-build                   Do not execute Maven/Gradle; use existing or
+                                explicitly supplied bytecode artifacts
+--class-output DIR             Project class-output directory, repeatable or
+                                comma-separated
+--project-jar JAR              Project artifact JAR, repeatable or comma-separated
+--dependency-jar JAR           Dependency JAR, repeatable or comma-separated
+--classpath-file FILE          File containing classpath entries, one per line
+                                or path-separated
 ```
 
 CoCoMUT performs static bytecode analysis. The analyzed checkout must compile,
@@ -161,6 +169,25 @@ Compilation runs the subject repository's Maven or Gradle build logic. For
 untrusted public repositories, run CoCoMUT in a disposable container or VM with
 an unprivileged user, scrubbed environment, isolated writable build/cache
 directories, and CPU, memory, process, wall-clock, and network limits.
+
+If the project was already compiled elsewhere, or if build execution is not
+acceptable, use the explicit artifact path:
+
+```bash
+./bin/cocomut \
+  --project /path/to/java/project \
+  --skip-build \
+  --class-output /path/to/java/project/target/classes \
+  --dependency-jar ~/.m2/repository/org/example/lib/1.0/lib-1.0.jar \
+  --source-set main
+```
+
+`--class-output` and `--project-jar` are project bytecode inputs. They can
+satisfy CoCoMUT's project-bytecode requirement. `--dependency-jar` and entries
+from `--classpath-file` help type/call-target resolution, but dependency JARs
+alone do not count as analyzed project bytecode. `--skip-build` also suppresses
+Gradle metadata tasks, because those tasks still evaluate the target project's
+build scripts.
 
 `--call-graph rta` is the default. Use `--call-graph cha` when the study design
 needs class-hierarchy analysis instead of rapid type analysis.
@@ -229,6 +256,7 @@ share the same final directory name:
 ./cocomut_output/<project-name>-<path-hash>/
   method_contexts__<request-hash>.jsonl
   extraction_report.json
+  extraction_manifest.json
   Output_CallGraph_CHA.txt     when CHA is effectively used
   Output_CallGraph_RTA.txt     when RTA is effectively used
   failed_source_files.jsonl    only when some Java files fail source parsing
@@ -247,7 +275,14 @@ A tiny fixture-generated example is checked in at:
 ```text
 examples/sample-output/minimal-method-context.jsonl
 examples/sample-output/minimal-extraction-report.json
+examples/sample-output/minimal-extraction-manifest.json
 ```
+
+`extraction_manifest.json` records run-level provenance: repository revision
+when available, dirty checkout state, build execution policy, source/classpath
+locations, project bytecode hash, dependency classpath hash, request hash, and
+the selected target. This metadata is kept out of individual JSONL rows so row
+content remains method-focused.
 
 ## JSONL Viewer
 
@@ -366,6 +401,11 @@ pipeline through `ContextRequest` and `ContextExtractorService`.
 | Visibility filter | `--visibility public` | `.visibility("public")` or `.visibilities(Set.of(...))` |
 | Include path glob | `--include-path GLOB` | `.includePathGlob("GLOB")` or `.includePathGlobs(Set.of(...))` |
 | Exclude path glob | `--exclude-path GLOB` | `.excludePathGlob("GLOB")` or `.excludePathGlobs(Set.of(...))` |
+| Skip build execution | `--skip-build` | `.skipBuild(true)` |
+| Project class output | `--class-output target/classes` | `.classOutputDir(Path.of("target/classes"))` |
+| Project JAR | `--project-jar target/app.jar` | `.projectJar(Path.of("target/app.jar"))` |
+| Dependency JAR | `--dependency-jar lib.jar` | `.dependencyJar(Path.of("lib.jar"))` |
+| Classpath file | `--classpath-file cp.txt` | `.classpathFile(Path.of("cp.txt"))` |
 
 Default behavior is aligned as well: both CLI/JAR and API default to all
 methods, classpath-aware source extraction, static bytecode analysis, build
@@ -385,7 +425,11 @@ Current static-analysis boundaries:
   for target resolution rather than as application entry points;
 - build-tool compilation is part of phase 1 for supported Maven/Gradle projects;
   otherwise CoCoMUT requires pre-existing project class files or project JARs in
-  a conventional build layout;
+  a conventional build layout or through explicit `--class-output` /
+  `--project-jar` inputs;
+- `--skip-build` disables Maven/Gradle execution and relies on existing or
+  explicitly supplied bytecode, which is the preferred policy for untrusted
+  repositories unless the build runs in an external sandbox;
 - reflection, proxies, generated code, Lombok, service loaders, and dependency
   injection can reduce precision, but common dynamic-feature hints are labeled
   in JSON;

@@ -15,6 +15,8 @@ public class ProjectMetadata {
     private final String buildSystem;  // "maven" or "gradle"
     private final String javaVersion;
     private final Path sourceRoot;
+    private final List<Path> sourceRoots;
+    private final List<Path> testSourceRoots;
     private final List<Path> classpath;
     private final List<Path> mainClassOutputs;
     private final List<Path> testClassOutputs;
@@ -22,6 +24,13 @@ public class ProjectMetadata {
     private final List<Path> dependencyClasspath;
     private final boolean compiles;
     private final String compileStatus;
+    private final boolean buildAttempted;
+    private final boolean buildSkipped;
+    private final boolean buildSandboxed;
+    private final List<Path> explicitClassOutputDirs;
+    private final List<Path> explicitProjectJars;
+    private final List<Path> explicitDependencyJars;
+    private final List<Path> explicitClasspathFiles;
 
     private ProjectMetadata(Builder builder) {
         this.projectName = Objects.requireNonNull(builder.projectName, "projectName cannot be null");
@@ -29,6 +38,8 @@ public class ProjectMetadata {
         this.buildSystem = Objects.requireNonNull(builder.buildSystem, "buildSystem cannot be null");
         this.javaVersion = Objects.requireNonNull(builder.javaVersion, "javaVersion cannot be null");
         this.sourceRoot = Objects.requireNonNull(builder.sourceRoot, "sourceRoot cannot be null");
+        this.sourceRoots = Collections.unmodifiableList(safeList(builder.sourceRoots));
+        this.testSourceRoots = Collections.unmodifiableList(safeList(builder.testSourceRoots));
         this.classpath = Collections.unmodifiableList(safeList(builder.classpath));
         this.mainClassOutputs = Collections.unmodifiableList(safeList(builder.mainClassOutputs));
         this.testClassOutputs = Collections.unmodifiableList(safeList(builder.testClassOutputs));
@@ -36,6 +47,13 @@ public class ProjectMetadata {
         this.dependencyClasspath = Collections.unmodifiableList(safeList(builder.dependencyClasspath));
         this.compiles = builder.compiles;
         this.compileStatus = builder.compileStatus;
+        this.buildAttempted = builder.buildAttempted;
+        this.buildSkipped = builder.buildSkipped;
+        this.buildSandboxed = builder.buildSandboxed;
+        this.explicitClassOutputDirs = Collections.unmodifiableList(safeList(builder.explicitClassOutputDirs));
+        this.explicitProjectJars = Collections.unmodifiableList(safeList(builder.explicitProjectJars));
+        this.explicitDependencyJars = Collections.unmodifiableList(safeList(builder.explicitDependencyJars));
+        this.explicitClasspathFiles = Collections.unmodifiableList(safeList(builder.explicitClasspathFiles));
     }
 
     private static List<Path> safeList(List<Path> paths) {
@@ -61,6 +79,14 @@ public class ProjectMetadata {
 
     public Path getSourceRoot() {
         return sourceRoot;
+    }
+
+    public List<Path> getSourceRoots() {
+        return sourceRoots;
+    }
+
+    public List<Path> getTestSourceRoots() {
+        return testSourceRoots;
     }
 
     public List<Path> getClasspath() {
@@ -91,6 +117,34 @@ public class ProjectMetadata {
         return compileStatus;
     }
 
+    public boolean isBuildAttempted() {
+        return buildAttempted;
+    }
+
+    public boolean isBuildSkipped() {
+        return buildSkipped;
+    }
+
+    public boolean isBuildSandboxed() {
+        return buildSandboxed;
+    }
+
+    public List<Path> getExplicitClassOutputDirs() {
+        return explicitClassOutputDirs;
+    }
+
+    public List<Path> getExplicitProjectJars() {
+        return explicitProjectJars;
+    }
+
+    public List<Path> getExplicitDependencyJars() {
+        return explicitDependencyJars;
+    }
+
+    public List<Path> getExplicitClasspathFiles() {
+        return explicitClasspathFiles;
+    }
+
     @Override
     public String toString() {
         return "ProjectMetadata{" +
@@ -99,6 +153,8 @@ public class ProjectMetadata {
                 ", buildSystem='" + buildSystem + '\'' +
                 ", javaVersion='" + javaVersion + '\'' +
                 ", sourceRoot=" + sourceRoot +
+                ", sourceRoots=" + sourceRoots.size() +
+                ", testSourceRoots=" + testSourceRoots.size() +
                 ", classpathSize=" + classpath.size() +
                 ", mainClassOutputs=" + mainClassOutputs.size() +
                 ", testClassOutputs=" + testClassOutputs.size() +
@@ -106,6 +162,11 @@ public class ProjectMetadata {
                 ", dependencyClasspath=" + dependencyClasspath.size() +
                 ", compiles=" + compiles +
                 ", compileStatus='" + compileStatus + '\'' +
+                ", buildAttempted=" + buildAttempted +
+                ", buildSkipped=" + buildSkipped +
+                ", explicitClassOutputDirs=" + explicitClassOutputDirs.size() +
+                ", explicitProjectJars=" + explicitProjectJars.size() +
+                ", explicitDependencyJars=" + explicitDependencyJars.size() +
                 '}';
     }
 
@@ -118,6 +179,8 @@ public class ProjectMetadata {
         private String buildSystem;
         private String javaVersion;
         private Path sourceRoot;
+        private List<Path> sourceRoots = Collections.emptyList();
+        private List<Path> testSourceRoots = Collections.emptyList();
         private List<Path> classpath = Collections.emptyList();
         private List<Path> mainClassOutputs = Collections.emptyList();
         private List<Path> testClassOutputs = Collections.emptyList();
@@ -125,6 +188,13 @@ public class ProjectMetadata {
         private List<Path> dependencyClasspath = Collections.emptyList();
         private boolean compiles = false;
         private String compileStatus = "";
+        private boolean buildAttempted = false;
+        private boolean buildSkipped = false;
+        private boolean buildSandboxed = false;
+        private List<Path> explicitClassOutputDirs = Collections.emptyList();
+        private List<Path> explicitProjectJars = Collections.emptyList();
+        private List<Path> explicitDependencyJars = Collections.emptyList();
+        private List<Path> explicitClasspathFiles = Collections.emptyList();
 
         /**
          * Seed a builder from an existing metadata instance — useful for adapters
@@ -138,13 +208,22 @@ public class ProjectMetadata {
                     .buildSystem(src.buildSystem)
                     .javaVersion(src.javaVersion)
                     .sourceRoot(src.sourceRoot)
+                    .sourceRoots(src.sourceRoots)
+                    .testSourceRoots(src.testSourceRoots)
                     .classpath(src.classpath)
                     .mainClassOutputs(src.mainClassOutputs)
                     .testClassOutputs(src.testClassOutputs)
                     .projectArtifactJars(src.projectArtifactJars)
                     .dependencyClasspath(src.dependencyClasspath)
                     .compiles(src.compiles)
-                    .compileStatus(src.compileStatus);
+                    .compileStatus(src.compileStatus)
+                    .buildAttempted(src.buildAttempted)
+                    .buildSkipped(src.buildSkipped)
+                    .buildSandboxed(src.buildSandboxed)
+                    .explicitClassOutputDirs(src.explicitClassOutputDirs)
+                    .explicitProjectJars(src.explicitProjectJars)
+                    .explicitDependencyJars(src.explicitDependencyJars)
+                    .explicitClasspathFiles(src.explicitClasspathFiles);
         }
 
         public Builder projectName(String projectName) {
@@ -169,6 +248,16 @@ public class ProjectMetadata {
 
         public Builder sourceRoot(Path sourceRoot) {
             this.sourceRoot = sourceRoot;
+            return this;
+        }
+
+        public Builder sourceRoots(List<Path> sourceRoots) {
+            this.sourceRoots = sourceRoots;
+            return this;
+        }
+
+        public Builder testSourceRoots(List<Path> testSourceRoots) {
+            this.testSourceRoots = testSourceRoots;
             return this;
         }
 
@@ -204,6 +293,41 @@ public class ProjectMetadata {
 
         public Builder compileStatus(String compileStatus) {
             this.compileStatus = compileStatus;
+            return this;
+        }
+
+        public Builder buildAttempted(boolean buildAttempted) {
+            this.buildAttempted = buildAttempted;
+            return this;
+        }
+
+        public Builder buildSkipped(boolean buildSkipped) {
+            this.buildSkipped = buildSkipped;
+            return this;
+        }
+
+        public Builder buildSandboxed(boolean buildSandboxed) {
+            this.buildSandboxed = buildSandboxed;
+            return this;
+        }
+
+        public Builder explicitClassOutputDirs(List<Path> explicitClassOutputDirs) {
+            this.explicitClassOutputDirs = explicitClassOutputDirs;
+            return this;
+        }
+
+        public Builder explicitProjectJars(List<Path> explicitProjectJars) {
+            this.explicitProjectJars = explicitProjectJars;
+            return this;
+        }
+
+        public Builder explicitDependencyJars(List<Path> explicitDependencyJars) {
+            this.explicitDependencyJars = explicitDependencyJars;
+            return this;
+        }
+
+        public Builder explicitClasspathFiles(List<Path> explicitClasspathFiles) {
+            this.explicitClasspathFiles = explicitClasspathFiles;
             return this;
         }
 

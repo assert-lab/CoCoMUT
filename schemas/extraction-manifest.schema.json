@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assert-lab.github.io/cocomut/schemas/extraction-manifest.schema.json",
+  "title": "CoCoMUT Extraction Manifest",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at",
+    "tool",
+    "tool_version",
+    "request_hash",
+    "selection",
+    "project",
+    "build",
+    "artifacts",
+    "hashes"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "generated_at": { "type": "string" },
+    "tool": { "const": "CoCoMUT" },
+    "tool_version": { "type": "string" },
+    "request_hash": { "type": "string" },
+    "jsonl_file": { "type": "string" },
+    "selection": { "type": "object" },
+    "project": {
+      "type": "object",
+      "required": ["name", "path", "build_system", "java_version", "git"],
+      "properties": {
+        "name": { "type": "string" },
+        "path": { "type": "string" },
+        "build_system": { "type": "string" },
+        "java_version": { "type": "string" },
+        "git": {
+          "type": "object",
+          "properties": {
+            "remote_url": { "type": "string" },
+            "commit": { "type": "string" },
+            "dirty": { "enum": ["true", "false", ""] }
+          }
+        }
+      }
+    },
+    "build": {
+      "type": "object",
+      "required": ["attempted", "skipped", "sandboxed", "status", "policy"],
+      "properties": {
+        "attempted": { "type": "boolean" },
+        "skipped": { "type": "boolean" },
+        "sandboxed": { "type": "boolean" },
+        "status": { "type": "string" },
+        "policy": { "enum": ["allow_unsandboxed", "skip"] }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    },
+    "hashes": {
+      "type": "object",
+      "required": [
+        "classpath_sha256",
+        "project_bytecode_sha256",
+        "dependency_classpath_sha256"
+      ],
+      "properties": {
+        "classpath_sha256": { "type": "string" },
+        "project_bytecode_sha256": { "type": "string" },
+        "dependency_classpath_sha256": { "type": "string" }
+      }
+    }
+  }
+}

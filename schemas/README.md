@@ -120,6 +120,36 @@ CoCoMUT does not fetch JDK/dependency source jars or generated Javadoc pages for
 external `@see` / `{@link ...}` targets, because that behavior depends heavily
 on local build artifacts and would make dataset provenance noisier.
 
+## Extraction Manifest
+
+Every extraction also writes `extraction_manifest.json` beside the JSONL file.
+This is run-level metadata, not method-level context. The manifest records:
+
+```text
+schema_version                  Manifest schema version
+generated_at                    Timestamp for the extraction run
+tool / tool_version             CoCoMUT release identity
+request_hash                    Hash of selection and extraction options
+selection                       Same selection provenance stored in JSONL rows
+project.name/path/build_system  Analyzed project identity
+project.git.remote_url          Git remote when the checkout exposes one
+project.git.commit              Git commit when available
+project.git.dirty               Whether the checkout had uncommitted changes
+build.attempted                 Whether CoCoMUT executed Maven/Gradle
+build.skipped                   Whether `--skip-build` was requested
+build.sandboxed                 Currently false; sandboxing is an external policy
+build.policy                    `allow_unsandboxed` or `skip`
+artifacts.*                     Source roots, class outputs, jars, explicit inputs
+hashes.classpath_sha256         Hash over classpath files/directories
+hashes.project_bytecode_sha256  Hash over project class outputs and project JARs
+hashes.dependency_classpath_sha256
+                                Hash over dependency JARs
+```
+
+The manifest is intentionally separate from the JSONL rows. Dataset rows remain
+method-centric, while repository revision, build policy, and artifact hashes are
+auditable at extraction-run granularity.
+
 When a target omits parameters, for example `@see #parse`, CoCoMUT resolves it
 only if there is a single project method named `parse` in the target class. If
 multiple overloads exist, it reports `overload_ambiguous` and emits candidate

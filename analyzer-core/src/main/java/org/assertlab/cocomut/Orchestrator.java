@@ -46,6 +46,7 @@ final class Orchestrator {
     private Set<String> excludePathGlobs = Set.of();
     private Set<SymbolTarget> targetFilters = Set.of();
     private Path outputDirectory;
+    private ProjectMetadata providedProjectMetadata;
 
     // Pipeline state passed between phases
     private ProjectMetadata projectMetadata;
@@ -79,6 +80,11 @@ final class Orchestrator {
         this.excludePathGlobs = request.excludePathGlobs();
         this.targetFilters = request.targets();
         this.outputDirectory = request.outputDirectory();
+    }
+
+    Orchestrator(ContextRequest request, ProjectMetadata metadata) {
+        this(request);
+        this.providedProjectMetadata = Objects.requireNonNull(metadata, "metadata cannot be null");
     }
 
     Orchestrator setCallGraphAlgorithm(CallGraphGenerator.Algorithm algorithm) {
@@ -185,14 +191,23 @@ final class Orchestrator {
 
     private boolean executePhase1() {
         try {
-            ProjectAnalyzer analyzer = new ProjectAnalyzer(projectPath, true, "auto", includeTestBytecode());
-            projectMetadata = analyzer.analyze();
+            if (providedProjectMetadata != null) {
+                projectMetadata = providedProjectMetadata;
+            } else {
+                ProjectAnalyzer analyzer = new ProjectAnalyzer(projectPath, true, "auto", includeTestBytecode());
+                projectMetadata = analyzer.analyze();
+            }
 
             executionReport.put("phase_1_project", projectMetadata.getProjectName());
             executionReport.put("phase_1_build_system", projectMetadata.getBuildSystem());
             executionReport.put("phase_1_java_version", projectMetadata.getJavaVersion());
             executionReport.put("phase_1_compiles", projectMetadata.isCompiles());
             executionReport.put("phase_1_compile_status", projectMetadata.getCompileStatus());
+            executionReport.put("phase_1_build_attempted", projectMetadata.isBuildAttempted());
+            executionReport.put("phase_1_build_skipped", projectMetadata.isBuildSkipped());
+            executionReport.put("phase_1_build_sandboxed", projectMetadata.isBuildSandboxed());
+            executionReport.put("phase_1_build_execution_policy",
+                    projectMetadata.isBuildSkipped() ? "skip" : "allow_unsandboxed");
             projectModel = ProjectModel.from(projectMetadata);
             executionReport.put("phase_1_source_available", projectModel.sourceAvailable());
             executionReport.put("phase_1_source_roots", projectModel.sourceRoots().size());
@@ -204,6 +219,10 @@ final class Orchestrator {
             executionReport.put("phase_1_project_bytecode_locations", projectBytecodeLocations().size());
             executionReport.put("phase_1_dependency_locations", projectMetadata.getDependencyClasspath().size());
             executionReport.put("phase_1_dependency_jars", projectModel.dependencyJars().size());
+            executionReport.put("phase_1_explicit_class_outputs", projectMetadata.getExplicitClassOutputDirs().size());
+            executionReport.put("phase_1_explicit_project_jars", projectMetadata.getExplicitProjectJars().size());
+            executionReport.put("phase_1_explicit_dependency_jars", projectMetadata.getExplicitDependencyJars().size());
+            executionReport.put("phase_1_explicit_classpath_files", projectMetadata.getExplicitClasspathFiles().size());
 
             if (!projectMetadata.isCompiles()) {
                 failureCodes.add(FailureCode.BUILD_FAILED);
@@ -512,6 +531,9 @@ final class Orchestrator {
             executionReport.put("phase_5_jsonl_rows", jsonlRows);
             executionReport.put("phase_5_files_generated", jsonlRows);
             executionReport.put("phase_5_call_edges_serialized", serializedCallEdgeCount(methodContexts));
+            Path manifestPath = ExtractionManifest.write(root, projectMetadata, projectModel,
+                    selectionProvenance(), requestHash(), jsonlPath);
+            executionReport.put("extraction_manifest_file", manifestPath.toString());
             if (jsonlRows != methodContexts.size() || jsonlRows != methodInfos.size()) {
                 failureCodes.add(FailureCode.JSON_GENERATION_FAILED);
                 executionReport.put("phase_5_warning",
