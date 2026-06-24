@@ -102,7 +102,6 @@ See [schemas/README.md](schemas/README.md) for the full schema.
 | Field-test notes | [docs/research/FIELD_TEST_RESULTS.md](docs/research/FIELD_TEST_RESULTS.md) |
 | Documentation-context notes | [docs/research/DOC_CONTEXT_RETRIEVAL_NOTES.md](docs/research/DOC_CONTEXT_RETRIEVAL_NOTES.md) |
 | Call-edge resolution notes | [docs/research/CALL_EDGE_RESOLUTION_REPORT.md](docs/research/CALL_EDGE_RESOLUTION_REPORT.md) |
-| ISSTA evaluation plan | [docs/research/ISSTA_EVALUATION_PLAN.md](docs/research/ISSTA_EVALUATION_PLAN.md) |
 | Agent instructions | [AGENTS.md](AGENTS.md) |
 | Parallel worktrees | [docs/agents/PARALLEL_WORKFLOW.md](docs/agents/PARALLEL_WORKFLOW.md) |
 | Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
