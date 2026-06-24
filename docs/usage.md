@@ -118,6 +118,7 @@ Useful options:
 --scope all|entry-points       Method scope for source scanning: all extracts
                                 every discovered method; entry-points keeps
                                 public/protected API-like methods
+--call-graph rta|cha           Static bytecode call-graph algorithm
 --output-dir DIR               Directory for generated artifacts
 --max-methods N                Limit methods for smoke tests
 --max-source-files N           Limit parsed Java files for low-memory smoke tests
@@ -143,6 +144,9 @@ or it must already contain usable class directories, build outputs, or classpath
 JARs. Maven and Gradle projects are compiled during phase 1 when their build
 files are present; plain Java projects must provide class files or a compatible
 build layout.
+
+`--call-graph rta` is the default. Use `--call-graph cha` when the study design
+needs class-hierarchy analysis instead of rapid type analysis.
 
 For documentation datasets, prefer a precise source-set and scope:
 
@@ -323,6 +327,7 @@ pipeline through `ContextRequest` and `ContextExtractorService`.
 | Project root | `--project PATH` | `.projectRoot(Path.of(...))` |
 | All methods | `--scope all` | `.allMethods()` or `.scope(Scope.ALL)` |
 | Entry points | `--scope entry-points`, `--entry-points` | `.entryPoints()` or `.scope(Scope.ENTRY_POINTS)` |
+| Call-graph algorithm | `--call-graph rta\|cha` | `.callGraphAlgorithm(Algorithm.RTA/CHA)` |
 | Output directory | `--output-dir DIR` | `.outputDirectory(Path.of(...))` |
 | Method cap | `--max-methods N` | `.maxMethods(N)` |
 | Source-file cap | `--max-source-files N` | `.maxSourceFiles(N)` |

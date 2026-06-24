@@ -1,5 +1,6 @@
 package org.assertlab.cocomut.cli;
 
+import org.assertlab.cocomut.CallGraphGenerator;
 import org.assertlab.cocomut.ContextExtractorService;
 import org.assertlab.cocomut.ContextRequest;
 import org.assertlab.cocomut.ExtractionReport;
@@ -31,6 +32,10 @@ public final class CoCoMUTCommand implements Callable<Integer> {
 
     @Option(names = "--entry-points", description = "Shortcut for --scope entry-points.")
     private boolean entryPoints;
+
+    @Option(names = "--call-graph", defaultValue = "rta",
+            description = "Static bytecode call-graph algorithm: rta or cha.")
+    private String callGraph;
 
     @Option(names = "--output-dir", description = "Directory for generated artifacts. Defaults to ./cocomut_output/<project-name>.")
     private Path outputDir;
@@ -85,6 +90,7 @@ public final class CoCoMUTCommand implements Callable<Integer> {
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(project)
                 .scope(selectedScope)
+                .callGraphAlgorithm(toCallGraphAlgorithm(callGraph))
                 .maxMethods(maxMethods)
                 .maxSourceFiles(maxSourceFiles)
                 .sourceSets(toSourceSets(sourceSet))
@@ -108,6 +114,14 @@ public final class CoCoMUTCommand implements Callable<Integer> {
             case "all" -> ContextRequest.Scope.ALL;
             case "entry-points", "entry_points" -> ContextRequest.Scope.ENTRY_POINTS;
             default -> throw new IllegalArgumentException("Unsupported --scope: " + value);
+        };
+    }
+
+    private static CallGraphGenerator.Algorithm toCallGraphAlgorithm(String value) {
+        return switch (normalize(value)) {
+            case "rta" -> CallGraphGenerator.Algorithm.RTA;
+            case "cha" -> CallGraphGenerator.Algorithm.CHA;
+            default -> throw new IllegalArgumentException("Unsupported --call-graph: " + value + " (expected rta or cha)");
         };
     }
 
