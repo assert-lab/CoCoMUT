@@ -2,6 +2,7 @@ package org.assertlab.cocomut;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.assertlab.cocomut.source.SourceBackends;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -79,6 +80,23 @@ public class AnalyzerFacadeTest {
         }
         assertTrue("Filtered private helper should resolve but not embed context",
                 privateHelperResolvedOutsideOutput);
+    }
+
+    @Test
+    public void facadeUsesOneRequestScopedSpoonParse() throws Exception {
+        SourceBackends.resetParseCount();
+
+        Map<String, Object> report = AnalyzerFacade.analyze(ContextRequest.builder()
+                .projectRoot(fixtureRoot)
+                .scope(ContextRequest.Scope.ALL)
+                .sourceSet("main")
+                .build());
+
+        assertEquals("SUCCESS", report.get("status"));
+        assertTrue("Fixture should provide multiple focal methods",
+                ((Number) report.get("phase_2_methods_identified")).intValue() > 1);
+        assertEquals("One extraction request should construct one Spoon model",
+                1, SourceBackends.parseCount());
     }
 
     @Test

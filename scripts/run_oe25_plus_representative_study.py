@@ -11,7 +11,7 @@ deletes or overwrites these protected folders:
 Default extraction policy:
 
 - run the default bytecode-backed extraction once per target;
-- require compilation or pre-existing bytecode/classpath artifacts;
+- require compilation or pre-existing project bytecode in a conventional layout;
 - record build, timeout, and analysis failures as evaluation evidence.
 
 Examples:
@@ -95,10 +95,15 @@ RESULT_FIELDS = [
     "call_graph_edges_generated",
     "jsonl_call_edges_serialized",
     "call_edges",
+    "call_edge_unique_directed_relations",
     "call_edges_with_target_uri",
     "call_edges_with_method_uri",
     "call_edge_source_match_rate",
+    "call_edge_project_target_edges",
+    "call_edge_project_target_edges_with_method_uri",
+    "call_edge_project_target_source_join_rate",
     "call_edge_project_method_edges",
+    "call_edge_project_method_edges_with_method_uri",
     "call_edge_project_method_source_match_rate",
     "call_edge_project_jdk_external_edges",
     "call_edge_project_jdk_external_rate",
@@ -256,8 +261,11 @@ def inspect_jsonl(artifact_dir: Path) -> dict[str, str]:
     inheritdoc_methods = 0
     inheritdoc_with_candidates = 0
     call_edges = 0
+    unique_directed_relations: set[tuple[str, str]] = set()
     call_edges_with_target_uri = 0
     call_edges_with_method_uri = 0
+    call_edge_project_target_edges = 0
+    call_edge_project_target_edges_with_method_uri = 0
     call_edge_project_method_edges = 0
     call_edge_project_method_edges_with_method_uri = 0
     malformed_rows = 0
@@ -281,30 +289,46 @@ def inspect_jsonl(artifact_dir: Path) -> dict[str, str]:
                 mode = metadata.get("source_backend_mode")
                 if mode:
                     source_modes.add(str(mode))
-                for edge in (row.get("callers") or []) + (row.get("callees") or []):
-                    if not isinstance(edge, dict):
-                        continue
-                    call_edges += 1
-                    if edge.get("target_uri"):
-                        call_edges_with_target_uri += 1
-                    if edge.get("method_uri"):
-                        call_edges_with_method_uri += 1
-                    target_kind = str(edge.get("target_kind") or edge.get("kind") or "missing")
-                    if target_kind == "project_method":
-                        call_edge_project_method_edges += 1
+                mut_uri = str(((row.get("MUT") or {}).get("method_uri")) or "")
+                for direction, edges in [("caller", row.get("callers") or []), ("callee", row.get("callees") or [])]:
+                    for edge in edges:
+                        if not isinstance(edge, dict):
+                            continue
+                        call_edges += 1
+                        edge_target = str(edge.get("target_uri") or edge.get("method_uri") or "")
+                        if mut_uri and edge_target:
+                            if direction == "caller":
+                                unique_directed_relations.add((edge_target, mut_uri))
+                            else:
+                                unique_directed_relations.add((mut_uri, edge_target))
+                        if edge.get("target_uri"):
+                            call_edges_with_target_uri += 1
                         if edge.get("method_uri"):
-                            call_edge_project_method_edges_with_method_uri += 1
-                    call_edge_target_kind_counts[target_kind] += 1
-                    call_edge_resolution_counts[str(edge.get("resolution") or "missing")] += 1
-                    if edge.get("unresolved_reason"):
-                        reason = str(edge.get("unresolved_reason"))
-                        call_edge_unresolved_reason_counts[reason] += 1
-                        if reason.startswith("project_class_present_method_absent"):
-                            call_edge_project_method_absent_subreason_counts[reason] += 1
-                    if edge.get("resolution") == "ambiguous":
-                        call_edge_ambiguous_edges += 1
-                    if edge.get("candidate_method_uris"):
-                        call_edge_candidate_edges += 1
+                            call_edges_with_method_uri += 1
+                        target_kind = str(edge.get("target_kind") or edge.get("kind") or "missing")
+                        if target_kind in {
+                            "project_method",
+                            "unresolved_project_method",
+                            "ambiguous_project_method",
+                        }:
+                            call_edge_project_target_edges += 1
+                            if edge.get("method_uri"):
+                                call_edge_project_target_edges_with_method_uri += 1
+                        if target_kind == "project_method":
+                            call_edge_project_method_edges += 1
+                            if edge.get("method_uri"):
+                                call_edge_project_method_edges_with_method_uri += 1
+                        call_edge_target_kind_counts[target_kind] += 1
+                        call_edge_resolution_counts[str(edge.get("resolution") or "missing")] += 1
+                        if edge.get("unresolved_reason"):
+                            reason = str(edge.get("unresolved_reason"))
+                            call_edge_unresolved_reason_counts[reason] += 1
+                            if reason.startswith("project_class_present_method_absent"):
+                                call_edge_project_method_absent_subreason_counts[reason] += 1
+                        if edge.get("resolution") == "ambiguous":
+                            call_edge_ambiguous_edges += 1
+                        if edge.get("candidate_method_uris"):
+                            call_edge_candidate_edges += 1
                 javadoc = row.get("javadoc_metadata") or {}
                 if javadoc.get("see"):
                     see_methods += 1
@@ -331,10 +355,18 @@ def inspect_jsonl(artifact_dir: Path) -> dict[str, str]:
     return {
         "source_backend_modes": ",".join(sorted(source_modes)),
         "call_edges": str(call_edges),
+        "call_edge_unique_directed_relations": str(len(unique_directed_relations)),
         "call_edges_with_target_uri": str(call_edges_with_target_uri),
         "call_edges_with_method_uri": str(call_edges_with_method_uri),
         "call_edge_source_match_rate": percent_string(call_edges_with_method_uri, call_edges),
+        "call_edge_project_target_edges": str(call_edge_project_target_edges),
+        "call_edge_project_target_edges_with_method_uri": str(call_edge_project_target_edges_with_method_uri),
+        "call_edge_project_target_source_join_rate": percent_string(
+            call_edge_project_target_edges_with_method_uri,
+            call_edge_project_target_edges,
+        ),
         "call_edge_project_method_edges": str(call_edge_project_method_edges),
+        "call_edge_project_method_edges_with_method_uri": str(call_edge_project_method_edges_with_method_uri),
         "call_edge_project_method_source_match_rate": percent_string(
             call_edge_project_method_edges_with_method_uri,
             call_edge_project_method_edges,
@@ -476,10 +508,15 @@ def run_target(root: Path, output_dir: Path, target: Target, args: argparse.Name
         "call_graph_edges_generated": report.get("phase_3_call_edges_generated", ""),
         "jsonl_call_edges_serialized": report.get("phase_5_call_edges_serialized", ""),
         "call_edges": stats.get("call_edges", ""),
+        "call_edge_unique_directed_relations": stats.get("call_edge_unique_directed_relations", ""),
         "call_edges_with_target_uri": stats.get("call_edges_with_target_uri", ""),
         "call_edges_with_method_uri": stats.get("call_edges_with_method_uri", ""),
         "call_edge_source_match_rate": stats.get("call_edge_source_match_rate", ""),
+        "call_edge_project_target_edges": stats.get("call_edge_project_target_edges", ""),
+        "call_edge_project_target_edges_with_method_uri": stats.get("call_edge_project_target_edges_with_method_uri", ""),
+        "call_edge_project_target_source_join_rate": stats.get("call_edge_project_target_source_join_rate", ""),
         "call_edge_project_method_edges": stats.get("call_edge_project_method_edges", ""),
+        "call_edge_project_method_edges_with_method_uri": stats.get("call_edge_project_method_edges_with_method_uri", ""),
         "call_edge_project_method_source_match_rate": stats.get("call_edge_project_method_source_match_rate", ""),
         "call_edge_project_jdk_external_edges": stats.get("call_edge_project_jdk_external_edges", ""),
         "call_edge_project_jdk_external_rate": stats.get("call_edge_project_jdk_external_rate", ""),
@@ -524,19 +561,13 @@ def write_summary(output_dir: Path, results_path: Path) -> None:
     total_methods = sum(int(row["methods"] or 0) for row in rows if (row["methods"] or "").isdigit())
     total_rows = sum(int(row["jsonl_rows"] or 0) for row in rows if (row["jsonl_rows"] or "").isdigit())
     total_call_edges = sum(int(row["call_edges"] or 0) for row in rows if (row["call_edges"] or "").isdigit())
+    total_unique_relations = sum(int(row["call_edge_unique_directed_relations"] or 0) for row in rows if (row["call_edge_unique_directed_relations"] or "").isdigit())
     total_target_uri_edges = sum(int(row["call_edges_with_target_uri"] or 0) for row in rows if (row["call_edges_with_target_uri"] or "").isdigit())
     total_method_uri_edges = sum(int(row["call_edges_with_method_uri"] or 0) for row in rows if (row["call_edges_with_method_uri"] or "").isdigit())
+    total_project_target_edges = sum(int(row["call_edge_project_target_edges"] or 0) for row in rows if (row["call_edge_project_target_edges"] or "").isdigit())
+    total_project_target_joined_edges = sum(int(row["call_edge_project_target_edges_with_method_uri"] or 0) for row in rows if (row["call_edge_project_target_edges_with_method_uri"] or "").isdigit())
     total_project_method_edges = sum(int(row["call_edge_project_method_edges"] or 0) for row in rows if (row["call_edge_project_method_edges"] or "").isdigit())
-    total_project_method_joined_edges = 0
-    for row in rows:
-        if not (row["call_edge_project_method_edges"] or "").isdigit():
-            continue
-        rate = row.get("call_edge_project_method_source_match_rate", "")
-        if rate.endswith("%"):
-            try:
-                total_project_method_joined_edges += round(int(row["call_edge_project_method_edges"]) * float(rate[:-1]) / 100.0)
-            except ValueError:
-                pass
+    total_project_method_joined_edges = sum(int(row["call_edge_project_method_edges_with_method_uri"] or 0) for row in rows if (row["call_edge_project_method_edges_with_method_uri"] or "").isdigit())
     total_malformed_rows = sum(int(row["jsonl_malformed_rows"] or 0) for row in rows if (row["jsonl_malformed_rows"] or "").isdigit())
     total_project_jdk_external_edges = sum(int(row["call_edge_project_jdk_external_edges"] or 0) for row in rows if (row["call_edge_project_jdk_external_edges"] or "").isdigit())
     total_ambiguous_edges = sum(int(row["call_edge_ambiguous_edges"] or 0) for row in rows if (row["call_edge_ambiguous_edges"] or "").isdigit())
@@ -581,10 +612,13 @@ def write_summary(output_dir: Path, results_path: Path) -> None:
         f"- call graph availability counts: `{dict(call_graph_counts)}`",
         f"- methods identified: {total_methods}",
         f"- JSONL rows emitted: {total_rows}",
-        f"- call edges observed: {total_call_edges}",
+        f"- serialized call-edge adjacency entries observed: {total_call_edges}",
+        f"- unique directed bytecode/source relations observed: {total_unique_relations}",
         f"- call edges with `target_uri`: {total_target_uri_edges} ({percent_string(total_target_uri_edges, total_call_edges) or '-'})",
         f"- call edges joined to source `method_uri`: {total_method_uri_edges} ({percent_string(total_method_uri_edges, total_call_edges) or '-'})",
-        f"- project-method target edges: {total_project_method_edges}",
+        f"- project-target edges, including unresolved/ambiguous project targets: {total_project_target_edges}",
+        f"- project-target edges joined to source `method_uri`: {total_project_target_joined_edges} ({percent_string(total_project_target_joined_edges, total_project_target_edges) or '-'})",
+        f"- resolved project-method target edges: {total_project_method_edges}",
         f"- project-method target edges joined to source `method_uri`: {total_project_method_joined_edges} ({percent_string(total_project_method_joined_edges, total_project_method_edges) or '-'})",
         f"- call edges classified as project/JDK/external method targets: {total_project_jdk_external_edges} ({percent_string(total_project_jdk_external_edges, total_call_edges) or '-'})",
         f"- ambiguous call edges: {total_ambiguous_edges}",
@@ -597,6 +631,11 @@ def write_summary(output_dir: Path, results_path: Path) -> None:
         "`target_uri` is bytecode identity and should be present for every call edge.",
         "`method_uri` is source identity and is present only when the bytecode target",
         "joins to one unique CoCoMUT/Spoon project method.",
+        "",
+        "The aggregate project-target source-join rate is a taxonomy-derived",
+        "diagnostic over serialized adjacency entries, not oracle-backed source-join",
+        "recall. Final accuracy claims require pinned revisions and manual or",
+        "fixture-based ground truth for uniquely mappable project targets.",
         "",
         "Target-kind counts:",
         "",

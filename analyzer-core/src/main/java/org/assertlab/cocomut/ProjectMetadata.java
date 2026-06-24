@@ -16,6 +16,10 @@ public class ProjectMetadata {
     private final String javaVersion;
     private final Path sourceRoot;
     private final List<Path> classpath;
+    private final List<Path> mainClassOutputs;
+    private final List<Path> testClassOutputs;
+    private final List<Path> projectArtifactJars;
+    private final List<Path> dependencyClasspath;
     private final boolean compiles;
     private final String compileStatus;
 
@@ -25,9 +29,17 @@ public class ProjectMetadata {
         this.buildSystem = Objects.requireNonNull(builder.buildSystem, "buildSystem cannot be null");
         this.javaVersion = Objects.requireNonNull(builder.javaVersion, "javaVersion cannot be null");
         this.sourceRoot = Objects.requireNonNull(builder.sourceRoot, "sourceRoot cannot be null");
-        this.classpath = Collections.unmodifiableList(builder.classpath);
+        this.classpath = Collections.unmodifiableList(safeList(builder.classpath));
+        this.mainClassOutputs = Collections.unmodifiableList(safeList(builder.mainClassOutputs));
+        this.testClassOutputs = Collections.unmodifiableList(safeList(builder.testClassOutputs));
+        this.projectArtifactJars = Collections.unmodifiableList(safeList(builder.projectArtifactJars));
+        this.dependencyClasspath = Collections.unmodifiableList(safeList(builder.dependencyClasspath));
         this.compiles = builder.compiles;
         this.compileStatus = builder.compileStatus;
+    }
+
+    private static List<Path> safeList(List<Path> paths) {
+        return paths != null ? List.copyOf(paths) : List.of();
     }
 
     // Getters
@@ -55,6 +67,22 @@ public class ProjectMetadata {
         return classpath;
     }
 
+    public List<Path> getMainClassOutputs() {
+        return mainClassOutputs;
+    }
+
+    public List<Path> getTestClassOutputs() {
+        return testClassOutputs;
+    }
+
+    public List<Path> getProjectArtifactJars() {
+        return projectArtifactJars;
+    }
+
+    public List<Path> getDependencyClasspath() {
+        return dependencyClasspath;
+    }
+
     public boolean isCompiles() {
         return compiles;
     }
@@ -72,6 +100,10 @@ public class ProjectMetadata {
                 ", javaVersion='" + javaVersion + '\'' +
                 ", sourceRoot=" + sourceRoot +
                 ", classpathSize=" + classpath.size() +
+                ", mainClassOutputs=" + mainClassOutputs.size() +
+                ", testClassOutputs=" + testClassOutputs.size() +
+                ", projectArtifactJars=" + projectArtifactJars.size() +
+                ", dependencyClasspath=" + dependencyClasspath.size() +
                 ", compiles=" + compiles +
                 ", compileStatus='" + compileStatus + '\'' +
                 '}';
@@ -87,6 +119,10 @@ public class ProjectMetadata {
         private String javaVersion;
         private Path sourceRoot;
         private List<Path> classpath = Collections.emptyList();
+        private List<Path> mainClassOutputs = Collections.emptyList();
+        private List<Path> testClassOutputs = Collections.emptyList();
+        private List<Path> projectArtifactJars = Collections.emptyList();
+        private List<Path> dependencyClasspath = Collections.emptyList();
         private boolean compiles = false;
         private String compileStatus = "";
 
@@ -103,6 +139,10 @@ public class ProjectMetadata {
                     .javaVersion(src.javaVersion)
                     .sourceRoot(src.sourceRoot)
                     .classpath(src.classpath)
+                    .mainClassOutputs(src.mainClassOutputs)
+                    .testClassOutputs(src.testClassOutputs)
+                    .projectArtifactJars(src.projectArtifactJars)
+                    .dependencyClasspath(src.dependencyClasspath)
                     .compiles(src.compiles)
                     .compileStatus(src.compileStatus);
         }
@@ -134,6 +174,26 @@ public class ProjectMetadata {
 
         public Builder classpath(List<Path> classpath) {
             this.classpath = classpath;
+            return this;
+        }
+
+        public Builder mainClassOutputs(List<Path> mainClassOutputs) {
+            this.mainClassOutputs = mainClassOutputs;
+            return this;
+        }
+
+        public Builder testClassOutputs(List<Path> testClassOutputs) {
+            this.testClassOutputs = testClassOutputs;
+            return this;
+        }
+
+        public Builder projectArtifactJars(List<Path> projectArtifactJars) {
+            this.projectArtifactJars = projectArtifactJars;
+            return this;
+        }
+
+        public Builder dependencyClasspath(List<Path> dependencyClasspath) {
+            this.dependencyClasspath = dependencyClasspath;
             return this;
         }
 

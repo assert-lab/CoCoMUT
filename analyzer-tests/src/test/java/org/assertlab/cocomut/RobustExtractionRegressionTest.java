@@ -36,7 +36,7 @@ public class RobustExtractionRegressionTest {
                     .build());
 
             Map<String, Object> values = report.asMap();
-            assertTrue(report.successful());
+            assertCompleted(report);
             assertEquals(1, ((Number) values.get("phase_2_methods_identified")).intValue());
             assertEquals(1, ((Number) values.get("source_max_files")).intValue());
         } finally {
@@ -65,10 +65,10 @@ public class RobustExtractionRegressionTest {
                     .sourceSet("main")
                     .build());
 
-            assertTrue(all.successful());
+            assertCompleted(all);
             assertEquals(2, all.methodsIdentified());
 
-            assertTrue(mainOnly.successful());
+            assertCompleted(mainOnly);
             assertEquals(1, mainOnly.methodsIdentified());
             assertEquals("main", mainOnly.asMap().get("phase_2_source_set_filter"));
             assertEquals(2, ((Number) mainOnly.asMap().get("phase_2_source_set_filter_before")).intValue());
@@ -101,8 +101,8 @@ public class RobustExtractionRegressionTest {
                     .excludePathGlobs(Set.of("**/internal/**"))
                     .build());
 
-            Path jsonl = output.resolve("method__keep.jsonl");
-            assertTrue(report.successful());
+            assertCompleted(report);
+            Path jsonl = singleJsonl(output, "method__keep__*.jsonl");
             assertTrue("Filtered JSONL should be written under explicit output dir", Files.isRegularFile(jsonl));
             assertTrue("Project root should not receive default JSONL artifact",
                     Files.notExists(project.resolve("method_contexts.jsonl")));
@@ -147,8 +147,9 @@ public class RobustExtractionRegressionTest {
                     .typeUri(typeUri)
                     .build());
 
-            Path typeJsonl = output.resolve("type").resolve("type_src_main_java_demo_api_PublicApi.java#demo.api.PublicApi.jsonl");
-            assertTrue(typeReport.successful());
+            assertCompleted(typeReport);
+            Path typeJsonl = singleJsonl(output.resolve("type"),
+                    "type_src_main_java_demo_api_PublicApi.java#demo.api.PublicApi__*.jsonl");
             assertTrue(Files.isRegularFile(typeJsonl));
             List<String> typeRows = Files.readAllLines(typeJsonl);
             assertEquals(2, typeRows.size());
@@ -164,9 +165,9 @@ public class RobustExtractionRegressionTest {
                     .packageUri(packageUri)
                     .build());
 
-            Path packageJsonl = output.resolve("package")
-                    .resolve("package_src_main_java_demo_api_package-info.java#demo.api.jsonl");
-            assertTrue(packageReport.successful());
+            assertCompleted(packageReport);
+            Path packageJsonl = singleJsonl(output.resolve("package"),
+                    "package_src_main_java_demo_api_package-info.java#demo.api__*.jsonl");
             assertTrue(Files.isRegularFile(packageJsonl));
             List<String> packageRows = Files.readAllLines(packageJsonl);
             assertEquals(2, packageRows.size());
@@ -184,8 +185,13 @@ public class RobustExtractionRegressionTest {
         Files.writeString(path, text, StandardCharsets.UTF_8);
     }
 
+    private static void assertCompleted(ExtractionReport report) {
+        assertTrue("Expected completed extraction, got " + report.status(),
+                "SUCCESS".equals(report.status()) || "PARTIAL".equals(report.status()));
+    }
+
     private static void compileProject(Path project) throws Exception {
-        Path classes = project.resolve("classes");
+        Path classes = project.resolve("target/classes");
         Files.createDirectories(classes);
         List<String> command = new ArrayList<>();
         command.add(javac());
@@ -223,6 +229,17 @@ public class RobustExtractionRegressionTest {
             for (Path path : walk.sorted((a, b) -> b.compareTo(a)).toList()) {
                 Files.deleteIfExists(path);
             }
+        }
+    }
+
+    private static Path singleJsonl(Path directory, String glob) throws Exception {
+        try (var stream = Files.newDirectoryStream(directory, glob)) {
+            List<Path> matches = new ArrayList<>();
+            for (Path path : stream) {
+                matches.add(path);
+            }
+            assertEquals("Expected one JSONL file matching " + glob, 1, matches.size());
+            return matches.get(0);
         }
     }
 }

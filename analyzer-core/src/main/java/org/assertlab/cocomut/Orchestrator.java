@@ -1,7 +1,9 @@
 package org.assertlab.cocomut;
 
 import org.assertlab.cocomut.source.ProjectModel;
+import org.assertlab.cocomut.source.SourceAnalysisSession;
 import org.assertlab.cocomut.source.SourceBackends;
+import org.assertlab.cocomut.source.SourceModelBackend;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
@@ -47,6 +49,8 @@ final class Orchestrator {
 
     // Pipeline state passed between phases
     private ProjectMetadata projectMetadata;
+    private ProjectModel projectModel;
+    private SourceAnalysisSession sourceSession;
     private List<MethodInfo> analysisUniverseMethods;
     private List<MethodInfo> methodInfos;
     private CallGraphGenerator callGraphGenerator;
@@ -146,15 +150,20 @@ final class Orchestrator {
         try {
             if (!executePhase1()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 1); return false; }
             configureSourceFileLimit();
+            openSourceSession();
             if (!executePhase2()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 2); return false; }
             if (!executePhase3()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 3); return false; }
             if (!executePhase4()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 4); return false; }
             if (!executePhase5()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 5); return false; }
 
-            executionReport.put("status", "SUCCESS");
+            if (failureCodes.isEmpty()) {
+                executionReport.put("status", "SUCCESS");
+                success = true;
+            } else {
+                executionReport.put("status", "PARTIAL");
+            }
             executionReport.put("completed_phases", 5);
-            success = true;
-            return true;
+            return success;
 
         } catch (Exception e) {
             executionReport.put("status", "ERROR");
@@ -169,13 +178,14 @@ final class Orchestrator {
                     ? List.of(FailureCode.NONE.toString())
                     : failureCodes.stream().map(Enum::toString).toList());
             writeExecutionReportIfPossible();
+            closeSourceSession();
             restoreSourceFileLimit();
         }
     }
 
     private boolean executePhase1() {
         try {
-            ProjectAnalyzer analyzer = new ProjectAnalyzer(projectPath, true, "auto");
+            ProjectAnalyzer analyzer = new ProjectAnalyzer(projectPath, true, "auto", includeTestBytecode());
             projectMetadata = analyzer.analyze();
 
             executionReport.put("phase_1_project", projectMetadata.getProjectName());
@@ -183,12 +193,17 @@ final class Orchestrator {
             executionReport.put("phase_1_java_version", projectMetadata.getJavaVersion());
             executionReport.put("phase_1_compiles", projectMetadata.isCompiles());
             executionReport.put("phase_1_compile_status", projectMetadata.getCompileStatus());
-            ProjectModel model = ProjectModel.from(projectMetadata);
-            executionReport.put("phase_1_source_available", model.sourceAvailable());
-            executionReport.put("phase_1_source_roots", model.sourceRoots().size());
-            executionReport.put("phase_1_test_source_roots", model.testSourceRoots().size());
-            executionReport.put("phase_1_class_output_dirs", model.classOutputDirs().size());
-            executionReport.put("phase_1_dependency_jars", model.dependencyJars().size());
+            projectModel = ProjectModel.from(projectMetadata);
+            executionReport.put("phase_1_source_available", projectModel.sourceAvailable());
+            executionReport.put("phase_1_source_roots", projectModel.sourceRoots().size());
+            executionReport.put("phase_1_test_source_roots", projectModel.testSourceRoots().size());
+            executionReport.put("phase_1_class_output_dirs", projectModel.classOutputDirs().size());
+            executionReport.put("phase_1_main_class_outputs", projectMetadata.getMainClassOutputs().size());
+            executionReport.put("phase_1_test_class_outputs", projectMetadata.getTestClassOutputs().size());
+            executionReport.put("phase_1_project_artifact_jars", projectMetadata.getProjectArtifactJars().size());
+            executionReport.put("phase_1_project_bytecode_locations", projectBytecodeLocations().size());
+            executionReport.put("phase_1_dependency_locations", projectMetadata.getDependencyClasspath().size());
+            executionReport.put("phase_1_dependency_jars", projectModel.dependencyJars().size());
 
             if (!projectMetadata.isCompiles()) {
                 failureCodes.add(FailureCode.BUILD_FAILED);
@@ -196,10 +211,10 @@ final class Orchestrator {
                         "CoCoMUT requires compiled project bytecode. Build the project or provide compiled class files.");
                 return false;
             }
-            if (model.classOutputDirs().isEmpty() && model.dependencyJars().isEmpty()) {
+            if (projectBytecodeLocations().isEmpty()) {
                 failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
                 executionReport.put("phase_1_error",
-                        "CoCoMUT requires compiled class directories or JAR bytecode for static bytecode analysis.");
+                        "CoCoMUT requires project class directories or project artifact JARs for static bytecode analysis.");
                 return false;
             }
 
@@ -210,11 +225,26 @@ final class Orchestrator {
         }
     }
 
+    private boolean includeTestBytecode() {
+        return sourceSets == null || sourceSets.isEmpty()
+                || sourceSets.stream().anyMatch(set -> !"main".equals(set));
+    }
+
+    private List<Path> projectBytecodeLocations() {
+        if (projectMetadata == null) {
+            return List.of();
+        }
+        List<Path> locations = new ArrayList<>();
+        locations.addAll(projectMetadata.getMainClassOutputs());
+        locations.addAll(projectMetadata.getProjectArtifactJars());
+        return locations;
+    }
+
     private boolean executePhase2() {
         try {
             MethodIdentifier identifier = new MethodIdentifier(projectMetadata);
 
-            analysisUniverseMethods = identifier.identify();
+            analysisUniverseMethods = identifier.identify(sourceSession);
             methodInfos = filterScope(analysisUniverseMethods);
             methodInfos = filterMethods(methodInfos);
             methodInfos = limitMethods(methodInfos);
@@ -264,6 +294,9 @@ final class Orchestrator {
             long nonEmptyCallGraphResults = callGraphResults.values().stream()
                     .filter(result -> result.getCallerCount() > 0 || result.getCalleeCount() > 0)
                     .count();
+            long matchedToBytecode = callGraphResults.values().stream()
+                    .filter(CallGraphResult::isMethodMatched)
+                    .count();
 
             String cgText = callGraphGenerator.getCallGraphText();
             if (!cgText.isEmpty()) {
@@ -276,7 +309,6 @@ final class Orchestrator {
             boolean artifactExists = !cgText.isEmpty() || !callGraphResults.isEmpty();
             boolean hasUsableEdges = callGraphEdgeCount > 0;
             if (!hasUsableEdges) {
-                failureCodes.add(FailureCode.CALL_GRAPH_EMPTY);
                 executionReport.put("phase_3_warning",
                         "Call graph generated but contained no usable caller/callee edges");
             }
@@ -285,8 +317,14 @@ final class Orchestrator {
             executionReport.put("phase_3_effective_algorithm", effectiveAlgorithm.toString());
             executionReport.put("phase_3_call_graph_artifact_exists", artifactExists);
             executionReport.put("phase_3_call_graphs_generated", callGraphResults.size());
+            executionReport.put("phase_3_focal_methods_matched_to_bytecode", matchedToBytecode);
             executionReport.put("phase_3_non_empty_call_graphs", nonEmptyCallGraphResults);
             executionReport.put("phase_3_call_edges_generated", callGraphEdgeCount);
+            if (callGraphResults.size() != methodInfos.size() || matchedToBytecode != methodInfos.size()) {
+                failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
+                executionReport.put("phase_3_warning",
+                        "One or more selected methods did not receive a matched bytecode call graph result.");
+            }
             return true;
         } catch (Exception e) {
             executionReport.put("phase_3_error", e.getMessage());
@@ -300,7 +338,7 @@ final class Orchestrator {
      */
     private boolean executePhase4() {
         try {
-            ContextExtractor extractor = new ContextExtractor(projectMetadata, callGraphGenerator);
+            ContextExtractor extractor = new ContextExtractor(projectMetadata, callGraphGenerator, sourceSession);
             methodContexts = extractor.extractContextForMethods(methodInfos);
             contextExtractionFailures = missingContextFailures(methodInfos, methodContexts);
 
@@ -310,6 +348,10 @@ final class Orchestrator {
                 Path failuresPath = writeContextExtractionFailures(contextExtractionFailures);
                 executionReport.put("phase_4_context_failures", contextExtractionFailures.size());
                 executionReport.put("phase_4_context_failures_file", failuresPath.toString());
+            }
+            if (methodContexts.size() != methodInfos.size()) {
+                executionReport.put("phase_4_warning",
+                        "One or more selected methods did not produce a method context.");
             }
             return true;
         } catch (Exception e) {
@@ -379,13 +421,66 @@ final class Orchestrator {
         return "main".equals(method.getMethodName())
                 && method.isStatic()
                 && "void".equals(method.getErasedReturnType())
-                && method.getMethodSignature().contains("String[]");
+                && method.getErasedParameterTypes().equals(List.of("java.lang.String[]"));
     }
 
     private void configureSourceFileLimit() {
         if (maxSourceFiles != null && maxSourceFiles > 0) {
             SourceBackends.setMaxSourceFiles(maxSourceFiles);
             executionReport.put("source_max_files", maxSourceFiles);
+        }
+    }
+
+    private void openSourceSession() throws java.io.IOException {
+        SourceModelBackend backend = SourceBackends.spoon();
+        sourceSession = backend.open(projectModel);
+        executionReport.put("source_backend", backend.name());
+        var stats = sourceSession.parseStats();
+        executionReport.put("source_files_discovered", stats.discovered());
+        executionReport.put("source_files_parsed", stats.parsed());
+        executionReport.put("source_files_failed", stats.failed());
+        if (stats.failed() > 0) {
+            failureCodes.add(FailureCode.SOURCE_PARSE_FAILED);
+            Path failures = writeFailedSourceFiles(stats.failedFiles());
+            executionReport.put("failed_source_files_file", failures.toString());
+        }
+    }
+
+    private Path writeFailedSourceFiles(List<Path> failedFiles) throws java.io.IOException {
+        Path output = outputRoot().resolve("failed_source_files.jsonl");
+        Files.createDirectories(output.getParent());
+        try (var writer = Files.newBufferedWriter(output)) {
+            for (Path file : failedFiles) {
+                ObjectNode node = OBJECT_MAPPER.createObjectNode();
+                node.put("failure_code", FailureCode.SOURCE_PARSE_FAILED.toString());
+                node.put("source_file", relativePathString(file));
+                writer.write(OBJECT_MAPPER.writeValueAsString(node));
+                writer.newLine();
+            }
+        }
+        return output;
+    }
+
+    private String relativePathString(Path file) {
+        try {
+            return projectPath.toAbsolutePath().normalize()
+                    .relativize(file.toAbsolutePath().normalize())
+                    .toString().replace('\\', '/');
+        } catch (Exception e) {
+            return file.toString().replace('\\', '/');
+        }
+    }
+
+    private void closeSourceSession() {
+        if (sourceSession == null) {
+            return;
+        }
+        try {
+            sourceSession.close();
+        } catch (Exception e) {
+            executionReport.put("source_session_close_error", e.getMessage());
+        } finally {
+            sourceSession = null;
         }
     }
 
@@ -401,7 +496,8 @@ final class Orchestrator {
             if (methodContexts == null || methodContexts.isEmpty()) {
                 executionReport.put("phase_5_warning", "No method contexts to generate JSON for");
                 executionReport.put("phase_5_files_generated", 0);
-                return true;
+                failureCodes.add(FailureCode.JSON_GENERATION_FAILED);
+                return false;
             }
 
             Path root = outputRoot();
@@ -416,10 +512,10 @@ final class Orchestrator {
             executionReport.put("phase_5_jsonl_rows", jsonlRows);
             executionReport.put("phase_5_files_generated", jsonlRows);
             executionReport.put("phase_5_call_edges_serialized", serializedCallEdgeCount(methodContexts));
-            if (jsonlRows < methodContexts.size()) {
+            if (jsonlRows != methodContexts.size() || jsonlRows != methodInfos.size()) {
                 failureCodes.add(FailureCode.JSON_GENERATION_FAILED);
-                executionReport.put("phase_5_error", "JSONL row count is lower than extracted context count.");
-                return false;
+                executionReport.put("phase_5_warning",
+                        "JSONL row count does not match selected method count.");
             }
             return true;
         } catch (Exception e) {
@@ -473,7 +569,13 @@ final class Orchestrator {
         }
         executionReport.put("phase_2_max_methods", maxMethods);
         executionReport.put("phase_2_methods_before_limit", methods.size());
-        return new ArrayList<>(methods.subList(0, maxMethods));
+        List<MethodInfo> ordered = methods.stream()
+                .sorted(Comparator.comparing((MethodInfo method) -> relativeSourceFile(method).toString())
+                        .thenComparingInt(MethodInfo::getLineNumber)
+                        .thenComparingInt(MethodInfo::getColumnNumber)
+                        .thenComparing(MethodInfo::getMethodUri))
+                .toList();
+        return new ArrayList<>(ordered.subList(0, maxMethods));
     }
 
     private Map<String, String> missingContextFailures(List<MethodInfo> expected,
@@ -700,7 +802,8 @@ final class Orchestrator {
 
     private String outputJsonlFilename() {
         String selection = selectionLabel();
-        return selection.isBlank() ? "method_contexts.jsonl" : sanitize(selection) + ".jsonl";
+        String base = selection.isBlank() ? "method_contexts" : sanitize(selection);
+        return base + "__" + requestHash() + ".jsonl";
     }
 
     private String selectionLabel() {
@@ -719,6 +822,29 @@ final class Orchestrator {
             return "package__" + String.join("__", packageFilters);
         }
         return "";
+    }
+
+    private String requestHash() {
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("scope", scope.toString());
+        request.put("source_sets", sourceSets.stream().sorted().toList());
+        request.put("packages", packageFilters.stream().sorted().toList());
+        request.put("classes", classFilters.stream().sorted().toList());
+        request.put("methods", methodFilters.stream().sorted().toList());
+        request.put("visibilities", visibilityFilters.stream().sorted().toList());
+        request.put("include_paths", includePathGlobs.stream().sorted().toList());
+        request.put("exclude_paths", excludePathGlobs.stream().sorted().toList());
+        request.put("targets", targetFilters.stream().map(SymbolTarget::prefixedUri).sorted().toList());
+        request.put("max_methods", maxMethods);
+        request.put("max_source_files", maxSourceFiles);
+        request.put("call_graph", callGraphAlgorithm.toString());
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(OBJECT_MAPPER.writeValueAsBytes(request));
+            return HexFormat.of().formatHex(digest, 0, 4);
+        } catch (Exception e) {
+            return Integer.toHexString(request.hashCode());
+        }
     }
 
     private static String sanitize(String value) {

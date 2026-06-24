@@ -65,12 +65,13 @@ public class JsonGenerator {
 
     public int generateJsonLinesFile(Map<String, MethodContext> contexts, Path jsonlPath) {
         int rows = 0;
-        Path temp = jsonlPath.resolveSibling(jsonlPath.getFileName() + ".tmp");
+        Path temp = null;
         try {
             if (jsonlPath.getParent() != null) {
                 Files.createDirectories(jsonlPath.getParent());
             }
-            Files.deleteIfExists(temp);
+            Path tempDir = jsonlPath.getParent() != null ? jsonlPath.getParent() : Path.of(".");
+            temp = Files.createTempFile(tempDir, jsonlPath.getFileName().toString(), ".tmp");
             try (var writer = Files.newBufferedWriter(temp, StandardCharsets.UTF_8)) {
                 for (MethodContext context : contexts.values().stream()
                         .sorted(Comparator.comparing(MethodContext::getMethodUri))
@@ -91,10 +92,12 @@ public class JsonGenerator {
             generationResults.put("__jsonl__", "SUCCESS:" + jsonlPath);
         } catch (Exception e) {
             generationResults.put("__jsonl__", "FAILED:" + e.getMessage());
-            try {
-                Files.deleteIfExists(temp);
-            } catch (IOException ignored) {
-                // Preserve the original serialization/write failure.
+            if (temp != null) {
+                try {
+                    Files.deleteIfExists(temp);
+                } catch (IOException ignored) {
+                    // Preserve the original serialization/write failure.
+                }
             }
             if (e instanceof IOException io) {
                 throw new UncheckedIOException(io);

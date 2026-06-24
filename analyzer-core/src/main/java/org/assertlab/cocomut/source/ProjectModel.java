@@ -50,6 +50,17 @@ public final class ProjectModel {
         addIfDirectory(sourceRoots, metadata.getSourceRoot());
         addStandardRoots(projectRoot, sourceRoots, testSourceRoots, classOutputDirs);
 
+        metadata.getMainClassOutputs().forEach(path -> addIfClassDirectory(classOutputDirs, path));
+        metadata.getTestClassOutputs().forEach(path -> addIfClassDirectory(classOutputDirs, path));
+        metadata.getProjectArtifactJars().stream()
+                .filter(path -> path.toString().endsWith(".jar") && Files.isRegularFile(path))
+                .map(ProjectModel::normalize)
+                .forEach(dependencyJars::add);
+        metadata.getDependencyClasspath().stream()
+                .filter(path -> path.toString().endsWith(".jar") && Files.isRegularFile(path))
+                .map(ProjectModel::normalize)
+                .forEach(dependencyJars::add);
+
         for (Path cp : metadata.getClasspath()) {
             if (Files.isDirectory(cp)) {
                 if (containsClassFile(cp)) {
@@ -128,18 +139,20 @@ public final class ProjectModel {
                     sourceRoots.add(normalized);
                 } else if (normalized.endsWith(Path.of("src/test/java"))) {
                     testSourceRoots.add(normalized);
-                } else if (containsClassFile(normalized)
-                        && (normalized.endsWith(Path.of("target/classes"))
-                        || normalized.endsWith(Path.of("target/test-classes"))
-                        || normalized.endsWith(Path.of("build/classes"))
-                        || normalized.endsWith(Path.of("build/classes/java/main"))
-                        || normalized.endsWith(Path.of("build/classes/java/test")))) {
+                } else if (isCandidateClassOutput(normalized) && containsClassFile(normalized)) {
                     classOutputDirs.add(normalized);
                 }
             }
         } catch (IOException ignored) {
             // Best-effort model. Extraction reports provenance instead of failing here.
         }
+    }
+
+    private static boolean isCandidateClassOutput(Path path) {
+        return path.endsWith(Path.of("target/classes"))
+                || path.endsWith(Path.of("target/test-classes"))
+                || path.endsWith(Path.of("build/classes/java/main"))
+                || path.endsWith(Path.of("build/classes/java/test"));
     }
 
     private static void addIfDirectory(Set<Path> dirs, Path path) {

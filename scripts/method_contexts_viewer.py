@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-Dependency-free browser viewer for CoCoMUT method_contexts.jsonl outputs.
+Dependency-free browser viewer for CoCoMUT method_contexts JSONL outputs.
 
 Usage examples:
     # Inspect one CoCoMUT output file.
-    python3 scripts/method_contexts_viewer.py /tmp/cocomut-commons-lang-test/method_contexts.jsonl
+    python3 scripts/method_contexts_viewer.py /tmp/cocomut-commons-lang-test/method_contexts__4987c243.jsonl
 
     # Inspect every *.jsonl file under an output directory.
     python3 scripts/method_contexts_viewer.py /tmp/cocomut-commons-lang-test
 
     # Inspect multiple outputs at once.
     python3 scripts/method_contexts_viewer.py \
-        /tmp/cocomut-commons-lang-test/method_contexts.jsonl \
+        /tmp/cocomut-commons-lang-test/method_contexts__4987c243.jsonl \
         experiments/manual-run/outputs
 
     # Use an explicit port and do not open the browser automatically.
@@ -26,7 +26,7 @@ Usage examples:
     # Stop the server with Ctrl-C.
 
 Common workflow:
-    1. Run CoCoMUT and generate method_contexts.jsonl.
+    1. Run CoCoMUT and generate a method_contexts__<request-hash>.jsonl file.
     2. Start this viewer with the JSONL file or the containing output directory.
     3. Use filters to inspect tags, reference resolution, source set,
        reference scope/domain/target kind, source set, visibility, backend
@@ -1424,7 +1424,7 @@ def make_datasets(files: list[Path]) -> list[Dataset]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Serve a dependency-free web viewer for CoCoMUT method_contexts.jsonl files."
+        description="Serve a dependency-free web viewer for CoCoMUT method context JSONL files."
     )
     parser.add_argument(
         "paths",

@@ -140,15 +140,22 @@ Useful options:
 ```
 
 CoCoMUT performs static bytecode analysis. The analyzed checkout must compile,
-or it must already contain usable class directories, build outputs, or classpath
-JARs. Maven and Gradle projects are compiled during phase 1 when their build
-files are present; plain Java projects must provide class files or a compatible
-build layout.
+or it must already contain usable project class directories, project build
+outputs, or project JARs in a conventional build layout. Maven and Gradle
+projects are compiled during phase 1 when their build files are present; plain
+Java projects must provide project class files under conventional directories
+such as `target/classes`, `build/classes/java/main`, `bin`, `classes`, or
+project JARs under conventional artifact directories such as `target/` or
+`build/libs/`.
 
-For Maven and Gradle projects, phase 1 performs a clean compile of main and test
-classes without running tests. Class output directories and dependency JARs are
-collected after that build from the project build tool, not by scanning
-arbitrary global dependency caches.
+For Maven and Gradle projects, phase 1 performs a clean compile without running
+tests. A main-only request uses main compilation (`mvn compile` or Gradle
+`classes`). Requests that include test source sets use test compilation
+(`mvn test-compile` or Gradle `testClasses`). Project class output directories
+and dependency JARs are collected after that build from the project build tool,
+not by scanning arbitrary global dependency caches. Dependency JARs help resolve
+types and call targets but do not satisfy the project-bytecode requirement by
+themselves.
 
 Compilation runs the subject repository's Maven or Gradle build logic. For
 untrusted public repositories, run CoCoMUT in a disposable container or VM with
@@ -188,10 +195,12 @@ Layered selection is available when you do not want the whole repository:
   --exclude-path '**/generated/**'
 ```
 
-Repository-wide extraction writes `method_contexts.jsonl`. Package, class, or
-method-filtered extraction writes a distinguishable JSONL filename based on the
-selected target, for example `package__org.example.api.jsonl`,
-`class__org.example.PublicApi.jsonl`, or `method__parse.jsonl`.
+Repository-wide extraction writes a request-hashed JSONL file such as
+`method_contexts__4987c243.jsonl`. Package, class, or method-filtered extraction
+writes a distinguishable JSONL filename based on the selected target plus the
+same request hash, for example `package__org.example.api__4987c243.jsonl`,
+`class__org.example.PublicApi__4987c243.jsonl`, or
+`method__parse__4987c243.jsonl`.
 
 CoCoMUT supports both filter-based package/class/method selection and exact URI
 targets through `--target-uri`, `--method-uri`, `--type-uri` / `--class-uri`,
@@ -218,10 +227,11 @@ share the same final directory name:
 
 ```text
 ./cocomut_output/<project-name>-<path-hash>/
-  method_contexts.jsonl
+  method_contexts__<request-hash>.jsonl
   extraction_report.json
   Output_CallGraph_CHA.txt     when CHA is effectively used
   Output_CallGraph_RTA.txt     when RTA is effectively used
+  failed_source_files.jsonl    only when some Java files fail source parsing
   method_context_failures.jsonl only when some methods fail context extraction
 ```
 
@@ -245,7 +255,7 @@ For manual inspection of generated method contexts, CoCoMUT ships a
 dependency-free research viewer:
 
 ```bash
-python3 scripts/method_contexts_viewer.py /path/to/method_contexts.jsonl
+python3 scripts/method_contexts_viewer.py /path/to/method_contexts__<request-hash>.jsonl
 ```
 
 You can also pass an output directory; the viewer recursively finds `*.jsonl`
@@ -371,9 +381,11 @@ Current static-analysis boundaries:
 - source extraction uses Spoon with classpath evidence from the compiled
   project;
 - call context comes from static bytecode analysis over compiled class
-  directories and classpath artifacts, including dependency JARs;
+  directories and project artifacts, with dependency JARs loaded as libraries
+  for target resolution rather than as application entry points;
 - build-tool compilation is part of phase 1 for supported Maven/Gradle projects;
-  otherwise CoCoMUT requires pre-existing class files or bytecode artifacts;
+  otherwise CoCoMUT requires pre-existing project class files or project JARs in
+  a conventional build layout;
 - reflection, proxies, generated code, Lombok, service loaders, and dependency
   injection can reduce precision, but common dynamic-feature hints are labeled
   in JSON;

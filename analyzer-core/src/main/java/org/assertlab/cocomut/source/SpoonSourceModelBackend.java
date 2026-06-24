@@ -51,8 +51,6 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     private static final Pattern THROWS_TAG = Pattern.compile("(?m)^\\s*\\*?\\s*@(throws|exception)\\s+(\\S+)");
     private static final Pattern SINCE_TAG = Pattern.compile("(?m)^\\s*\\*?\\s*@since\\s+(.+)$");
     private static final Pattern SEE_TAG = Pattern.compile("(?m)^\\s*\\*?\\s*@see\\s+(.+)$");
-    private static final Pattern INLINE_LINK = Pattern.compile("\\{@(?:link|linkplain)\\s+([^}\\s]+)");
-    private static final Pattern INLINE_LINK_FULL = Pattern.compile("\\{@(link|linkplain)\\s+([^}\\s]+)(?:\\s+([^}]+))?}");
     private static final Pattern ANCHOR_HREF = Pattern.compile("<a\\s+[^>]*href\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>(.*?)</a>",
             Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern BLOCK_TAG = Pattern.compile(
@@ -83,18 +81,11 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     }
 
     @Override
-    public List<SourceMethod> findMethods(ProjectModel project) throws IOException {
-        return parsed(project).methods();
+    public SourceAnalysisSession open(ProjectModel project) throws IOException {
+        return new SpoonSession(parse(project));
     }
 
-    @Override
-    public Optional<SourceMethod> findMethod(ProjectModel project, String methodUri) throws IOException {
-        return Optional.ofNullable(parsed(project).methodsByUri().get(methodUri));
-    }
-
-    @Override
-    public Optional<SourceContext> extractContext(ProjectModel project, String methodUri) throws IOException {
-        ParsedProject parsed = parsed(project);
+    private Optional<SourceContext> extractContext(ParsedProject parsed, String methodUri) {
         CtExecutable<?> executable = parsed.executablesByUri().get(methodUri);
         SourceMethod method = parsed.methodsByUri().get(methodUri);
         if (executable == null || method == null) {
@@ -127,12 +118,42 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 parsed.mode()));
     }
 
-    private ParsedProject parsed(ProjectModel project) throws IOException {
-        return parse(project);
+    private ParsedProject parse(ProjectModel project) throws IOException {
+        SourceBackends.recordParse();
+        return buildParsedProject(project, parseModels(project));
     }
 
-    private ParsedProject parse(ProjectModel project) throws IOException {
-        return buildParsedProject(project, parseModels(project));
+    private final class SpoonSession implements SourceAnalysisSession {
+        private final ParsedProject parsed;
+
+        private SpoonSession(ParsedProject parsed) {
+            this.parsed = parsed;
+        }
+
+        @Override
+        public List<SourceMethod> methods() {
+            return parsed.methods();
+        }
+
+        @Override
+        public Optional<SourceMethod> findMethod(String methodUri) {
+            return Optional.ofNullable(parsed.methodsByUri().get(methodUri));
+        }
+
+        @Override
+        public Optional<SourceContext> extractContext(String methodUri) {
+            return SpoonSourceModelBackend.this.extractContext(parsed, methodUri);
+        }
+
+        @Override
+        public SourceParseStats parseStats() {
+            return parsed.parseStats();
+        }
+
+        @Override
+        public void close() throws IOException {
+            parsed.close();
+        }
     }
 
     private ParsedProject buildParsedProject(ProjectModel project, ParsedModels parsedModels) {
@@ -188,76 +209,72 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return new ParsedProject(project.projectPath(), methods, methodsByUri, executablesByUri,
                 typesByQualifiedName, methodsByClassName, fieldsByClassName,
                 importsByFile, new java.util.concurrent.ConcurrentHashMap<>(),
-                projectClassLoader(project), parsedModels.mode());
+                projectClassLoader(project), parsedModels.mode(), parsedModels.stats());
     }
 
     private ParsedModels parseModels(ProjectModel project) throws IOException {
         Integer maxSourceFiles = maxSourceFiles();
         if (maxSourceFiles != null) {
-            return new ParsedModels(parseJavaFilesWithLimit(allSourceRoots(project),
-                    complianceLevel(project.javaVersion()), maxSourceFiles, project), "classpath_limited");
+            return parseJavaFilesWithLimit(allSourceRoots(project),
+                    complianceLevel(project.javaVersion()), maxSourceFiles, project);
         }
 
-        return new ParsedModels(parseCtModels(project), "classpath");
+        return parseCtModels(project);
     }
 
-    private List<CtModel> parseCtModels(ProjectModel project) throws IOException {
+    private ParsedModels parseCtModels(ProjectModel project) throws IOException {
         List<Path> roots = allSourceRoots(project);
+        List<Path> javaFiles = javaFiles(roots, 0);
         if (roots.isEmpty()) {
-            return List.of(buildModel(List.of(), complianceLevel(project.javaVersion()), project));
+            return new ParsedModels(List.of(buildModel(List.of(), complianceLevel(project.javaVersion()), project)),
+                    "classpath", SourceParseStats.empty());
         }
 
         try {
-            return List.of(buildModel(roots, complianceLevel(project.javaVersion()), project));
+            return new ParsedModels(List.of(buildModel(roots, complianceLevel(project.javaVersion()), project)),
+                    "classpath", new SourceParseStats(javaFiles.size(), javaFiles.size(), List.of()));
         } catch (RuntimeException combinedFailure) {
             List<CtModel> models = new ArrayList<>();
+            List<Path> failedFiles = new ArrayList<>();
             for (Path root : roots) {
                 try {
                     models.add(buildModel(List.of(root), complianceLevel(project.javaVersion()), project));
                 } catch (RuntimeException rootFailure) {
-                    models.addAll(parseJavaFilesIndividually(root, complianceLevel(project.javaVersion()), project));
+                    ParsedModels parsedRoot = parseJavaFilesIndividually(root, complianceLevel(project.javaVersion()), project);
+                    models.addAll(parsedRoot.models());
+                    failedFiles.addAll(parsedRoot.stats().failedFiles());
                 }
             }
             if (models.isEmpty()) {
                 throw combinedFailure;
             }
-            return models;
+            return new ParsedModels(models, "classpath",
+                    new SourceParseStats(javaFiles.size(), javaFiles.size() - failedFiles.size(), failedFiles));
         }
     }
 
-    private List<CtModel> parseJavaFilesWithLimit(List<Path> roots, int complianceLevel, int maxSourceFiles,
+    private ParsedModels parseJavaFilesWithLimit(List<Path> roots, int complianceLevel, int maxSourceFiles,
                                                   ProjectModel project)
             throws IOException {
         if (roots.isEmpty()) {
-            return List.of(buildModel(List.of(), complianceLevel, project));
+            return new ParsedModels(List.of(buildModel(List.of(), complianceLevel, project)),
+                    "classpath_limited", SourceParseStats.empty());
         }
         List<CtModel> models = new ArrayList<>();
-        int parsedFiles = 0;
-        for (Path root : roots) {
-            if (parsedFiles >= maxSourceFiles) {
-                break;
-            }
-            if (!Files.exists(root)) {
-                continue;
-            }
-            try (var walk = Files.walk(root)) {
-                for (Path file : walk
-                        .filter(path -> path.toString().endsWith(".java"))
-                        .sorted()
-                        .toList()) {
-                    if (parsedFiles >= maxSourceFiles) {
-                        break;
-                    }
-                    parsedFiles++;
-                    try {
-                        models.add(buildModel(List.of(file), complianceLevel, project));
-                    } catch (RuntimeException ignored) {
-                        // A few invalid/newer-syntax files should not drop a capped smoke run.
-                    }
-                }
+        List<Path> files = javaFiles(roots, maxSourceFiles);
+        List<Path> failedFiles = new ArrayList<>();
+        for (Path file : files) {
+            try {
+                models.add(buildModel(List.of(file), complianceLevel, project));
+            } catch (RuntimeException ignored) {
+                failedFiles.add(file);
             }
         }
-        return models.isEmpty() ? List.of(buildModel(List.of(), complianceLevel, project)) : models;
+        if (models.isEmpty()) {
+            models = List.of(buildModel(List.of(), complianceLevel, project));
+        }
+        return new ParsedModels(models, "classpath_limited",
+                new SourceParseStats(files.size(), files.size() - failedFiles.size(), failedFiles));
     }
 
     private static List<Path> allSourceRoots(ProjectModel project) {
@@ -267,18 +284,39 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return roots.stream().distinct().toList();
     }
 
-    private List<CtModel> parseJavaFilesIndividually(Path root, int complianceLevel, ProjectModel project) throws IOException {
+    private ParsedModels parseJavaFilesIndividually(Path root, int complianceLevel, ProjectModel project) throws IOException {
         List<CtModel> models = new ArrayList<>();
-        try (var walk = Files.walk(root)) {
-            for (Path file : walk.filter(path -> path.toString().endsWith(".java")).toList()) {
-                try {
-                    models.add(buildModel(List.of(file), complianceLevel, project));
-                } catch (RuntimeException ignored) {
-                    // A few invalid/newer-syntax files should not drop an entire repository.
+        List<Path> files = javaFiles(List.of(root), 0);
+        List<Path> failedFiles = new ArrayList<>();
+        for (Path file : files) {
+            try {
+                models.add(buildModel(List.of(file), complianceLevel, project));
+            } catch (RuntimeException ignored) {
+                failedFiles.add(file);
+            }
+        }
+        return new ParsedModels(models, "classpath", new SourceParseStats(files.size(),
+                files.size() - failedFiles.size(), failedFiles));
+    }
+
+    private static List<Path> javaFiles(List<Path> roots, int limit) throws IOException {
+        List<Path> files = new ArrayList<>();
+        for (Path root : roots) {
+            if (!Files.exists(root)) {
+                continue;
+            }
+            try (var walk = Files.walk(root)) {
+                for (Path file : walk.filter(path -> path.toString().endsWith(".java"))
+                        .sorted()
+                        .toList()) {
+                    if (limit > 0 && files.size() >= limit) {
+                        return files;
+                    }
+                    files.add(file);
                 }
             }
         }
-        return models;
+        return files;
     }
 
     private CtModel buildModel(List<Path> inputs, int complianceLevel, ProjectModel project) {
@@ -690,7 +728,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         metrics.put("uses_inheritdoc", normalized.contains("{@inheritDoc}") || normalized.contains("@inheritDoc"));
         metrics.put("has_since_tag", !matches(SINCE_TAG, normalized, 1).isEmpty());
         metrics.put("has_see_tag", !matches(SEE_TAG, normalized, 1).isEmpty());
-        metrics.put("inline_link_count", matches(INLINE_LINK, normalized, 1).size());
+        metrics.put("inline_link_count", inlineLinkTargets(normalized).size());
         return metrics;
     }
 
@@ -701,7 +739,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         String normalized = javadoc == null ? "" : javadoc.strip();
         metadata.put("since", matches(SINCE_TAG, normalized, 1));
         metadata.put("see", matches(SEE_TAG, normalized, 1));
-        metadata.put("inline_links", matches(INLINE_LINK, normalized, 1));
+        metadata.put("inline_links", inlineLinkTargets(normalized));
         metadata.put("javadoc_references", javadocReferences(parsed, owner, normalized));
         metadata.put("file_references", fileReferences(parsed.projectRoot(), method, normalized));
         metadata.put("structured_tags", structuredTags(normalized));
@@ -889,14 +927,55 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             references.add(resolveJavadocReference(parsed, owner, "see", raw, targetAndLabel[0], targetAndLabel[1]));
         }
 
-        Matcher inlineMatcher = INLINE_LINK_FULL.matcher(javadoc);
-        while (inlineMatcher.find()) {
-            String tag = inlineMatcher.group(1);
-            String target = inlineMatcher.group(2).trim();
-            String label = inlineMatcher.group(3) != null ? inlineMatcher.group(3).trim() : "";
-            references.add(resolveJavadocReference(parsed, owner, tag, inlineMatcher.group(0), target, label));
+        for (InlineJavadocReference inline : inlineLinkReferences(javadoc)) {
+            references.add(resolveJavadocReference(parsed, owner, inline.tag(), inline.raw(),
+                    inline.target(), inline.label()));
         }
 
+        return references;
+    }
+
+    private static List<String> inlineLinkTargets(String javadoc) {
+        return inlineLinkReferences(javadoc).stream()
+                .map(InlineJavadocReference::target)
+                .toList();
+    }
+
+    private static List<InlineJavadocReference> inlineLinkReferences(String javadoc) {
+        if (javadoc == null || javadoc.isBlank()) {
+            return List.of();
+        }
+        List<InlineJavadocReference> references = new ArrayList<>();
+        int index = 0;
+        while (index < javadoc.length()) {
+            int start = javadoc.indexOf("{@", index);
+            if (start < 0 || start + 3 >= javadoc.length()) {
+                break;
+            }
+            int tagStart = start + 2;
+            int tagEnd = tagStart;
+            while (tagEnd < javadoc.length() && Character.isJavaIdentifierPart(javadoc.charAt(tagEnd))) {
+                tagEnd++;
+            }
+            String tag = javadoc.substring(tagStart, tagEnd);
+            if (!"link".equals(tag) && !"linkplain".equals(tag)) {
+                index = tagEnd;
+                continue;
+            }
+            if (tagEnd >= javadoc.length() || !Character.isWhitespace(javadoc.charAt(tagEnd))) {
+                index = tagEnd;
+                continue;
+            }
+            int end = javadoc.indexOf('}', tagEnd);
+            if (end < 0) {
+                break;
+            }
+            String raw = javadoc.substring(start, end + 1);
+            String body = javadoc.substring(tagEnd, end).trim();
+            String[] targetAndLabel = splitReferenceTargetAndLabel(body);
+            references.add(new InlineJavadocReference(tag, raw, targetAndLabel[0], targetAndLabel[1]));
+            index = end + 1;
+        }
         return references;
     }
 
@@ -919,13 +998,18 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
         int firstWhitespace = -1;
         int parenDepth = 0;
+        int angleDepth = 0;
         for (int i = 0; i < trimmed.length(); i++) {
             char c = trimmed.charAt(i);
             if (c == '(') {
                 parenDepth++;
             } else if (c == ')') {
                 parenDepth = Math.max(0, parenDepth - 1);
-            } else if (Character.isWhitespace(c) && parenDepth == 0) {
+            } else if (c == '<') {
+                angleDepth++;
+            } else if (c == '>') {
+                angleDepth = Math.max(0, angleDepth - 1);
+            } else if (Character.isWhitespace(c) && parenDepth == 0 && angleDepth == 0) {
                 firstWhitespace = i;
                 break;
             }
@@ -1202,9 +1286,9 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
 
         ExternalMember member = classifyExternalMember(parsed, external.qualifiedName(), memberReference);
         ref.put("kind", member.kind());
-        ref.put("resolution", "external_symbol");
         ref.put("external_member_kind", member.memberKind());
         ref.put("external_member_resolution", member.confidence());
+        ref.put("resolution", "unknown".equals(member.memberKind()) ? "unresolved" : "external_symbol");
     }
 
     private static ExternalType resolveExternalType(ParsedProject parsed, CtType<?> owner, String rawType) {
@@ -1283,15 +1367,13 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             }
             for (java.lang.reflect.Method method : clazz.getMethods()) {
                 if (method.getName().equals(memberReference.name())
-                        && (!memberReference.hasParameters()
-                        || method.getParameterCount() == memberReference.parameterTypes().size())) {
+                        && externalParametersMatch(method.getParameterTypes(), memberReference)) {
                     return new ExternalMember("member_reference", "method", "reflection_public_method");
                 }
             }
             for (java.lang.reflect.Method method : clazz.getDeclaredMethods()) {
                 if (method.getName().equals(memberReference.name())
-                        && (!memberReference.hasParameters()
-                        || method.getParameterCount() == memberReference.parameterTypes().size())) {
+                        && externalParametersMatch(method.getParameterTypes(), memberReference)) {
                     return new ExternalMember("member_reference", "method", "reflection_declared_method");
                 }
             }
@@ -1300,6 +1382,32 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             // extraction remains valid when symbols cannot be loaded.
         }
         return new ExternalMember("member_reference", "unknown", "symbol_only");
+    }
+
+    private static boolean externalParametersMatch(Class<?>[] parameterTypes, MemberReference memberReference) {
+        if (!memberReference.hasParameters()) {
+            return true;
+        }
+        if (parameterTypes.length != memberReference.parameterTypes().size()) {
+            return false;
+        }
+        for (int i = 0; i < parameterTypes.length; i++) {
+            String reference = normalizeTypeForMatch(memberReference.parameterTypes().get(i));
+            String binary = normalizeTypeForMatch(reflectionTypeName(parameterTypes[i]));
+            String simple = normalizeTypeForMatch(simpleTypeName(reflectionTypeName(parameterTypes[i])));
+            if (!reference.equals(binary) && !reference.equals(simple)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static String reflectionTypeName(Class<?> type) {
+        if (type.isArray()) {
+            return reflectionTypeName(type.getComponentType()) + "[]";
+        }
+        String name = type.getCanonicalName();
+        return name == null ? type.getName().replace('$', '.') : name;
     }
 
     private static Class<?> classForName(ParsedProject parsed, String className) throws ClassNotFoundException {
@@ -1963,7 +2071,8 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             Map<Path, ImportContext> importsByFile,
             Map<String, ClassContext> classContextsByTypeAndMethod,
             ClassLoader projectClassLoader,
-            String mode) {
+            String mode,
+            SourceParseStats parseStats) {
         private ParsedProject {
             projectRoot = projectRoot != null ? projectRoot.toAbsolutePath().normalize() : Path.of(".").toAbsolutePath().normalize();
             methods = List.copyOf(methods);
@@ -1980,6 +2089,13 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                             entry -> List.copyOf(entry.getValue())));
             importsByFile = importsByFile != null ? Map.copyOf(importsByFile) : Map.of();
             mode = mode != null ? mode : "";
+            parseStats = parseStats != null ? parseStats : SourceParseStats.empty();
+        }
+
+        private void close() throws IOException {
+            if (projectClassLoader instanceof URLClassLoader loader) {
+                loader.close();
+            }
         }
     }
 
@@ -2058,10 +2174,20 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
     }
 
-    private record ParsedModels(List<CtModel> models, String mode) {
+    private record InlineJavadocReference(String tag, String raw, String target, String label) {
+        private InlineJavadocReference {
+            tag = tag != null ? tag : "";
+            raw = raw != null ? raw : "";
+            target = target != null ? target : "";
+            label = label != null ? label : "";
+        }
+    }
+
+    private record ParsedModels(List<CtModel> models, String mode, SourceParseStats stats) {
         private ParsedModels {
             models = models != null ? List.copyOf(models) : List.of();
             mode = mode != null ? mode : "";
+            stats = stats != null ? stats : SourceParseStats.empty();
         }
     }
 

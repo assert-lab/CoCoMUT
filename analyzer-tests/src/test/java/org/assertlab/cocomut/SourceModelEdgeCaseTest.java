@@ -293,11 +293,15 @@ public class SourceModelEdgeCaseTest {
                     package demo;
 
                     import java.util.Arrays;
+                    import java.util.Map;
                     import java.util.regex.*;
 
                     /** Child docs. */
                     public class Child extends Base {
                         /** Exercises Javadoc reference resolution.
+                         * Inline reference: {@link #sameName(String) same-name link}.
+                         * Spaced inline reference: {@linkplain Map#put(Object, Object) map put}.
+                         * Invalid external member: {@link java.util.List#add(Integer) invalid add}.
                          * @see #sameName
                          * @see #sameName(String)
                          * @see #TOKEN
@@ -405,6 +409,23 @@ public class SourceModelEdgeCaseTest {
             assertEquals("add(Object)", external.get("external_member"));
             assertEquals("method", external.get("external_member_kind"));
 
+            Map<String, Object> invalidExternal = referenceByTarget(refs, "java.util.List#add(Integer)");
+            assertEquals("unresolved", invalidExternal.get("resolution"));
+            assertEquals("unknown", invalidExternal.get("external_member_kind"));
+            assertEquals("symbol_only", invalidExternal.get("external_member_resolution"));
+
+            Map<String, Object> inlineExact = referenceByTargetAndTag(refs, "#sameName(String)", "link");
+            assertEquals("link", inlineExact.get("tag"));
+            assertEquals("same-name link", inlineExact.get("label"));
+            assertEquals("resolved_method", inlineExact.get("resolution"));
+
+            Map<String, Object> spacedInline = referenceByTarget(refs, "Map#put(Object, Object)");
+            assertEquals("linkplain", spacedInline.get("tag"));
+            assertEquals("map put", spacedInline.get("label"));
+            assertEquals("external_symbol", spacedInline.get("resolution"));
+            assertEquals("java.util.Map", spacedInline.get("external_class"));
+            assertEquals("method", spacedInline.get("external_member_kind"));
+
             Map<String, Object> modulePrefixed = referenceByTarget(refs, "java.base/java.util.List#remove(Object)");
             assertEquals("external_symbol", modulePrefixed.get("resolution"));
             assertEquals("java.util.List", modulePrefixed.get("external_class"));
@@ -509,6 +530,16 @@ public class SourceModelEdgeCaseTest {
     private static Map<String, Object> referenceByTarget(List<Map<String, Object>> references, String target) {
         return references.stream()
                 .filter(reference -> target.equals(reference.get("target")))
+                .findFirst()
+                .orElseThrow();
+    }
+
+    private static Map<String, Object> referenceByTargetAndTag(List<Map<String, Object>> references,
+                                                               String target,
+                                                               String tag) {
+        return references.stream()
+                .filter(reference -> target.equals(reference.get("target")))
+                .filter(reference -> tag.equals(reference.get("tag")))
                 .findFirst()
                 .orElseThrow();
     }

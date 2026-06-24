@@ -38,9 +38,9 @@ def iter_repo_jsonl(output_dir: Path):
     if not checkouts.is_dir():
         return
     for checkout in sorted(checkouts.iterdir()):
-        jsonl = checkout / "method_contexts.jsonl"
-        if jsonl.is_file():
-            yield checkout.name.replace("__", "/", 1), jsonl
+        for jsonl in sorted(checkout.glob("method_contexts*.jsonl")):
+            if jsonl.is_file() and jsonl.name != "method_context_failures.jsonl":
+                yield checkout.name.replace("__", "/", 1), jsonl
 
 
 def extract_cases(output_dir: Path, excerpt_chars: int):
@@ -82,7 +82,7 @@ def extract_cases(output_dir: Path, excerpt_chars: int):
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", type=Path, required=True,
-                        help="Field-test output directory containing checkouts/*/method_contexts.jsonl.")
+                        help="Field-test output directory containing checkouts/*/method_contexts*.jsonl.")
     parser.add_argument("--csv", type=Path, default=None,
                         help="Output CSV path. Defaults to <output-dir>/javadoc_tag_cases.csv.")
     parser.add_argument("--excerpt-chars", type=int, default=800)

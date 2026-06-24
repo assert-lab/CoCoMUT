@@ -29,8 +29,9 @@ static, reproducible, bytecode-backed, and explicit about failure modes.
 
 ## Why CoCoMUT?
 
-- **Compiled-project extraction** over Java source plus compiled class files,
-  build outputs, or supplied bytecode artifacts.
+- **Compiled-project extraction** over Java source plus project class files,
+  conventional build output directories, or project JARs discovered in the
+  checkout.
 - **Stable method identity** using path, qualified type, erased parameter types,
   and erased return type.
 - **Javadoc-aware context** for `@see`, `{@link ...}`, `{@inheritDoc}`,
@@ -57,14 +58,14 @@ Run CoCoMUT on a Java project:
   --source-set main
 ```
 
-The project must compile, or the checkout must already contain usable class
-files, build output directories, or JAR/classpath artifacts for static bytecode
-analysis.
+The project must compile, or the checkout must already contain usable project
+class files, conventional build output directories, or project JARs for static
+bytecode analysis.
 
 The default output goes to:
 
 ```text
-./cocomut_output/<project-name>-<path-hash>/method_contexts.jsonl
+./cocomut_output/<project-name>-<path-hash>/method_contexts__<request-hash>.jsonl
 ```
 
 Open the JSONL viewer:
@@ -137,5 +138,7 @@ is available.
 ## Status
 
 CoCoMUT currently targets Java 17+ and performs static analysis only. It does not
-execute the analyzed program. The analyzed project must compile, or provide
-usable bytecode/classpath artifacts, before extraction can succeed.
+execute application code or tests, but supported Maven and Gradle builds execute
+the subject repository's build scripts during phase 1. The analyzed project must
+compile, or provide usable project bytecode in a conventional build layout,
+before extraction can succeed.
