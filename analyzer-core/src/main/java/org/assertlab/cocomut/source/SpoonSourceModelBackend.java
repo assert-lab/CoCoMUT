@@ -42,7 +42,7 @@ import java.util.regex.Pattern;
  * Spoon-backed source model.
  *
  * <p>The product pipeline uses classpath-aware extraction against compiled
- * projects and does not fall back to source-only parsing.
+ * projects and does not use legacy fallback parsing.
  */
 final class SpoonSourceModelBackend implements SourceModelBackend {
     private static final Pattern PARAM_TAG = Pattern.compile("(?m)^\\s*\\*?\\s*@param\\s+(\\S+)");

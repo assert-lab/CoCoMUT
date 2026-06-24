@@ -4,7 +4,7 @@ This note documents the bytecode-to-source call-edge matching work introduced
 for schema `0.4.0`.
 
 CoCoMUT uses Spoon to build source-backed method contexts and SootUp to build
-optional bytecode call graphs. Those two worlds do not use the same identity:
+static bytecode call graphs. Those two worlds do not use the same identity:
 
 - Spoon identifies source declarations with CoCoMUT method URIs.
 - SootUp reports bytecode signatures such as

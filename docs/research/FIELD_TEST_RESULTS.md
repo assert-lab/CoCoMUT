@@ -2,7 +2,7 @@
 
 > Historical note: the measurements below were produced before CoCoMUT made
 > compiled bytecode a hard precondition for extraction. Mentions of
-> legacy source-only or disabled call-graph modes describe that older experiment
+> legacy fallback or disabled call-graph modes describe that older experiment
 > configuration, not the current product interface.
 
 Field tests use repositories selected from `../cleaned_mined_repos.csv`.
@@ -44,7 +44,7 @@ scripts/field_test_public_repos.py \
 
 This historical run used the old optional bytecode policy. It attempted
 Maven/Gradle compilation when useful, retained classpath-aware source extraction
-when classpath evidence was usable, and used legacy source-only fallback modes
+when classpath evidence was usable, and used legacy fallback modes
 when build/classpath resolution was incomplete. Current CoCoMUT runs require
 compiled classes, dependency bytecode, or supplied JAR/classpath artifacts.
 
@@ -73,7 +73,9 @@ The expanded sweep selected Java repositories that are:
 - normal libraries, tools, frameworks, clients, servers, plugins, SDKs, parsers, apps, or infrastructure projects;
 - within the configured repository-size cap.
 
-Android repositories are included. The test intentionally validates source-only extraction on mixed Java, Android, Gradle, Maven, and plain source layouts without requiring every repository to compile.
+Android repositories are included. This historical sweep intentionally measured
+mixed Java, Android, Gradle, Maven, and plain-source layouts under the old
+optional-bytecode policy. It is not the current CoCoMUT extraction contract.
 
 ## Auto Sweep Summary
 
@@ -123,18 +125,19 @@ Historical source backend mode distribution over generated method contexts:
 
 | Source backend mode | Method contexts |
 | --- | ---: |
-| legacy source-only fallback | 1186464 |
-| legacy bounded source-only | 595000 |
-| legacy source-only | 90063 |
+| legacy fallback | 1186464 |
+| legacy bounded fallback | 595000 |
+| legacy baseline fallback | 90063 |
 | `classpath` | 42454 |
 
 Historical interpretation:
 
 - `classpath` means Spoon classpath-aware extraction was retained.
-- legacy source-only fallback means the old auto mode tried or considered stronger
-  resolution but used source-only parsing as the coverage-preserving baseline.
-- legacy bounded source-only means bounded source-file or method caps were active.
-- legacy source-only means the old normal source-only extraction path.
+- legacy fallback means the old auto mode tried or considered stronger
+  resolution but used the former fallback parser as the coverage-preserving
+  baseline.
+- legacy bounded fallback means bounded source-file or method caps were active.
+- legacy baseline fallback means the old normal fallback extraction path.
 
 ## Bounded Retry Cases
 
@@ -145,7 +148,7 @@ Retry distribution:
 | `none` | 435 | Completed without field-test caps. |
 | `max_source_files=1500` | 85 | Completed after limiting parsed source files. |
 | `max_source_files=1500;max_methods=5000;source_set=main,unknown` | 17 | Completed as a bounded 5,000-method run after allowing unknown source roots for nonstandard layouts. |
-| `max_source_files=1500;legacy_source_only_smoke;smoke_max_source_files=100;smoke_max_methods=250` | 4 | Completed as last-resort source-only smoke runs for very large/slow repositories. |
+| `max_source_files=1500;legacy_fallback_smoke;smoke_max_source_files=100;smoke_max_methods=250` | 4 | Completed as last-resort legacy smoke runs for very large/slow repositories. |
 
 Large successful examples include:
 
@@ -239,11 +242,11 @@ High-value manual inspection targets:
 - `jfree/jfreechart`, `ReactiveX/RxJava`, `spring-projects/spring-framework`: dense `@see` usage.
 - `ff4j/ff4j`, `apache/jmeter`, `jtablesaw/tablesaw`: many resolvable `{@inheritDoc}` candidates.
 - `aeron-io/aeron`, `aeron-io/agrona`, `classgraph/classgraph`: clean auto-mode library/tool cases.
-- `kubernetes-client/java`, `lakesoul-io/LakeSoul`, `apache/incubator-seata`, `eclipse-milo/milo`: last-resort source-only smoke cases.
+- `kubernetes-client/java`, `lakesoul-io/LakeSoul`, `apache/incubator-seata`, `eclipse-milo/milo`: last-resort legacy smoke cases.
 
-## Historical Source-Only Sweep
+## Historical Legacy Sweep
 
-The previous source-only JSONL sweep used:
+The previous legacy JSONL sweep used:
 
 ```bash
 scripts/field_test_public_repos.py \
@@ -256,7 +259,9 @@ scripts/field_test_public_repos.py \
   --output-dir target/field-tests/expanded-public-repos
 ```
 
-It completed 541/541 repositories in source-only mode with 2686556 generated JSONL rows. The current auto sweep is stricter and more informative because it also records opportunistic build/classpath and call-graph behavior.
+It completed 541/541 repositories under the old fallback-capable policy with
+2686556 generated JSONL rows. This is retained only as historical evidence; the
+current CoCoMUT pipeline requires bytecode-backed static analysis.
 
 ## Remaining Follow-Up
 
@@ -264,4 +269,4 @@ It completed 541/541 repositories in source-only mode with 2686556 generated JSO
 - Continue auditing per-method `source_set` distributions from generated JSONL records.
 - Investigate whether the four smoke-fallback repositories can be handled with a better preflight size model.
 - Inspect `javadoc_tag_cases.csv` for `@see` target quality and `{@inheritDoc}` candidate correctness.
-- Continue adding small regression fixtures for `@see`, `{@inheritDoc}`, source-set filtering, classpath-aware fallback, and capped extraction.
+- Continue adding small regression fixtures for `@see`, `{@inheritDoc}`, source-set filtering, classpath-backed extraction, and capped extraction.

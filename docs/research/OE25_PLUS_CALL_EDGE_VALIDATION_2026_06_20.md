@@ -53,7 +53,7 @@ Execution policy:
 
 - legacy primary attempt: optional compile/source-resolution/call-graph modes
   from the pre-mandatory-bytecode CLI;
-- legacy fallback: no-call-graph or bounded source-only extraction when needed;
+- legacy fallback: no-call-graph or bounded fallback extraction when needed;
 - sequential execution only, with a memory/load guard before each target;
 - Baloo file indexing was temporarily suspended during the run because it was
   consuming several GiB while indexing generated experiment output.
@@ -301,7 +301,7 @@ failure_codes=[CALL_GRAPH_EMPTY]
 
 ## Fallback And Scalability Cases
 
-These repositories completed with bounded source-only fallback and therefore
+These repositories completed with bounded legacy fallback and therefore
 do not contribute SootUp edge-matching evidence in this run:
 
 ```text
@@ -321,7 +321,7 @@ spring-projects/spring-security
 testcontainers/testcontainers-java
 ```
 
-Other source-only/no-call-graph successes:
+Other legacy fallback successes:
 
 ```text
 kevinsawicki/http-request
