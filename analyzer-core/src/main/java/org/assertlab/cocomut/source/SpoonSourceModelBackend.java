@@ -22,6 +22,8 @@ import spoon.reflect.visitor.filter.TypeFilter;
 import spoon.support.compiler.VirtualFile;
 
 import java.io.IOException;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -32,6 +34,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -184,7 +187,8 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
 
         return new ParsedProject(project.projectPath(), methods, methodsByUri, executablesByUri,
                 typesByQualifiedName, methodsByClassName, fieldsByClassName,
-                importsByFile, new java.util.concurrent.ConcurrentHashMap<>(), parsedModels.mode());
+                importsByFile, new java.util.concurrent.ConcurrentHashMap<>(),
+                projectClassLoader(project), parsedModels.mode());
     }
 
     private ParsedModels parseModels(ProjectModel project) throws IOException {
@@ -1196,7 +1200,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return;
         }
 
-        ExternalMember member = classifyExternalMember(external.qualifiedName(), memberReference);
+        ExternalMember member = classifyExternalMember(parsed, external.qualifiedName(), memberReference);
         ref.put("kind", member.kind());
         ref.put("resolution", "external_symbol");
         ref.put("external_member_kind", member.memberKind());
@@ -1213,27 +1217,27 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         // imports, language-defined java.lang, wildcard imports, then cautious
         // JDK probing only when the runtime can prove the symbol exists.
         if (target.contains(".")) {
-            return classExists(target) ? ExternalType.resolved(target, "qualified_symbol")
+            return classExists(parsed, target) ? ExternalType.resolved(target, "qualified_symbol")
                     : ExternalType.unresolved(target);
         }
         ImportContext imports = importContext(parsed, owner);
         String explicit = imports.explicit().get(target);
-        if (explicit != null && classExists(explicit)) {
+        if (explicit != null && classExists(parsed, explicit)) {
             return ExternalType.resolved(explicit, "explicit_import");
         }
         String javaLang = "java.lang." + target;
-        if (classExists(javaLang)) {
+        if (classExists(parsed, javaLang)) {
             return ExternalType.resolved(javaLang, "implicit_java_lang");
         }
         for (String packageName : imports.wildcard()) {
             String candidate = packageName + "." + target;
-            if (classExists(candidate)) {
+            if (classExists(parsed, candidate)) {
                 return ExternalType.resolved(candidate, "wildcard_import_symbol");
             }
         }
         for (String packageName : COMMON_JDK_PACKAGES) {
             String candidate = packageName + "." + target;
-            if (classExists(candidate)) {
+            if (classExists(parsed, candidate)) {
                 return ExternalType.resolved(candidate, "common_jdk_probe");
             }
         }
@@ -1258,12 +1262,13 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 .orElseGet(ImportContext::empty);
     }
 
-    private static ExternalMember classifyExternalMember(String className, MemberReference memberReference) {
+    private static ExternalMember classifyExternalMember(ParsedProject parsed, String className,
+                                                         MemberReference memberReference) {
         if (className == null || className.isBlank() || memberReference.name().isBlank()) {
             return new ExternalMember("member_reference", "unknown", "unresolved");
         }
         try {
-            Class<?> clazz = Class.forName(className, false, ClassLoader.getSystemClassLoader());
+            Class<?> clazz = classForName(parsed, className);
             if (!memberReference.hasParameters()) {
                 for (java.lang.reflect.Field field : clazz.getFields()) {
                     if (field.getName().equals(memberReference.name())) {
@@ -1297,13 +1302,44 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return new ExternalMember("member_reference", "unknown", "symbol_only");
     }
 
-    private static boolean classExists(String className) {
+    private static Class<?> classForName(ParsedProject parsed, String className) throws ClassNotFoundException {
+        ClassLoader loader = parsed != null && parsed.projectClassLoader() != null
+                ? parsed.projectClassLoader()
+                : ClassLoader.getSystemClassLoader();
+        return Class.forName(className, false, loader);
+    }
+
+    private static boolean classExists(ParsedProject parsed, String className) {
         try {
-            Class.forName(className, false, ClassLoader.getSystemClassLoader());
+            classForName(parsed, className);
             return true;
         } catch (Throwable ignored) {
             return false;
         }
+    }
+
+    private static ClassLoader projectClassLoader(ProjectModel project) {
+        try {
+            List<URL> urls = new ArrayList<>();
+            java.util.stream.Stream.concat(project.classOutputDirs().stream(), project.dependencyJars().stream())
+                    .distinct()
+                    .filter(Files::exists)
+                    .map(path -> {
+                        try {
+                            return path.toUri().toURL();
+                        } catch (Exception e) {
+                            return null;
+                        }
+                    })
+                    .filter(Objects::nonNull)
+                    .forEach(urls::add);
+            if (!urls.isEmpty()) {
+                return new URLClassLoader(urls.toArray(URL[]::new), ClassLoader.getSystemClassLoader());
+            }
+        } catch (Exception ignored) {
+            // External Javadoc resolution remains best-effort.
+        }
+        return ClassLoader.getSystemClassLoader();
     }
 
     private static boolean resolveMethodCandidate(ParsedProject parsed, String className,
@@ -1926,6 +1962,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             Map<String, List<SourceField>> fieldsByClassName,
             Map<Path, ImportContext> importsByFile,
             Map<String, ClassContext> classContextsByTypeAndMethod,
+            ClassLoader projectClassLoader,
             String mode) {
         private ParsedProject {
             projectRoot = projectRoot != null ? projectRoot.toAbsolutePath().normalize() : Path.of(".").toAbsolutePath().normalize();
