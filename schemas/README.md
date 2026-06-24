@@ -26,7 +26,7 @@ callers                   Optional caller context from SootUp call graph
 callees                   Optional callee context from SootUp call graph
 metadata                  Schema, backend, method identity, and call graph metadata
 provenance                Extraction source and confidence information
-documentation_metrics     Computed Javadoc quality flags
+documentation_metrics     Parser-backed Javadoc quality flags and parser provenance
 javadoc_metadata          Parsed @see, @since, inline links, deprecation, inheritDoc hints
 dynamic_features          Static hints for reflection, proxies, service loaders, DI, native code
 selection                 Project/method/type/package target provenance
@@ -68,6 +68,7 @@ inline_links              Raw inline {@link ...}/{@linkplain ...} targets
 javadoc_references        Resolved reference objects for @see/link/linkplain targets
 file_references           Referenced doc-files/images/html/text/sample-source paths when present
 structured_tags           Parsed param/return/throws/since/apiNote/implSpec/implNote/deprecated text
+                          plus parser and parse_confidence
 inheritdoc_resolution     not_used|resolved_candidate|unresolved
 inherited_javadoc_candidates
                           Candidate inherited Javadoc snippets for {@inheritDoc}
@@ -114,6 +115,11 @@ CoCoMUT recognizes the standard doclet `@see` forms: quoted text entries,
 HTML anchor links, and program-element references such as
 `module/package.Type#member label`. Module prefixes are normalized before
 symbol lookup.
+
+Javadoc reference and structured-tag parsing uses Spoon's official
+`spoon-javadoc` parser first. CoCoMUT keeps a text fallback only when Spoon does
+not produce parseable reference/tag elements; fallback-derived objects are marked
+with `parser=cocomut-fallback` and `parse_confidence=low`.
 
 External references are intentionally symbol-level only in the current schema.
 CoCoMUT does not fetch JDK/dependency source jars or generated Javadoc pages for

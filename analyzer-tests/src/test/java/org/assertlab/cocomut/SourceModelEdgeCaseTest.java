@@ -29,9 +29,10 @@ public class SourceModelEdgeCaseTest {
                     import java.io.IOException;
                     public interface Parent<T> {
                         /** Converts the input value.
-                         * @param input input value
+                         * @param input input value, may be {@code null}
                          * @return converted value
-                         * @throws IOException if conversion fails
+                         * @throws IOException
+                         *         if conversion fails
                          */
                         T transform(T input) throws IOException;
                     }
@@ -45,6 +46,10 @@ public class SourceModelEdgeCaseTest {
                         private String last;
 
                         /** {@inheritDoc}
+                         * @param input input value, may be {@code null}
+                         * @return converted value
+                         * @throws IOException
+                         *         if conversion fails
                          * @see #transform(String, int)
                          */
                         @Deprecated
@@ -113,9 +118,22 @@ public class SourceModelEdgeCaseTest {
             assertTrue(context.fieldWrites().contains("last"));
             assertTrue(context.dynamicFeatures().contains("reflection"));
             assertEquals(2, context.overloadGroup().size());
+            assertEquals("spoon-javadoc", context.documentationMetrics().get("parser"));
+            assertEquals("high", context.documentationMetrics().get("parse_confidence"));
+            assertTrue((Boolean) context.documentationMetrics().get("has_param_tags"));
+            assertTrue((Boolean) context.documentationMetrics().get("has_return_tag"));
+            assertTrue((Boolean) context.documentationMetrics().get("has_throws_tag"));
             assertTrue((Boolean) context.documentationMetrics().get("uses_inheritdoc"));
             assertEquals("resolved_candidate", context.javadocMetadata().get("inheritdoc_resolution"));
             assertTrue(context.javadocMetadata().containsKey("inherited_javadoc_candidates"));
+            @SuppressWarnings("unchecked")
+            Map<String, Object> structuredTags = (Map<String, Object>) context.javadocMetadata().get("structured_tags");
+            assertEquals("spoon-javadoc", structuredTags.get("parser"));
+            assertEquals("high", structuredTags.get("parse_confidence"));
+            assertTrue(structuredTags.get("params").toString().contains("input value, may be null"));
+            assertTrue(structuredTags.get("return").toString().contains("converted value"));
+            assertTrue(structuredTags.get("throws").toString().contains("type=java.io.IOException"));
+            assertTrue(structuredTags.get("throws").toString().contains("if conversion fails"));
             assertTrue("Javadoc @see should resolve to a project method URI",
                     context.javadocMetadata().get("javadoc_references").toString()
                             .contains("#demo.EdgeCase.transform(java.lang.String,int):java.lang.String"));
@@ -289,9 +307,23 @@ public class SourceModelEdgeCaseTest {
                     public class OtherHelper {
                     }
                     """);
+            write(project.resolve("src/main/java/demo/nested/Outer.java"), """
+                    package demo.nested;
+
+                    /** Outer docs. */
+                    public class Outer {
+                        /** Inner docs. */
+                        public static class Inner {
+                            /** Run docs. */
+                            public void run() {
+                            }
+                        }
+                    }
+                    """);
             write(project.resolve("src/main/java/demo/Child.java"), """
                     package demo;
 
+                    import demo.nested.Outer.Inner;
                     import java.util.Arrays;
                     import java.util.Map;
                     import java.util.regex.*;
@@ -304,9 +336,12 @@ public class SourceModelEdgeCaseTest {
                          * Invalid external member: {@link java.util.List#add(Integer) invalid add}.
                          * @see #sameName
                          * @see #sameName(String)
+                         * @see #sameName(String,
+                         *     int) multi-line overload
                          * @see #TOKEN
                          * @see Helper
                          * @see demo.other.OtherHelper
+                         * @see Inner#run()
                          * @see #inherited(CharSequence)
                          * @see java.util.List#add(Object)
                          * @see java.base/java.util.List#remove(Object)
@@ -324,6 +359,10 @@ public class SourceModelEdgeCaseTest {
 
                         /** String overload. */
                         public void sameName(String value) {
+                        }
+
+                        /** String and mode overload. */
+                        public void sameName(String value, int mode) {
                         }
                     }
                     """);
@@ -349,9 +388,13 @@ public class SourceModelEdgeCaseTest {
             assertTrue(ambiguous.get("candidate_method_uris").toString().contains("sameName():void"));
             assertTrue(ambiguous.get("candidate_method_uris").toString()
                     .contains("sameName(java.lang.String):void"));
+            assertTrue(ambiguous.get("candidate_method_uris").toString()
+                    .contains("sameName(java.lang.String,int):void"));
 
             Map<String, Object> exactOverload = referenceByTarget(refs, "#sameName(String)");
             assertEquals("resolved_method", exactOverload.get("resolution"));
+            assertEquals("spoon-javadoc", exactOverload.get("parser"));
+            assertEquals("high", exactOverload.get("parse_confidence"));
             assertEquals("method", exactOverload.get("reference_target_kind"));
             assertEquals("project", exactOverload.get("reference_domain"));
             assertEquals("same_type", exactOverload.get("reference_scope"));
@@ -361,6 +404,14 @@ public class SourceModelEdgeCaseTest {
             Map<String, Object> exactOverloadContext = (Map<String, Object>) exactOverload.get("referenced_method");
             assertTrue(exactOverloadContext.get("code").toString().contains("public void sameName(String value)"));
             assertTrue(exactOverloadContext.get("javadoc").toString().contains("String overload."));
+
+            Map<String, Object> multilineOverload = referenceByTarget(refs, "#sameName(String, int)");
+            assertEquals("resolved_method", multilineOverload.get("resolution"));
+            assertEquals("multi-line overload", multilineOverload.get("label"));
+            assertEquals("spoon-javadoc", multilineOverload.get("parser"));
+            assertEquals("high", multilineOverload.get("parse_confidence"));
+            assertTrue(multilineOverload.get("method_uri").toString()
+                    .contains("sameName(java.lang.String,int):void"));
 
             Map<String, Object> inheritedField = referenceByTarget(refs, "#TOKEN");
             assertEquals("field_reference", inheritedField.get("kind"));
@@ -387,6 +438,14 @@ public class SourceModelEdgeCaseTest {
             assertEquals("project", otherPackageType.get("reference_domain"));
             assertEquals("same_module", otherPackageType.get("reference_scope"));
 
+            Map<String, Object> importedNestedMethod = referenceByTarget(refs, "Inner#run()");
+            assertEquals("resolved_method", importedNestedMethod.get("resolution"));
+            assertEquals("spoon-javadoc", importedNestedMethod.get("parser"));
+            assertEquals("high", importedNestedMethod.get("parse_confidence"));
+            assertTrue(importedNestedMethod.get("canonical_target").toString().contains("demo.nested.Outer"));
+            assertTrue(importedNestedMethod.get("method_uri").toString()
+                    .contains("Outer$Inner.run():void"));
+
             Map<String, Object> inheritedMethod = referenceByTarget(refs, "#inherited(CharSequence)");
             assertEquals("resolved_inherited_method", inheritedMethod.get("resolution"));
             assertEquals("demo.Base", inheritedMethod.get("inherited_from"));
@@ -406,7 +465,7 @@ public class SourceModelEdgeCaseTest {
             assertEquals("external_jdk", external.get("reference_domain"));
             assertEquals("external", external.get("reference_scope"));
             assertEquals("java.util.List", external.get("external_class"));
-            assertEquals("add(Object)", external.get("external_member"));
+            assertEquals("add(java.lang.Object)", external.get("external_member"));
             assertEquals("method", external.get("external_member_kind"));
 
             Map<String, Object> invalidExternal = referenceByTarget(refs, "java.util.List#add(Integer)");
@@ -422,6 +481,8 @@ public class SourceModelEdgeCaseTest {
             Map<String, Object> spacedInline = referenceByTarget(refs, "Map#put(Object, Object)");
             assertEquals("linkplain", spacedInline.get("tag"));
             assertEquals("map put", spacedInline.get("label"));
+            assertEquals("spoon-javadoc", spacedInline.get("parser"));
+            assertEquals("high", spacedInline.get("parse_confidence"));
             assertEquals("external_symbol", spacedInline.get("resolution"));
             assertEquals("java.util.Map", spacedInline.get("external_class"));
             assertEquals("method", spacedInline.get("external_member_kind"));
@@ -429,20 +490,20 @@ public class SourceModelEdgeCaseTest {
             Map<String, Object> modulePrefixed = referenceByTarget(refs, "java.base/java.util.List#remove(Object)");
             assertEquals("external_symbol", modulePrefixed.get("resolution"));
             assertEquals("java.util.List", modulePrefixed.get("external_class"));
-            assertEquals("remove(Object)", modulePrefixed.get("external_member"));
+            assertEquals("remove(java.lang.Object)", modulePrefixed.get("external_member"));
             assertEquals("method", modulePrefixed.get("external_member_kind"));
 
             Map<String, Object> imported = referenceByTarget(refs, "Arrays#sort(byte[])");
             assertEquals("external_symbol", imported.get("resolution"));
             assertEquals("java.util.Arrays", imported.get("external_class"));
-            assertEquals("explicit_import", imported.get("external_resolution"));
+            assertEquals("qualified_symbol", imported.get("external_resolution"));
             assertEquals("method", imported.get("external_member_kind"));
 
             Map<String, Object> javaLangField = referenceByTarget(refs, "Long#MIN_VALUE");
             assertEquals("field_reference", javaLangField.get("kind"));
             assertEquals("external_symbol", javaLangField.get("resolution"));
             assertEquals("java.lang.Long", javaLangField.get("external_class"));
-            assertEquals("implicit_java_lang", javaLangField.get("external_resolution"));
+            assertEquals("qualified_symbol", javaLangField.get("external_resolution"));
             assertEquals("field", javaLangField.get("external_member_kind"));
 
             Map<String, Object> wildcardField = referenceByTarget(refs, "Pattern#DOTALL");

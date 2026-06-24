@@ -198,10 +198,12 @@ Primary references:
 - JDK documentation-comment specification for the standard doclet.
 - Javadoc tool reference.
 
-These documents are versioned with the JDK. CoCoMUT implements the stable
-traditional Javadoc reference forms used by `@see`, `{@link ...}`, and
-`{@linkplain ...}`; it does not currently implement newer Markdown
-documentation-comment syntax as a separate parser mode.
+These documents are versioned with the JDK. CoCoMUT delegates program-element
+reference parsing to Spoon's official `spoon-javadoc` module from Maven
+providers, then maps the typed Spoon reference to CoCoMUT's URI and taxonomy
+model. It implements the stable traditional Javadoc reference forms used by
+`@see`, `{@link ...}`, and `{@linkplain ...}`; it does not currently implement
+newer Markdown documentation-comment syntax as a separate parser mode.
 
 Important fields:
 
@@ -210,6 +212,11 @@ kind                 type_reference|member_reference|field_reference|external_ur
 resolution           resolved_method|resolved_type|resolved_field|
                      resolved_inherited_method|resolved_inherited_field|
                      overload_ambiguous|external_symbol|external|text|unresolved
+parser               parser path, normally spoon-javadoc
+parse_confidence     high|medium|low parser confidence marker
+target               source Javadoc spelling preserved for auditability
+canonical_target     Spoon-normalized target when it differs from target
+spoon_reference      typed Spoon reference rendering used for semantic resolution
 reference_target_kind method|field|type|url|text|method_or_field|unknown
 reference_domain    project|external_jdk|external_library|external_web|text|unresolved
 reference_scope     same_type|same_package|same_module|external|text|unknown

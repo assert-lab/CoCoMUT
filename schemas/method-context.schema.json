@@ -36,8 +36,14 @@
         "parameters": {"type": "array"},
         "annotations": {"type": "array"},
         "throws": {"type": "array"},
-        "lines_of_code": {"type": "integer"},
-        "cyclomatic_complexity": {"type": "integer"},
+        "lines_of_code": {
+          "type": "integer",
+          "description": "Lexical estimate derived from emitted method source; not an AST structural metric."
+        },
+        "cyclomatic_complexity": {
+          "type": "integer",
+          "description": "Lexical branch-token estimate derived from emitted method source; not an AST/control-flow McCabe metric."
+        },
         "code": {
           "type": "string",
           "description": "Method or constructor source without leading Javadoc. Method annotations are kept."
@@ -91,7 +97,20 @@
       },
       "additionalProperties": true
     },
-    "documentation_metrics": {"type": "object"},
+    "documentation_metrics": {
+      "type": "object",
+      "properties": {
+        "parser": {
+          "type": "string",
+          "description": "Parser path used for documentation metrics, normally spoon-javadoc."
+        },
+        "parse_confidence": {
+          "type": "string",
+          "description": "high for spoon-javadoc parsed metrics, low for fallback text parsing."
+        }
+      },
+      "additionalProperties": true
+    },
     "javadoc_metadata": {
       "type": "object",
       "properties": {
@@ -102,7 +121,10 @@
           "items": {"$ref": "#/$defs/javadocReference"}
         },
         "file_references": {"type": "array"},
-        "structured_tags": {"type": "object"},
+        "structured_tags": {
+          "type": "object",
+          "description": "Parser-backed param/return/throws/since/apiNote/implSpec/implNote/deprecated tags. Includes parser and parse_confidence."
+        },
         "uses_inheritdoc": {"type": "boolean"},
         "inheritdoc_resolution": {"type": "string"},
         "inherited_javadoc_candidates": {"type": "array"}
@@ -169,8 +191,24 @@
         "tag": {"type": "string"},
         "raw": {"type": "string"},
         "target": {"type": "string"},
+        "canonical_target": {
+          "type": "string",
+          "description": "Parser-normalized target when it differs from the source Javadoc spelling preserved in target."
+        },
         "label": {"type": "string"},
         "text": {"type": "string"},
+        "parser": {
+          "type": "string",
+          "description": "Parser path used for the reference, for example spoon-javadoc or cocomut-fallback."
+        },
+        "parse_confidence": {
+          "type": "string",
+          "description": "high for typed spoon-javadoc references, medium for Spoon text fallback, low for CoCoMUT fallback text parsing."
+        },
+        "spoon_reference": {
+          "type": "string",
+          "description": "Spoon-javadoc typed reference rendering when available."
+        },
         "kind": {"type": "string"},
         "resolution": {"type": "string"},
         "reference_target_kind": {"type": "string"},

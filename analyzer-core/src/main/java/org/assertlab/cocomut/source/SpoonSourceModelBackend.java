@@ -1,6 +1,13 @@
 package org.assertlab.cocomut.source;
 
 import spoon.Launcher;
+import spoon.javadoc.api.StandardJavadocTagType;
+import spoon.javadoc.api.elements.JavadocBlockTag;
+import spoon.javadoc.api.elements.JavadocElement;
+import spoon.javadoc.api.elements.JavadocInlineTag;
+import spoon.javadoc.api.elements.JavadocReference;
+import spoon.javadoc.api.elements.JavadocText;
+import spoon.javadoc.api.parsing.JavadocParser;
 import spoon.reflect.CtModel;
 import spoon.reflect.code.CtFieldRead;
 import spoon.reflect.code.CtFieldWrite;
@@ -17,6 +24,9 @@ import spoon.reflect.declaration.CtParameter;
 import spoon.reflect.declaration.CtType;
 import spoon.reflect.path.CtRole;
 import spoon.reflect.reference.CtExecutableReference;
+import spoon.reflect.reference.CtFieldReference;
+import spoon.reflect.reference.CtPackageReference;
+import spoon.reflect.reference.CtReference;
 import spoon.reflect.reference.CtTypeReference;
 import spoon.reflect.visitor.filter.TypeFilter;
 import spoon.support.compiler.VirtualFile;
@@ -114,7 +124,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 classContext.overloadGroup(),
                 dynamicFeatures(executable),
                 javadocMetadata(parsed, owner, executable, method, javadoc),
-                documentationMetrics(method, javadoc),
+                documentationMetrics(method, executable, javadoc),
                 parsed.mode()));
     }
 
@@ -705,11 +715,16 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return List.copyOf(features);
     }
 
-    private static Map<String, Object> documentationMetrics(SourceMethod method, String javadoc) {
+    private static Map<String, Object> documentationMetrics(SourceMethod method, CtExecutable<?> executable, String javadoc) {
         Map<String, Object> metrics = new LinkedHashMap<>();
         String normalized = javadoc == null ? "" : javadoc.strip();
-        List<String> paramTags = matches(PARAM_TAG, normalized, 1);
-        List<String> throwsTags = matches(THROWS_TAG, normalized, 2);
+        List<JavadocElement> elements = spoonJavadocElements(executable);
+        Map<String, Object> structuredTags = !elements.isEmpty()
+                ? structuredTagsFromElements(elements)
+                : fallbackStructuredTags(normalized);
+        List<String> paramTags = structuredTagNames(structuredTags, "params");
+        @SuppressWarnings("unchecked")
+        List<Map<String, String>> throwsTags = (List<Map<String, String>>) structuredTags.getOrDefault("throws", List.of());
         Set<String> parameterNames = new LinkedHashSet<>(method.parameters().stream()
                 .map(SourceParameter::name)
                 .toList());
@@ -718,17 +733,22 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 .filter(p -> !documentedParams.contains(p))
                 .toList();
 
-        metrics.put("has_summary", hasSummary(normalized));
+        metrics.put("parser", structuredTags.getOrDefault("parser", "cocomut-fallback"));
+        metrics.put("parse_confidence", structuredTags.getOrDefault("parse_confidence", "low"));
+        metrics.put("has_summary", !elements.isEmpty() ? hasSummary(elements) : hasSummary(normalized));
         metrics.put("has_param_tags", !paramTags.isEmpty());
         metrics.put("missing_param_tags", missingParams);
-        metrics.put("has_return_tag", normalized.contains("@return"));
+        metrics.put("has_return_tag", !structuredList(structuredTags, "return").isEmpty());
         metrics.put("has_throws_tag", !throwsTags.isEmpty());
         metrics.put("mentions_null", normalized.toLowerCase(Locale.ROOT).contains("null"));
         metrics.put("mentions_examples", mentionsExample(normalized));
-        metrics.put("uses_inheritdoc", normalized.contains("{@inheritDoc}") || normalized.contains("@inheritDoc"));
-        metrics.put("has_since_tag", !matches(SINCE_TAG, normalized, 1).isEmpty());
-        metrics.put("has_see_tag", !matches(SEE_TAG, normalized, 1).isEmpty());
-        metrics.put("inline_link_count", inlineLinkTargets(normalized).size());
+        metrics.put("uses_inheritdoc", !elements.isEmpty()
+                ? usesInheritDoc(elements)
+                : normalized.contains("{@inheritDoc}") || normalized.contains("@inheritDoc"));
+        metrics.put("has_since_tag", !structuredList(structuredTags, "since").isEmpty());
+        metrics.put("has_see_tag", hasBlockTag(elements, StandardJavadocTagType.SEE)
+                || !matches(SEE_TAG, normalized, 1).isEmpty());
+        metrics.put("inline_link_count", inlineLinkTargets(executable, normalized).size());
         return metrics;
     }
 
@@ -739,11 +759,14 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         String normalized = javadoc == null ? "" : javadoc.strip();
         metadata.put("since", matches(SINCE_TAG, normalized, 1));
         metadata.put("see", matches(SEE_TAG, normalized, 1));
-        metadata.put("inline_links", inlineLinkTargets(normalized));
-        metadata.put("javadoc_references", javadocReferences(parsed, owner, normalized));
+        metadata.put("inline_links", inlineLinkTargets(executable, normalized));
+        metadata.put("javadoc_references", javadocReferences(parsed, owner, executable, normalized));
         metadata.put("file_references", fileReferences(parsed.projectRoot(), method, normalized));
-        metadata.put("structured_tags", structuredTags(normalized));
-        metadata.put("uses_inheritdoc", normalized.contains("{@inheritDoc}") || normalized.contains("@inheritDoc"));
+        List<JavadocElement> elements = spoonJavadocElements(executable);
+        metadata.put("structured_tags", structuredTags(executable, normalized));
+        metadata.put("uses_inheritdoc", !elements.isEmpty()
+                ? usesInheritDoc(elements)
+                : normalized.contains("{@inheritDoc}") || normalized.contains("@inheritDoc"));
         metadata.put("deprecated", isDeprecated(executable, normalized));
         metadata.put("deprecation_text", deprecationText(normalized));
         metadata.put("inheritdoc_resolution", inheritdocResolution(executable, normalized));
@@ -861,7 +884,57 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
     }
 
-    private static Map<String, Object> structuredTags(String javadoc) {
+    private static Map<String, Object> structuredTags(CtExecutable<?> executable, String javadoc) {
+        List<JavadocElement> elements = spoonJavadocElements(executable);
+        if (!elements.isEmpty()) {
+            return structuredTagsFromElements(elements);
+        }
+        return fallbackStructuredTags(javadoc);
+    }
+
+    private static Map<String, Object> structuredTagsFromElements(List<JavadocElement> elements) {
+        Map<String, Object> tags = new LinkedHashMap<>();
+        List<Map<String, String>> params = new ArrayList<>();
+        List<Map<String, String>> throwsTags = new ArrayList<>();
+        List<String> returns = new ArrayList<>();
+        List<String> since = new ArrayList<>();
+        List<String> apiNotes = new ArrayList<>();
+        List<String> implSpecs = new ArrayList<>();
+        List<String> implNotes = new ArrayList<>();
+        List<String> deprecated = new ArrayList<>();
+
+        for (JavadocBlockTag block : blockTags(elements)) {
+            String tag = block.getTagType().getName();
+            List<JavadocElement> blockElements = block.getElements();
+            switch (tag) {
+                case "param" -> params.add(namedBlockTag(blockElements, "name"));
+                case "return" -> returns.add(elementsText(blockElements));
+                case "throws", "exception" -> throwsTags.add(namedBlockTag(blockElements, "type"));
+                case "since" -> since.add(elementsText(blockElements));
+                case "apiNote" -> apiNotes.add(elementsText(blockElements));
+                case "implSpec" -> implSpecs.add(elementsText(blockElements));
+                case "implNote" -> implNotes.add(elementsText(blockElements));
+                case "deprecated" -> deprecated.add(elementsText(blockElements));
+                default -> {
+                    // Only expose the structured tags CoCoMUT's schema names.
+                }
+            }
+        }
+
+        tags.put("parser", "spoon-javadoc");
+        tags.put("parse_confidence", "high");
+        tags.put("params", params);
+        tags.put("return", returns);
+        tags.put("throws", throwsTags);
+        tags.put("since", since);
+        tags.put("api_notes", apiNotes);
+        tags.put("impl_specs", implSpecs);
+        tags.put("impl_notes", implNotes);
+        tags.put("deprecated", deprecated);
+        return tags;
+    }
+
+    private static Map<String, Object> fallbackStructuredTags(String javadoc) {
         Map<String, Object> tags = new LinkedHashMap<>();
         List<Map<String, String>> params = new ArrayList<>();
         List<Map<String, String>> throwsTags = new ArrayList<>();
@@ -877,32 +950,22 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             String tag = matcher.group(1);
             String body = matcher.group(2).replaceAll("\\s+", " ").trim();
             switch (tag) {
-                case "param" -> {
-                    String[] parts = body.split("\\s+", 2);
-                    Map<String, String> param = new LinkedHashMap<>();
-                    param.put("name", parts.length > 0 ? parts[0] : "");
-                    param.put("text", parts.length > 1 ? parts[1] : "");
-                    params.add(param);
-                }
+                case "param" -> params.add(splitNamedText(body, "name"));
                 case "return" -> returns.add(body);
-                case "throws", "exception" -> {
-                    String[] parts = body.split("\\s+", 2);
-                    Map<String, String> thrown = new LinkedHashMap<>();
-                    thrown.put("type", parts.length > 0 ? parts[0] : "");
-                    thrown.put("text", parts.length > 1 ? parts[1] : "");
-                    throwsTags.add(thrown);
-                }
+                case "throws", "exception" -> throwsTags.add(splitNamedText(body, "type"));
                 case "since" -> since.add(body);
                 case "apiNote" -> apiNotes.add(body);
                 case "implSpec" -> implSpecs.add(body);
                 case "implNote" -> implNotes.add(body);
                 case "deprecated" -> deprecated.add(body);
                 default -> {
-                    // Keep the switch exhaustive for known tags above.
+                    // Keep the switch exhaustive for known fallback tags above.
                 }
             }
         }
 
+        tags.put("parser", "cocomut-fallback");
+        tags.put("parse_confidence", "low");
         tags.put("params", params);
         tags.put("return", returns);
         tags.put("throws", throwsTags);
@@ -914,31 +977,342 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return tags;
     }
 
-    private static List<Map<String, Object>> javadocReferences(ParsedProject parsed, CtType<?> owner, String javadoc) {
+    private static List<JavadocBlockTag> blockTags(List<JavadocElement> elements) {
+        List<JavadocBlockTag> blocks = new ArrayList<>();
+        for (JavadocElement element : elements == null ? List.<JavadocElement>of() : elements) {
+            if (element instanceof JavadocBlockTag block) {
+                blocks.add(block);
+            }
+        }
+        return blocks;
+    }
+
+    private static Map<String, String> namedBlockTag(List<JavadocElement> elements, String key) {
+        if (elements == null || elements.isEmpty()) {
+            return Map.of(key, "", "text", "");
+        }
+        String name = elementText(elements.get(0));
+        String text = elementsText(elements.subList(1, elements.size()));
+        Map<String, String> value = new LinkedHashMap<>();
+        value.put(key, name);
+        value.put("text", text);
+        return value;
+    }
+
+    private static Map<String, String> splitNamedText(String body, String key) {
+        String[] parts = (body == null ? "" : body).split("\\s+", 2);
+        Map<String, String> value = new LinkedHashMap<>();
+        value.put(key, parts.length > 0 ? parts[0] : "");
+        value.put("text", parts.length > 1 ? parts[1] : "");
+        return value;
+    }
+
+    private static List<String> structuredTagNames(Map<String, Object> structuredTags, String field) {
+        Object value = structuredTags.get(field);
+        if (!(value instanceof List<?> list)) {
+            return List.of();
+        }
+        List<String> names = new ArrayList<>();
+        for (Object item : list) {
+            if (item instanceof Map<?, ?> map) {
+                Object name = map.get("name");
+                if (name != null && !name.toString().isBlank()) {
+                    names.add(name.toString());
+                }
+            }
+        }
+        return names;
+    }
+
+    private static List<?> structuredList(Map<String, Object> structuredTags, String field) {
+        Object value = structuredTags.get(field);
+        return value instanceof List<?> list ? list : List.of();
+    }
+
+    private static boolean hasSummary(List<JavadocElement> elements) {
+        if (elements == null || elements.isEmpty()) {
+            return false;
+        }
+        List<JavadocElement> summaryElements = new ArrayList<>();
+        for (JavadocElement element : elements) {
+            if (element instanceof JavadocBlockTag) {
+                break;
+            }
+            summaryElements.add(element);
+        }
+        return !elementsText(summaryElements).isBlank();
+    }
+
+    private static boolean usesInheritDoc(List<JavadocElement> elements) {
+        if (elements == null || elements.isEmpty()) {
+            return false;
+        }
+        for (JavadocElement element : elements) {
+            if (element instanceof JavadocInlineTag inline) {
+                if (StandardJavadocTagType.INHERIT_DOC.equals(inline.getTagType())
+                        || usesInheritDoc(inline.getElements())) {
+                    return true;
+                }
+            } else if (element instanceof JavadocBlockTag block && usesInheritDoc(block.getElements())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasBlockTag(List<JavadocElement> elements, StandardJavadocTagType tagType) {
+        return blockTags(elements).stream().anyMatch(block -> tagType.equals(block.getTagType()));
+    }
+
+    private static String elementsText(List<JavadocElement> elements) {
+        if (elements == null || elements.isEmpty()) {
+            return "";
+        }
+        List<String> parts = new ArrayList<>();
+        for (JavadocElement element : elements) {
+            String text = elementText(element);
+            if (!text.isBlank()) {
+                parts.add(text);
+            }
+        }
+        return String.join(" ", parts).replaceAll("\\s+", " ").trim();
+    }
+
+    private static String elementText(JavadocElement element) {
+        if (element instanceof JavadocText text) {
+            return text.getText();
+        }
+        if (element instanceof JavadocReference reference) {
+            return referenceTarget(reference.getReference());
+        }
+        if (element instanceof JavadocInlineTag inline) {
+            if (StandardJavadocTagType.INHERIT_DOC.equals(inline.getTagType())) {
+                return "{@inheritDoc}";
+            }
+            return elementsText(inline.getElements());
+        }
+        if (element instanceof JavadocBlockTag block) {
+            return elementsText(block.getElements());
+        }
+        return "";
+    }
+
+    private static List<Map<String, Object>> javadocReferences(ParsedProject parsed, CtType<?> owner,
+                                                               CtExecutable<?> executable, String javadoc) {
         if (javadoc == null || javadoc.isBlank()) {
             return List.of();
         }
         List<Map<String, Object>> references = new ArrayList<>();
+        List<RawJavadocReference> rawReferences = new ArrayList<>(rawJavadocReferences(javadoc));
 
-        Matcher seeMatcher = SEE_TAG.matcher(javadoc);
-        while (seeMatcher.find()) {
-            String raw = seeMatcher.group(1).trim();
-            String[] targetAndLabel = splitReferenceTargetAndLabel(raw);
-            references.add(resolveJavadocReference(parsed, owner, "see", raw, targetAndLabel[0], targetAndLabel[1]));
+        for (JavadocElement element : spoonJavadocElements(executable)) {
+            addSpoonJavadocReference(parsed, owner, element, rawReferences, references);
         }
 
-        for (InlineJavadocReference inline : inlineLinkReferences(javadoc)) {
-            references.add(resolveJavadocReference(parsed, owner, inline.tag(), inline.raw(),
-                    inline.target(), inline.label()));
+        if (!references.isEmpty()) {
+            return references;
+        }
+
+        return fallbackJavadocReferences(parsed, owner, javadoc);
+    }
+
+    private static List<String> inlineLinkTargets(CtExecutable<?> executable, String javadoc) {
+        List<String> spoonTargets = spoonJavadocElements(executable).stream()
+                .filter(JavadocInlineTag.class::isInstance)
+                .map(JavadocInlineTag.class::cast)
+                .filter(tag -> isInlineReferenceTag(tag))
+                .map(SpoonSourceModelBackend::firstReferenceTarget)
+                .flatMap(Optional::stream)
+                .toList();
+        if (!spoonTargets.isEmpty()) {
+            List<String> rawTargets = inlineLinkReferences(javadoc).stream()
+                    .map(InlineJavadocReference::target)
+                    .toList();
+            return rawTargets.size() == spoonTargets.size() ? rawTargets : spoonTargets;
+        }
+        return inlineLinkReferences(javadoc).stream()
+                .map(InlineJavadocReference::target)
+                .toList();
+    }
+
+    private static List<JavadocElement> spoonJavadocElements(CtElement element) {
+        if (element == null) {
+            return List.of();
+        }
+        try {
+            return JavadocParser.forElement(element);
+        } catch (RuntimeException | StackOverflowError ignored) {
+            return List.of();
+        }
+    }
+
+    private static void addSpoonJavadocReference(ParsedProject parsed, CtType<?> owner,
+                                                 JavadocElement element,
+                                                 List<RawJavadocReference> rawReferences,
+                                                 List<Map<String, Object>> references) {
+        if (element instanceof JavadocInlineTag inline) {
+            if (isInlineReferenceTag(inline)) {
+                references.add(spoonJavadocReference(parsed, owner, inline.getTagType().getName(), inline.getElements(),
+                        nextRaw(rawReferences, inline.getTagType().getName())));
+            }
+            for (JavadocElement nested : inline.getElements()) {
+                addSpoonJavadocReference(parsed, owner, nested, rawReferences, references);
+            }
+        } else if (element instanceof JavadocBlockTag block) {
+            if (StandardJavadocTagType.SEE.equals(block.getTagType())) {
+                references.add(spoonJavadocReference(parsed, owner, block.getTagType().getName(), block.getElements(),
+                        nextRaw(rawReferences, block.getTagType().getName())));
+            }
+            for (JavadocElement nested : block.getElements()) {
+                addSpoonJavadocReference(parsed, owner, nested, rawReferences, references);
+            }
+        }
+    }
+
+    private static boolean isInlineReferenceTag(JavadocInlineTag tag) {
+        return StandardJavadocTagType.LINK.equals(tag.getTagType())
+                || StandardJavadocTagType.LINKPLAIN.equals(tag.getTagType())
+                || StandardJavadocTagType.VALUE.equals(tag.getTagType());
+    }
+
+    private static Map<String, Object> spoonJavadocReference(ParsedProject parsed, CtType<?> owner,
+                                                             String tag, List<JavadocElement> elements,
+                                                             Optional<RawJavadocReference> rawReference) {
+        Optional<JavadocReference> reference = elements.stream()
+                .filter(JavadocReference.class::isInstance)
+                .map(JavadocReference.class::cast)
+                .findFirst();
+        String label = labelText(elements);
+        if (reference.isPresent()) {
+            CtReference spoonReference = reference.get().getReference();
+            String canonicalTarget = referenceTarget(spoonReference);
+            String raw = rawReference.map(RawJavadocReference::raw).orElse(canonicalTarget);
+            String target = rawReference.map(RawJavadocReference::target).orElse(canonicalTarget);
+            String resolvedLabel = rawReference.map(RawJavadocReference::label)
+                    .filter(rawLabel -> !rawLabel.isBlank())
+                    .orElse(label);
+            Map<String, Object> ref = resolveTypedJavadocReference(parsed, owner, tag, raw, target,
+                    resolvedLabel, spoonReference);
+            ref.put("parser", "spoon-javadoc");
+            ref.put("parse_confidence", "high");
+            ref.put("spoon_reference", spoonReference.toString());
+            if (!canonicalTarget.equals(target)) {
+                ref.put("canonical_target", canonicalTarget);
+            }
+            return ref;
+        }
+        String text = elements.stream()
+                .filter(JavadocText.class::isInstance)
+                .map(JavadocText.class::cast)
+                .map(JavadocText::getText)
+                .reduce((left, right) -> left + " " + right)
+                .orElse("")
+                .trim();
+        String raw = rawReference.map(RawJavadocReference::raw).orElse(text);
+        String target = rawReference.map(RawJavadocReference::target)
+                .orElseGet(() -> splitReferenceTargetAndLabel(text)[0]);
+        String resolvedLabel = rawReference.map(RawJavadocReference::label)
+                .orElseGet(() -> splitReferenceTargetAndLabel(text)[1]);
+        Map<String, Object> ref = resolveJavadocReference(parsed, owner, tag, raw, target, resolvedLabel);
+        ref.put("parser", "spoon-javadoc-text-fallback");
+        ref.put("parse_confidence", "medium");
+        return ref;
+    }
+
+    private static Optional<RawJavadocReference> nextRaw(List<RawJavadocReference> rawReferences, String tag) {
+        if (rawReferences == null || rawReferences.isEmpty()) {
+            return Optional.empty();
+        }
+        for (int i = 0; i < rawReferences.size(); i++) {
+            RawJavadocReference raw = rawReferences.get(i);
+            if (raw.tag().equals(tag)) {
+                rawReferences.remove(i);
+                return Optional.of(raw);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<String> firstReferenceTarget(JavadocInlineTag tag) {
+        return tag.getElements().stream()
+                .filter(JavadocReference.class::isInstance)
+                .map(JavadocReference.class::cast)
+                .map(reference -> referenceTarget(reference.getReference()))
+                .findFirst();
+    }
+
+    private static String labelText(List<JavadocElement> elements) {
+        return elements.stream()
+                .dropWhile(element -> element instanceof JavadocReference)
+                .filter(JavadocText.class::isInstance)
+                .map(JavadocText.class::cast)
+                .map(JavadocText::getText)
+                .reduce((left, right) -> left + " " + right)
+                .orElse("")
+                .trim();
+    }
+
+    private static String referenceTarget(CtReference reference) {
+        if (reference instanceof CtExecutableReference<?> executable) {
+            String owner = executable.getDeclaringType() != null
+                    ? executable.getDeclaringType().getQualifiedName()
+                    : "";
+            String params = executable.getParameters().stream()
+                    .map(SpoonSourceModelBackend::typeName)
+                    .reduce((left, right) -> left + "," + right)
+                    .orElse("");
+            return (owner.isBlank() ? "" : owner) + "#" + executable.getSimpleName() + "(" + params + ")";
+        }
+        if (reference instanceof CtFieldReference<?> field) {
+            String owner = field.getDeclaringType() != null
+                    ? field.getDeclaringType().getQualifiedName()
+                    : "";
+            return (owner.isBlank() ? "" : owner) + "#" + field.getSimpleName();
+        }
+        if (reference instanceof CtTypeReference<?> type) {
+            return type.getQualifiedName();
+        }
+        if (reference instanceof CtPackageReference packageReference) {
+            return packageReference.getQualifiedName();
+        }
+        return reference == null ? "" : reference.toString();
+    }
+
+    private static List<Map<String, Object>> fallbackJavadocReferences(ParsedProject parsed, CtType<?> owner, String javadoc) {
+        List<Map<String, Object>> references = new ArrayList<>();
+
+        for (RawJavadocReference rawReference : rawJavadocReferences(javadoc)) {
+            Map<String, Object> ref = resolveJavadocReference(parsed, owner, rawReference.tag(), rawReference.raw(),
+                    rawReference.target(), rawReference.label());
+            ref.put("parser", "cocomut-fallback");
+            ref.put("parse_confidence", "low");
+            references.add(ref);
         }
 
         return references;
     }
 
-    private static List<String> inlineLinkTargets(String javadoc) {
-        return inlineLinkReferences(javadoc).stream()
-                .map(InlineJavadocReference::target)
-                .toList();
+    private static List<RawJavadocReference> rawJavadocReferences(String javadoc) {
+        if (javadoc == null || javadoc.isBlank()) {
+            return List.of();
+        }
+        List<RawJavadocReference> references = new ArrayList<>();
+
+        Matcher blockMatcher = BLOCK_TAG.matcher(javadoc);
+        while (blockMatcher.find()) {
+            if (!"see".equals(blockMatcher.group(1))) {
+                continue;
+            }
+            String raw = blockMatcher.group(2).replaceAll("\\s+", " ").trim();
+            String[] targetAndLabel = splitReferenceTargetAndLabel(raw);
+            references.add(new RawJavadocReference("see", raw, targetAndLabel[0], targetAndLabel[1]));
+        }
+
+        for (InlineJavadocReference inline : inlineLinkReferences(javadoc)) {
+            references.add(new RawJavadocReference(inline.tag(), inline.raw(), inline.target(), inline.label()));
+        }
+
+        return references;
     }
 
     private static List<InlineJavadocReference> inlineLinkReferences(String javadoc) {
@@ -1026,18 +1400,50 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     private static Map<String, Object> resolveJavadocReference(ParsedProject parsed, CtType<?> owner,
                                                                String tag, String raw, String target,
                                                                String label) {
+        Map<String, Object> ref = baseJavadocReference(tag, raw, target, label);
+        resolveStringJavadocReference(parsed, owner, target, ref);
+        enrichReferenceTaxonomy(parsed, owner, ref);
+        return ref;
+    }
+
+    private static Map<String, Object> resolveTypedJavadocReference(ParsedProject parsed, CtType<?> owner,
+                                                                    String tag, String raw, String target,
+                                                                    String label, CtReference spoonReference) {
+        Map<String, Object> ref = baseJavadocReference(tag, raw, target, label);
+        if (spoonReference instanceof CtExecutableReference<?> executable) {
+            resolveExecutableJavadocReference(parsed, owner, executable, ref);
+        } else if (spoonReference instanceof CtFieldReference<?> field) {
+            resolveFieldJavadocReference(parsed, owner, field, ref);
+        } else if (spoonReference instanceof CtTypeReference<?> type) {
+            resolveTypeJavadocReference(parsed, owner, type, ref);
+        } else if (spoonReference instanceof CtPackageReference packageReference) {
+            ref.put("kind", "type_reference");
+            ref.put("resolution", "external_symbol");
+            ref.put("external_class", packageReference.getQualifiedName());
+            ref.put("external_resolution", "package_reference");
+        } else {
+            resolveStringJavadocReference(parsed, owner, target, ref);
+        }
+        enrichReferenceTaxonomy(parsed, owner, ref);
+        return ref;
+    }
+
+    private static Map<String, Object> baseJavadocReference(String tag, String raw, String target, String label) {
         Map<String, Object> ref = new LinkedHashMap<>();
         ref.put("tag", tag);
         ref.put("raw", raw);
         ref.put("target", target);
         ref.put("label", label == null ? "" : label);
+        return ref;
+    }
 
+    private static void resolveStringJavadocReference(ParsedProject parsed, CtType<?> owner,
+                                                      String target, Map<String, Object> ref) {
         if (target.startsWith("\"")) {
             ref.put("kind", "text_reference");
             ref.put("text", target.replaceAll("^\"|\"$", ""));
             ref.put("resolution", "text");
-            enrichReferenceTaxonomy(parsed, owner, ref);
-            return ref;
+            return;
         }
 
         Matcher anchor = ANCHOR_HREF.matcher(target);
@@ -1046,24 +1452,21 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             ref.put("url", anchor.group(1).trim());
             ref.put("label", anchor.group(2).replaceAll("\\s+", " ").trim());
             ref.put("resolution", "external");
-            enrichReferenceTaxonomy(parsed, owner, ref);
-            return ref;
+            return;
         }
 
         if (target.startsWith("http://") || target.startsWith("https://")) {
             ref.put("kind", "external_url");
             ref.put("url", target);
             ref.put("resolution", "external");
-            enrichReferenceTaxonomy(parsed, owner, ref);
-            return ref;
+            return;
         }
 
         String cleaned = stripModulePrefix(target.replaceAll("#$", "").trim());
         if (cleaned.isBlank()) {
             ref.put("kind", "unknown");
             ref.put("resolution", "empty_target");
-            enrichReferenceTaxonomy(parsed, owner, ref);
-            return ref;
+            return;
         }
 
         if (cleaned.contains("#")) {
@@ -1071,8 +1474,118 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         } else {
             resolveTypeReference(parsed, owner, cleaned, ref);
         }
-        enrichReferenceTaxonomy(parsed, owner, ref);
-        return ref;
+    }
+
+    private static void resolveExecutableJavadocReference(ParsedProject parsed, CtType<?> owner,
+                                                          CtExecutableReference<?> executable,
+                                                          Map<String, Object> ref) {
+        String className = projectClassName(parsed, owner, executable.getDeclaringType());
+        String memberName = executable.getSimpleName();
+        if ("<init>".equals(memberName) && !className.isBlank()) {
+            memberName = simpleTypeName(className);
+        }
+        List<String> parameterTypes = executable.getParameters().stream()
+                .map(SpoonSourceModelBackend::typeName)
+                .toList();
+        MemberReference memberReference = typedMemberReference(memberName, parameterTypes, stringValue(ref.get("target")));
+        ref.put("kind", "member_reference");
+        ref.put("resolved_class", className);
+        ref.put("referenced_member", memberReference.hasParameters()
+                ? memberName + "(" + String.join(",", parameterTypes) + ")"
+                : memberName);
+        boolean inheritedRelativeReference = inheritedRelativeReference(owner, className, stringValue(ref.get("target")));
+
+        if (!className.isBlank()) {
+            if (resolveMethodCandidate(parsed, className, memberReference, inheritedRelativeReference, ref)) {
+                return;
+            }
+            if (!inheritedRelativeReference && resolveInheritedMemberCandidate(parsed, className, memberReference, ref)) {
+                return;
+            }
+            ref.put("resolution", "class_resolved_member_unresolved");
+            return;
+        }
+
+        String externalClass = externalClassName(executable.getDeclaringType());
+        if (!externalClass.isBlank()) {
+            resolveExternalMemberReference(parsed, owner, externalClass, memberReference,
+                    stringValue(ref.get("referenced_member")), ref);
+            return;
+        }
+        resolveStringJavadocReference(parsed, owner, stringValue(ref.get("target")), ref);
+    }
+
+    private static MemberReference typedMemberReference(String memberName, List<String> spoonParameterTypes,
+                                                        String sourceTarget) {
+        String target = sourceTarget == null ? "" : sourceTarget.trim();
+        int hash = target.indexOf('#');
+        if (hash >= 0 && hash + 1 < target.length()) {
+            MemberReference sourceMember = parseMemberReference(target.substring(hash + 1));
+            if (!sourceMember.name().isBlank() && !sourceMember.hasParameters()) {
+                return sourceMember;
+            }
+        }
+        return new MemberReference(memberName, true, spoonParameterTypes);
+    }
+
+    private static void resolveFieldJavadocReference(ParsedProject parsed, CtType<?> owner,
+                                                     CtFieldReference<?> field,
+                                                     Map<String, Object> ref) {
+        String className = projectClassName(parsed, owner, field.getDeclaringType());
+        MemberReference memberReference = new MemberReference(field.getSimpleName(), false, List.of());
+        ref.put("kind", "field_reference");
+        ref.put("resolved_class", className);
+        ref.put("referenced_member", field.getSimpleName());
+        boolean inheritedRelativeReference = inheritedRelativeReference(owner, className, stringValue(ref.get("target")));
+
+        if (!className.isBlank()) {
+            if (resolveFieldCandidate(parsed, className, memberReference, inheritedRelativeReference, ref)) {
+                return;
+            }
+            if (!inheritedRelativeReference && resolveInheritedMemberCandidate(parsed, className, memberReference, ref)) {
+                return;
+            }
+            ref.put("resolution", "class_resolved_member_unresolved");
+            return;
+        }
+
+        String externalClass = externalClassName(field.getDeclaringType());
+        if (!externalClass.isBlank()) {
+            resolveExternalMemberReference(parsed, owner, externalClass, memberReference,
+                    field.getSimpleName(), ref);
+            return;
+        }
+        resolveStringJavadocReference(parsed, owner, stringValue(ref.get("target")), ref);
+    }
+
+    private static boolean inheritedRelativeReference(CtType<?> owner, String className, String sourceTarget) {
+        if (owner == null || className == null || className.isBlank() || sourceTarget == null) {
+            return false;
+        }
+        return sourceTarget.trim().startsWith("#") && !owner.getQualifiedName().equals(className);
+    }
+
+    private static void resolveTypeJavadocReference(ParsedProject parsed, CtType<?> owner,
+                                                    CtTypeReference<?> type,
+                                                    Map<String, Object> ref) {
+        String className = projectClassName(parsed, owner, type);
+        ref.put("kind", "type_reference");
+        if (!className.isBlank()) {
+            ref.put("resolution", "resolved_type");
+            ref.put("resolved_class", className);
+            putTypeDetails(parsed, className, ref);
+            return;
+        }
+
+        String externalClass = externalClassName(type);
+        if (!externalClass.isBlank()) {
+            ExternalType external = resolveExternalType(parsed, owner, externalClass);
+            ref.put("resolution", external.resolved() ? "external_symbol" : "unresolved");
+            ref.put("external_class", external.qualifiedName());
+            ref.put("external_resolution", external.confidence());
+            return;
+        }
+        resolveStringJavadocReference(parsed, owner, stringValue(ref.get("target")), ref);
     }
 
     private static void enrichReferenceTaxonomy(ParsedProject parsed, CtType<?> owner, Map<String, Object> ref) {
@@ -1672,6 +2185,73 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return "";
     }
 
+    private static String projectClassName(ParsedProject parsed, CtType<?> owner, CtTypeReference<?> type) {
+        if (type == null) {
+            return owner != null ? owner.getQualifiedName() : "";
+        }
+        try {
+            CtType<?> declaration = type.getDeclaration();
+            if (declaration != null && declaration.getQualifiedName() != null
+                    && parsed.typesByQualifiedName().containsKey(declaration.getQualifiedName())) {
+                return declaration.getQualifiedName();
+            }
+        } catch (Exception | StackOverflowError ignored) {
+            // Fall back to textual names below.
+        }
+
+        List<String> candidates = new ArrayList<>();
+        String qualified = type.getQualifiedName();
+        if (qualified != null && !qualified.isBlank()) {
+            candidates.add(qualified);
+        }
+        String rendered = typeName(type);
+        if (rendered != null && !rendered.isBlank()) {
+            candidates.add(rendered);
+        }
+        String simple = type.getSimpleName();
+        if (simple != null && !simple.isBlank()) {
+            candidates.add(simple);
+        }
+
+        for (String candidate : candidates) {
+            String normalized = stripModulePrefix(candidate);
+            if (parsed.typesByQualifiedName().containsKey(normalized)) {
+                return normalized;
+            }
+            String resolved = resolveClassName(parsed, owner, normalized);
+            if (!resolved.isBlank()) {
+                return resolved;
+            }
+            String nested = projectNestedClassName(parsed, normalized);
+            if (!nested.isBlank()) {
+                return nested;
+            }
+        }
+        return "";
+    }
+
+    private static String projectNestedClassName(ParsedProject parsed, String candidate) {
+        if (candidate == null || candidate.isBlank()) {
+            return "";
+        }
+        String dotted = candidate.replace('$', '.');
+        return parsed.typesByQualifiedName().keySet().stream()
+                .filter(type -> type.replace('$', '.').equals(dotted))
+                .findFirst()
+                .orElse("");
+    }
+
+    private static String externalClassName(CtTypeReference<?> type) {
+        if (type == null) {
+            return "";
+        }
+        String qualified = type.getQualifiedName();
+        if (qualified != null && !qualified.isBlank()) {
+            return stripModulePrefix(qualified.replaceAll("<.*>", ""));
+        }
+        return stripModulePrefix(typeName(type).replaceAll("<.*>", ""));
+    }
+
     private static MemberReference parseMemberReference(String member) {
         String value = member == null ? "" : member.trim();
         int open = value.indexOf('(');
@@ -2176,6 +2756,15 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
 
     private record InlineJavadocReference(String tag, String raw, String target, String label) {
         private InlineJavadocReference {
+            tag = tag != null ? tag : "";
+            raw = raw != null ? raw : "";
+            target = target != null ? target : "";
+            label = label != null ? label : "";
+        }
+    }
+
+    private record RawJavadocReference(String tag, String raw, String target, String label) {
+        private RawJavadocReference {
             tag = tag != null ? tag : "";
             raw = raw != null ? raw : "";
             target = target != null ? target : "";

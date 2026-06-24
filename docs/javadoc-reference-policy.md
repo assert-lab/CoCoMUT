@@ -1,9 +1,11 @@
 # Javadoc Reference Policy
 
-CoCoMUT parses common Javadoc tags using the official Oracle/JDK doc-comment
-syntax and standard doclet model. The implementation should not add
-repository-specific parsing rules for a single project such as Apache Commons
-Lang.
+CoCoMUT parses common Javadoc tags using Spoon's official `spoon-javadoc`
+module, which follows the Oracle/JDK documentation-comment syntax and standard
+doclet model. The dependency is resolved from normal Maven providers as
+`fr.inria.gforge.spoon:spoon-javadoc`; it is not read from a local Spoon
+checkout. The implementation should not add repository-specific parsing rules
+for a single project such as Apache Commons Lang.
 
 ## Supported Tags
 
@@ -42,6 +44,7 @@ Type
 Type#member
 #member
 package.Type#member(parameter.Types)
+Type#member(Type, int)
 module/package.Type#member(parameter.Types) label text
 ```
 
@@ -59,6 +62,12 @@ Javadoc text.
 Each resolved reference also gets derived taxonomy fields for empirical
 analysis:
 
+- `parser`: the parser path used for the reference, normally `spoon-javadoc`;
+- `parse_confidence`: `high` for typed Spoon references, `medium` for Spoon
+  text fallback, and `low` for CoCoMUT fallback text parsing;
+- `spoon_reference`: Spoon's typed reference rendering when available;
+- `target`: the source Javadoc spelling, preserved for auditability;
+- `canonical_target`: Spoon's normalized target when it differs from `target`;
 - `reference_target_kind`: `method`, `field`, `type`, `url`, `text`,
   `method_or_field`, or `unknown`;
 - `reference_domain`: `project`, `external_jdk`, `external_library`,
@@ -69,6 +78,16 @@ analysis:
 These taxonomy fields summarize CoCoMUT's resolution result. They are not
 additional Javadoc syntax and should not replace canonical method/type/field
 URIs when a project-local target is resolved.
+
+CoCoMUT keeps a fallback text parser only for cases where `spoon-javadoc` cannot
+produce reference or structured-tag elements. Fallback objects are emitted for
+coverage and auditability, but are marked with `parser=cocomut-fallback` and
+low confidence.
+
+When `spoon-javadoc` produces a typed `CtReference`, CoCoMUT resolves semantics
+from that typed Spoon reference rather than reparsing `target`. The raw
+`target` field remains the source spelling for audit and compatibility; it is
+not the authoritative semantic identity when `spoon_reference` is present.
 
 ## Resolution Policy
 
