@@ -64,7 +64,7 @@ analysis.
 The default output goes to:
 
 ```text
-./cocomut_output/<project-name>/method_contexts.jsonl
+./cocomut_output/<project-name>-<path-hash>/method_contexts.jsonl
 ```
 
 Open the JSONL viewer:

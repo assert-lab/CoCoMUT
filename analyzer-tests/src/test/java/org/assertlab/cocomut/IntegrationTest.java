@@ -33,8 +33,7 @@ public class IntegrationTest {
     @After
     public void tearDown() {
         Path outputDir = Path.of(System.getProperty("user.dir"))
-                .resolve("cocomut_output")
-                .resolve(testProjectPath.getFileName().toString());
+                .resolve("cocomut_output");
 
         try {
             if (Files.exists(outputDir)) {

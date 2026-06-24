@@ -145,6 +145,16 @@ JARs. Maven and Gradle projects are compiled during phase 1 when their build
 files are present; plain Java projects must provide class files or a compatible
 build layout.
 
+For Maven and Gradle projects, phase 1 performs a clean compile of main and test
+classes without running tests. Class output directories and dependency JARs are
+collected after that build from the project build tool, not by scanning
+arbitrary global dependency caches.
+
+Compilation runs the subject repository's Maven or Gradle build logic. For
+untrusted public repositories, run CoCoMUT in a disposable container or VM with
+an unprivileged user, scrubbed environment, isolated writable build/cache
+directories, and CPU, memory, process, wall-clock, and network limits.
+
 `--call-graph rta` is the default. Use `--call-graph cha` when the study design
 needs class-hierarchy analysis instead of rapid type analysis.
 
@@ -160,6 +170,8 @@ For documentation datasets, prefer a precise source-set and scope:
 `--source-set main` excludes public methods found under test, generated,
 example, integration-test, or unknown source roots. Use `--source-set all` or
 omit the flag to preserve the default behavior.
+`--source-set test` uses standard test source roots such as `src/test/java` and
+the matching test bytecode when the build produces it.
 
 ## Layered Selection
 
@@ -200,11 +212,12 @@ Examples:
 ## Output Directory
 
 By default, generated artifacts are written outside the analyzed project under
-`./cocomut_output/<project-name>/`, relative to the directory where you run
-`cocomut`:
+`./cocomut_output/<project-name>-<path-hash>/`, relative to the directory where
+you run `cocomut`. The suffix avoids collisions when two analyzed repositories
+share the same final directory name:
 
 ```text
-./cocomut_output/<project-name>/
+./cocomut_output/<project-name>-<path-hash>/
   method_contexts.jsonl
   extraction_report.json
   Output_CallGraph_CHA.txt     when CHA is effectively used
@@ -212,7 +225,8 @@ By default, generated artifacts are written outside the analyzed project under
   method_context_failures.jsonl only when some methods fail context extraction
 ```
 
-Use `--output-dir` to choose an explicit destination:
+Use `--output-dir` to choose an explicit destination. This is recommended for
+published experiments:
 
 ```bash
 ./bin/cocomut --project /path/to/java/project --output-dir ./results/project-name
@@ -357,7 +371,7 @@ Current static-analysis boundaries:
 - source extraction uses Spoon with classpath evidence from the compiled
   project;
 - call context comes from static bytecode analysis over compiled class
-  directories and classpath artifacts;
+  directories and classpath artifacts, including dependency JARs;
 - build-tool compilation is part of phase 1 for supported Maven/Gradle projects;
   otherwise CoCoMUT requires pre-existing class files or bytecode artifacts;
 - reflection, proxies, generated code, Lombok, service loaders, and dependency

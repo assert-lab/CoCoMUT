@@ -111,7 +111,8 @@ public class CallGraphGenerator {
             List<AnalysisInputLocation> inputLocations = new ArrayList<>();
 
             for (Path cp : projectMetadata.getClasspath()) {
-                if (cp.toFile().isDirectory() && containsClassFiles(cp)) {
+                if ((cp.toFile().isDirectory() && containsClassFiles(cp))
+                        || (cp.toString().endsWith(".jar") && Files.isRegularFile(cp))) {
                     if (seenPaths.add(cp.toAbsolutePath().toString())) {
                         inputLocations.add(new JavaClassPathAnalysisInputLocation(cp.toString()));
                     }
@@ -136,7 +137,7 @@ public class CallGraphGenerator {
             } catch (Exception ignored) {}
 
             if (inputLocations.isEmpty()) {
-                System.err.println("[CallGraphGenerator] no class directories found under " + projectMetadata.getProjectPath());
+                System.err.println("[CallGraphGenerator] no bytecode locations found under " + projectMetadata.getProjectPath());
                 return false;
             }
 
@@ -151,7 +152,7 @@ public class CallGraphGenerator {
                 List<SootMethod> methods = new ArrayList<>();
                 for (SootMethod m : sootClass.getMethods()) {
                     methods.add(m);
-                    if (m.hasBody() && m.isConcrete() && !isSpecialMethod(m.getSignature())) {
+                    if (m.hasBody() && m.isConcrete() && !isClassInitializer(m.getSignature())) {
                         entryPoints.add(m.getSignature());
                     }
                 }
@@ -191,13 +192,13 @@ public class CallGraphGenerator {
 
                 for (CallGraph.Call call : cg.callsTo(sig)) {
                     MethodSignature callerSig = call.getSourceMethodSignature();
-                    if (!isSpecialMethod(callerSig)) {
+                    if (!isClassInitializer(callerSig)) {
                         callers.add(edgeFor(callerSig));
                     }
                 }
                 for (CallGraph.Call call : cg.callsFrom(sig)) {
                     MethodSignature calleeSig = call.getTargetMethodSignature();
-                    if (!isSpecialMethod(calleeSig)) {
+                    if (!isClassInitializer(calleeSig)) {
                         callees.add(edgeFor(calleeSig));
                     }
                 }
@@ -213,6 +214,7 @@ public class CallGraphGenerator {
                     .callees(callees)
                     .algorithm(algorithm.toString())
                     .generationTime(endTime - startTime)
+                    .methodMatched(sig != null)
                     .build();
 
             cache.put(cacheKey, result);
@@ -223,11 +225,16 @@ public class CallGraphGenerator {
     }
 
     public Map<String, CallGraphResult> generateForMethods(List<MethodInfo> methods) {
+        return generateForMethods(methods, methods);
+    }
+
+    public Map<String, CallGraphResult> generateForMethods(List<MethodInfo> analysisUniverse,
+                                                           List<MethodInfo> focalMethods) {
         if (!initialized) {
             throw new IllegalStateException("CallGraphGenerator not initialized. Call initialize() first.");
         }
-        indexMethodSignatures(methods);
-        return methods.stream()
+        indexMethodSignatures(analysisUniverse == null ? List.of() : analysisUniverse);
+        return (focalMethods == null ? List.<MethodInfo>of() : focalMethods).stream()
                 .map(this::generateForMethod)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toMap(CallGraphResult::getMethodUri, r -> r));
@@ -555,74 +562,29 @@ public class CallGraphGenerator {
         List<SootMethod> classMethods = methodsByClass.get(className);
         if (classMethods == null) return null;
 
-        List<String> expectedParams = parseParamTypes(method.getMethodSignature());
-
-        SootMethod best = null;
-        int bestScore = Integer.MIN_VALUE;
-        String bestSigStr = null;
+        SourceMethodKey expected = SourceMethodKey.from(method);
+        List<SootMethod> exactMatches = new ArrayList<>();
+        List<SootMethod> returnAgnosticMatches = new ArrayList<>();
 
         for (SootMethod m : classMethods) {
-            if (!methodName.equals(m.getName())) continue;
-            int score = m.hasBody() ? 5 : 0;
-
-            if (!expectedParams.isEmpty() && paramsMatch(m.getParameterTypes(), expectedParams)) {
-                score += 10;
+            MethodSignature signature = m.getSignature();
+            BytecodeMethodKey bytecodeKey = BytecodeMethodKey.from(signature, true);
+            if (!expected.sameClassNameParams(bytecodeKey)) {
+                continue;
             }
-            if (returnTypeMatches(m.getSignature(), method.getErasedReturnType())) {
-                score += 4;
-            }
-
-            String sigStr = m.getSignature().toString();
-            if (score > bestScore || (score == bestScore && (bestSigStr == null || sigStr.compareTo(bestSigStr) < 0))) {
-                best = m;
-                bestScore = score;
-                bestSigStr = sigStr;
+            if (expected.returnType().equals(bytecodeKey.returnType())) {
+                exactMatches.add(m);
+            } else {
+                returnAgnosticMatches.add(m);
             }
         }
-        return best != null ? best.getSignature() : null;
-    }
-
-    private static List<String> parseParamTypes(String methodSignature) {
-        if (methodSignature == null) return List.of();
-        int open = methodSignature.indexOf('(');
-        int close = methodSignature.lastIndexOf(')');
-        if (open < 0 || close <= open) return List.of();
-        String paramStr = methodSignature.substring(open + 1, close).trim();
-        if (paramStr.isEmpty()) return List.of();
-        List<String> types = new ArrayList<>();
-        for (String p : paramStr.split(",")) {
-            String trimmed = p.trim().replaceAll("<.*?>", "");
-            String[] parts = trimmed.split("\\s+");
-            if (parts.length >= 1) types.add(toSimpleName(parts[0]));
+        if (exactMatches.size() == 1) {
+            return exactMatches.get(0).getSignature();
         }
-        return types;
-    }
-
-    private static boolean paramsMatch(List<?> sootParams, List<String> expectedSimple) {
-        if (sootParams.size() != expectedSimple.size()) return false;
-        for (int i = 0; i < sootParams.size(); i++) {
-            String sootSimple = toSimpleName(sootParams.get(i).toString().replaceAll("<.*?>", ""));
-            if (!sootSimple.equals(expectedSimple.get(i))) return false;
+        if (exactMatches.isEmpty() && returnAgnosticMatches.size() == 1) {
+            return returnAgnosticMatches.get(0).getSignature();
         }
-        return true;
-    }
-
-    private static boolean returnTypeMatches(MethodSignature signature, String expectedErasedReturnType) {
-        if (expectedErasedReturnType == null || expectedErasedReturnType.isBlank()) {
-            return false;
-        }
-        String sootReturn = toSimpleName(signature.getType().toString().replaceAll("<.*?>", ""));
-        String expected = toSimpleName(expectedErasedReturnType.replaceAll("<.*?>", ""));
-        return sootReturn.equals(expected);
-    }
-
-    private static String toSimpleName(String fqcn) {
-        if (fqcn == null || fqcn.isEmpty()) return fqcn;
-        boolean isArray = fqcn.endsWith("[]");
-        String base = isArray ? fqcn.substring(0, fqcn.length() - 2) : fqcn;
-        int lastDot = base.lastIndexOf('.');
-        String simple = (lastDot >= 0) ? base.substring(lastDot + 1) : base;
-        return isArray ? simple + "[]" : simple;
+        return null;
     }
 
     private static boolean parametersCompatibleForSingleCandidate(MethodSignature sig, MethodInfo method) {
@@ -635,13 +597,6 @@ public class CallGraphGenerator {
             String left = bytecodeParams.get(i);
             String right = sourceParams.get(i);
             if (left.equals(right)) {
-                continue;
-            }
-            if (simpleType(left).equals(simpleType(right))) {
-                continue;
-            }
-            if ("java.lang.Object".equals(left) || "java.lang.Object".equals(right)
-                    || "Object".equals(left) || "Object".equals(right)) {
                 continue;
             }
             return false;
@@ -657,7 +612,7 @@ public class CallGraphGenerator {
         }
 
         private static SourceMethodKey from(MethodInfo method) {
-            return new SourceMethodKey(method.getClassname(), method.getMethodName(),
+            return new SourceMethodKey(method.getClassname(), bytecodeMethodName(method),
                     normalizeSourceParameters(method.getMethodSignature()),
                     normalizeType(method.getErasedReturnType()));
         }
@@ -867,8 +822,22 @@ public class CallGraphGenerator {
             t = t.replaceAll("<[^<>]*>", "");
         } while (!previous.equals(t));
         t = t.replaceAll("\\s+", "");
-        return primitiveDescriptorToJava(t);
+        t = primitiveDescriptorToJava(t);
+        if (t.endsWith("[]")) {
+            String component = t.substring(0, t.length() - 2);
+            String normalizedComponent = normalizeType(component);
+            return normalizedComponent.isBlank() ? t : normalizedComponent + "[]";
+        }
+        if (!t.contains(".") && JAVA_LANG_SIMPLE_TYPES.contains(t)) {
+            return "java.lang." + t;
+        }
+        return t;
     }
+
+    private static final Set<String> JAVA_LANG_SIMPLE_TYPES = Set.of(
+            "Boolean", "Byte", "Character", "Class", "Double", "Enum", "Float",
+            "Integer", "Long", "Number", "Object", "Short", "String", "StringBuilder",
+            "StringBuffer", "Throwable", "Exception", "RuntimeException", "Void");
 
     private static String primitiveDescriptorToJava(String t) {
         return switch (t) {
@@ -885,20 +854,17 @@ public class CallGraphGenerator {
         };
     }
 
-    private static String simpleType(String type) {
-        String t = normalizeType(type);
-        String suffix = "";
-        while (t.endsWith("[]")) {
-            suffix += "[]";
-            t = t.substring(0, t.length() - 2);
+    private static String bytecodeMethodName(MethodInfo method) {
+        String simpleClass = method.getClassname().substring(method.getClassname().lastIndexOf('.') + 1);
+        int nested = simpleClass.lastIndexOf('$');
+        if (nested >= 0) {
+            simpleClass = simpleClass.substring(nested + 1);
         }
-        int dot = t.lastIndexOf('.');
-        return (dot >= 0 ? t.substring(dot + 1) : t) + suffix;
+        return method.getMethodName().equals(simpleClass) ? "<init>" : method.getMethodName();
     }
 
-    private static boolean isSpecialMethod(MethodSignature sig) {
-        String name = sig.getName();
-        return "<init>".equals(name) || "<clinit>".equals(name);
+    private static boolean isClassInitializer(MethodSignature sig) {
+        return "<clinit>".equals(sig.getName());
     }
 
     private static boolean containsClassFiles(Path dir) {

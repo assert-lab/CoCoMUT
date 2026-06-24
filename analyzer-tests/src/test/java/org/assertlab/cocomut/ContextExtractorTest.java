@@ -21,14 +21,16 @@ public class ContextExtractorTest {
 
     @Before
     public void setUp() throws Exception {
+        TestFixtures.ensureMinimalMavenProjectCompiled();
+        java.nio.file.Path fixture = TestFixtures.minimalMavenProjectRoot();
         projectMetadata = new ProjectMetadata.Builder()
                 .projectName("TestProject")
-                .projectPath(Paths.get(System.getProperty("user.dir")))
+                .projectPath(fixture)
                 .buildSystem("maven")
                 .javaVersion("17")
-                .sourceRoot(Paths.get(System.getProperty("user.dir"), "src/main/java"))
+                .sourceRoot(fixture.resolve("src/main/java"))
                 .classpath(List.of(
-                        Paths.get(System.getProperty("user.dir"), "target/classes")
+                        fixture.resolve("target/classes")
                 ))
                 .compiles(true)
                 .compileStatus("BUILD SUCCESS")

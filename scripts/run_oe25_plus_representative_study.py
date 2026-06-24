@@ -77,6 +77,8 @@ RESULT_FIELDS = [
     "set",
     "repo",
     "project_path",
+    "commit_sha",
+    "dirty_checkout",
     "clone_status",
     "status",
     "retry_mode",
@@ -96,6 +98,8 @@ RESULT_FIELDS = [
     "call_edges_with_target_uri",
     "call_edges_with_method_uri",
     "call_edge_source_match_rate",
+    "call_edge_project_method_edges",
+    "call_edge_project_method_source_match_rate",
     "call_edge_project_jdk_external_edges",
     "call_edge_project_jdk_external_rate",
     "call_edge_target_kind_counts",
@@ -106,6 +110,7 @@ RESULT_FIELDS = [
     "call_edge_candidate_edges",
     "methods",
     "jsonl_rows",
+    "jsonl_malformed_rows",
     "see_methods",
     "see_references",
     "see_resolution_counts",
@@ -253,6 +258,9 @@ def inspect_jsonl(artifact_dir: Path) -> dict[str, str]:
     call_edges = 0
     call_edges_with_target_uri = 0
     call_edges_with_method_uri = 0
+    call_edge_project_method_edges = 0
+    call_edge_project_method_edges_with_method_uri = 0
+    malformed_rows = 0
     call_edge_target_kind_counts: Counter[str] = Counter()
     call_edge_resolution_counts: Counter[str] = Counter()
     call_edge_unresolved_reason_counts: Counter[str] = Counter()
@@ -267,6 +275,7 @@ def inspect_jsonl(artifact_dir: Path) -> dict[str, str]:
                 try:
                     row = json.loads(line)
                 except json.JSONDecodeError:
+                    malformed_rows += 1
                     continue
                 metadata = row.get("metadata") or {}
                 mode = metadata.get("source_backend_mode")
@@ -280,7 +289,12 @@ def inspect_jsonl(artifact_dir: Path) -> dict[str, str]:
                         call_edges_with_target_uri += 1
                     if edge.get("method_uri"):
                         call_edges_with_method_uri += 1
-                    call_edge_target_kind_counts[str(edge.get("target_kind") or edge.get("kind") or "missing")] += 1
+                    target_kind = str(edge.get("target_kind") or edge.get("kind") or "missing")
+                    if target_kind == "project_method":
+                        call_edge_project_method_edges += 1
+                        if edge.get("method_uri"):
+                            call_edge_project_method_edges_with_method_uri += 1
+                    call_edge_target_kind_counts[target_kind] += 1
                     call_edge_resolution_counts[str(edge.get("resolution") or "missing")] += 1
                     if edge.get("unresolved_reason"):
                         reason = str(edge.get("unresolved_reason"))
@@ -320,6 +334,11 @@ def inspect_jsonl(artifact_dir: Path) -> dict[str, str]:
         "call_edges_with_target_uri": str(call_edges_with_target_uri),
         "call_edges_with_method_uri": str(call_edges_with_method_uri),
         "call_edge_source_match_rate": percent_string(call_edges_with_method_uri, call_edges),
+        "call_edge_project_method_edges": str(call_edge_project_method_edges),
+        "call_edge_project_method_source_match_rate": percent_string(
+            call_edge_project_method_edges_with_method_uri,
+            call_edge_project_method_edges,
+        ),
         "call_edge_project_jdk_external_edges": str(project_jdk_external),
         "call_edge_project_jdk_external_rate": percent_string(project_jdk_external, call_edges),
         "call_edge_target_kind_counts": json.dumps(dict(sorted(call_edge_target_kind_counts.items())), sort_keys=True),
@@ -336,7 +355,33 @@ def inspect_jsonl(artifact_dir: Path) -> dict[str, str]:
         "inline_link_references": str(inline_link_references),
         "inheritdoc_methods": str(inheritdoc_methods),
         "inheritdoc_with_candidates": str(inheritdoc_with_candidates),
+        "jsonl_malformed_rows": str(malformed_rows),
     }
+
+
+def checkout_revision(path: Path | None) -> tuple[str, str]:
+    if path is None:
+        return "", ""
+    try:
+        sha = subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "HEAD"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+            timeout=10,
+        ).stdout.strip()
+        dirty = subprocess.run(
+            ["git", "-C", str(path), "status", "--short"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+            timeout=10,
+        ).stdout.strip()
+        return sha, "true" if dirty else "false"
+    except Exception:
+        return "", ""
 
 
 def percent_string(numerator: int, denominator: int) -> str:
@@ -403,12 +448,20 @@ def run_target(root: Path, output_dir: Path, target: Target, args: argparse.Name
 
     duration_ms = str(int((time.time() - start) * 1000))
     stats = inspect_jsonl(artifact_dir)
+    commit_sha, dirty_checkout = checkout_revision(target.project_path)
+    malformed_rows = int(stats.get("jsonl_malformed_rows") or 0)
+    status_text = report.get("status", "TIMEOUT" if status is None else f"EXIT_{status}")
+    if malformed_rows:
+        status_text = "FAILED"
+        note = (note + "; " if note else "") + f"malformed JSONL rows: {malformed_rows}"
     return {
         "set": target.dataset,
         "repo": target.repo,
         "project_path": str(target.project_path),
+        "commit_sha": commit_sha,
+        "dirty_checkout": dirty_checkout,
         "clone_status": "OK",
-        "status": report.get("status", "TIMEOUT" if status is None else f"EXIT_{status}"),
+        "status": status_text,
         "retry_mode": retry_mode,
         "build_system": report.get("phase_1_build_system", ""),
         "compiles": report.get("phase_1_compiles", ""),
@@ -426,6 +479,8 @@ def run_target(root: Path, output_dir: Path, target: Target, args: argparse.Name
         "call_edges_with_target_uri": stats.get("call_edges_with_target_uri", ""),
         "call_edges_with_method_uri": stats.get("call_edges_with_method_uri", ""),
         "call_edge_source_match_rate": stats.get("call_edge_source_match_rate", ""),
+        "call_edge_project_method_edges": stats.get("call_edge_project_method_edges", ""),
+        "call_edge_project_method_source_match_rate": stats.get("call_edge_project_method_source_match_rate", ""),
         "call_edge_project_jdk_external_edges": stats.get("call_edge_project_jdk_external_edges", ""),
         "call_edge_project_jdk_external_rate": stats.get("call_edge_project_jdk_external_rate", ""),
         "call_edge_target_kind_counts": stats.get("call_edge_target_kind_counts", ""),
@@ -436,6 +491,7 @@ def run_target(root: Path, output_dir: Path, target: Target, args: argparse.Name
         "call_edge_candidate_edges": stats.get("call_edge_candidate_edges", ""),
         "methods": report.get("phase_2_methods_identified", ""),
         "jsonl_rows": report.get("phase_5_jsonl_rows", ""),
+        "jsonl_malformed_rows": stats.get("jsonl_malformed_rows", ""),
         "see_methods": stats.get("see_methods", ""),
         "see_references": stats.get("see_references", ""),
         "see_resolution_counts": stats.get("see_resolution_counts", ""),
@@ -470,6 +526,18 @@ def write_summary(output_dir: Path, results_path: Path) -> None:
     total_call_edges = sum(int(row["call_edges"] or 0) for row in rows if (row["call_edges"] or "").isdigit())
     total_target_uri_edges = sum(int(row["call_edges_with_target_uri"] or 0) for row in rows if (row["call_edges_with_target_uri"] or "").isdigit())
     total_method_uri_edges = sum(int(row["call_edges_with_method_uri"] or 0) for row in rows if (row["call_edges_with_method_uri"] or "").isdigit())
+    total_project_method_edges = sum(int(row["call_edge_project_method_edges"] or 0) for row in rows if (row["call_edge_project_method_edges"] or "").isdigit())
+    total_project_method_joined_edges = 0
+    for row in rows:
+        if not (row["call_edge_project_method_edges"] or "").isdigit():
+            continue
+        rate = row.get("call_edge_project_method_source_match_rate", "")
+        if rate.endswith("%"):
+            try:
+                total_project_method_joined_edges += round(int(row["call_edge_project_method_edges"]) * float(rate[:-1]) / 100.0)
+            except ValueError:
+                pass
+    total_malformed_rows = sum(int(row["jsonl_malformed_rows"] or 0) for row in rows if (row["jsonl_malformed_rows"] or "").isdigit())
     total_project_jdk_external_edges = sum(int(row["call_edge_project_jdk_external_edges"] or 0) for row in rows if (row["call_edge_project_jdk_external_edges"] or "").isdigit())
     total_ambiguous_edges = sum(int(row["call_edge_ambiguous_edges"] or 0) for row in rows if (row["call_edge_ambiguous_edges"] or "").isdigit())
     target_kind_counts: Counter[str] = Counter()
@@ -516,8 +584,11 @@ def write_summary(output_dir: Path, results_path: Path) -> None:
         f"- call edges observed: {total_call_edges}",
         f"- call edges with `target_uri`: {total_target_uri_edges} ({percent_string(total_target_uri_edges, total_call_edges) or '-'})",
         f"- call edges joined to source `method_uri`: {total_method_uri_edges} ({percent_string(total_method_uri_edges, total_call_edges) or '-'})",
+        f"- project-method target edges: {total_project_method_edges}",
+        f"- project-method target edges joined to source `method_uri`: {total_project_method_joined_edges} ({percent_string(total_project_method_joined_edges, total_project_method_edges) or '-'})",
         f"- call edges classified as project/JDK/external method targets: {total_project_jdk_external_edges} ({percent_string(total_project_jdk_external_edges, total_call_edges) or '-'})",
         f"- ambiguous call edges: {total_ambiguous_edges}",
+        f"- malformed JSONL rows: {total_malformed_rows}",
         f"- `@see` references observed: {total_see_refs}",
         f"- methods using `{{@inheritDoc}}`: {total_inheritdoc}",
         "",

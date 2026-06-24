@@ -37,7 +37,7 @@ public final class CoCoMUTCommand implements Callable<Integer> {
             description = "Static bytecode call-graph algorithm: rta or cha.")
     private String callGraph;
 
-    @Option(names = "--output-dir", description = "Directory for generated artifacts. Defaults to ./cocomut_output/<project-name>.")
+    @Option(names = "--output-dir", description = "Directory for generated artifacts. Defaults to ./cocomut_output/<project-name>-<path-hash>.")
     private Path outputDir;
 
     @Option(names = "--max-methods", description = "Limit methods for smoke tests.")

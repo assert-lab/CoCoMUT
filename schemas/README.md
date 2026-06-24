@@ -52,6 +52,10 @@ class_hierarchy           Source hierarchy and resolution confidence
 source_context            Field reads/writes, overload group, sibling methods
 ```
 
+`lines_of_code` and `cyclomatic_complexity` are lexical estimates derived from
+the emitted method source, not AST control-flow measurements. Use them for
+coarse filtering, not as canonical structural metrics.
+
 CoCoMUT uses the same `path#symbol` convention for method, type, and package
 selection. See
 [../docs/symbol-model.md](../docs/symbol-model.md).
@@ -146,6 +150,8 @@ resolution                resolved|resolved_normalized_exact|
                           resolved_parameter_normalized_unique|
                           ambiguous|unresolved|
                           synthetic_or_compiler_generated
+context_in_output         true only when the resolved method's full context is
+                          included in the current JSONL selection
 candidate_method_uris     Candidate source method URIs when a project edge is
                           plausible but not uniquely resolvable
 unresolved_reason         Deterministic reason why method_uri is empty
@@ -156,6 +162,14 @@ context                   Optional method node when method_uri resolves to an ex
 remains stricter: it is populated only when the bytecode edge maps to one unique
 source method in the CoCoMUT/Spoon model. This avoids treating JDK, dependency,
 synthetic, ambiguous, or bytecode-only targets as source-backed methods.
+
+The source join universe is the full project source model. Focal-method filters
+such as `--scope`, `--source-set`, `--package`, `--class`, `--method`,
+`--visibility`, path filters, and `--max-methods` control which methods receive
+top-level JSONL rows; they do not remove methods from bytecode-to-source
+identity resolution. When an edge resolves to a project method outside the
+current output selection, `method_uri` is still populated and
+`context_in_output` is `false`.
 
 ### Call Graph Target Taxonomy
 

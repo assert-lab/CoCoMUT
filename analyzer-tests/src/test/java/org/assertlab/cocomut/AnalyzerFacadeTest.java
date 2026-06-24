@@ -60,6 +60,28 @@ public class AnalyzerFacadeTest {
     }
 
     @Test
+    public void entryPointEdgesResolveAgainstFullAnalysisUniverse() throws Exception {
+        Map<String, Object> report = AnalyzerFacade.analyze(ContextRequest.builder()
+                .projectRoot(fixtureRoot)
+                .scope(ContextRequest.Scope.ENTRY_POINTS)
+                .sourceSets(java.util.Set.of("main"))
+                .build());
+
+        assertEquals("SUCCESS", report.get("status"));
+        JsonNode row = findJsonlRowForMethod(Path.of(String.valueOf(report.get("phase_5_jsonl_file"))), "greet");
+        boolean privateHelperResolvedOutsideOutput = false;
+        for (JsonNode edge : row.path("callees")) {
+            if ("prefix".equals(edge.path("method_name").asText())) {
+                privateHelperResolvedOutsideOutput = edge.path("method_uri").asText().contains("prefix()")
+                        && !edge.path("context_in_output").asBoolean(true)
+                        && "project_method".equals(edge.path("target_kind").asText());
+            }
+        }
+        assertTrue("Filtered private helper should resolve but not embed context",
+                privateHelperResolvedOutsideOutput);
+    }
+
+    @Test
     public void serviceApiReturnsTypedExtractionReport() throws Exception {
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(fixtureRoot)

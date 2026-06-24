@@ -149,6 +149,10 @@
         "declaring_class": {"type": "string"},
         "method_name": {"type": "string"},
         "resolution": {"type": "string"},
+        "context_in_output": {
+          "type": "boolean",
+          "description": "True when the resolved project method's full context is included in the current JSONL output selection."
+        },
         "candidate_method_uris": {"type": "array", "items": {"type": "string"}},
         "unresolved_reason": {
           "type": "string",

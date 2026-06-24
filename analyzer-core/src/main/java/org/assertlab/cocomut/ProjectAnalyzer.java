@@ -64,8 +64,8 @@ public class ProjectAnalyzer {
         String detectedBuildSystem = detectBuildSystem();
         String javaVersion = detectJavaVersion(detectedBuildSystem);
         Path sourceRoot = findSourceRoot();
-        List<Path> classpath = buildClasspath(detectedBuildSystem);
         boolean compiles = validateProjectCompiles();
+        List<Path> classpath = buildClasspath(detectedBuildSystem);
 
         String projectName = projectPath.getFileName().toString();
 
@@ -254,10 +254,14 @@ public class ProjectAnalyzer {
                 if (Files.exists(moduleClasses)) {
                     classpath.add(moduleClasses);
                 }
+                Path moduleTestClasses = module.resolve("target/test-classes");
+                if (Files.exists(moduleTestClasses)) {
+                    classpath.add(moduleTestClasses);
+                }
             }
         }
 
-        // Add dependencies from Maven local repository
+        // Add build-tool-resolved dependency artifacts after compilation.
         if ("maven".equals(buildSystem)) {
             classpath.addAll(buildMavenClasspath());
         } else if ("gradle".equals(buildSystem)) {
@@ -271,30 +275,33 @@ public class ProjectAnalyzer {
     }
 
     /**
-     * Extract classpath from Maven repository (~/.m2/repository)
+     * Extract the exact Maven compile classpath for the analyzed project.
      */
     private List<Path> buildMavenClasspath() throws IOException {
-        List<Path> jars = new ArrayList<>();
-        
-        Path mavenRepo = Paths.get(System.getProperty("user.home"), ".m2", "repository");
-        if (!Files.exists(mavenRepo)) {
-            return jars;
+        boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
+        String mvn = executableWithWrapper("mvn", isWindows);
+        Path output = Files.createTempFile("cocomut-maven-classpath", ".txt");
+        try {
+            CommandResult result;
+            try {
+                result = runCommand(List.of(mvn, "-q", "-DincludeScope=test",
+                        "-Dmdep.outputFile=" + output.toAbsolutePath(),
+                        "dependency:build-classpath"));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return List.of();
+            }
+            if (result.exitCode() != 0 || !Files.isRegularFile(output)) {
+                return List.of();
+            }
+            return parsePathList(Files.readString(output, StandardCharsets.UTF_8));
+        } finally {
+            Files.deleteIfExists(output);
         }
-
-        // Find all JAR files in Maven repository
-        try (var stream = Files.walk(mavenRepo, 5)) {
-            stream.filter(path -> path.toString().endsWith(".jar"))
-                    .limit(100)  // Limit to avoid excessive classpaths
-                    .forEach(jars::add);
-        } catch (IOException e) {
-            // If walk fails, continue with what we have
-        }
-
-        return jars;
     }
 
     /**
-     * Extract classpath from Gradle (simplified - looks for build/libs and .gradle cache)
+     * Extract the exact Gradle runtime/compile classpath for the analyzed project.
      */
     private List<Path> buildGradleClasspath() throws IOException {
         List<Path> jars = new ArrayList<>();
@@ -308,30 +315,54 @@ public class ProjectAnalyzer {
             }
         }
 
-        // Check Gradle cache (simplified - just look for common location)
-        Path gradleCache = Paths.get(System.getProperty("user.home"), ".gradle", "caches");
-        if (Files.exists(gradleCache)) {
-            try (var stream = Files.walk(gradleCache, 3)) {
-                stream.filter(p -> p.toString().endsWith(".jar"))
-                        .limit(50)
-                        .forEach(jars::add);
-            } catch (IOException e) {
-                // Continue if walk fails
+        boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
+        String gradle = executableWithWrapper("gradle", isWindows);
+        Path initScript = Files.createTempFile("cocomut-gradle-classpath", ".gradle");
+        Files.writeString(initScript, """
+                allprojects {
+                    tasks.register("printCocomutClasspath") {
+                        doLast {
+                            def names = ["runtimeClasspath", "compileClasspath", "testRuntimeClasspath", "testCompileClasspath"]
+                            def files = [] as LinkedHashSet
+                            names.each { n ->
+                                if (configurations.findByName(n) != null) {
+                                    try { files.addAll(configurations.getByName(n).resolve()) } catch (Throwable ignored) {}
+                                }
+                            }
+                            println("COCOMUT_CLASSPATH=" + files.collect { it.absolutePath }.join(File.pathSeparator))
+                        }
+                    }
+                }
+                """, StandardCharsets.UTF_8);
+        try {
+            CommandResult result;
+            try {
+                result = runCommand(List.of(gradle, "--no-daemon", "-q",
+                        "--init-script", initScript.toAbsolutePath().toString(), "printCocomutClasspath"));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return new ArrayList<>(new LinkedHashSet<>(jars));
             }
+            if (result.exitCode() == 0) {
+                for (String line : result.output().split("\\R")) {
+                    if (line.startsWith("COCOMUT_CLASSPATH=")) {
+                        jars.addAll(parsePathList(line.substring("COCOMUT_CLASSPATH=".length())));
+                    }
+                }
+            }
+        } finally {
+            Files.deleteIfExists(initScript);
         }
-
-        return jars;
+        return new ArrayList<>(new LinkedHashSet<>(jars));
     }
 
     /**
      * Validate that the project compiles successfully.
      *
      * Strategy:
-     *   1. Fast-path: if compiled output already exists (target/classes for Maven,
-     *      build/classes for Gradle) and contains at least one .class file, treat
-     *      the project as compiled. This avoids re-running a slow build on every
-     *      analysis call and works regardless of OS shell quirks.
-     *   2. Otherwise, invoke the build tool. On Windows the launcher is named
+     *   1. Invoke the build tool for Maven/Gradle projects so metadata reflects
+     *      the current source tree instead of stale class files.
+     *   2. On Windows the launcher is named
      *      "mvn.cmd" / "gradle.bat"; everywhere else the bare command name is
      *      used. The timeout is raised to 5 minutes so first-time compiles of
      *      medium-sized projects don't spuriously fail.
@@ -346,38 +377,27 @@ public class ProjectAnalyzer {
             return false;
         }
 
-        if (hasExistingCompiledArtifacts(buildSystem)) {
-            return true;
+        if (!"maven".equals(buildSystem) && !"gradle".equals(buildSystem)) {
+            return hasExistingCompiledArtifacts(buildSystem);
         }
 
         try {
-            ProcessBuilder pb;
             boolean isWindows = System.getProperty("os.name", "")
                     .toLowerCase()
                     .contains("win");
+            List<String> command;
 
             if ("maven".equals(buildSystem)) {
                 String mvn = executableWithWrapper("mvn", isWindows);
-                pb = new ProcessBuilder(mvn, "-q", "-DskipTests", "-Dmaven.test.skip=true", "compile");
+                command = List.of(mvn, "-q", "-DskipTests", "clean", "test-compile");
             } else if ("gradle".equals(buildSystem)) {
                 String gradle = executableWithWrapper("gradle", isWindows);
-                pb = new ProcessBuilder(gradle, "--no-daemon", "classes", "-x", "test", "--build-cache", "-q");
+                command = List.of(gradle, "--no-daemon", "clean", "testClasses", "-x", "test", "--build-cache", "-q");
             } else {
                 return false;
             }
 
-            pb.directory(projectPath.toFile());
-            pb.redirectErrorStream(true);
-            Process process = pb.start();
-
-            boolean completed = process.waitFor(compileTimeoutSeconds(), java.util.concurrent.TimeUnit.SECONDS);
-
-            if (!completed) {
-                process.destroyForcibly();
-                return false;
-            }
-
-            return process.exitValue() == 0;
+            return runCommand(command).exitCode() == 0;
         } catch (Exception e) {
             return false;
         }
@@ -395,6 +415,49 @@ public class ProjectAnalyzer {
         }
         return isWindows ? tool + ".cmd" : tool;
     }
+
+    private CommandResult runCommand(List<String> command) throws IOException, InterruptedException {
+        ProcessBuilder pb = new ProcessBuilder(command);
+        pb.directory(projectPath.toFile());
+        pb.redirectErrorStream(true);
+        Process process = pb.start();
+        StringBuilder output = new StringBuilder();
+        Thread drainer = new Thread(() -> {
+            try (var input = process.getInputStream()) {
+                output.append(new String(input.readAllBytes(), StandardCharsets.UTF_8));
+            } catch (IOException ignored) {
+                // Build output is diagnostic only.
+            }
+        }, "cocomut-build-output-drainer");
+        drainer.setDaemon(true);
+        drainer.start();
+        boolean completed = process.waitFor(compileTimeoutSeconds(), java.util.concurrent.TimeUnit.SECONDS);
+        if (!completed) {
+            process.destroyForcibly();
+            drainer.join(1000);
+            return new CommandResult(-1, output.toString());
+        }
+        drainer.join(1000);
+        return new CommandResult(process.exitValue(), output.toString());
+    }
+
+    private static List<Path> parsePathList(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return List.of();
+        }
+        List<Path> paths = new ArrayList<>();
+        for (String item : raw.strip().split(Pattern.quote(java.io.File.pathSeparator))) {
+            if (!item.isBlank()) {
+                Path path = Path.of(item.strip());
+                if (Files.exists(path)) {
+                    paths.add(path);
+                }
+            }
+        }
+        return paths;
+    }
+
+    private record CommandResult(int exitCode, String output) {}
 
     private static long compileTimeoutSeconds() {
         String configured = System.getProperty("cocomut.compileTimeoutSeconds");
@@ -446,6 +509,12 @@ public class ProjectAnalyzer {
         if (Files.isDirectory(rootOutput) && containsClassFile(rootOutput)) {
             dirs.add(rootOutput);
         }
+        if ("maven".equals(buildSystem)) {
+            Path rootTestOutput = projectPath.resolve("target/test-classes");
+            if (Files.isDirectory(rootTestOutput) && containsClassFile(rootTestOutput)) {
+                dirs.add(rootTestOutput);
+            }
+        }
 
         // Multi-module fallback: only check directories declared as <modules> in the
         // root pom. Avoids treating unrelated nested projects as submodules.
@@ -454,6 +523,10 @@ public class ProjectAnalyzer {
                 Path moduleClasses = module.resolve("target/classes");
                 if (Files.isDirectory(moduleClasses) && containsClassFile(moduleClasses)) {
                     dirs.add(moduleClasses);
+                }
+                Path moduleTestClasses = module.resolve("target/test-classes");
+                if (Files.isDirectory(moduleTestClasses) && containsClassFile(moduleTestClasses)) {
+                    dirs.add(moduleTestClasses);
                 }
             }
         }

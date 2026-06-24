@@ -34,7 +34,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -69,7 +68,6 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             "java.time",
             "java.text",
             "java.io");
-    private final Map<String, ParsedProject> cache = new ConcurrentHashMap<>();
 
     @Override
     public String name() {
@@ -127,26 +125,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     }
 
     private ParsedProject parsed(ProjectModel project) throws IOException {
-        String key = cacheKey(project);
-        ParsedProject cached = cache.get(key);
-        if (cached != null) {
-            return cached;
-        }
-        ParsedProject parsed = parse(project);
-        cache.put(key, parsed);
-        return parsed;
-    }
-
-    private String cacheKey(ProjectModel project) {
-        String limit = String.valueOf(maxSourceFiles());
-        String roots = project.sourceRoots().stream()
-                .map(path -> path.toAbsolutePath().normalize().toString())
-                .sorted()
-                .reduce((a, b) -> a + ";" + b)
-                .orElse("");
-        return project.projectPath().toAbsolutePath().normalize()
-                + "::roots=" + roots
-                + "::maxSourceFiles=" + limit;
+        return parse(project);
     }
 
     private ParsedProject parse(ProjectModel project) throws IOException {
@@ -205,29 +184,30 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
 
         return new ParsedProject(project.projectPath(), methods, methodsByUri, executablesByUri,
                 typesByQualifiedName, methodsByClassName, fieldsByClassName,
-                importsByFile, new ConcurrentHashMap<>(), parsedModels.mode());
+                importsByFile, new java.util.concurrent.ConcurrentHashMap<>(), parsedModels.mode());
     }
 
     private ParsedModels parseModels(ProjectModel project) throws IOException {
         Integer maxSourceFiles = maxSourceFiles();
         if (maxSourceFiles != null) {
-            return new ParsedModels(parseJavaFilesWithLimit(project.sourceRoots(),
-                    complianceLevel(project.javaVersion()), maxSourceFiles), "classpath_limited");
+            return new ParsedModels(parseJavaFilesWithLimit(allSourceRoots(project),
+                    complianceLevel(project.javaVersion()), maxSourceFiles, project), "classpath_limited");
         }
 
         return new ParsedModels(parseCtModels(project), "classpath");
     }
 
     private List<CtModel> parseCtModels(ProjectModel project) throws IOException {
-        if (project.sourceRoots().isEmpty()) {
+        List<Path> roots = allSourceRoots(project);
+        if (roots.isEmpty()) {
             return List.of(buildModel(List.of(), complianceLevel(project.javaVersion()), project));
         }
 
         try {
-            return List.of(buildModel(project.sourceRoots(), complianceLevel(project.javaVersion()), project));
+            return List.of(buildModel(roots, complianceLevel(project.javaVersion()), project));
         } catch (RuntimeException combinedFailure) {
             List<CtModel> models = new ArrayList<>();
-            for (Path root : project.sourceRoots()) {
+            for (Path root : roots) {
                 try {
                     models.add(buildModel(List.of(root), complianceLevel(project.javaVersion()), project));
                 } catch (RuntimeException rootFailure) {
@@ -241,10 +221,11 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
     }
 
-    private List<CtModel> parseJavaFilesWithLimit(List<Path> roots, int complianceLevel, int maxSourceFiles)
+    private List<CtModel> parseJavaFilesWithLimit(List<Path> roots, int complianceLevel, int maxSourceFiles,
+                                                  ProjectModel project)
             throws IOException {
         if (roots.isEmpty()) {
-            return List.of(buildModel(List.of(), complianceLevel, null));
+            return List.of(buildModel(List.of(), complianceLevel, project));
         }
         List<CtModel> models = new ArrayList<>();
         int parsedFiles = 0;
@@ -265,14 +246,21 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                     }
                     parsedFiles++;
                     try {
-                        models.add(buildModel(List.of(file), complianceLevel, null));
+                        models.add(buildModel(List.of(file), complianceLevel, project));
                     } catch (RuntimeException ignored) {
                         // A few invalid/newer-syntax files should not drop a capped smoke run.
                     }
                 }
             }
         }
-        return models.isEmpty() ? List.of(buildModel(List.of(), complianceLevel, null)) : models;
+        return models.isEmpty() ? List.of(buildModel(List.of(), complianceLevel, project)) : models;
+    }
+
+    private static List<Path> allSourceRoots(ProjectModel project) {
+        List<Path> roots = new ArrayList<>();
+        roots.addAll(project.sourceRoots());
+        roots.addAll(project.testSourceRoots());
+        return roots.stream().distinct().toList();
     }
 
     private List<CtModel> parseJavaFilesIndividually(Path root, int complianceLevel, ProjectModel project) throws IOException {
@@ -711,7 +699,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         metadata.put("see", matches(SEE_TAG, normalized, 1));
         metadata.put("inline_links", matches(INLINE_LINK, normalized, 1));
         metadata.put("javadoc_references", javadocReferences(parsed, owner, normalized));
-        metadata.put("file_references", fileReferences(method, normalized));
+        metadata.put("file_references", fileReferences(parsed.projectRoot(), method, normalized));
         metadata.put("structured_tags", structuredTags(normalized));
         metadata.put("uses_inheritdoc", normalized.contains("{@inheritDoc}") || normalized.contains("@inheritDoc"));
         metadata.put("deprecated", isDeprecated(executable, normalized));
@@ -721,7 +709,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return metadata;
     }
 
-    private static List<Map<String, Object>> fileReferences(SourceMethod method, String javadoc) {
+    private static List<Map<String, Object>> fileReferences(Path projectRoot, SourceMethod method, String javadoc) {
         if (javadoc == null || javadoc.isBlank()) {
             return List.of();
         }
@@ -730,14 +718,15 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         Matcher matcher = JAVADOC_FILE_REFERENCE.matcher(javadoc);
         while (matcher.find()) {
             String raw = matcher.group();
-            if (raw.startsWith("http://") || raw.startsWith("https://")) {
+            if (raw.startsWith("http://") || raw.startsWith("https://")
+                    || precededByUrlScheme(javadoc, matcher.start())) {
                 continue;
             }
             String normalized = raw.replace("{@docRoot}/", "");
             if (!seen.add(normalized)) {
                 continue;
             }
-            Path resolved = resolveJavadocFile(method.sourceFile(), normalized);
+            Path resolved = resolveJavadocFile(projectRoot, method.sourceFile(), normalized);
             Map<String, Object> ref = new LinkedHashMap<>();
             ref.put("raw", raw);
             ref.put("path", normalized);
@@ -755,7 +744,13 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return references;
     }
 
-    private static Path resolveJavadocFile(Path sourceFile, String rawPath) {
+    private static boolean precededByUrlScheme(String text, int start) {
+        int from = Math.max(0, start - 16);
+        String prefix = text.substring(from, start).toLowerCase(Locale.ROOT);
+        return prefix.contains("http://") || prefix.contains("https://");
+    }
+
+    private static Path resolveJavadocFile(Path projectRoot, Path sourceFile, String rawPath) {
         if (sourceFile == null || rawPath == null || rawPath.isBlank()) {
             return null;
         }
@@ -764,17 +759,32 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return null;
         }
         Path direct = sourceDir.resolve(rawPath).normalize();
-        if (Files.exists(direct)) {
+        if (isWithinProject(projectRoot, direct) && Files.exists(direct)) {
             return direct;
         }
         int docFiles = rawPath.indexOf("doc-files/");
         if (docFiles >= 0) {
             Path docFile = sourceDir.resolve(rawPath.substring(docFiles)).normalize();
-            if (Files.exists(docFile)) {
+            if (isWithinProject(projectRoot, docFile) && Files.exists(docFile)) {
                 return docFile;
             }
         }
-        return direct;
+        return isWithinProject(projectRoot, direct) ? direct : null;
+    }
+
+    private static boolean isWithinProject(Path projectRoot, Path candidate) {
+        if (projectRoot == null || candidate == null) {
+            return false;
+        }
+        try {
+            Path root = projectRoot.toRealPath();
+            Path path = Files.exists(candidate) ? candidate.toRealPath() : candidate.toAbsolutePath().normalize();
+            return path.startsWith(root);
+        } catch (Exception e) {
+            Path root = projectRoot.toAbsolutePath().normalize();
+            Path path = candidate.toAbsolutePath().normalize();
+            return path.startsWith(root);
+        }
     }
 
     private static String fileReferenceKind(String path) {
@@ -1494,6 +1504,11 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return target;
         }
         if (owner != null && !target.contains(".")) {
+            ImportContext imports = importContext(parsed, owner);
+            String explicit = imports.explicit().get(target);
+            if (explicit != null && parsed.typesByQualifiedName().containsKey(explicit)) {
+                return explicit;
+            }
             String packageName = owner.getPackage() != null ? owner.getPackage().getQualifiedName() : "";
             String samePackage = packageName.isBlank() ? target : packageName + "." + target;
             if (parsed.typesByQualifiedName().containsKey(samePackage)) {
@@ -1503,15 +1518,14 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             if (parsed.typesByQualifiedName().containsKey(nested)) {
                 return nested;
             }
+            for (String wildcard : imports.wildcard()) {
+                String imported = wildcard + "." + target;
+                if (parsed.typesByQualifiedName().containsKey(imported)) {
+                    return imported;
+                }
+            }
         }
-        String lookupTarget = target;
-        List<String> simpleMatches = parsed.typesByQualifiedName().keySet().stream()
-                .filter(name -> name.endsWith("." + lookupTarget)
-                        || name.endsWith("$" + lookupTarget)
-                        || name.equals(lookupTarget))
-                .limit(2)
-                .toList();
-        return simpleMatches.size() == 1 ? simpleMatches.get(0) : "";
+        return "";
     }
 
     private static MemberReference parseMemberReference(String member) {
@@ -1684,6 +1698,10 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     }
 
     private static Integer maxSourceFiles() {
+        Integer requestScoped = SourceBackends.maxSourceFiles();
+        if (requestScoped != null) {
+            return requestScoped;
+        }
         String configured = System.getProperty(MAX_SOURCE_FILES_PROPERTY);
         if (configured == null || configured.isBlank()) {
             configured = System.getenv(MAX_SOURCE_FILES_ENV);

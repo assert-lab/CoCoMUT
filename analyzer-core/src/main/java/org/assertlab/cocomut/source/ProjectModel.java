@@ -36,7 +36,8 @@ public final class ProjectModel {
         this.testSourceRoots = List.copyOf(testSourceRoots);
         this.classOutputDirs = List.copyOf(classOutputDirs);
         this.dependencyJars = List.copyOf(dependencyJars);
-        this.sourceAvailable = this.sourceRoots.stream().anyMatch(ProjectModel::containsJavaFile);
+        this.sourceAvailable = java.util.stream.Stream.concat(this.sourceRoots.stream(), this.testSourceRoots.stream())
+                .anyMatch(ProjectModel::containsJavaFile);
     }
 
     public static ProjectModel from(ProjectMetadata metadata) {
@@ -117,6 +118,7 @@ public final class ProjectModel {
         addIfDirectory(sourceRoots, projectRoot.resolve("src/main/java"));
         addIfDirectory(testSourceRoots, projectRoot.resolve("src/test/java"));
         addIfClassDirectory(classOutputDirs, projectRoot.resolve("target/classes"));
+        addIfClassDirectory(classOutputDirs, projectRoot.resolve("target/test-classes"));
         addIfClassDirectory(classOutputDirs, projectRoot.resolve("build/classes"));
 
         try (var walk = Files.walk(projectRoot, 5)) {
@@ -128,7 +130,10 @@ public final class ProjectModel {
                     testSourceRoots.add(normalized);
                 } else if (containsClassFile(normalized)
                         && (normalized.endsWith(Path.of("target/classes"))
-                        || normalized.toString().contains("/build/classes/"))) {
+                        || normalized.endsWith(Path.of("target/test-classes"))
+                        || normalized.endsWith(Path.of("build/classes"))
+                        || normalized.endsWith(Path.of("build/classes/java/main"))
+                        || normalized.endsWith(Path.of("build/classes/java/test")))) {
                     classOutputDirs.add(normalized);
                 }
             }

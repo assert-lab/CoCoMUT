@@ -322,7 +322,7 @@ public class CallGraphGeneratorTest {
     }
 
     @Test
-    public void testParameterNormalizationResolvesUniqueVarargsCandidate() throws Exception {
+    public void testParameterNormalizationResolvesVarargsArrayDescriptor() throws Exception {
         MethodInfo sourceMethod = new MethodInfo.Builder()
                 .methodUri("src/main/java/com/example/Log.java#com.example.Log.log(java.lang.String[]):void")
                 .classname("com.example.Log")
@@ -339,11 +339,41 @@ public class CallGraphGeneratorTest {
 
         assertEquals("src/main/java/com/example/Log.java#com.example.Log.log(java.lang.String[]):void",
                 edge.methodUri());
-        assertEquals("resolved_parameter_normalized_unique", edge.resolution());
+        assertEquals("resolved_normalized_exact", edge.resolution());
     }
 
     @Test
-    public void testParameterNormalizationReportsAmbiguousOverload() throws Exception {
+    public void testPackageQualifiedOverloadsAreNotMatchedBySimpleName() throws Exception {
+        MethodInfo first = new MethodInfo.Builder()
+                .methodUri("src/main/java/com/example/Foo.java#com.example.Foo.consume(com.alpha.Token):void")
+                .classname("com.example.Foo")
+                .methodName("consume")
+                .methodSignature("consume(com.alpha.Token token)")
+                .returnType("void")
+                .erasedReturnType("void")
+                .sourceFile(Paths.get("Foo.java"))
+                .lineNumber(20)
+                .build();
+        MethodInfo second = new MethodInfo.Builder()
+                .methodUri("src/main/java/com/example/Foo.java#com.example.Foo.consume(com.gamma.Token):void")
+                .classname("com.example.Foo")
+                .methodName("consume")
+                .methodSignature("consume(com.gamma.Token token)")
+                .returnType("void")
+                .erasedReturnType("void")
+                .sourceFile(Paths.get("Foo.java"))
+                .lineNumber(24)
+                .build();
+
+        CallGraphEdge edge = resolveEdgeFor(List.of(first, second),
+                "<com.example.Foo: void consume(com.beta.Token)>");
+
+        assertEquals("", edge.methodUri());
+        assertEquals("unresolved", edge.resolution());
+    }
+
+    @Test
+    public void testExactObjectOverloadResolvesWithoutWildcardAmbiguity() throws Exception {
         MethodInfo first = new MethodInfo.Builder()
                 .methodUri("src/main/java/com/example/Foo.java#com.example.Foo.f(java.lang.String):void")
                 .classname("com.example.Foo")
@@ -368,10 +398,9 @@ public class CallGraphGeneratorTest {
         CallGraphEdge edge = resolveEdgeFor(List.of(first, second),
                 "<com.example.Foo: void f(java.lang.Object)>");
 
-        assertEquals("", edge.methodUri());
-        assertEquals("ambiguous", edge.resolution());
-        assertEquals("multiple_source_methods_match_normalized_parameters", edge.unresolvedReason());
-        assertEquals(2, edge.candidateMethodUris().size());
+        assertEquals("src/main/java/com/example/Foo.java#com.example.Foo.f(java.lang.Object):void",
+                edge.methodUri());
+        assertEquals("resolved_normalized_exact", edge.resolution());
     }
 
     @Test

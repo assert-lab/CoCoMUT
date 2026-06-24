@@ -1,13 +1,16 @@
 package org.assertlab.cocomut;
 
 import org.assertlab.cocomut.source.ProjectModel;
+import org.assertlab.cocomut.source.SourceBackends;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.FileSystems;
 import java.nio.file.PathMatcher;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.util.*;
 
 /**
@@ -41,11 +44,10 @@ final class Orchestrator {
     private Set<String> excludePathGlobs = Set.of();
     private Set<SymbolTarget> targetFilters = Set.of();
     private Path outputDirectory;
-    private String previousMaxSourceFilesProperty;
-    private boolean sourceFileLimitConfigured;
 
     // Pipeline state passed between phases
     private ProjectMetadata projectMetadata;
+    private List<MethodInfo> analysisUniverseMethods;
     private List<MethodInfo> methodInfos;
     private CallGraphGenerator callGraphGenerator;
     private Map<String, CallGraphResult> callGraphResults;
@@ -194,10 +196,10 @@ final class Orchestrator {
                         "CoCoMUT requires compiled project bytecode. Build the project or provide compiled class files.");
                 return false;
             }
-            if (model.classOutputDirs().isEmpty()) {
+            if (model.classOutputDirs().isEmpty() && model.dependencyJars().isEmpty()) {
                 failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
                 executionReport.put("phase_1_error",
-                        "CoCoMUT requires compiled class directories for static bytecode analysis.");
+                        "CoCoMUT requires compiled class directories or JAR bytecode for static bytecode analysis.");
                 return false;
             }
 
@@ -212,13 +214,19 @@ final class Orchestrator {
         try {
             MethodIdentifier identifier = new MethodIdentifier(projectMetadata);
 
-            methodInfos = identifier.identify();
-            methodInfos = filterScope(methodInfos);
+            analysisUniverseMethods = identifier.identify();
+            methodInfos = filterScope(analysisUniverseMethods);
             methodInfos = filterMethods(methodInfos);
             methodInfos = limitMethods(methodInfos);
 
             executionReport.put("phase_2_strategy", scope.toString());
+            executionReport.put("phase_2_analysis_universe_methods", analysisUniverseMethods.size());
             executionReport.put("phase_2_methods_identified", methodInfos.size());
+            if (methodInfos.isEmpty()) {
+                failureCodes.add(FailureCode.EMPTY_SELECTION);
+                executionReport.put("phase_2_error", "Selection matched zero methods.");
+                return false;
+            }
             return true;
         } catch (Exception e) {
             executionReport.put("phase_2_error", e.getMessage());
@@ -249,7 +257,7 @@ final class Orchestrator {
                 return false;
             }
 
-            callGraphResults = callGraphGenerator.generateForMethods(methodInfos);
+            callGraphResults = callGraphGenerator.generateForMethods(analysisUniverseMethods, methodInfos);
             int callGraphEdgeCount = callGraphResults.values().stream()
                     .mapToInt(result -> result.getCallerCount() + result.getCalleeCount())
                     .sum();
@@ -358,7 +366,8 @@ final class Orchestrator {
             return methods;
         }
         List<MethodInfo> filtered = methods.stream()
-                .filter(method -> "public".equals(method.getVisibility()))
+                .filter(method -> "public".equals(method.getVisibility())
+                        || "protected".equals(method.getVisibility()))
                 .filter(method -> !isMain(method))
                 .toList();
         executionReport.put("phase_2_scope_filter_before", methods.size());
@@ -367,29 +376,21 @@ final class Orchestrator {
     }
 
     private static boolean isMain(MethodInfo method) {
-        return "main".equals(method.getMethodName()) && method.isStatic();
+        return "main".equals(method.getMethodName())
+                && method.isStatic()
+                && "void".equals(method.getErasedReturnType())
+                && method.getMethodSignature().contains("String[]");
     }
 
     private void configureSourceFileLimit() {
         if (maxSourceFiles != null && maxSourceFiles > 0) {
-            if (!sourceFileLimitConfigured) {
-                previousMaxSourceFilesProperty = System.getProperty("cocomut.maxSourceFiles");
-                sourceFileLimitConfigured = true;
-            }
-            System.setProperty("cocomut.maxSourceFiles", String.valueOf(maxSourceFiles));
+            SourceBackends.setMaxSourceFiles(maxSourceFiles);
             executionReport.put("source_max_files", maxSourceFiles);
         }
     }
 
     private void restoreSourceFileLimit() {
-        if (!sourceFileLimitConfigured) {
-            return;
-        }
-        if (previousMaxSourceFilesProperty == null) {
-            System.clearProperty("cocomut.maxSourceFiles");
-        } else {
-            System.setProperty("cocomut.maxSourceFiles", previousMaxSourceFilesProperty);
-        }
+        SourceBackends.clearConfiguration();
     }
 
     /**
@@ -417,6 +418,8 @@ final class Orchestrator {
             executionReport.put("phase_5_call_edges_serialized", serializedCallEdgeCount(methodContexts));
             if (jsonlRows < methodContexts.size()) {
                 failureCodes.add(FailureCode.JSON_GENERATION_FAILED);
+                executionReport.put("phase_5_error", "JSONL row count is lower than extracted context count.");
+                return false;
             }
             return true;
         } catch (Exception e) {
@@ -447,6 +450,10 @@ final class Orchestrator {
 
     public List<MethodInfo> getMethodInfos() {
         return methodInfos != null ? methodInfos : List.of();
+    }
+
+    public List<MethodInfo> getAnalysisUniverseMethods() {
+        return analysisUniverseMethods != null ? analysisUniverseMethods : List.of();
     }
 
     public void printReport() {
@@ -622,10 +629,21 @@ final class Orchestrator {
 
     private Map<String, Object> selectionProvenance() {
         Map<String, Object> selection = new LinkedHashMap<>();
+        selection.put("scope", scope.toString().toLowerCase(Locale.ROOT));
+        selection.put("source_sets", sourceSets.isEmpty() ? List.of("all") : sourceSets.stream().sorted().toList());
+        selection.put("packages", packageFilters.stream().sorted().toList());
+        selection.put("classes", classFilters.stream().sorted().toList());
+        selection.put("methods", methodFilters.stream().sorted().toList());
+        selection.put("visibilities", visibilityFilters.stream().sorted().toList());
+        selection.put("include_paths", includePathGlobs.stream().sorted().toList());
+        selection.put("exclude_paths", excludePathGlobs.stream().sorted().toList());
+        selection.put("max_methods", maxMethods);
+        selection.put("max_source_files", maxSourceFiles);
         if (targetFilters.isEmpty()) {
             selection.put("kind", "project");
-            selection.put("uri", projectPath.toAbsolutePath().normalize().toString());
-            selection.put("selector", "project");
+            selection.put("uri", projectUri());
+            selection.put("project_name", projectName());
+            selection.put("selector", selectionLabel().isBlank() ? "project" : selectionLabel());
             return selection;
         }
         if (targetFilters.size() == 1) {
@@ -654,12 +672,30 @@ final class Orchestrator {
         if (outputDirectory != null) {
             return outputDirectory.toAbsolutePath().normalize();
         }
-        String projectName = projectPath.getFileName() != null ? projectPath.getFileName().toString() : "project";
         return Path.of(System.getProperty("user.dir"))
                 .resolve("cocomut_output")
-                .resolve(sanitize(projectName))
+                .resolve(sanitize(projectName()) + "-" + shortProjectHash())
                 .toAbsolutePath()
                 .normalize();
+    }
+
+    private String projectName() {
+        return projectPath.getFileName() != null ? projectPath.getFileName().toString() : "project";
+    }
+
+    private String projectUri() {
+        return "project://" + sanitize(projectName());
+    }
+
+    private String shortProjectHash() {
+        String normalized = projectPath.toAbsolutePath().normalize().toString();
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(normalized.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest, 0, 4);
+        } catch (Exception e) {
+            return Integer.toHexString(normalized.hashCode());
+        }
     }
 
     private String outputJsonlFilename() {

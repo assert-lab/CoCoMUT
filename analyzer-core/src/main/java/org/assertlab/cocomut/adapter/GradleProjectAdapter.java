@@ -16,15 +16,14 @@ import java.util.concurrent.TimeUnit;
 /**
  * Adapter for Gradle projects ({@code build.gradle} or {@code build.gradle.kts} present).
  *
- * <p>Resolves the <b>real</b> compile classpath by invoking Gradle with a temporary
+ * <p>Resolves the <b>real</b> runtime/compile classpath by invoking Gradle with a temporary
  * init script (so the target project's build files are never modified). The init
- * script registers a task that prints each {@code compileClasspath} entry; the
+ * script registers a task that prints runtime, compile, and test classpath entries; the
  * adapter parses those lines and merges them into the metadata.
  *
- * <p>This is strictly an enhancement over {@link ProjectAnalyzer}'s simplified
- * Gradle classpath (which scanned {@code build/libs} and the global cache). If Gradle
- * is unavailable, offline, or the invocation fails for any reason, the adapter falls
- * back to the base metadata so analysis still proceeds.
+ * <p>This supplements {@link ProjectAnalyzer}'s post-build Gradle metadata with
+ * the resolved Gradle dependency classpath. If Gradle is unavailable, offline, or
+ * the invocation fails for any reason, the adapter falls back to the base metadata.
  */
 public class GradleProjectAdapter implements ProjectAdapter {
 
@@ -80,7 +79,6 @@ public class GradleProjectAdapter implements ProjectAdapter {
             cmd.add(initScript.toString());
             cmd.add("analyzerPrintClasspath");
             cmd.add("-q");
-            cmd.add("--offline");           // prefer cached deps; avoids slow network
             cmd.add("--console=plain");
 
             ProcessBuilder pb = new ProcessBuilder(cmd);
@@ -88,18 +86,29 @@ public class GradleProjectAdapter implements ProjectAdapter {
             pb.redirectErrorStream(true);
             Process p = pb.start();
 
-            List<Path> classpath = new ArrayList<>();
-            String output = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            StringBuilder output = new StringBuilder();
+            Thread drainer = new Thread(() -> {
+                try (var input = p.getInputStream()) {
+                    output.append(new String(input.readAllBytes(), StandardCharsets.UTF_8));
+                } catch (IOException ignored) {
+                    // Gradle output is diagnostic only.
+                }
+            }, "cocomut-gradle-adapter-output-drainer");
+            drainer.setDaemon(true);
+            drainer.start();
 
             if (!p.waitFor(GRADLE_TIMEOUT_MIN, TimeUnit.MINUTES)) {
                 p.destroyForcibly();
+                drainer.join(1000);
                 return List.of();
             }
+            drainer.join(1000);
             if (p.exitValue() != 0) {
                 return List.of();
             }
 
-            for (String line : output.split("\\R")) {
+            List<Path> classpath = new ArrayList<>();
+            for (String line : output.toString().split("\\R")) {
                 if (line.startsWith(CP_PREFIX)) {
                     Path jar = Path.of(line.substring(CP_PREFIX.length()).trim());
                     if (Files.exists(jar)) {
@@ -139,13 +148,13 @@ public class GradleProjectAdapter implements ProjectAdapter {
                 "allprojects {\n" +
                 "    tasks.register('analyzerPrintClasspath') {\n" +
                 "        doLast {\n" +
-                "            def cp = configurations.findByName('compileClasspath')\n" +
-                "            if (cp == null) { cp = configurations.findByName('runtimeClasspath') }\n" +
-                "            if (cp != null) {\n" +
-                "                try {\n" +
-                "                    cp.resolve().each { println '" + CP_PREFIX + "' + it.absolutePath }\n" +
-                "                } catch (Exception ignored) { }\n" +
+                "            def names = ['runtimeClasspath', 'compileClasspath', 'testRuntimeClasspath', 'testCompileClasspath']\n" +
+                "            def files = [] as LinkedHashSet\n" +
+                "            names.each { n ->\n" +
+                "                def cp = configurations.findByName(n)\n" +
+                "                if (cp != null) { try { files.addAll(cp.resolve()) } catch (Exception ignored) { } }\n" +
                 "            }\n" +
+                "            files.each { println '" + CP_PREFIX + "' + it.absolutePath }\n" +
                 "        }\n" +
                 "    }\n" +
                 "}\n";
