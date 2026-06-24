@@ -3,7 +3,10 @@ package org.assertlab.cocomut;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.LinkedHashMap;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -48,7 +51,7 @@ public class JsonGenerator {
         this.generationResults = new LinkedHashMap<>();
         this.allContexts = allContexts != null ? allContexts : Map.of();
         this.callGraphGenerator = callGraphGenerator;
-        this.selection = selection != null ? Map.copyOf(selection) : Map.of();
+        this.selection = selection != null ? new LinkedHashMap<>(selection) : Map.of();
         try {
             Files.createDirectories(outputDirectory);
         } catch (Exception e) {
@@ -62,12 +65,17 @@ public class JsonGenerator {
 
     public int generateJsonLinesFile(Map<String, MethodContext> contexts, Path jsonlPath) {
         int rows = 0;
+        Path temp = null;
         try {
             if (jsonlPath.getParent() != null) {
                 Files.createDirectories(jsonlPath.getParent());
             }
-            try (var writer = Files.newBufferedWriter(jsonlPath, StandardCharsets.UTF_8)) {
-                for (MethodContext context : contexts.values()) {
+            Path tempDir = jsonlPath.getParent() != null ? jsonlPath.getParent() : Path.of(".");
+            temp = Files.createTempFile(tempDir, jsonlPath.getFileName().toString(), ".tmp");
+            try (var writer = Files.newBufferedWriter(temp, StandardCharsets.UTF_8)) {
+                for (MethodContext context : contexts.values().stream()
+                        .sorted(Comparator.comparing(MethodContext::getMethodUri))
+                        .toList()) {
                     ObjectNode json = buildJsonFromContext(context);
                     writer.write(objectMapper.writeValueAsString(json));
                     writer.newLine();
@@ -75,9 +83,26 @@ public class JsonGenerator {
                     rows++;
                 }
             }
+            try {
+                Files.move(temp, jsonlPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                        java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                Files.move(temp, jsonlPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
             generationResults.put("__jsonl__", "SUCCESS:" + jsonlPath);
         } catch (Exception e) {
             generationResults.put("__jsonl__", "FAILED:" + e.getMessage());
+            if (temp != null) {
+                try {
+                    Files.deleteIfExists(temp);
+                } catch (IOException ignored) {
+                    // Preserve the original serialization/write failure.
+                }
+            }
+            if (e instanceof IOException io) {
+                throw new UncheckedIOException(io);
+            }
+            throw new IllegalStateException("JSONL generation failed", e);
         }
         return rows;
     }
@@ -112,7 +137,11 @@ public class JsonGenerator {
         metadata.put("generation_time_ms", cg != null ? cg.getGenerationTime() : 0);
         metadata.put("class_hierarchy_included", true);
         ObjectNode callGraphNode = objectMapper.createObjectNode();
-        callGraphNode.put("available", cg != null);
+        boolean hasEdges = cg != null && (cg.getCallerCount() > 0 || cg.getCalleeCount() > 0);
+        callGraphNode.put("available", hasEdges);
+        callGraphNode.put("initialized", cg != null);
+        callGraphNode.put("method_matched", cg != null && cg.isMethodMatched());
+        callGraphNode.put("has_edges", hasEdges);
         callGraphNode.put("tool", cg != null ? "SootUp" : "N/A");
         callGraphNode.put("algorithm", cg != null ? cg.getAlgorithm() : "N/A");
         callGraphNode.put("confidence", cg != null ? callGraphConfidence(cg.getAlgorithm()) : "missing");
@@ -196,7 +225,11 @@ public class JsonGenerator {
 
     private ArrayNode buildCallerCalleeArray(Set<CallGraphEdge> edges) {
         ArrayNode array = objectMapper.createArrayNode();
-        for (CallGraphEdge edge : edges) {
+        for (CallGraphEdge edge : edges.stream()
+                .sorted(Comparator.comparing(CallGraphEdge::targetUri)
+                        .thenComparing(CallGraphEdge::methodUri)
+                        .thenComparing(CallGraphEdge::rawSignature))
+                .toList()) {
             ObjectNode edgeNode = objectMapper.createObjectNode();
             edgeNode.put("kind", edge.kind());
             edgeNode.put("method_uri", edge.methodUri());
@@ -206,6 +239,7 @@ public class JsonGenerator {
             edgeNode.put("declaring_class", edge.declaringClass());
             edgeNode.put("method_name", edge.methodName());
             edgeNode.put("resolution", edge.resolution());
+            edgeNode.put("context_in_output", edge.resolved() && allContexts.containsKey(edge.methodUri()));
             if (!edge.candidateMethodUris().isEmpty()) {
                 edgeNode.set("candidate_method_uris", objectMapper.valueToTree(edge.candidateMethodUris()));
             }

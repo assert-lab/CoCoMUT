@@ -126,7 +126,7 @@ Rules:
 - Do not run multiple large Maven/Gradle compilations in parallel.
 - Prefer sequential repository runs unless `free -h` shows comfortable memory.
 - For large repositories, use bounded CoCoMUT extraction before raising heap:
-  `--max-source-files`, `--max-methods`, or `--call-graph none`.
+  `--max-source-files` or `--max-methods`.
 - If memory drops below about 3-4 GB available, wait instead of starting a new
   job.
 

@@ -1,6 +1,7 @@
 package org.assertlab.cocomut;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -18,6 +19,8 @@ public class MethodInfo {
     private final boolean isStatic;
     private final String returnType;
     private final String erasedReturnType;
+    private final List<String> erasedParameterTypes;
+    private final boolean constructor;
     private final String sourceSet;
 
     private MethodInfo(Builder builder) {
@@ -32,6 +35,8 @@ public class MethodInfo {
         this.isStatic = builder.isStatic;
         this.returnType = Objects.requireNonNull(builder.returnType, "returnType cannot be null");
         this.erasedReturnType = Objects.requireNonNull(builder.erasedReturnType, "erasedReturnType cannot be null");
+        this.erasedParameterTypes = List.copyOf(builder.erasedParameterTypes);
+        this.constructor = builder.constructor;
         this.sourceSet = builder.sourceSet != null ? builder.sourceSet : "unknown";
     }
 
@@ -79,6 +84,14 @@ public class MethodInfo {
         return erasedReturnType;
     }
 
+    public List<String> getErasedParameterTypes() {
+        return erasedParameterTypes;
+    }
+
+    public boolean isConstructor() {
+        return constructor;
+    }
+
     public String getSourceSet() {
         return sourceSet;
     }
@@ -96,6 +109,8 @@ public class MethodInfo {
                 ", sourceSet='" + sourceSet + '\'' +
                 ", returnType='" + returnType + '\'' +
                 ", erasedReturnType='" + erasedReturnType + '\'' +
+                ", erasedParameterTypes=" + erasedParameterTypes +
+                ", constructor=" + constructor +
                 '}';
     }
 
@@ -129,6 +144,8 @@ public class MethodInfo {
         private boolean isStatic = false;
         private String returnType = "void";
         private String erasedReturnType = "void";
+        private List<String> erasedParameterTypes = List.of();
+        private boolean constructor = false;
         private String sourceSet = "unknown";
 
         public Builder methodUri(String methodUri) {
@@ -186,6 +203,16 @@ public class MethodInfo {
 
         public Builder erasedReturnType(String erasedReturnType) {
             this.erasedReturnType = erasedReturnType;
+            return this;
+        }
+
+        public Builder erasedParameterTypes(List<String> erasedParameterTypes) {
+            this.erasedParameterTypes = erasedParameterTypes == null ? List.of() : List.copyOf(erasedParameterTypes);
+            return this;
+        }
+
+        public Builder constructor(boolean constructor) {
+            this.constructor = constructor;
             return this;
         }
 

@@ -10,11 +10,9 @@ deletes or overwrites these protected folders:
 
 Default extraction policy:
 
-- try classpath-aware source extraction and SootUp call graph with
-  ``--compile --resolution auto --call-graph auto``;
-- if that fails, retry without call graph;
-- if that still fails or runs out of memory, retry source-only with bounded
-  source files/methods.
+- run the default bytecode-backed extraction once per target;
+- require compilation or pre-existing project bytecode in a conventional layout;
+- record build, timeout, and analysis failures as evaluation evidence.
 
 Examples:
 
@@ -79,14 +77,14 @@ RESULT_FIELDS = [
     "set",
     "repo",
     "project_path",
+    "commit_sha",
+    "dirty_checkout",
     "clone_status",
     "status",
     "retry_mode",
     "build_system",
-    "compile_attempted",
     "compiles",
     "compile_status",
-    "source_resolution_requested",
     "source_backend_modes",
     "call_graph_requested",
     "call_graph_available",
@@ -97,9 +95,16 @@ RESULT_FIELDS = [
     "call_graph_edges_generated",
     "jsonl_call_edges_serialized",
     "call_edges",
+    "call_edge_unique_directed_relations",
     "call_edges_with_target_uri",
     "call_edges_with_method_uri",
     "call_edge_source_match_rate",
+    "call_edge_project_target_edges",
+    "call_edge_project_target_edges_with_method_uri",
+    "call_edge_project_target_source_join_rate",
+    "call_edge_project_method_edges",
+    "call_edge_project_method_edges_with_method_uri",
+    "call_edge_project_method_source_match_rate",
     "call_edge_project_jdk_external_edges",
     "call_edge_project_jdk_external_rate",
     "call_edge_target_kind_counts",
@@ -110,6 +115,7 @@ RESULT_FIELDS = [
     "call_edge_candidate_edges",
     "methods",
     "jsonl_rows",
+    "jsonl_malformed_rows",
     "see_methods",
     "see_references",
     "see_resolution_counts",
@@ -217,9 +223,6 @@ def run_cocomut(
     timeout: int,
     env: dict[str, str],
     *,
-    compile_project: bool,
-    resolution: str,
-    call_graph: str,
     max_source_files: int | None = None,
     max_methods: int | None = None,
 ) -> tuple[int | None, dict[str, str], str]:
@@ -233,57 +236,15 @@ def run_cocomut(
         "entry-points",
         "--source-set",
         "main",
-        "--resolution",
-        resolution,
-        "--call-graph",
-        call_graph,
         "--output-dir",
         str(artifact_dir),
     ]
-    if compile_project:
-        command.append("--compile")
     if max_source_files and max_source_files > 0:
         command.extend(["--max-source-files", str(max_source_files)])
     if max_methods and max_methods > 0:
         command.extend(["--max-methods", str(max_methods)])
     status = run_command(command, root, log_path, timeout, env)
     return status, parse_report(log_path), read_tail(log_path)
-
-
-def failed_or_unstable(status: int | None, tail: str) -> bool:
-    return (
-        status is None
-        or status != 0
-        or "Java heap space" in tail
-        or "OutOfMemoryError" in tail
-        or "StackOverflowError" in tail
-    )
-
-
-def has_frontend_package_manager(project_path: Path) -> bool:
-    """Return true for Java repos whose compile may trigger JS package setup.
-
-    CoCoMUT is a Java static-analysis tool. For field testing, we avoid invoking
-    build steps that commonly install or build frontend dependencies as a side
-    effect of Maven/Gradle compilation. Source-only extraction can still run.
-    """
-    frontend_markers = {
-        "package.json",
-        "yarn.lock",
-        "package-lock.json",
-        "pnpm-lock.yaml",
-        "bun.lockb",
-    }
-    return any((project_path / marker).exists() for marker in frontend_markers)
-
-
-def timeout_or_memory_failure(status: int | None, tail: str) -> bool:
-    return (
-        status is None
-        or "Java heap space" in tail
-        or "OutOfMemoryError" in tail
-        or "StackOverflowError" in tail
-    )
 
 
 def inspect_jsonl(artifact_dir: Path) -> dict[str, str]:
@@ -300,8 +261,14 @@ def inspect_jsonl(artifact_dir: Path) -> dict[str, str]:
     inheritdoc_methods = 0
     inheritdoc_with_candidates = 0
     call_edges = 0
+    unique_directed_relations: set[tuple[str, str]] = set()
     call_edges_with_target_uri = 0
     call_edges_with_method_uri = 0
+    call_edge_project_target_edges = 0
+    call_edge_project_target_edges_with_method_uri = 0
+    call_edge_project_method_edges = 0
+    call_edge_project_method_edges_with_method_uri = 0
+    malformed_rows = 0
     call_edge_target_kind_counts: Counter[str] = Counter()
     call_edge_resolution_counts: Counter[str] = Counter()
     call_edge_unresolved_reason_counts: Counter[str] = Counter()
@@ -316,30 +283,52 @@ def inspect_jsonl(artifact_dir: Path) -> dict[str, str]:
                 try:
                     row = json.loads(line)
                 except json.JSONDecodeError:
+                    malformed_rows += 1
                     continue
                 metadata = row.get("metadata") or {}
                 mode = metadata.get("source_backend_mode")
                 if mode:
                     source_modes.add(str(mode))
-                for edge in (row.get("callers") or []) + (row.get("callees") or []):
-                    if not isinstance(edge, dict):
-                        continue
-                    call_edges += 1
-                    if edge.get("target_uri"):
-                        call_edges_with_target_uri += 1
-                    if edge.get("method_uri"):
-                        call_edges_with_method_uri += 1
-                    call_edge_target_kind_counts[str(edge.get("target_kind") or edge.get("kind") or "missing")] += 1
-                    call_edge_resolution_counts[str(edge.get("resolution") or "missing")] += 1
-                    if edge.get("unresolved_reason"):
-                        reason = str(edge.get("unresolved_reason"))
-                        call_edge_unresolved_reason_counts[reason] += 1
-                        if reason.startswith("project_class_present_method_absent"):
-                            call_edge_project_method_absent_subreason_counts[reason] += 1
-                    if edge.get("resolution") == "ambiguous":
-                        call_edge_ambiguous_edges += 1
-                    if edge.get("candidate_method_uris"):
-                        call_edge_candidate_edges += 1
+                mut_uri = str(((row.get("MUT") or {}).get("method_uri")) or "")
+                for direction, edges in [("caller", row.get("callers") or []), ("callee", row.get("callees") or [])]:
+                    for edge in edges:
+                        if not isinstance(edge, dict):
+                            continue
+                        call_edges += 1
+                        edge_target = str(edge.get("target_uri") or edge.get("method_uri") or "")
+                        if mut_uri and edge_target:
+                            if direction == "caller":
+                                unique_directed_relations.add((edge_target, mut_uri))
+                            else:
+                                unique_directed_relations.add((mut_uri, edge_target))
+                        if edge.get("target_uri"):
+                            call_edges_with_target_uri += 1
+                        if edge.get("method_uri"):
+                            call_edges_with_method_uri += 1
+                        target_kind = str(edge.get("target_kind") or edge.get("kind") or "missing")
+                        if target_kind in {
+                            "project_method",
+                            "unresolved_project_method",
+                            "ambiguous_project_method",
+                        }:
+                            call_edge_project_target_edges += 1
+                            if edge.get("method_uri"):
+                                call_edge_project_target_edges_with_method_uri += 1
+                        if target_kind == "project_method":
+                            call_edge_project_method_edges += 1
+                            if edge.get("method_uri"):
+                                call_edge_project_method_edges_with_method_uri += 1
+                        call_edge_target_kind_counts[target_kind] += 1
+                        call_edge_resolution_counts[str(edge.get("resolution") or "missing")] += 1
+                        if edge.get("unresolved_reason"):
+                            reason = str(edge.get("unresolved_reason"))
+                            call_edge_unresolved_reason_counts[reason] += 1
+                            if reason.startswith("project_class_present_method_absent"):
+                                call_edge_project_method_absent_subreason_counts[reason] += 1
+                        if edge.get("resolution") == "ambiguous":
+                            call_edge_ambiguous_edges += 1
+                        if edge.get("candidate_method_uris"):
+                            call_edge_candidate_edges += 1
                 javadoc = row.get("javadoc_metadata") or {}
                 if javadoc.get("see"):
                     see_methods += 1
@@ -366,9 +355,22 @@ def inspect_jsonl(artifact_dir: Path) -> dict[str, str]:
     return {
         "source_backend_modes": ",".join(sorted(source_modes)),
         "call_edges": str(call_edges),
+        "call_edge_unique_directed_relations": str(len(unique_directed_relations)),
         "call_edges_with_target_uri": str(call_edges_with_target_uri),
         "call_edges_with_method_uri": str(call_edges_with_method_uri),
         "call_edge_source_match_rate": percent_string(call_edges_with_method_uri, call_edges),
+        "call_edge_project_target_edges": str(call_edge_project_target_edges),
+        "call_edge_project_target_edges_with_method_uri": str(call_edge_project_target_edges_with_method_uri),
+        "call_edge_project_target_source_join_rate": percent_string(
+            call_edge_project_target_edges_with_method_uri,
+            call_edge_project_target_edges,
+        ),
+        "call_edge_project_method_edges": str(call_edge_project_method_edges),
+        "call_edge_project_method_edges_with_method_uri": str(call_edge_project_method_edges_with_method_uri),
+        "call_edge_project_method_source_match_rate": percent_string(
+            call_edge_project_method_edges_with_method_uri,
+            call_edge_project_method_edges,
+        ),
         "call_edge_project_jdk_external_edges": str(project_jdk_external),
         "call_edge_project_jdk_external_rate": percent_string(project_jdk_external, call_edges),
         "call_edge_target_kind_counts": json.dumps(dict(sorted(call_edge_target_kind_counts.items())), sort_keys=True),
@@ -385,7 +387,33 @@ def inspect_jsonl(artifact_dir: Path) -> dict[str, str]:
         "inline_link_references": str(inline_link_references),
         "inheritdoc_methods": str(inheritdoc_methods),
         "inheritdoc_with_candidates": str(inheritdoc_with_candidates),
+        "jsonl_malformed_rows": str(malformed_rows),
     }
+
+
+def checkout_revision(path: Path | None) -> tuple[str, str]:
+    if path is None:
+        return "", ""
+    try:
+        sha = subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "HEAD"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+            timeout=10,
+        ).stdout.strip()
+        dirty = subprocess.run(
+            ["git", "-C", str(path), "status", "--short"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+            timeout=10,
+        ).stdout.strip()
+        return sha, "true" if dirty else "false"
+    except Exception:
+        return "", ""
 
 
 def percent_string(numerator: int, denominator: int) -> str:
@@ -435,7 +463,6 @@ def run_target(root: Path, output_dir: Path, target: Target, args: argparse.Name
     env.setdefault("JAVA_TOOL_OPTIONS", f"-Xmx{args.heap_gb}g")
     env.setdefault("COCOMUT_COMPILE_TIMEOUT_SECONDS", str(args.compile_timeout))
     start = time.time()
-    compile_project = not has_frontend_package_manager(target.project_path)
 
     log_path = logs / f"{target.dataset}__{target.safe_name}.cocomut.log"
     status, report, tail = run_cocomut(
@@ -445,73 +472,32 @@ def run_target(root: Path, output_dir: Path, target: Target, args: argparse.Name
         log_path,
         args.timeout,
         env,
-        compile_project=compile_project,
-        resolution="auto",
-        call_graph="auto",
     )
     retry_mode = "none"
     note = "" if status == 0 else f"exit {status}"
-    if not compile_project:
-        note = "compile skipped: frontend package-manager marker"
-
-    if failed_or_unstable(status, tail) and not timeout_or_memory_failure(status, tail):
-        retry_mode = "no_call_graph"
-        retry_log = logs / f"{target.dataset}__{target.safe_name}.retry-no-callgraph.log"
-        status, report, tail = run_cocomut(
-            root,
-            target,
-            artifact_dir,
-            retry_log,
-            args.timeout,
-            env,
-            compile_project=compile_project,
-            resolution="auto",
-            call_graph="none",
-        )
-        note = (
-            "retry without call graph"
-            if status == 0
-            else f"retry no-callgraph exit {status}"
-        )
-        if not compile_project:
-            note += "; compile skipped: frontend package-manager marker"
-
-    if failed_or_unstable(status, tail):
-        retry_mode = (
-            "source_only_bounded"
-            if retry_mode == "none"
-            else f"{retry_mode};source_only_bounded"
-        )
-        retry_log = logs / f"{target.dataset}__{target.safe_name}.retry-source-only.log"
-        status, report, tail = run_cocomut(
-            root,
-            target,
-            artifact_dir,
-            retry_log,
-            args.timeout,
-            env,
-            compile_project=False,
-            resolution="noclasspath",
-            call_graph="none",
-            max_source_files=args.retry_max_source_files,
-            max_methods=args.retry_max_methods,
-        )
-        note = "retry source-only bounded" if status == 0 else f"retry source-only exit {status}"
+    if status is None:
+        note = "analysis timeout"
 
     duration_ms = str(int((time.time() - start) * 1000))
     stats = inspect_jsonl(artifact_dir)
+    commit_sha, dirty_checkout = checkout_revision(target.project_path)
+    malformed_rows = int(stats.get("jsonl_malformed_rows") or 0)
+    status_text = report.get("status", "TIMEOUT" if status is None else f"EXIT_{status}")
+    if malformed_rows:
+        status_text = "FAILED"
+        note = (note + "; " if note else "") + f"malformed JSONL rows: {malformed_rows}"
     return {
         "set": target.dataset,
         "repo": target.repo,
         "project_path": str(target.project_path),
+        "commit_sha": commit_sha,
+        "dirty_checkout": dirty_checkout,
         "clone_status": "OK",
-        "status": report.get("status", "TIMEOUT" if status is None else f"EXIT_{status}"),
+        "status": status_text,
         "retry_mode": retry_mode,
         "build_system": report.get("phase_1_build_system", ""),
-        "compile_attempted": report.get("phase_1_compile_attempted", ""),
         "compiles": report.get("phase_1_compiles", ""),
         "compile_status": report.get("phase_1_compile_status", ""),
-        "source_resolution_requested": report.get("phase_1_source_resolution_requested", ""),
         "source_backend_modes": stats.get("source_backend_modes", ""),
         "call_graph_requested": report.get("phase_3_algorithm", ""),
         "call_graph_available": report.get("phase_3_available", ""),
@@ -522,9 +508,16 @@ def run_target(root: Path, output_dir: Path, target: Target, args: argparse.Name
         "call_graph_edges_generated": report.get("phase_3_call_edges_generated", ""),
         "jsonl_call_edges_serialized": report.get("phase_5_call_edges_serialized", ""),
         "call_edges": stats.get("call_edges", ""),
+        "call_edge_unique_directed_relations": stats.get("call_edge_unique_directed_relations", ""),
         "call_edges_with_target_uri": stats.get("call_edges_with_target_uri", ""),
         "call_edges_with_method_uri": stats.get("call_edges_with_method_uri", ""),
         "call_edge_source_match_rate": stats.get("call_edge_source_match_rate", ""),
+        "call_edge_project_target_edges": stats.get("call_edge_project_target_edges", ""),
+        "call_edge_project_target_edges_with_method_uri": stats.get("call_edge_project_target_edges_with_method_uri", ""),
+        "call_edge_project_target_source_join_rate": stats.get("call_edge_project_target_source_join_rate", ""),
+        "call_edge_project_method_edges": stats.get("call_edge_project_method_edges", ""),
+        "call_edge_project_method_edges_with_method_uri": stats.get("call_edge_project_method_edges_with_method_uri", ""),
+        "call_edge_project_method_source_match_rate": stats.get("call_edge_project_method_source_match_rate", ""),
         "call_edge_project_jdk_external_edges": stats.get("call_edge_project_jdk_external_edges", ""),
         "call_edge_project_jdk_external_rate": stats.get("call_edge_project_jdk_external_rate", ""),
         "call_edge_target_kind_counts": stats.get("call_edge_target_kind_counts", ""),
@@ -535,6 +528,7 @@ def run_target(root: Path, output_dir: Path, target: Target, args: argparse.Name
         "call_edge_candidate_edges": stats.get("call_edge_candidate_edges", ""),
         "methods": report.get("phase_2_methods_identified", ""),
         "jsonl_rows": report.get("phase_5_jsonl_rows", ""),
+        "jsonl_malformed_rows": stats.get("jsonl_malformed_rows", ""),
         "see_methods": stats.get("see_methods", ""),
         "see_references": stats.get("see_references", ""),
         "see_resolution_counts": stats.get("see_resolution_counts", ""),
@@ -567,8 +561,14 @@ def write_summary(output_dir: Path, results_path: Path) -> None:
     total_methods = sum(int(row["methods"] or 0) for row in rows if (row["methods"] or "").isdigit())
     total_rows = sum(int(row["jsonl_rows"] or 0) for row in rows if (row["jsonl_rows"] or "").isdigit())
     total_call_edges = sum(int(row["call_edges"] or 0) for row in rows if (row["call_edges"] or "").isdigit())
+    total_unique_relations = sum(int(row["call_edge_unique_directed_relations"] or 0) for row in rows if (row["call_edge_unique_directed_relations"] or "").isdigit())
     total_target_uri_edges = sum(int(row["call_edges_with_target_uri"] or 0) for row in rows if (row["call_edges_with_target_uri"] or "").isdigit())
     total_method_uri_edges = sum(int(row["call_edges_with_method_uri"] or 0) for row in rows if (row["call_edges_with_method_uri"] or "").isdigit())
+    total_project_target_edges = sum(int(row["call_edge_project_target_edges"] or 0) for row in rows if (row["call_edge_project_target_edges"] or "").isdigit())
+    total_project_target_joined_edges = sum(int(row["call_edge_project_target_edges_with_method_uri"] or 0) for row in rows if (row["call_edge_project_target_edges_with_method_uri"] or "").isdigit())
+    total_project_method_edges = sum(int(row["call_edge_project_method_edges"] or 0) for row in rows if (row["call_edge_project_method_edges"] or "").isdigit())
+    total_project_method_joined_edges = sum(int(row["call_edge_project_method_edges_with_method_uri"] or 0) for row in rows if (row["call_edge_project_method_edges_with_method_uri"] or "").isdigit())
+    total_malformed_rows = sum(int(row["jsonl_malformed_rows"] or 0) for row in rows if (row["jsonl_malformed_rows"] or "").isdigit())
     total_project_jdk_external_edges = sum(int(row["call_edge_project_jdk_external_edges"] or 0) for row in rows if (row["call_edge_project_jdk_external_edges"] or "").isdigit())
     total_ambiguous_edges = sum(int(row["call_edge_ambiguous_edges"] or 0) for row in rows if (row["call_edge_ambiguous_edges"] or "").isdigit())
     target_kind_counts: Counter[str] = Counter()
@@ -592,7 +592,7 @@ def write_summary(output_dir: Path, results_path: Path) -> None:
         row for row in rows
         if row["status"] != "SUCCESS"
         or row["retry_mode"] != "none"
-        or row["failure_codes"] not in {"", "[NONE]", "[CALL_GRAPH_DISABLED]"}
+        or row["failure_codes"] not in {"", "[NONE]"}
     ]
     lines = [
         "# OE25 Plus Representative Study",
@@ -601,8 +601,8 @@ def write_summary(output_dir: Path, results_path: Path) -> None:
         "public-repository checkouts. It is intentionally written to a separate",
         "experiment directory and does not overwrite the previous experiment folders.",
         "",
-        "Default policy: `--compile --resolution auto --call-graph auto`, with",
-        "fallbacks to no-call-graph and bounded source-only extraction when needed.",
+        "Default policy: one mandatory bytecode-backed extraction attempt per",
+        "target. Build, timeout, and analysis failures are recorded as evidence.",
         "",
         "## Summary",
         "",
@@ -612,19 +612,30 @@ def write_summary(output_dir: Path, results_path: Path) -> None:
         f"- call graph availability counts: `{dict(call_graph_counts)}`",
         f"- methods identified: {total_methods}",
         f"- JSONL rows emitted: {total_rows}",
-        f"- call edges observed: {total_call_edges}",
+        f"- serialized call-edge adjacency entries observed: {total_call_edges}",
+        f"- unique directed bytecode/source relations observed: {total_unique_relations}",
         f"- call edges with `target_uri`: {total_target_uri_edges} ({percent_string(total_target_uri_edges, total_call_edges) or '-'})",
         f"- call edges joined to source `method_uri`: {total_method_uri_edges} ({percent_string(total_method_uri_edges, total_call_edges) or '-'})",
+        f"- project-target edges, including unresolved/ambiguous project targets: {total_project_target_edges}",
+        f"- project-target edges joined to source `method_uri`: {total_project_target_joined_edges} ({percent_string(total_project_target_joined_edges, total_project_target_edges) or '-'})",
+        f"- resolved project-method target edges: {total_project_method_edges}",
+        f"- project-method target edges joined to source `method_uri`: {total_project_method_joined_edges} ({percent_string(total_project_method_joined_edges, total_project_method_edges) or '-'})",
         f"- call edges classified as project/JDK/external method targets: {total_project_jdk_external_edges} ({percent_string(total_project_jdk_external_edges, total_call_edges) or '-'})",
         f"- ambiguous call edges: {total_ambiguous_edges}",
+        f"- malformed JSONL rows: {total_malformed_rows}",
         f"- `@see` references observed: {total_see_refs}",
         f"- methods using `{{@inheritDoc}}`: {total_inheritdoc}",
         "",
         "## Call-Edge Matching",
         "",
-        "`target_uri` is bytecode identity and should be present for every SootUp edge.",
-        "`method_uri` is source identity and is present only when the SootUp target",
+        "`target_uri` is bytecode identity and should be present for every call edge.",
+        "`method_uri` is source identity and is present only when the bytecode target",
         "joins to one unique CoCoMUT/Spoon project method.",
+        "",
+        "The aggregate project-target source-join rate is a taxonomy-derived",
+        "diagnostic over serialized adjacency entries, not oracle-backed source-join",
+        "recall. Final accuracy claims require pinned revisions and manual or",
+        "fixture-based ground truth for uniquely mappable project targets.",
         "",
         "Target-kind counts:",
         "",
@@ -695,8 +706,6 @@ def main() -> int:
     parser.add_argument("--clone-timeout", type=int, default=600)
     parser.add_argument("--compile-timeout", type=int, default=180)
     parser.add_argument("--heap-gb", type=int, default=2)
-    parser.add_argument("--retry-max-source-files", type=int, default=1500)
-    parser.add_argument("--retry-max-methods", type=int, default=5000)
     parser.add_argument("--oe25-checkouts-dir", type=Path, default=None,
                         help="Optional existing OE25 checkout directory keyed by owner__repo.")
     parser.add_argument("--representative-checkouts-dir", type=Path, default=None,

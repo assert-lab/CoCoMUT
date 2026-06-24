@@ -1,6 +1,7 @@
 package org.assertlab.cocomut;
 
 import org.assertlab.cocomut.source.ProjectModel;
+import org.assertlab.cocomut.source.SourceAnalysisSession;
 import org.assertlab.cocomut.source.SourceBackends;
 import org.assertlab.cocomut.source.SourceContext;
 import org.assertlab.cocomut.source.SourceMethod;
@@ -32,13 +33,20 @@ public class ContextExtractor {
     private final Map<String, MethodContext> cache;
     private final ProjectModel projectModel;
     private final SourceModelBackend sourceBackend;
+    private final SourceAnalysisSession sourceSession;
 
     public ContextExtractor(ProjectMetadata projectMetadata, CallGraphGenerator callGraphGenerator) {
+        this(projectMetadata, callGraphGenerator, null);
+    }
+
+    public ContextExtractor(ProjectMetadata projectMetadata, CallGraphGenerator callGraphGenerator,
+                            SourceAnalysisSession sourceSession) {
         this.projectMetadata = Objects.requireNonNull(projectMetadata, "projectMetadata cannot be null");
         this.callGraphGenerator = Objects.requireNonNull(callGraphGenerator, "callGraphGenerator cannot be null");
         this.cache = new HashMap<>();
         this.projectModel = ProjectModel.from(projectMetadata);
         this.sourceBackend = SourceBackends.spoon();
+        this.sourceSession = sourceSession;
     }
 
     public MethodContext extractContext(MethodInfo method) {
@@ -49,7 +57,9 @@ public class ContextExtractor {
 
         try {
             java.util.Optional<SourceContext> sourceContext =
-                    sourceBackend.extractContext(projectModel, methodUri);
+                    sourceSession != null
+                            ? sourceSession.extractContext(methodUri)
+                            : sourceBackend.extractContext(projectModel, methodUri);
             if (sourceContext.isPresent()) {
                 MethodContext context = fromSourceContext(method, sourceContext.get());
                 cache.put(methodUri, context);

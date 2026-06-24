@@ -19,19 +19,11 @@ public final class ContextRequest {
         ENTRY_POINTS
     }
 
-    public enum SourceResolution {
-        NOCLASSPATH,
-        CLASSPATH,
-        AUTO
-    }
-
     private final Path projectRoot;
     private final Scope scope;
     private final CallGraphGenerator.Algorithm callGraphAlgorithm;
     private final Integer maxMethods;
     private final Integer maxSourceFiles;
-    private final boolean attemptCompile;
-    private final SourceResolution sourceResolution;
     private final Set<String> sourceSets;
     private final Set<String> packages;
     private final Set<String> classes;
@@ -51,9 +43,6 @@ public final class ContextRequest {
                 "callGraphAlgorithm cannot be null");
         this.maxMethods = builder.maxMethods;
         this.maxSourceFiles = builder.maxSourceFiles;
-        this.attemptCompile = builder.attemptCompile;
-        this.sourceResolution = Objects.requireNonNull(builder.sourceResolution,
-                "sourceResolution cannot be null");
         this.sourceSets = Collections.unmodifiableSet(new LinkedHashSet<>(builder.sourceSets));
         this.packages = Collections.unmodifiableSet(new LinkedHashSet<>(builder.packages));
         this.classes = Collections.unmodifiableSet(new LinkedHashSet<>(builder.classes));
@@ -95,14 +84,6 @@ public final class ContextRequest {
         return maxSourceFiles;
     }
 
-    public boolean attemptCompile() {
-        return attemptCompile;
-    }
-
-    public SourceResolution sourceResolution() {
-        return sourceResolution;
-    }
-
     public Set<String> sourceSets() {
         return sourceSets;
     }
@@ -142,11 +123,9 @@ public final class ContextRequest {
     public static final class Builder {
         private Path projectRoot;
         private Scope scope = Scope.ALL;
-        private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.AUTO;
+        private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.RTA;
         private Integer maxMethods;
         private Integer maxSourceFiles;
-        private boolean attemptCompile;
-        private SourceResolution sourceResolution = SourceResolution.NOCLASSPATH;
         private Set<String> sourceSets = new LinkedHashSet<>();
         private Set<String> packages = new LinkedHashSet<>();
         private Set<String> classes = new LinkedHashSet<>();
@@ -189,16 +168,6 @@ public final class ContextRequest {
 
         public Builder maxSourceFiles(Integer maxSourceFiles) {
             this.maxSourceFiles = maxSourceFiles;
-            return this;
-        }
-
-        public Builder attemptCompile(boolean attemptCompile) {
-            this.attemptCompile = attemptCompile;
-            return this;
-        }
-
-        public Builder sourceResolution(SourceResolution sourceResolution) {
-            this.sourceResolution = Objects.requireNonNull(sourceResolution, "sourceResolution cannot be null");
             return this;
         }
 

@@ -45,4 +45,23 @@ public class ContextRequestTest {
         assertTrue(request.targets().contains(SymbolTarget.packageTarget(
                 "src/main/java/demo/api/package-info.java#demo.api")));
     }
+
+    @Test
+    public void defaultRequestRequiresBytecodeAnalysis() {
+        ContextRequest request = ContextRequest.builder()
+                .projectRoot(Path.of("."))
+                .build();
+
+        assertEquals(CallGraphGenerator.Algorithm.RTA, request.callGraphAlgorithm());
+    }
+
+    @Test
+    public void builderAcceptsChaBytecodeAnalysis() {
+        ContextRequest request = ContextRequest.builder()
+                .projectRoot(Path.of("."))
+                .callGraphAlgorithm(CallGraphGenerator.Algorithm.CHA)
+                .build();
+
+        assertEquals(CallGraphGenerator.Algorithm.CHA, request.callGraphAlgorithm());
+    }
 }

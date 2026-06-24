@@ -15,9 +15,23 @@ public interface SourceModelBackend {
 
     String mode();
 
-    List<SourceMethod> findMethods(ProjectModel project) throws IOException;
+    SourceAnalysisSession open(ProjectModel project) throws IOException;
 
-    Optional<SourceMethod> findMethod(ProjectModel project, String methodUri) throws IOException;
+    default List<SourceMethod> findMethods(ProjectModel project) throws IOException {
+        try (SourceAnalysisSession session = open(project)) {
+            return session.methods();
+        }
+    }
 
-    Optional<SourceContext> extractContext(ProjectModel project, String methodUri) throws IOException;
+    default Optional<SourceMethod> findMethod(ProjectModel project, String methodUri) throws IOException {
+        try (SourceAnalysisSession session = open(project)) {
+            return session.findMethod(methodUri);
+        }
+    }
+
+    default Optional<SourceContext> extractContext(ProjectModel project, String methodUri) throws IOException {
+        try (SourceAnalysisSession session = open(project)) {
+            return session.extractContext(methodUri);
+        }
+    }
 }

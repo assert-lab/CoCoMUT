@@ -31,7 +31,7 @@ public class MavenProjectAdapter implements ProjectAdapter {
 
     /**
      * Delegates to {@link ProjectAnalyzer#analyze()} which performs Maven-aware
-     * classpath resolution, Java version detection, and {@code mvn compile}.
+     * classpath resolution, Java version detection, and clean test compilation.
      */
     @Override
     public ProjectMetadata toMetadata() throws IOException {

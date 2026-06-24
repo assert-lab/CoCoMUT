@@ -140,8 +140,8 @@ public class OrchestratorTest {
     }
 
     @Test
-    public void testSourceOnlyProjectContinuesWithoutBuildOrCallGraph() throws Exception {
-        Path project = Files.createTempDirectory("cocomut-source-only-");
+    public void testUncompiledProjectFailsWithoutBytecode() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-uncompiled-");
         try {
             Path sourceDir = project.resolve("src/main/java/example");
             Files.createDirectories(sourceDir);
@@ -162,19 +162,82 @@ public class OrchestratorTest {
                     """);
 
             Orchestrator sourceOnly = new Orchestrator(project);
-            assertTrue("Source-only project should still complete", sourceOnly.execute());
+            assertFalse("Source-only project should fail without compiled bytecode", sourceOnly.execute());
 
             Map<String, Object> report = sourceOnly.getExecutionReport();
-            assertEquals("SUCCESS", report.get("status"));
+            assertEquals("FAILED", report.get("status"));
+            assertEquals(1, report.get("failed_at_phase"));
             assertEquals(false, report.get("phase_1_compiles"));
             assertEquals(true, report.get("phase_1_source_available"));
-            assertEquals(false, report.get("phase_3_available"));
-            assertEquals(1, ((Number) report.get("phase_5_jsonl_rows")).intValue());
-            assertTrue(Files.isRegularFile(Path.of(String.valueOf(report.get("phase_5_jsonl_file")))));
+            assertTrue(String.valueOf(report.get("phase_1_error")).contains("compiled project bytecode"));
             assertTrue(Files.isRegularFile(Path.of(String.valueOf(report.get("extraction_report_file")))));
         } finally {
             deleteRecursively(project);
         }
+    }
+
+    @Test
+    public void normalMavenTestSourceSetIsParsedAndCompiled() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-maven-test-source-set-");
+        try {
+            write(project.resolve("pom.xml"), """
+                    <?xml version="1.0" encoding="UTF-8"?>
+                    <project xmlns="http://maven.apache.org/POM/4.0.0"
+                             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                             xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+                      <modelVersion>4.0.0</modelVersion>
+                      <groupId>demo</groupId>
+                      <artifactId>test-source-set</artifactId>
+                      <version>1.0-SNAPSHOT</version>
+                      <properties>
+                        <maven.compiler.source>17</maven.compiler.source>
+                        <maven.compiler.target>17</maven.compiler.target>
+                        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+                      </properties>
+                    </project>
+                    """);
+            write(project.resolve("src/main/java/demo/MainOnly.java"), """
+                    package demo;
+                    public class MainOnly {
+                        public String value() { return "main"; }
+                    }
+                    """);
+            write(project.resolve("src/test/java/demo/MainOnlyTest.java"), """
+                    package demo;
+                    public class MainOnlyTest {
+                        public String testHelper() { return new MainOnly().value(); }
+                    }
+                    """);
+
+            Orchestrator testOnly = new Orchestrator(ContextRequest.builder()
+                    .projectRoot(project)
+                    .sourceSets(java.util.Set.of("test"))
+                    .build());
+
+            assertTrue(testOnly.execute());
+            assertEquals("SUCCESS", testOnly.getExecutionReport().get("status"));
+            assertTrue(testOnly.getMethodInfos().stream()
+                    .anyMatch(method -> "test".equals(method.getSourceSet())
+                            && "testHelper".equals(method.getMethodName())));
+            assertTrue("Maven test bytecode should be part of the bytecode model",
+                    ((Number) testOnly.getExecutionReport().get("phase_1_class_output_dirs")).intValue() >= 2);
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void emptySelectionFailsExplicitly() {
+        Orchestrator missing = new Orchestrator(ContextRequest.builder()
+                .projectRoot(testProjectPath)
+                .methods(java.util.Set.of("doesNotExist"))
+                .build());
+
+        assertFalse(missing.execute());
+        Map<String, Object> report = missing.getExecutionReport();
+        assertEquals("FAILED", report.get("status"));
+        assertEquals(2, report.get("failed_at_phase"));
+        assertTrue(String.valueOf(report.get("failure_codes")).contains("EMPTY_SELECTION"));
     }
 
     private static void deleteRecursively(Path root) throws Exception {
@@ -186,5 +249,10 @@ public class OrchestratorTest {
                 Files.deleteIfExists(path);
             }
         }
+    }
+
+    private static void write(Path path, String text) throws Exception {
+        Files.createDirectories(path.getParent());
+        Files.writeString(path, text);
     }
 }

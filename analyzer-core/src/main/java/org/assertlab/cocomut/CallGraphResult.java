@@ -14,15 +14,17 @@ public class CallGraphResult {
     private final Set<CallGraphEdge> callees;    // Methods this method calls
     private final String algorithm;        // CHA, RTA, etc.
     private final long generationTime;
+    private final boolean methodMatched;
 
     private CallGraphResult(Builder builder) {
         this.methodUri = Objects.requireNonNull(builder.methodUri, "methodUri cannot be null");
         this.methodName = Objects.requireNonNull(builder.methodName, "methodName cannot be null");
         this.classname = Objects.requireNonNull(builder.classname, "classname cannot be null");
-        this.callers = Collections.unmodifiableSet(new HashSet<>(builder.callers));
-        this.callees = Collections.unmodifiableSet(new HashSet<>(builder.callees));
+        this.callers = Collections.unmodifiableSet(new LinkedHashSet<>(builder.callers));
+        this.callees = Collections.unmodifiableSet(new LinkedHashSet<>(builder.callees));
         this.algorithm = Objects.requireNonNull(builder.algorithm, "algorithm cannot be null");
         this.generationTime = builder.generationTime;
+        this.methodMatched = builder.methodMatched;
     }
 
     // Getters
@@ -54,6 +56,10 @@ public class CallGraphResult {
         return generationTime;
     }
 
+    public boolean isMethodMatched() {
+        return methodMatched;
+    }
+
     public int getCallerCount() {
         return callers.size();
     }
@@ -81,10 +87,11 @@ public class CallGraphResult {
         private String methodUri;
         private String methodName;
         private String classname;
-        private Set<CallGraphEdge> callers = new HashSet<>();
-        private Set<CallGraphEdge> callees = new HashSet<>();
+        private Set<CallGraphEdge> callers = new LinkedHashSet<>();
+        private Set<CallGraphEdge> callees = new LinkedHashSet<>();
         private String algorithm = "CHA";
         private long generationTime = 0;
+        private boolean methodMatched = false;
 
         public Builder methodUri(String methodUri) {
             this.methodUri = methodUri;
@@ -102,7 +109,7 @@ public class CallGraphResult {
         }
 
         public Builder callers(Set<CallGraphEdge> callers) {
-            this.callers = new HashSet<>(callers);
+            this.callers = new LinkedHashSet<>(callers);
             return this;
         }
 
@@ -112,7 +119,7 @@ public class CallGraphResult {
         }
 
         public Builder callees(Set<CallGraphEdge> callees) {
-            this.callees = new HashSet<>(callees);
+            this.callees = new LinkedHashSet<>(callees);
             return this;
         }
 
@@ -128,6 +135,11 @@ public class CallGraphResult {
 
         public Builder generationTime(long generationTime) {
             this.generationTime = generationTime;
+            return this;
+        }
+
+        public Builder methodMatched(boolean methodMatched) {
+            this.methodMatched = methodMatched;
             return this;
         }
 

@@ -1,5 +1,10 @@
 # OE25 Plus Representative Study
 
+> Historical note: this report describes a pre-mandatory-bytecode experiment.
+> Mentions of legacy fallback, skipped compilation, or disabled call-graph
+> retries are preserved as provenance for that run and are not current CoCoMUT
+> behavior.
+
 This branch adds a reproducible field-test runner for the OE25 repository set
 plus the 30 representative public-repository checkouts already present under
 `experiments/expanded-public-repos-auto-main-representative/checkouts/`.
@@ -32,24 +37,24 @@ python3 scripts/run_oe25_plus_representative_study.py \
   --retry-max-methods 5000
 ```
 
-The first phase of the run used a longer timeout, then the runner was improved
-after `apple/pkl` showed that retrying classpath mode without call graph can
-repeat the same expensive Spoon phase. The committed runner now sends
-timeout/OOM/stack-overflow cases directly to bounded source-only extraction.
+The first phase of the historical run used a longer timeout, then the runner
+was improved after `apple/pkl` showed that retrying classpath mode without call
+graph can repeat the same expensive Spoon phase. That older runner sent
+timeout/OOM/stack-overflow cases directly to bounded legacy extraction.
 
 ## Policy
 
-Default extraction attempts:
+Legacy default extraction attempts:
 
 ```text
---compile --resolution auto --call-graph auto --source-set main --scope entry-points
+pre-mandatory-bytecode optional compile/source-resolution/call-graph modes
 ```
 
-Fallbacks:
+Legacy fallbacks:
 
 ```text
-ordinary nonzero exit      -> retry with --call-graph none
-timeout/OOM/StackOverflow  -> retry source-only, bounded by source files/methods
+ordinary nonzero exit      -> retry with legacy disabled-call-graph mode
+timeout/OOM/StackOverflow  -> retry legacy bounded extraction
 ```
 
 The runner also skips compilation for Java repositories whose root contains
@@ -89,16 +94,16 @@ compiled successfully:         33
 compile unavailable/failed:    22
 RTA call graph available:      37
 call graph unavailable/none:   18
-bounded source-only fallback:  11
+bounded legacy fallback:       11
 ```
 
-Source backend modes observed:
+Historical source backend modes observed:
 
 ```text
-noclasspath_fallback:          30
+legacy fallback:               30
 classpath:                     13
-noclasspath_limited:           11
-noclasspath:                   1
+legacy bounded fallback:       11
+legacy baseline fallback:      1
 ```
 
 ## Javadoc Reference Breakdown
@@ -149,11 +154,11 @@ jhy/jsoup                               263 @see refs
 No product code bug was confirmed during this run. The main changes were to the
 study runner:
 
-- timeout/OOM/stack-overflow cases now skip the expensive classpath no-callgraph
-  retry and go directly to bounded source-only extraction;
-- mixed Java/frontend repositories skip compile attempts to avoid unrelated
-  package-manager side effects, while still allowing source extraction and any
-  already available class-output directories to be used.
+- timeout/OOM/stack-overflow cases skipped the expensive classpath no-callgraph
+  retry and went directly to bounded legacy extraction;
+- mixed Java/frontend repositories skipped compile attempts to avoid unrelated
+  package-manager side effects, while still allowing the old extraction mode and
+  any already available class-output directories to be used.
 
 The `@see` parser behavior remains framed by standard Javadoc syntax rather than
 repository-specific conventions. Any future parser change motivated by these
@@ -169,6 +174,6 @@ for `@see`, `{@link ...}`, and `{@linkplain ...}` program-element references.
   selection unsafe.
 - External symbols are intentionally symbol-level only; CoCoMUT does not fetch
   external Javadoc text.
-- Several large Gradle/Maven projects require bounded source-only extraction on
-  this 16 GB machine. That is field-test evidence about resource policy, not a
-  Javadoc parsing rule.
+- Several large Gradle/Maven projects required bounded legacy extraction on
+  this 16 GB machine during the historical run. That is field-test evidence
+  about resource policy, not a Javadoc parsing rule.

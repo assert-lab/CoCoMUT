@@ -22,20 +22,22 @@
 
 CoCoMUT extracts method-level context from Java repositories. For every method it
 writes one JSONL record with source code, Javadoc, type context, documentation
-metadata, provenance, and optional call-graph context.
+metadata, provenance, and static bytecode call context.
 
 It is designed for documentation related research:
-static, reproducible, source-first, and explicit about failure modes.
+static, reproducible, bytecode-backed, and explicit about failure modes.
 
 ## Why CoCoMUT?
 
-- **Source-first extraction** with Spoon, including no-classpath fallback for
-  imperfect public repositories.
+- **Compiled-project extraction** over Java source plus project class files,
+  conventional build output directories, or project JARs discovered in the
+  checkout.
 - **Stable method identity** using path, qualified type, erased parameter types,
   and erased return type.
 - **Javadoc-aware context** for `@see`, `{@link ...}`, `{@inheritDoc}`,
   structured tags, documentation metrics, and referenced project symbols.
-- **Optional call graph** through SootUp CHA/RTA when bytecode is available.
+- **Static bytecode call context** for caller/callee edges and source joins when
+  bytecode targets map deterministically to project source methods.
 - **Research-friendly output** as JSONL plus an extraction report and a
   dependency-free web viewer.
 
@@ -53,14 +55,17 @@ Run CoCoMUT on a Java project:
 ./bin/cocomut \
   --project /path/to/java/project \
   --scope entry-points \
-  --source-set main \
-  --call-graph none
+  --source-set main
 ```
+
+The project must compile, or the checkout must already contain usable project
+class files, conventional build output directories, or project JARs for static
+bytecode analysis.
 
 The default output goes to:
 
 ```text
-./cocomut_output/<project-name>/method_contexts.jsonl
+./cocomut_output/<project-name>-<path-hash>/method_contexts__<request-hash>.jsonl
 ```
 
 Open the JSONL viewer:
@@ -78,7 +83,8 @@ Each JSONL row contains:
 - type context, class Javadoc, hierarchy, fields, overloads, siblings, and
   documentation metrics;
 - resolved Javadoc references with target kind, domain, and scope taxonomy;
-- optional callers/callees when bytecode call-graph extraction is available;
+- callers/callees from static bytecode analysis, with project source joins when
+  the bytecode target maps to one unique source method;
 - provenance fields describing backend mode, resolution confidence, failures,
   and selected target.
 
@@ -132,6 +138,7 @@ is available.
 ## Status
 
 CoCoMUT currently targets Java 17+ and performs static analysis only. It does not
-execute the analyzed program. When classpath or bytecode is unavailable, it
-continues with source/Javadoc extraction and records that provenance in the
-output.
+execute application code or tests, but supported Maven and Gradle builds execute
+the subject repository's build scripts during phase 1. The analyzed project must
+compile, or provide usable project bytecode in a conventional build layout,
+before extraction can succeed.

@@ -18,7 +18,7 @@ scripts/build_release_jar.sh
 ## CLI Smoke Test
 
 ```bash
-./bin/cocomut --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project --scope entry-points --call-graph none
+./bin/cocomut --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project --scope entry-points --source-set main
 ```
 
 ## Development Notes

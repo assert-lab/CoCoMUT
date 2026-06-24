@@ -10,7 +10,6 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
 import java.nio.file.Path;
-import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.Callable;
 
@@ -34,14 +33,11 @@ public final class CoCoMUTCommand implements Callable<Integer> {
     @Option(names = "--entry-points", description = "Shortcut for --scope entry-points.")
     private boolean entryPoints;
 
-    @Option(names = "--call-graph", defaultValue = "auto", description = "Call graph mode: none, cha, rta, or auto.")
+    @Option(names = "--call-graph", defaultValue = "rta",
+            description = "Static bytecode call-graph algorithm: rta or cha.")
     private String callGraph;
 
-    @Option(names = "--resolution", defaultValue = "noclasspath",
-            description = "Source resolution mode: noclasspath, classpath, or auto.")
-    private String resolution;
-
-    @Option(names = "--output-dir", description = "Directory for generated artifacts. Defaults to ./cocomut_output/<project-name>.")
+    @Option(names = "--output-dir", description = "Directory for generated artifacts. Defaults to ./cocomut_output/<project-name>-<path-hash>.")
     private Path outputDir;
 
     @Option(names = "--max-methods", description = "Limit methods for smoke tests.")
@@ -87,9 +83,6 @@ public final class CoCoMUTCommand implements Callable<Integer> {
     @Option(names = "--exclude-path", split = ",", description = "Exclude source path glob relative to project root.")
     private Set<String> excludePaths;
 
-    @Option(names = "--compile", description = "Attempt Maven/Gradle compilation before analysis.")
-    private boolean compile;
-
     @Override
     public Integer call() throws Exception {
         ContextRequest.Scope selectedScope = toScope(entryPoints ? "entry-points" : scope);
@@ -97,8 +90,7 @@ public final class CoCoMUTCommand implements Callable<Integer> {
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(project)
                 .scope(selectedScope)
-                .callGraphAlgorithm(toAlgorithm(callGraph))
-                .sourceResolution(toSourceResolution(resolution))
+                .callGraphAlgorithm(toCallGraphAlgorithm(callGraph))
                 .maxMethods(maxMethods)
                 .maxSourceFiles(maxSourceFiles)
                 .sourceSets(toSourceSets(sourceSet))
@@ -110,7 +102,6 @@ public final class CoCoMUTCommand implements Callable<Integer> {
                 .includePathGlobs(emptyIfNull(includePaths))
                 .excludePathGlobs(emptyIfNull(excludePaths))
                 .outputDirectory(outputDir)
-                .attemptCompile(compile || isAuto(callGraph) || isAuto(resolution))
                 .build();
 
         ExtractionReport report = ContextExtractorService.createDefault().extract(request);
@@ -126,22 +117,11 @@ public final class CoCoMUTCommand implements Callable<Integer> {
         };
     }
 
-    private static CallGraphGenerator.Algorithm toAlgorithm(String value) {
+    private static CallGraphGenerator.Algorithm toCallGraphAlgorithm(String value) {
         return switch (normalize(value)) {
-            case "none" -> CallGraphGenerator.Algorithm.NONE;
-            case "cha" -> CallGraphGenerator.Algorithm.CHA;
             case "rta" -> CallGraphGenerator.Algorithm.RTA;
-            case "auto" -> CallGraphGenerator.Algorithm.AUTO;
-            default -> throw new IllegalArgumentException("Unsupported --call-graph: " + value);
-        };
-    }
-
-    private static ContextRequest.SourceResolution toSourceResolution(String value) {
-        return switch (normalize(value)) {
-            case "noclasspath", "no-classpath" -> ContextRequest.SourceResolution.NOCLASSPATH;
-            case "classpath" -> ContextRequest.SourceResolution.CLASSPATH;
-            case "auto" -> ContextRequest.SourceResolution.AUTO;
-            default -> throw new IllegalArgumentException("Unsupported --resolution: " + value);
+            case "cha" -> CallGraphGenerator.Algorithm.CHA;
+            default -> throw new IllegalArgumentException("Unsupported --call-graph: " + value + " (expected rta or cha)");
         };
     }
 
@@ -182,10 +162,6 @@ public final class CoCoMUTCommand implements Callable<Integer> {
     }
 
     private static String normalize(String value) {
-        return value == null ? "" : value.toLowerCase(Locale.ROOT).trim();
-    }
-
-    private static boolean isAuto(String value) {
-        return "auto".equals(normalize(value));
+        return value == null ? "" : value.toLowerCase(java.util.Locale.ROOT).trim();
     }
 }

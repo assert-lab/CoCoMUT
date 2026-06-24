@@ -1,14 +1,18 @@
 package org.assertlab.cocomut;
 
 import org.assertlab.cocomut.source.ProjectModel;
+import org.assertlab.cocomut.source.SourceAnalysisSession;
 import org.assertlab.cocomut.source.SourceBackends;
+import org.assertlab.cocomut.source.SourceModelBackend;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.FileSystems;
 import java.nio.file.PathMatcher;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.util.*;
 
 /**
@@ -17,7 +21,7 @@ import java.util.*;
  * Orchestrates the extraction phases in sequence:
  * Phase 1: ProjectAnalyzer - Detect project, build system, Java version, classpath
  * Phase 2: MethodIdentifier - Scan Java files, extract methods, generate URI identities
- * Phase 3: CallGraphGenerator - Generate call graphs for methods when configured
+ * Phase 3: CallGraphGenerator - Generate call graphs for methods
  * Phase 4: ContextExtractor - Extract method bodies, javadocs, class hierarchy
  * Phase 5: JsonGenerator - Generate JSONL output
  *
@@ -30,11 +34,9 @@ final class Orchestrator {
     private final Path projectPath;
     private final Map<String, Object> executionReport;
     private ContextRequest.Scope scope = ContextRequest.Scope.ALL;
-    private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.AUTO;
+    private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.RTA;
     private Integer maxMethods;
     private Integer maxSourceFiles;
-    private boolean attemptCompile;
-    private ContextRequest.SourceResolution sourceResolution = ContextRequest.SourceResolution.NOCLASSPATH;
     private Set<String> sourceSets = Set.of();
     private Set<String> packageFilters = Set.of();
     private Set<String> classFilters = Set.of();
@@ -44,11 +46,12 @@ final class Orchestrator {
     private Set<String> excludePathGlobs = Set.of();
     private Set<SymbolTarget> targetFilters = Set.of();
     private Path outputDirectory;
-    private String previousMaxSourceFilesProperty;
-    private boolean sourceFileLimitConfigured;
 
     // Pipeline state passed between phases
     private ProjectMetadata projectMetadata;
+    private ProjectModel projectModel;
+    private SourceAnalysisSession sourceSession;
+    private List<MethodInfo> analysisUniverseMethods;
     private List<MethodInfo> methodInfos;
     private CallGraphGenerator callGraphGenerator;
     private Map<String, CallGraphResult> callGraphResults;
@@ -67,8 +70,6 @@ final class Orchestrator {
         this.callGraphAlgorithm = request.callGraphAlgorithm();
         this.maxMethods = request.maxMethods();
         this.maxSourceFiles = request.maxSourceFiles();
-        this.attemptCompile = request.attemptCompile();
-        this.sourceResolution = request.sourceResolution();
         this.sourceSets = request.sourceSets();
         this.packageFilters = request.packages();
         this.classFilters = request.classes();
@@ -92,16 +93,6 @@ final class Orchestrator {
 
     Orchestrator setMaxSourceFiles(Integer maxSourceFiles) {
         this.maxSourceFiles = maxSourceFiles;
-        return this;
-    }
-
-    Orchestrator setAttemptCompile(boolean attemptCompile) {
-        this.attemptCompile = attemptCompile;
-        return this;
-    }
-
-    Orchestrator setSourceResolution(ContextRequest.SourceResolution sourceResolution) {
-        this.sourceResolution = Objects.requireNonNull(sourceResolution, "sourceResolution cannot be null");
         return this;
     }
 
@@ -159,15 +150,20 @@ final class Orchestrator {
         try {
             if (!executePhase1()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 1); return false; }
             configureSourceFileLimit();
+            openSourceSession();
             if (!executePhase2()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 2); return false; }
             if (!executePhase3()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 3); return false; }
             if (!executePhase4()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 4); return false; }
             if (!executePhase5()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 5); return false; }
 
-            executionReport.put("status", "SUCCESS");
+            if (failureCodes.isEmpty()) {
+                executionReport.put("status", "SUCCESS");
+                success = true;
+            } else {
+                executionReport.put("status", "PARTIAL");
+            }
             executionReport.put("completed_phases", 5);
-            success = true;
-            return true;
+            return success;
 
         } catch (Exception e) {
             executionReport.put("status", "ERROR");
@@ -182,42 +178,43 @@ final class Orchestrator {
                     ? List.of(FailureCode.NONE.toString())
                     : failureCodes.stream().map(Enum::toString).toList());
             writeExecutionReportIfPossible();
+            closeSourceSession();
             restoreSourceFileLimit();
-            SourceBackends.clearConfiguration();
         }
     }
 
     private boolean executePhase1() {
         try {
-            boolean effectiveAttemptCompile = attemptCompile
-                    || sourceResolution == ContextRequest.SourceResolution.AUTO
-                    || callGraphAlgorithm == CallGraphGenerator.Algorithm.AUTO;
-            ProjectAnalyzer analyzer = new ProjectAnalyzer(projectPath, true, "auto", effectiveAttemptCompile);
+            ProjectAnalyzer analyzer = new ProjectAnalyzer(projectPath, true, "auto", includeTestBytecode());
             projectMetadata = analyzer.analyze();
-            SourceBackends.configure(sourceResolution);
 
             executionReport.put("phase_1_project", projectMetadata.getProjectName());
             executionReport.put("phase_1_build_system", projectMetadata.getBuildSystem());
             executionReport.put("phase_1_java_version", projectMetadata.getJavaVersion());
             executionReport.put("phase_1_compiles", projectMetadata.isCompiles());
             executionReport.put("phase_1_compile_status", projectMetadata.getCompileStatus());
-            executionReport.put("phase_1_compile_attempted", effectiveAttemptCompile);
-            executionReport.put("phase_1_source_resolution_requested", sourceResolution.toString());
-            ProjectModel model = ProjectModel.from(projectMetadata);
-            executionReport.put("phase_1_source_available", model.sourceAvailable());
-            executionReport.put("phase_1_source_roots", model.sourceRoots().size());
-            executionReport.put("phase_1_test_source_roots", model.testSourceRoots().size());
-            executionReport.put("phase_1_class_output_dirs", model.classOutputDirs().size());
-            executionReport.put("phase_1_dependency_jars", model.dependencyJars().size());
+            projectModel = ProjectModel.from(projectMetadata);
+            executionReport.put("phase_1_source_available", projectModel.sourceAvailable());
+            executionReport.put("phase_1_source_roots", projectModel.sourceRoots().size());
+            executionReport.put("phase_1_test_source_roots", projectModel.testSourceRoots().size());
+            executionReport.put("phase_1_class_output_dirs", projectModel.classOutputDirs().size());
+            executionReport.put("phase_1_main_class_outputs", projectMetadata.getMainClassOutputs().size());
+            executionReport.put("phase_1_test_class_outputs", projectMetadata.getTestClassOutputs().size());
+            executionReport.put("phase_1_project_artifact_jars", projectMetadata.getProjectArtifactJars().size());
+            executionReport.put("phase_1_project_bytecode_locations", projectBytecodeLocations().size());
+            executionReport.put("phase_1_dependency_locations", projectMetadata.getDependencyClasspath().size());
+            executionReport.put("phase_1_dependency_jars", projectModel.dependencyJars().size());
 
             if (!projectMetadata.isCompiles()) {
-                if (model.sourceAvailable()) {
-                    failureCodes.add(FailureCode.BUILD_FAILED);
-                    executionReport.put("phase_1_warning",
-                            "Project did not compile; continuing with source-only context");
-                    return true;
-                }
-                failureCodes.add(FailureCode.NO_SOURCE_ROOT);
+                failureCodes.add(FailureCode.BUILD_FAILED);
+                executionReport.put("phase_1_error",
+                        "CoCoMUT requires compiled project bytecode. Build the project or provide compiled class files.");
+                return false;
+            }
+            if (projectBytecodeLocations().isEmpty()) {
+                failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
+                executionReport.put("phase_1_error",
+                        "CoCoMUT requires project class directories or project artifact JARs for static bytecode analysis.");
                 return false;
             }
 
@@ -228,20 +225,41 @@ final class Orchestrator {
         }
     }
 
+    private boolean includeTestBytecode() {
+        return sourceSets == null || sourceSets.isEmpty()
+                || sourceSets.stream().anyMatch(set -> !"main".equals(set));
+    }
+
+    private List<Path> projectBytecodeLocations() {
+        if (projectMetadata == null) {
+            return List.of();
+        }
+        List<Path> locations = new ArrayList<>();
+        locations.addAll(projectMetadata.getMainClassOutputs());
+        locations.addAll(projectMetadata.getProjectArtifactJars());
+        return locations;
+    }
+
     private boolean executePhase2() {
         try {
             MethodIdentifier identifier = new MethodIdentifier(projectMetadata);
 
-            methodInfos = identifier.identify();
-            methodInfos = filterScope(methodInfos);
+            analysisUniverseMethods = identifier.identify(sourceSession);
+            methodInfos = filterScope(analysisUniverseMethods);
             methodInfos = filterMethods(methodInfos);
             methodInfos = limitMethods(methodInfos);
 
             executionReport.put("phase_2_strategy", scope.toString());
+            executionReport.put("phase_2_analysis_universe_methods", analysisUniverseMethods.size());
             executionReport.put("phase_2_methods_identified", methodInfos.size());
+            if (methodInfos.isEmpty()) {
+                failureCodes.add(FailureCode.EMPTY_SELECTION);
+                executionReport.put("phase_2_error", "Selection matched zero methods.");
+                return false;
+            }
             return true;
         } catch (Exception e) {
-                executionReport.put("phase_2_error", e.getMessage());
+            executionReport.put("phase_2_error", e.getMessage());
             failureCodes.add(FailureCode.PARSE_ERROR);
             return false;
         }
@@ -252,37 +270,7 @@ final class Orchestrator {
      */
     private boolean executePhase3() {
         try {
-            if (callGraphAlgorithm == CallGraphGenerator.Algorithm.NONE) {
-                callGraphGenerator = new CallGraphGenerator(projectMetadata);
-                callGraphResults = new HashMap<>();
-                failureCodes.add(FailureCode.CALL_GRAPH_DISABLED);
-                executionReport.put("phase_3_available", false);
-                executionReport.put("phase_3_algorithm", "NONE");
-                executionReport.put("phase_3_warning", "Call graph disabled by configuration");
-                executionReport.put("phase_3_call_graph_artifact_exists", false);
-                executionReport.put("phase_3_call_graphs_generated", 0);
-                executionReport.put("phase_3_non_empty_call_graphs", 0);
-                executionReport.put("phase_3_call_edges_generated", 0);
-                return true;
-            }
-
-            CallGraphGenerator.Algorithm effectiveAlgorithm = effectiveCallGraphAlgorithm();
-            if (effectiveAlgorithm == CallGraphGenerator.Algorithm.NONE) {
-                callGraphGenerator = new CallGraphGenerator(projectMetadata);
-                callGraphResults = new HashMap<>();
-                failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
-                executionReport.put("phase_3_available", false);
-                executionReport.put("phase_3_algorithm", callGraphAlgorithm.toString());
-                executionReport.put("phase_3_effective_algorithm", "NONE");
-                executionReport.put("phase_3_warning",
-                        "Call graph auto disabled because compiled class directories are unavailable");
-                executionReport.put("phase_3_call_graph_artifact_exists", false);
-                executionReport.put("phase_3_call_graphs_generated", 0);
-                executionReport.put("phase_3_non_empty_call_graphs", 0);
-                executionReport.put("phase_3_call_edges_generated", 0);
-                return true;
-            }
-
+            CallGraphGenerator.Algorithm effectiveAlgorithm = callGraphAlgorithm;
             callGraphGenerator = new CallGraphGenerator(projectMetadata, effectiveAlgorithm);
             if (!callGraphGenerator.initialize()) {
                 callGraphResults = new HashMap<>();
@@ -290,21 +278,24 @@ final class Orchestrator {
                 executionReport.put("phase_3_available", false);
                 executionReport.put("phase_3_algorithm", callGraphAlgorithm.toString());
                 executionReport.put("phase_3_effective_algorithm", effectiveAlgorithm.toString());
-                executionReport.put("phase_3_warning",
-                        "Call graph unavailable; continuing with source-only context");
+                executionReport.put("phase_3_error",
+                        "Static bytecode analysis could not be initialized.");
                 executionReport.put("phase_3_call_graph_artifact_exists", false);
                 executionReport.put("phase_3_call_graphs_generated", 0);
                 executionReport.put("phase_3_non_empty_call_graphs", 0);
                 executionReport.put("phase_3_call_edges_generated", 0);
-                return true;
+                return false;
             }
 
-            callGraphResults = callGraphGenerator.generateForMethods(methodInfos);
+            callGraphResults = callGraphGenerator.generateForMethods(analysisUniverseMethods, methodInfos);
             int callGraphEdgeCount = callGraphResults.values().stream()
                     .mapToInt(result -> result.getCallerCount() + result.getCalleeCount())
                     .sum();
             long nonEmptyCallGraphResults = callGraphResults.values().stream()
                     .filter(result -> result.getCallerCount() > 0 || result.getCalleeCount() > 0)
+                    .count();
+            long matchedToBytecode = callGraphResults.values().stream()
+                    .filter(CallGraphResult::isMethodMatched)
                     .count();
 
             String cgText = callGraphGenerator.getCallGraphText();
@@ -318,7 +309,6 @@ final class Orchestrator {
             boolean artifactExists = !cgText.isEmpty() || !callGraphResults.isEmpty();
             boolean hasUsableEdges = callGraphEdgeCount > 0;
             if (!hasUsableEdges) {
-                failureCodes.add(FailureCode.CALL_GRAPH_EMPTY);
                 executionReport.put("phase_3_warning",
                         "Call graph generated but contained no usable caller/callee edges");
             }
@@ -327,8 +317,14 @@ final class Orchestrator {
             executionReport.put("phase_3_effective_algorithm", effectiveAlgorithm.toString());
             executionReport.put("phase_3_call_graph_artifact_exists", artifactExists);
             executionReport.put("phase_3_call_graphs_generated", callGraphResults.size());
+            executionReport.put("phase_3_focal_methods_matched_to_bytecode", matchedToBytecode);
             executionReport.put("phase_3_non_empty_call_graphs", nonEmptyCallGraphResults);
             executionReport.put("phase_3_call_edges_generated", callGraphEdgeCount);
+            if (callGraphResults.size() != methodInfos.size() || matchedToBytecode != methodInfos.size()) {
+                failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
+                executionReport.put("phase_3_warning",
+                        "One or more selected methods did not receive a matched bytecode call graph result.");
+            }
             return true;
         } catch (Exception e) {
             executionReport.put("phase_3_error", e.getMessage());
@@ -337,23 +333,12 @@ final class Orchestrator {
         }
     }
 
-    private CallGraphGenerator.Algorithm effectiveCallGraphAlgorithm() {
-        if (callGraphAlgorithm != CallGraphGenerator.Algorithm.AUTO) {
-            return callGraphAlgorithm;
-        }
-        ProjectModel model = ProjectModel.from(projectMetadata);
-        if (!model.classOutputDirs().isEmpty()) {
-            return CallGraphGenerator.Algorithm.RTA;
-        }
-        return CallGraphGenerator.Algorithm.NONE;
-    }
-
     /**
      * Phase 4: Reuse the SAME CallGraphGenerator from Phase 3 so getCachedResult() works.
      */
     private boolean executePhase4() {
         try {
-            ContextExtractor extractor = new ContextExtractor(projectMetadata, callGraphGenerator);
+            ContextExtractor extractor = new ContextExtractor(projectMetadata, callGraphGenerator, sourceSession);
             methodContexts = extractor.extractContextForMethods(methodInfos);
             contextExtractionFailures = missingContextFailures(methodInfos, methodContexts);
 
@@ -363,6 +348,10 @@ final class Orchestrator {
                 Path failuresPath = writeContextExtractionFailures(contextExtractionFailures);
                 executionReport.put("phase_4_context_failures", contextExtractionFailures.size());
                 executionReport.put("phase_4_context_failures_file", failuresPath.toString());
+            }
+            if (methodContexts.size() != methodInfos.size()) {
+                executionReport.put("phase_4_warning",
+                        "One or more selected methods did not produce a method context.");
             }
             return true;
         } catch (Exception e) {
@@ -419,7 +408,8 @@ final class Orchestrator {
             return methods;
         }
         List<MethodInfo> filtered = methods.stream()
-                .filter(method -> "public".equals(method.getVisibility()))
+                .filter(method -> "public".equals(method.getVisibility())
+                        || "protected".equals(method.getVisibility()))
                 .filter(method -> !isMain(method))
                 .toList();
         executionReport.put("phase_2_scope_filter_before", methods.size());
@@ -428,29 +418,74 @@ final class Orchestrator {
     }
 
     private static boolean isMain(MethodInfo method) {
-        return "main".equals(method.getMethodName()) && method.isStatic();
+        return "main".equals(method.getMethodName())
+                && method.isStatic()
+                && "void".equals(method.getErasedReturnType())
+                && method.getErasedParameterTypes().equals(List.of("java.lang.String[]"));
     }
 
     private void configureSourceFileLimit() {
         if (maxSourceFiles != null && maxSourceFiles > 0) {
-            if (!sourceFileLimitConfigured) {
-                previousMaxSourceFilesProperty = System.getProperty("cocomut.maxSourceFiles");
-                sourceFileLimitConfigured = true;
-            }
-            System.setProperty("cocomut.maxSourceFiles", String.valueOf(maxSourceFiles));
+            SourceBackends.setMaxSourceFiles(maxSourceFiles);
             executionReport.put("source_max_files", maxSourceFiles);
         }
     }
 
-    private void restoreSourceFileLimit() {
-        if (!sourceFileLimitConfigured) {
+    private void openSourceSession() throws java.io.IOException {
+        SourceModelBackend backend = SourceBackends.spoon();
+        sourceSession = backend.open(projectModel);
+        executionReport.put("source_backend", backend.name());
+        var stats = sourceSession.parseStats();
+        executionReport.put("source_files_discovered", stats.discovered());
+        executionReport.put("source_files_parsed", stats.parsed());
+        executionReport.put("source_files_failed", stats.failed());
+        if (stats.failed() > 0) {
+            failureCodes.add(FailureCode.SOURCE_PARSE_FAILED);
+            Path failures = writeFailedSourceFiles(stats.failedFiles());
+            executionReport.put("failed_source_files_file", failures.toString());
+        }
+    }
+
+    private Path writeFailedSourceFiles(List<Path> failedFiles) throws java.io.IOException {
+        Path output = outputRoot().resolve("failed_source_files.jsonl");
+        Files.createDirectories(output.getParent());
+        try (var writer = Files.newBufferedWriter(output)) {
+            for (Path file : failedFiles) {
+                ObjectNode node = OBJECT_MAPPER.createObjectNode();
+                node.put("failure_code", FailureCode.SOURCE_PARSE_FAILED.toString());
+                node.put("source_file", relativePathString(file));
+                writer.write(OBJECT_MAPPER.writeValueAsString(node));
+                writer.newLine();
+            }
+        }
+        return output;
+    }
+
+    private String relativePathString(Path file) {
+        try {
+            return projectPath.toAbsolutePath().normalize()
+                    .relativize(file.toAbsolutePath().normalize())
+                    .toString().replace('\\', '/');
+        } catch (Exception e) {
+            return file.toString().replace('\\', '/');
+        }
+    }
+
+    private void closeSourceSession() {
+        if (sourceSession == null) {
             return;
         }
-        if (previousMaxSourceFilesProperty == null) {
-            System.clearProperty("cocomut.maxSourceFiles");
-        } else {
-            System.setProperty("cocomut.maxSourceFiles", previousMaxSourceFilesProperty);
+        try {
+            sourceSession.close();
+        } catch (Exception e) {
+            executionReport.put("source_session_close_error", e.getMessage());
+        } finally {
+            sourceSession = null;
         }
+    }
+
+    private void restoreSourceFileLimit() {
+        SourceBackends.clearConfiguration();
     }
 
     /**
@@ -461,7 +496,8 @@ final class Orchestrator {
             if (methodContexts == null || methodContexts.isEmpty()) {
                 executionReport.put("phase_5_warning", "No method contexts to generate JSON for");
                 executionReport.put("phase_5_files_generated", 0);
-                return true;
+                failureCodes.add(FailureCode.JSON_GENERATION_FAILED);
+                return false;
             }
 
             Path root = outputRoot();
@@ -476,8 +512,10 @@ final class Orchestrator {
             executionReport.put("phase_5_jsonl_rows", jsonlRows);
             executionReport.put("phase_5_files_generated", jsonlRows);
             executionReport.put("phase_5_call_edges_serialized", serializedCallEdgeCount(methodContexts));
-            if (jsonlRows < methodContexts.size()) {
+            if (jsonlRows != methodContexts.size() || jsonlRows != methodInfos.size()) {
                 failureCodes.add(FailureCode.JSON_GENERATION_FAILED);
+                executionReport.put("phase_5_warning",
+                        "JSONL row count does not match selected method count.");
             }
             return true;
         } catch (Exception e) {
@@ -510,6 +548,10 @@ final class Orchestrator {
         return methodInfos != null ? methodInfos : List.of();
     }
 
+    public List<MethodInfo> getAnalysisUniverseMethods() {
+        return analysisUniverseMethods != null ? analysisUniverseMethods : List.of();
+    }
+
     public void printReport() {
         System.out.println("\n=== ORCHESTRATOR EXECUTION REPORT ===");
         executionReport.forEach((key, value) ->
@@ -527,7 +569,13 @@ final class Orchestrator {
         }
         executionReport.put("phase_2_max_methods", maxMethods);
         executionReport.put("phase_2_methods_before_limit", methods.size());
-        return new ArrayList<>(methods.subList(0, maxMethods));
+        List<MethodInfo> ordered = methods.stream()
+                .sorted(Comparator.comparing((MethodInfo method) -> relativeSourceFile(method).toString())
+                        .thenComparingInt(MethodInfo::getLineNumber)
+                        .thenComparingInt(MethodInfo::getColumnNumber)
+                        .thenComparing(MethodInfo::getMethodUri))
+                .toList();
+        return new ArrayList<>(ordered.subList(0, maxMethods));
     }
 
     private Map<String, String> missingContextFailures(List<MethodInfo> expected,
@@ -683,10 +731,21 @@ final class Orchestrator {
 
     private Map<String, Object> selectionProvenance() {
         Map<String, Object> selection = new LinkedHashMap<>();
+        selection.put("scope", scope.toString().toLowerCase(Locale.ROOT));
+        selection.put("source_sets", sourceSets.isEmpty() ? List.of("all") : sourceSets.stream().sorted().toList());
+        selection.put("packages", packageFilters.stream().sorted().toList());
+        selection.put("classes", classFilters.stream().sorted().toList());
+        selection.put("methods", methodFilters.stream().sorted().toList());
+        selection.put("visibilities", visibilityFilters.stream().sorted().toList());
+        selection.put("include_paths", includePathGlobs.stream().sorted().toList());
+        selection.put("exclude_paths", excludePathGlobs.stream().sorted().toList());
+        selection.put("max_methods", maxMethods);
+        selection.put("max_source_files", maxSourceFiles);
         if (targetFilters.isEmpty()) {
             selection.put("kind", "project");
-            selection.put("uri", projectPath.toAbsolutePath().normalize().toString());
-            selection.put("selector", "project");
+            selection.put("uri", projectUri());
+            selection.put("project_name", projectName());
+            selection.put("selector", selectionLabel().isBlank() ? "project" : selectionLabel());
             return selection;
         }
         if (targetFilters.size() == 1) {
@@ -715,17 +774,36 @@ final class Orchestrator {
         if (outputDirectory != null) {
             return outputDirectory.toAbsolutePath().normalize();
         }
-        String projectName = projectPath.getFileName() != null ? projectPath.getFileName().toString() : "project";
         return Path.of(System.getProperty("user.dir"))
                 .resolve("cocomut_output")
-                .resolve(sanitize(projectName))
+                .resolve(sanitize(projectName()) + "-" + shortProjectHash())
                 .toAbsolutePath()
                 .normalize();
     }
 
+    private String projectName() {
+        return projectPath.getFileName() != null ? projectPath.getFileName().toString() : "project";
+    }
+
+    private String projectUri() {
+        return "project://" + sanitize(projectName());
+    }
+
+    private String shortProjectHash() {
+        String normalized = projectPath.toAbsolutePath().normalize().toString();
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(normalized.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest, 0, 4);
+        } catch (Exception e) {
+            return Integer.toHexString(normalized.hashCode());
+        }
+    }
+
     private String outputJsonlFilename() {
         String selection = selectionLabel();
-        return selection.isBlank() ? "method_contexts.jsonl" : sanitize(selection) + ".jsonl";
+        String base = selection.isBlank() ? "method_contexts" : sanitize(selection);
+        return base + "__" + requestHash() + ".jsonl";
     }
 
     private String selectionLabel() {
@@ -744,6 +822,29 @@ final class Orchestrator {
             return "package__" + String.join("__", packageFilters);
         }
         return "";
+    }
+
+    private String requestHash() {
+        Map<String, Object> request = new LinkedHashMap<>();
+        request.put("scope", scope.toString());
+        request.put("source_sets", sourceSets.stream().sorted().toList());
+        request.put("packages", packageFilters.stream().sorted().toList());
+        request.put("classes", classFilters.stream().sorted().toList());
+        request.put("methods", methodFilters.stream().sorted().toList());
+        request.put("visibilities", visibilityFilters.stream().sorted().toList());
+        request.put("include_paths", includePathGlobs.stream().sorted().toList());
+        request.put("exclude_paths", excludePathGlobs.stream().sorted().toList());
+        request.put("targets", targetFilters.stream().map(SymbolTarget::prefixedUri).sorted().toList());
+        request.put("max_methods", maxMethods);
+        request.put("max_source_files", maxSourceFiles);
+        request.put("call_graph", callGraphAlgorithm.toString());
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(OBJECT_MAPPER.writeValueAsBytes(request));
+            return HexFormat.of().formatHex(digest, 0, 4);
+        } catch (Exception e) {
+            return Integer.toHexString(request.hashCode());
+        }
     }
 
     private static String sanitize(String value) {

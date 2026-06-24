@@ -40,14 +40,12 @@ FIELDS = [
     "clone_status",
     "status",
     "build_system",
-    "compile_attempted",
     "compiles",
     "compile_status",
     "source_roots",
     "test_source_roots",
     "class_output_dirs",
     "dependency_jars",
-    "source_resolution",
     "source_set_filter",
     "source_backend_modes",
     "call_graph_requested",
@@ -189,8 +187,6 @@ def run_extraction(
     env: dict[str, str],
     max_source_files: int | None,
     max_methods: int | None,
-    resolution: str,
-    call_graph: str,
     source_set: str,
 ) -> tuple[int | None, dict[str, str], str]:
     shutil.rmtree(artifact_dir, ignore_errors=True)
@@ -201,10 +197,6 @@ def run_extraction(
         str(checkout),
         "--scope",
         "entry-points",
-        "--call-graph",
-        call_graph,
-        "--resolution",
-        resolution,
         "--output-dir",
         str(artifact_dir),
     ]
@@ -235,10 +227,6 @@ def run_repo(
     timeout: int,
     retry_max_source_files: int,
     retry_max_methods: int,
-    retry_smoke_source_files: int,
-    retry_smoke_methods: int,
-    resolution: str,
-    call_graph: str,
     source_set: str,
     compile_timeout: int,
     java_home: str | None,
@@ -287,9 +275,8 @@ def run_repo(
     log_path = logs / f"{safe}.cocomut.log"
     start = time.time()
     status, data, tail = run_extraction(root, checkout, artifact_dir, log_path, timeout, env,
-                                        None, None, resolution, call_graph, source_set)
+                                        None, None, source_set)
     retry_mode = "none"
-    active_source_set = source_set
     note = "" if status == 0 else f"exit {status}"
 
     should_retry = status is None or status != 0 or "Java heap space" in tail or "OutOfMemoryError" in tail
@@ -298,7 +285,7 @@ def run_repo(
         retry_log = logs / f"{safe}.cocomut.retry.log"
         status, data, retry_tail = run_extraction(
             root, checkout, artifact_dir, retry_log, timeout, env, retry_max_source_files, None,
-            resolution, call_graph, source_set)
+            source_set)
         tail = retry_tail
         note = "retry capped source files" if status == 0 else f"retry exit {status}"
 
@@ -316,17 +303,14 @@ def run_repo(
             env,
             retry_max_source_files,
             retry_max_methods,
-            resolution,
-            call_graph,
             source_set,
         )
         tail = retry_tail
         note = "retry capped source files and methods" if status == 0 else f"retry max-methods exit {status}"
 
     if source_set == "main" and status != 0 and filtered_all_methods(data):
-        fallback_source_set = "main,unknown"
-        active_source_set = fallback_source_set
-        retry_mode = f"{retry_mode};source_set={fallback_source_set}"
+        expanded_source_set = "main,unknown"
+        retry_mode = f"{retry_mode};source_set={expanded_source_set}"
         retry_log = logs / f"{safe}.cocomut.retry-source-set.log"
         status, data, retry_tail = run_extraction(
             root,
@@ -337,42 +321,13 @@ def run_repo(
             env,
             retry_max_source_files,
             retry_max_methods,
-            resolution,
-            call_graph,
-            fallback_source_set,
+            expanded_source_set,
         )
         tail = retry_tail
         note = (
             "retry source-set main,unknown"
             if status == 0
             else f"retry source-set main,unknown exit {status}"
-        )
-
-    should_smoke_retry = status is None or status != 0 or "Java heap space" in tail or "OutOfMemoryError" in tail
-    if should_smoke_retry and retry_smoke_source_files > 0 and retry_smoke_methods > 0:
-        retry_mode = (
-            f"{retry_mode};smoke_resolution=noclasspath;smoke_call_graph=none;"
-            f"smoke_max_source_files={retry_smoke_source_files};smoke_max_methods={retry_smoke_methods}"
-        )
-        retry_log = logs / f"{safe}.cocomut.retry-smoke.log"
-        status, data, retry_tail = run_extraction(
-            root,
-            checkout,
-            artifact_dir,
-            retry_log,
-            timeout,
-            env,
-            retry_smoke_source_files,
-            retry_smoke_methods,
-            "noclasspath",
-            "none",
-            active_source_set,
-        )
-        tail = retry_tail
-        note = (
-            "retry smoke capped source files and methods"
-            if status == 0
-            else f"retry smoke exit {status}"
         )
 
     elapsed_ms = str(int((time.time() - start) * 1000))
@@ -392,17 +347,15 @@ def run_repo(
         "clone_status": "OK",
         "status": data.get("status", f"EXIT_{status}"),
         "build_system": data.get("phase_1_build_system", ""),
-        "compile_attempted": data.get("phase_1_compile_attempted", ""),
         "compiles": data.get("phase_1_compiles", ""),
         "compile_status": data.get("phase_1_compile_status", ""),
         "source_roots": data.get("phase_1_source_roots", ""),
         "test_source_roots": data.get("phase_1_test_source_roots", ""),
         "class_output_dirs": data.get("phase_1_class_output_dirs", ""),
         "dependency_jars": data.get("phase_1_dependency_jars", ""),
-        "source_resolution": data.get("phase_1_source_resolution_requested", resolution),
         "source_set_filter": data.get("phase_2_source_set_filter", source_set),
         "source_backend_modes": javadoc_counts.get("source_backend_modes", ""),
-        "call_graph_requested": data.get("phase_3_algorithm", call_graph),
+        "call_graph_requested": data.get("phase_3_algorithm", ""),
         "call_graph_available": data.get("phase_3_available", ""),
         "call_graph_effective_algorithm": data.get("phase_3_effective_algorithm", ""),
         "call_graph_artifact_exists": data.get("phase_3_call_graph_artifact_exists", ""),
@@ -479,16 +432,6 @@ def main() -> int:
                         help="Retry failed/timeout/OOM repos with a source-file cap. Use 0 to disable.")
     parser.add_argument("--retry-max-methods", type=int, default=5000,
                         help="Final retry method cap for huge repos that still fail. Use 0 to disable.")
-    parser.add_argument("--retry-smoke-source-files", type=int, default=100,
-                        help="Last-resort source-file cap for timeout/OOM repos. Use 0 to disable.")
-    parser.add_argument("--retry-smoke-methods", type=int, default=250,
-                        help="Last-resort method cap for timeout/OOM repos. Use 0 to disable.")
-    parser.add_argument("--resolution", default="noclasspath",
-                        choices=["noclasspath", "classpath", "auto"],
-                        help="CoCoMUT source resolution mode.")
-    parser.add_argument("--call-graph", default="none",
-                        choices=["none", "cha", "rta", "auto"],
-                        help="CoCoMUT call graph mode.")
     parser.add_argument("--source-set", default="all",
                         help="CoCoMUT source-set filter: all, main, test, integration_test, generated, example, unknown.")
     parser.add_argument("--compile-timeout", type=int, default=120,
@@ -539,10 +482,6 @@ def main() -> int:
             args.timeout,
             args.retry_max_source_files,
             args.retry_max_methods,
-            args.retry_smoke_source_files,
-            args.retry_smoke_methods,
-            args.resolution,
-            args.call_graph,
             args.source_set,
             args.compile_timeout,
             args.java_home or None,

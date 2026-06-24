@@ -2,6 +2,7 @@ package org.assertlab.cocomut;
 
 import org.assertlab.cocomut.source.ProjectModel;
 import org.assertlab.cocomut.source.SourceBackends;
+import org.assertlab.cocomut.source.SourceAnalysisSession;
 import org.assertlab.cocomut.source.SourceMethod;
 import org.assertlab.cocomut.source.SourceModelBackend;
 
@@ -45,6 +46,12 @@ public class MethodIdentifier {
                 .toList());
     }
 
+    public List<MethodInfo> identify(SourceAnalysisSession session) throws IOException {
+        return new ArrayList<>(session.methods().stream()
+                .map(MethodIdentifier::toMethodInfo)
+                .toList());
+    }
+
     public static MethodInfo toMethodInfo(SourceMethod method) {
         return new MethodInfo.Builder()
                 .methodUri(method.methodUri())
@@ -58,6 +65,10 @@ public class MethodIdentifier {
                 .isStatic(method.isStatic())
                 .returnType(method.returnType())
                 .erasedReturnType(method.erasedReturnType())
+                .erasedParameterTypes(method.parameters().stream()
+                        .map(parameter -> parameter.erasedType())
+                        .toList())
+                .constructor(method.constructor())
                 .sourceSet(method.sourceSet())
                 .build();
     }

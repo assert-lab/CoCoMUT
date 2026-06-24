@@ -12,11 +12,7 @@ COMPILE_TIMEOUT="${COMPILE_TIMEOUT:-60}"
 MAX_SIZE_KB="${MAX_SIZE_KB:-300000}"
 RETRY_MAX_SOURCE_FILES="${RETRY_MAX_SOURCE_FILES:-1500}"
 RETRY_MAX_METHODS="${RETRY_MAX_METHODS:-5000}"
-RETRY_SMOKE_SOURCE_FILES="${RETRY_SMOKE_SOURCE_FILES:-100}"
-RETRY_SMOKE_METHODS="${RETRY_SMOKE_METHODS:-250}"
 SOURCE_SET="${SOURCE_SET:-main}"
-RESOLUTION="${RESOLUTION:-auto}"
-CALL_GRAPH="${CALL_GRAPH:-auto}"
 JAVA_HOME_VALUE="${JAVA_HOME_VALUE:-/usr/lib/jvm/java-17-openjdk}"
 INCLUDE_ANDROID="${INCLUDE_ANDROID:-1}"
 BUILD_JAR="${BUILD_JAR:-1}"
@@ -38,11 +34,7 @@ mkdir -p "$OUTPUT_DIR"
   echo "max_size_kb=$MAX_SIZE_KB"
   echo "retry_max_source_files=$RETRY_MAX_SOURCE_FILES"
   echo "retry_max_methods=$RETRY_MAX_METHODS"
-  echo "retry_smoke_source_files=$RETRY_SMOKE_SOURCE_FILES"
-  echo "retry_smoke_methods=$RETRY_SMOKE_METHODS"
   echo "source_set=$SOURCE_SET"
-  echo "resolution=$RESOLUTION"
-  echo "call_graph=$CALL_GRAPH"
   echo "java_home=$JAVA_HOME_VALUE"
   echo "include_android=$INCLUDE_ANDROID"
 } > "$OUTPUT_DIR/run_manifest.txt"
@@ -62,14 +54,10 @@ python scripts/field_test_public_repos.py \
   --timeout "$TIMEOUT" \
   $INCLUDE_ANDROID_FLAG \
   --max-size-kb "$MAX_SIZE_KB" \
-  --resolution "$RESOLUTION" \
-  --call-graph "$CALL_GRAPH" \
   --source-set "$SOURCE_SET" \
   --compile-timeout "$COMPILE_TIMEOUT" \
   --retry-max-source-files "$RETRY_MAX_SOURCE_FILES" \
   --retry-max-methods "$RETRY_MAX_METHODS" \
-  --retry-smoke-source-files "$RETRY_SMOKE_SOURCE_FILES" \
-  --retry-smoke-methods "$RETRY_SMOKE_METHODS" \
   --java-home "$JAVA_HOME_VALUE" \
   --output-dir "$OUTPUT_DIR"
 

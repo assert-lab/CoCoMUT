@@ -2,6 +2,7 @@ package org.assertlab.cocomut;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.assertlab.cocomut.source.SourceBackends;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -60,11 +61,49 @@ public class AnalyzerFacadeTest {
     }
 
     @Test
+    public void entryPointEdgesResolveAgainstFullAnalysisUniverse() throws Exception {
+        Map<String, Object> report = AnalyzerFacade.analyze(ContextRequest.builder()
+                .projectRoot(fixtureRoot)
+                .scope(ContextRequest.Scope.ENTRY_POINTS)
+                .sourceSets(java.util.Set.of("main"))
+                .build());
+
+        assertEquals("SUCCESS", report.get("status"));
+        JsonNode row = findJsonlRowForMethod(Path.of(String.valueOf(report.get("phase_5_jsonl_file"))), "greet");
+        boolean privateHelperResolvedOutsideOutput = false;
+        for (JsonNode edge : row.path("callees")) {
+            if ("prefix".equals(edge.path("method_name").asText())) {
+                privateHelperResolvedOutsideOutput = edge.path("method_uri").asText().contains("prefix()")
+                        && !edge.path("context_in_output").asBoolean(true)
+                        && "project_method".equals(edge.path("target_kind").asText());
+            }
+        }
+        assertTrue("Filtered private helper should resolve but not embed context",
+                privateHelperResolvedOutsideOutput);
+    }
+
+    @Test
+    public void facadeUsesOneRequestScopedSpoonParse() throws Exception {
+        SourceBackends.resetParseCount();
+
+        Map<String, Object> report = AnalyzerFacade.analyze(ContextRequest.builder()
+                .projectRoot(fixtureRoot)
+                .scope(ContextRequest.Scope.ALL)
+                .sourceSet("main")
+                .build());
+
+        assertEquals("SUCCESS", report.get("status"));
+        assertTrue("Fixture should provide multiple focal methods",
+                ((Number) report.get("phase_2_methods_identified")).intValue() > 1);
+        assertEquals("One extraction request should construct one Spoon model",
+                1, SourceBackends.parseCount());
+    }
+
+    @Test
     public void serviceApiReturnsTypedExtractionReport() throws Exception {
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(fixtureRoot)
                 .scope(ContextRequest.Scope.ENTRY_POINTS)
-                .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                 .build();
 
         ExtractionReport report = ContextExtractorService.createDefault().extract(request);
@@ -75,8 +114,8 @@ public class AnalyzerFacadeTest {
         assertEquals(1, report.contextsExtracted());
         assertEquals(1, report.jsonlRows());
         assertNotNull("JSONL output path should be available", report.jsonlFile());
-        assertTrue("Failure codes should record disabled call graph",
-                report.failureCodes().contains("CALL_GRAPH_DISABLED"));
+        assertTrue("Static bytecode analysis should be available",
+                Boolean.TRUE.equals(report.asMap().get("phase_3_available")));
     }
 
     @Test
@@ -84,15 +123,13 @@ public class AnalyzerFacadeTest {
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(fixtureRoot)
                 .scope(ContextRequest.Scope.ENTRY_POINTS)
-                .callGraphAlgorithm(CallGraphGenerator.Algorithm.AUTO)
-                .sourceResolution(ContextRequest.SourceResolution.AUTO)
                 .maxMethods(1)
                 .build();
 
         ExtractionReport report = ContextExtractorService.createDefault().extract(request);
 
         assertTrue(report.successful());
-        assertEquals("AUTO", report.asMap().get("phase_3_algorithm"));
+        assertEquals("RTA", report.asMap().get("phase_3_algorithm"));
         assertEquals("RTA", report.asMap().get("phase_3_effective_algorithm"));
     }
 

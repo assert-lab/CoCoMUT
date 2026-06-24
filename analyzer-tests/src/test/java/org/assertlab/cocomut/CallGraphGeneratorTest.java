@@ -322,7 +322,7 @@ public class CallGraphGeneratorTest {
     }
 
     @Test
-    public void testParameterNormalizationResolvesUniqueVarargsCandidate() throws Exception {
+    public void testParameterNormalizationResolvesVarargsArrayDescriptor() throws Exception {
         MethodInfo sourceMethod = new MethodInfo.Builder()
                 .methodUri("src/main/java/com/example/Log.java#com.example.Log.log(java.lang.String[]):void")
                 .classname("com.example.Log")
@@ -339,11 +339,41 @@ public class CallGraphGeneratorTest {
 
         assertEquals("src/main/java/com/example/Log.java#com.example.Log.log(java.lang.String[]):void",
                 edge.methodUri());
-        assertEquals("resolved_parameter_normalized_unique", edge.resolution());
+        assertEquals("resolved_normalized_exact", edge.resolution());
     }
 
     @Test
-    public void testParameterNormalizationReportsAmbiguousOverload() throws Exception {
+    public void testPackageQualifiedOverloadsAreNotMatchedBySimpleName() throws Exception {
+        MethodInfo first = new MethodInfo.Builder()
+                .methodUri("src/main/java/com/example/Foo.java#com.example.Foo.consume(com.alpha.Token):void")
+                .classname("com.example.Foo")
+                .methodName("consume")
+                .methodSignature("consume(com.alpha.Token token)")
+                .returnType("void")
+                .erasedReturnType("void")
+                .sourceFile(Paths.get("Foo.java"))
+                .lineNumber(20)
+                .build();
+        MethodInfo second = new MethodInfo.Builder()
+                .methodUri("src/main/java/com/example/Foo.java#com.example.Foo.consume(com.gamma.Token):void")
+                .classname("com.example.Foo")
+                .methodName("consume")
+                .methodSignature("consume(com.gamma.Token token)")
+                .returnType("void")
+                .erasedReturnType("void")
+                .sourceFile(Paths.get("Foo.java"))
+                .lineNumber(24)
+                .build();
+
+        CallGraphEdge edge = resolveEdgeFor(List.of(first, second),
+                "<com.example.Foo: void consume(com.beta.Token)>");
+
+        assertEquals("", edge.methodUri());
+        assertEquals("unresolved", edge.resolution());
+    }
+
+    @Test
+    public void testExactObjectOverloadResolvesWithoutWildcardAmbiguity() throws Exception {
         MethodInfo first = new MethodInfo.Builder()
                 .methodUri("src/main/java/com/example/Foo.java#com.example.Foo.f(java.lang.String):void")
                 .classname("com.example.Foo")
@@ -368,10 +398,102 @@ public class CallGraphGeneratorTest {
         CallGraphEdge edge = resolveEdgeFor(List.of(first, second),
                 "<com.example.Foo: void f(java.lang.Object)>");
 
-        assertEquals("", edge.methodUri());
-        assertEquals("ambiguous", edge.resolution());
-        assertEquals("multiple_source_methods_match_normalized_parameters", edge.unresolvedReason());
-        assertEquals(2, edge.candidateMethodUris().size());
+        assertEquals("src/main/java/com/example/Foo.java#com.example.Foo.f(java.lang.Object):void",
+                edge.methodUri());
+        assertEquals("resolved_normalized_exact", edge.resolution());
+    }
+
+    @Test
+    public void testGenericMethodUsesErasedParameterTypesForBytecodeJoin() throws Exception {
+        MethodInfo sourceMethod = new MethodInfo.Builder()
+                .methodUri("src/main/java/com/example/Box.java#com.example.Box.identity(java.lang.Object):java.lang.Object")
+                .classname("com.example.Box")
+                .methodName("identity")
+                .methodSignature("identity(T value)")
+                .erasedParameterTypes(List.of("java.lang.Object"))
+                .returnType("T")
+                .erasedReturnType("java.lang.Object")
+                .sourceFile(Paths.get("Box.java"))
+                .lineNumber(10)
+                .build();
+
+        CallGraphEdge edge = resolveEdgeFor(List.of(sourceMethod),
+                "<com.example.Box: java.lang.Object identity(java.lang.Object)>");
+
+        assertEquals("src/main/java/com/example/Box.java#com.example.Box.identity(java.lang.Object):java.lang.Object",
+                edge.methodUri());
+        assertEquals("resolved_normalized_exact", edge.resolution());
+    }
+
+    @Test
+    public void testBoundedGenericMethodUsesBoundErasureForBytecodeJoin() throws Exception {
+        MethodInfo sourceMethod = new MethodInfo.Builder()
+                .methodUri("src/main/java/com/example/Box.java#com.example.Box.identity(java.lang.Number):java.lang.Number")
+                .classname("com.example.Box")
+                .methodName("identity")
+                .methodSignature("identity(T value)")
+                .erasedParameterTypes(List.of("java.lang.Number"))
+                .returnType("T")
+                .erasedReturnType("java.lang.Number")
+                .sourceFile(Paths.get("Box.java"))
+                .lineNumber(12)
+                .build();
+
+        CallGraphEdge edge = resolveEdgeFor(List.of(sourceMethod),
+                "<com.example.Box: java.lang.Number identity(java.lang.Number)>");
+
+        assertEquals("src/main/java/com/example/Box.java#com.example.Box.identity(java.lang.Number):java.lang.Number",
+                edge.methodUri());
+        assertEquals("resolved_normalized_exact", edge.resolution());
+    }
+
+    @Test
+    public void testConstructorFlagMapsSourceConstructorToInit() throws Exception {
+        MethodInfo constructor = new MethodInfo.Builder()
+                .methodUri("src/main/java/com/example/Widget.java#com.example.Widget.Widget(java.lang.String):void")
+                .classname("com.example.Widget")
+                .methodName("Widget")
+                .methodSignature("Widget(String name)")
+                .erasedParameterTypes(List.of("java.lang.String"))
+                .returnType("void")
+                .erasedReturnType("void")
+                .constructor(true)
+                .sourceFile(Paths.get("Widget.java"))
+                .lineNumber(8)
+                .build();
+
+        CallGraphEdge edge = resolveEdgeFor(List.of(constructor),
+                "<com.example.Widget: void <init>(java.lang.String)>");
+
+        assertEquals("src/main/java/com/example/Widget.java#com.example.Widget.Widget(java.lang.String):void",
+                edge.methodUri());
+        assertEquals("resolved_normalized_exact", edge.resolution());
+    }
+
+    @Test
+    public void testOrdinaryMethodNamedLikeClassDoesNotMatchConstructor() throws Exception {
+        MethodInfo ordinaryMethod = new MethodInfo.Builder()
+                .methodUri("src/main/java/com/example/Widget.java#com.example.Widget.Widget():int")
+                .classname("com.example.Widget")
+                .methodName("Widget")
+                .methodSignature("Widget()")
+                .returnType("int")
+                .erasedReturnType("int")
+                .constructor(false)
+                .sourceFile(Paths.get("Widget.java"))
+                .lineNumber(14)
+                .build();
+
+        CallGraphEdge constructorEdge = resolveEdgeFor(List.of(ordinaryMethod),
+                "<com.example.Widget: void <init>()>");
+        CallGraphEdge ordinaryEdge = resolveEdgeFor(List.of(ordinaryMethod),
+                "<com.example.Widget: int Widget()>");
+
+        assertEquals("", constructorEdge.methodUri());
+        assertEquals("unresolved", constructorEdge.resolution());
+        assertEquals("src/main/java/com/example/Widget.java#com.example.Widget.Widget():int",
+                ordinaryEdge.methodUri());
+        assertEquals("resolved_normalized_exact", ordinaryEdge.resolution());
     }
 
     @Test

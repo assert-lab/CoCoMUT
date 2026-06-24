@@ -1,37 +1,42 @@
 package org.assertlab.cocomut.source;
 
-import org.assertlab.cocomut.ContextRequest;
-
 public final class SourceBackends {
-    private static final ThreadLocal<ContextRequest.SourceResolution> RESOLUTION =
-            ThreadLocal.withInitial(() -> ContextRequest.SourceResolution.NOCLASSPATH);
-    private static final SourceModelBackend SPOON_NOCLASSPATH =
-            new SpoonSourceModelBackend(ContextRequest.SourceResolution.NOCLASSPATH);
-    private static final SourceModelBackend SPOON_CLASSPATH =
-            new SpoonSourceModelBackend(ContextRequest.SourceResolution.CLASSPATH);
-    private static final SourceModelBackend SPOON_AUTO =
-            new SpoonSourceModelBackend(ContextRequest.SourceResolution.AUTO);
+    private static final SourceModelBackend SPOON = new SpoonSourceModelBackend();
+    private static final ThreadLocal<Integer> MAX_SOURCE_FILES = new ThreadLocal<>();
+    private static final java.util.concurrent.atomic.AtomicInteger PARSE_COUNT = new java.util.concurrent.atomic.AtomicInteger();
 
     private SourceBackends() {
     }
 
-    public static void configure(ContextRequest.SourceResolution resolution) {
-        RESOLUTION.set(resolution != null ? resolution : ContextRequest.SourceResolution.NOCLASSPATH);
+    public static SourceModelBackend spoon() {
+        return SPOON;
+    }
+
+    public static void setMaxSourceFiles(Integer maxSourceFiles) {
+        if (maxSourceFiles == null || maxSourceFiles <= 0) {
+            MAX_SOURCE_FILES.remove();
+        } else {
+            MAX_SOURCE_FILES.set(maxSourceFiles);
+        }
+    }
+
+    public static Integer maxSourceFiles() {
+        return MAX_SOURCE_FILES.get();
     }
 
     public static void clearConfiguration() {
-        RESOLUTION.remove();
+        MAX_SOURCE_FILES.remove();
     }
 
-    public static SourceModelBackend spoon() {
-        return spoon(RESOLUTION.get());
+    static void recordParse() {
+        PARSE_COUNT.incrementAndGet();
     }
 
-    public static SourceModelBackend spoon(ContextRequest.SourceResolution resolution) {
-        return switch (resolution) {
-            case CLASSPATH -> SPOON_CLASSPATH;
-            case AUTO -> SPOON_AUTO;
-            case NOCLASSPATH -> SPOON_NOCLASSPATH;
-        };
+    public static int parseCount() {
+        return PARSE_COUNT.get();
+    }
+
+    public static void resetParseCount() {
+        PARSE_COUNT.set(0);
     }
 }

@@ -7,6 +7,8 @@ import org.junit.Test;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -25,16 +27,16 @@ public class RobustExtractionRegressionTest {
                     "package demo; public class A { public void a() {} }");
             write(project.resolve("src/main/java/demo/B.java"),
                     "package demo; public class B { public void b() {} }");
+            compileProject(project);
 
             ExtractionReport report = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
                     .scope(ContextRequest.Scope.ALL)
-                    .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                     .maxSourceFiles(1)
                     .build());
 
             Map<String, Object> values = report.asMap();
-            assertTrue(report.successful());
+            assertCompleted(report);
             assertEquals(1, ((Number) values.get("phase_2_methods_identified")).intValue());
             assertEquals(1, ((Number) values.get("source_max_files")).intValue());
         } finally {
@@ -50,24 +52,23 @@ public class RobustExtractionRegressionTest {
                     "package demo; public class MainApi { public void api() {} }");
             write(project.resolve("module-test/src/test/java/demo/MainApiTest.java"),
                     "package demo; public class MainApiTest { public void testApi() {} }");
+            compileProject(project);
 
             ExtractionReport all = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
                     .scope(ContextRequest.Scope.ENTRY_POINTS)
-                    .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                     .build());
 
             ExtractionReport mainOnly = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
                     .scope(ContextRequest.Scope.ENTRY_POINTS)
-                    .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                     .sourceSet("main")
                     .build());
 
-            assertTrue(all.successful());
+            assertCompleted(all);
             assertEquals(2, all.methodsIdentified());
 
-            assertTrue(mainOnly.successful());
+            assertCompleted(mainOnly);
             assertEquals(1, mainOnly.methodsIdentified());
             assertEquals("main", mainOnly.asMap().get("phase_2_source_set_filter"));
             assertEquals(2, ((Number) mainOnly.asMap().get("phase_2_source_set_filter_before")).intValue());
@@ -86,11 +87,11 @@ public class RobustExtractionRegressionTest {
                     "package demo.api; public class PublicApi { public void keep() {} private void hidden() {} }");
             write(project.resolve("src/main/java/demo/internal/InternalApi.java"),
                     "package demo.internal; public class InternalApi { public void drop() {} }");
+            compileProject(project);
 
             ExtractionReport report = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
                     .scope(ContextRequest.Scope.ALL)
-                    .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                     .outputDirectory(output)
                     .packages(Set.of("demo.api"))
                     .classes(Set.of("PublicApi"))
@@ -100,8 +101,8 @@ public class RobustExtractionRegressionTest {
                     .excludePathGlobs(Set.of("**/internal/**"))
                     .build());
 
-            Path jsonl = output.resolve("method__keep.jsonl");
-            assertTrue(report.successful());
+            assertCompleted(report);
+            Path jsonl = singleJsonl(output, "method__keep__*.jsonl");
             assertTrue("Filtered JSONL should be written under explicit output dir", Files.isRegularFile(jsonl));
             assertTrue("Project root should not receive default JSONL artifact",
                     Files.notExists(project.resolve("method_contexts.jsonl")));
@@ -136,18 +137,19 @@ public class RobustExtractionRegressionTest {
                         public void drop() {}
                     }
                     """);
+            compileProject(project);
 
             String typeUri = "src/main/java/demo/api/PublicApi.java#demo.api.PublicApi";
             ExtractionReport typeReport = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
                     .scope(ContextRequest.Scope.ALL)
-                    .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                     .outputDirectory(output.resolve("type"))
                     .typeUri(typeUri)
                     .build());
 
-            Path typeJsonl = output.resolve("type").resolve("type_src_main_java_demo_api_PublicApi.java#demo.api.PublicApi.jsonl");
-            assertTrue(typeReport.successful());
+            assertCompleted(typeReport);
+            Path typeJsonl = singleJsonl(output.resolve("type"),
+                    "type_src_main_java_demo_api_PublicApi.java#demo.api.PublicApi__*.jsonl");
             assertTrue(Files.isRegularFile(typeJsonl));
             List<String> typeRows = Files.readAllLines(typeJsonl);
             assertEquals(2, typeRows.size());
@@ -159,14 +161,13 @@ public class RobustExtractionRegressionTest {
             ExtractionReport packageReport = ContextExtractorService.createDefault().extract(ContextRequest.builder()
                     .projectRoot(project)
                     .scope(ContextRequest.Scope.ALL)
-                    .callGraphAlgorithm(CallGraphGenerator.Algorithm.NONE)
                     .outputDirectory(output.resolve("package"))
                     .packageUri(packageUri)
                     .build());
 
-            Path packageJsonl = output.resolve("package")
-                    .resolve("package_src_main_java_demo_api_package-info.java#demo.api.jsonl");
-            assertTrue(packageReport.successful());
+            assertCompleted(packageReport);
+            Path packageJsonl = singleJsonl(output.resolve("package"),
+                    "package_src_main_java_demo_api_package-info.java#demo.api__*.jsonl");
             assertTrue(Files.isRegularFile(packageJsonl));
             List<String> packageRows = Files.readAllLines(packageJsonl);
             assertEquals(2, packageRows.size());
@@ -184,6 +185,42 @@ public class RobustExtractionRegressionTest {
         Files.writeString(path, text, StandardCharsets.UTF_8);
     }
 
+    private static void assertCompleted(ExtractionReport report) {
+        assertTrue("Expected completed extraction, got " + report.status(),
+                "SUCCESS".equals(report.status()) || "PARTIAL".equals(report.status()));
+    }
+
+    private static void compileProject(Path project) throws Exception {
+        Path classes = project.resolve("target/classes");
+        Files.createDirectories(classes);
+        List<String> command = new ArrayList<>();
+        command.add(javac());
+        command.add("-d");
+        command.add(classes.toString());
+        try (var walk = Files.walk(project)) {
+            walk.filter(path -> path.toString().endsWith(".java"))
+                    .sorted(Comparator.comparing(Path::toString))
+                    .map(Path::toString)
+                    .forEach(command::add);
+        }
+        ProcessBuilder builder = new ProcessBuilder(command);
+        builder.redirectErrorStream(true);
+        Process process = builder.start();
+        if (!process.waitFor(60, java.util.concurrent.TimeUnit.SECONDS)) {
+            process.destroyForcibly();
+            throw new AssertionError("javac timed out for " + project);
+        }
+        if (process.exitValue() != 0) {
+            throw new AssertionError("javac failed for " + project);
+        }
+    }
+
+    private static String javac() {
+        Path javac = Path.of(System.getProperty("java.home"), "bin",
+                System.getProperty("os.name", "").toLowerCase().contains("win") ? "javac.exe" : "javac");
+        return Files.isRegularFile(javac) ? javac.toString() : "javac";
+    }
+
     private static void deleteRecursively(Path root) throws Exception {
         if (root == null || !Files.exists(root)) {
             return;
@@ -192,6 +229,17 @@ public class RobustExtractionRegressionTest {
             for (Path path : walk.sorted((a, b) -> b.compareTo(a)).toList()) {
                 Files.deleteIfExists(path);
             }
+        }
+    }
+
+    private static Path singleJsonl(Path directory, String glob) throws Exception {
+        try (var stream = Files.newDirectoryStream(directory, glob)) {
+            List<Path> matches = new ArrayList<>();
+            for (Path path : stream) {
+                matches.add(path);
+            }
+            assertEquals("Expected one JSONL file matching " + glob, 1, matches.size());
+            return matches.get(0);
         }
     }
 }

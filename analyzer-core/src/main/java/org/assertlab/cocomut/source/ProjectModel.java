@@ -36,7 +36,8 @@ public final class ProjectModel {
         this.testSourceRoots = List.copyOf(testSourceRoots);
         this.classOutputDirs = List.copyOf(classOutputDirs);
         this.dependencyJars = List.copyOf(dependencyJars);
-        this.sourceAvailable = this.sourceRoots.stream().anyMatch(ProjectModel::containsJavaFile);
+        this.sourceAvailable = java.util.stream.Stream.concat(this.sourceRoots.stream(), this.testSourceRoots.stream())
+                .anyMatch(ProjectModel::containsJavaFile);
     }
 
     public static ProjectModel from(ProjectMetadata metadata) {
@@ -48,6 +49,17 @@ public final class ProjectModel {
 
         addIfDirectory(sourceRoots, metadata.getSourceRoot());
         addStandardRoots(projectRoot, sourceRoots, testSourceRoots, classOutputDirs);
+
+        metadata.getMainClassOutputs().forEach(path -> addIfClassDirectory(classOutputDirs, path));
+        metadata.getTestClassOutputs().forEach(path -> addIfClassDirectory(classOutputDirs, path));
+        metadata.getProjectArtifactJars().stream()
+                .filter(path -> path.toString().endsWith(".jar") && Files.isRegularFile(path))
+                .map(ProjectModel::normalize)
+                .forEach(dependencyJars::add);
+        metadata.getDependencyClasspath().stream()
+                .filter(path -> path.toString().endsWith(".jar") && Files.isRegularFile(path))
+                .map(ProjectModel::normalize)
+                .forEach(dependencyJars::add);
 
         for (Path cp : metadata.getClasspath()) {
             if (Files.isDirectory(cp)) {
@@ -117,6 +129,7 @@ public final class ProjectModel {
         addIfDirectory(sourceRoots, projectRoot.resolve("src/main/java"));
         addIfDirectory(testSourceRoots, projectRoot.resolve("src/test/java"));
         addIfClassDirectory(classOutputDirs, projectRoot.resolve("target/classes"));
+        addIfClassDirectory(classOutputDirs, projectRoot.resolve("target/test-classes"));
         addIfClassDirectory(classOutputDirs, projectRoot.resolve("build/classes"));
 
         try (var walk = Files.walk(projectRoot, 5)) {
@@ -126,15 +139,20 @@ public final class ProjectModel {
                     sourceRoots.add(normalized);
                 } else if (normalized.endsWith(Path.of("src/test/java"))) {
                     testSourceRoots.add(normalized);
-                } else if (containsClassFile(normalized)
-                        && (normalized.endsWith(Path.of("target/classes"))
-                        || normalized.toString().contains("/build/classes/"))) {
+                } else if (isCandidateClassOutput(normalized) && containsClassFile(normalized)) {
                     classOutputDirs.add(normalized);
                 }
             }
         } catch (IOException ignored) {
             // Best-effort model. Extraction reports provenance instead of failing here.
         }
+    }
+
+    private static boolean isCandidateClassOutput(Path path) {
+        return path.endsWith(Path.of("target/classes"))
+                || path.endsWith(Path.of("target/test-classes"))
+                || path.endsWith(Path.of("build/classes/java/main"))
+                || path.endsWith(Path.of("build/classes/java/test"));
     }
 
     private static void addIfDirectory(Set<Path> dirs, Path path) {

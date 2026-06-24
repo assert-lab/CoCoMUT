@@ -1,6 +1,7 @@
 package org.assertlab.cocomut;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
@@ -51,6 +52,36 @@ public class ProjectAnalyzerTest {
         assertNotEquals("Java version should not be unknown", "unknown", metadata.getJavaVersion());
         // analyzer-core/pom.xml declares maven.compiler.source=17 as the product baseline.
         assertEquals("Should detect Java version from pom.xml", "17", metadata.getJavaVersion());
+    }
+
+    @Test
+    public void detectsMavenReleaseThroughJavaVersionProperty() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-maven-release-version-");
+        try {
+            Files.writeString(project.resolve("pom.xml"), """
+                    <?xml version="1.0" encoding="UTF-8"?>
+                    <project xmlns="http://maven.apache.org/POM/4.0.0"
+                             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                             xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+                      <modelVersion>4.0.0</modelVersion>
+                      <groupId>demo</groupId>
+                      <artifactId>release-version</artifactId>
+                      <version>1.0-SNAPSHOT</version>
+                      <properties>
+                        <java.version>21</java.version>
+                        <maven.compiler.release>${java.version}</maven.compiler.release>
+                      </properties>
+                    </project>
+                    """);
+            Files.createDirectories(project.resolve("target/classes"));
+            Files.write(project.resolve("target/classes/Marker.class"), new byte[] {0, 0, 0, 0});
+
+            ProjectMetadata metadata = new ProjectAnalyzer(project).analyze();
+
+            assertEquals("21", metadata.getJavaVersion());
+        } finally {
+            deleteRecursively(project);
+        }
     }
 
     @Test
@@ -128,5 +159,16 @@ public class ProjectAnalyzerTest {
         ProjectMetadata metadata = customAnalyzer.analyze();
         assertNotNull("Custom analyzer should work", metadata);
         assertEquals("Should use specified Maven system", "maven", metadata.getBuildSystem());
+    }
+
+    private static void deleteRecursively(Path root) throws IOException {
+        if (root == null || !Files.exists(root)) {
+            return;
+        }
+        try (var walk = Files.walk(root)) {
+            for (Path path : walk.sorted((a, b) -> b.compareTo(a)).toList()) {
+                Files.deleteIfExists(path);
+            }
+        }
     }
 }

@@ -1,5 +1,10 @@
 # OE25 Plus Representative Call-Edge Validation
 
+> Historical note: this validation run used the older evaluation runner that
+> could retry without bytecode-backed call context. The aggregate measurements
+> remain useful as historical evidence, but current CoCoMUT runs require
+> compilation or supplied bytecode artifacts.
+
 This report validates CoCoMUT call-edge matching after the Spoon/SootUp glue
 changes that introduced bytecode `target_uri`, source `method_uri`, and the
 call-edge target taxonomy.
@@ -46,8 +51,9 @@ python3 scripts/run_oe25_plus_representative_study.py \
 
 Execution policy:
 
-- primary attempt: `--compile --resolution auto --call-graph auto`;
-- fallback: no-call-graph or bounded no-classpath extraction when needed;
+- legacy primary attempt: optional compile/source-resolution/call-graph modes
+  from the pre-mandatory-bytecode CLI;
+- legacy fallback: no-call-graph or bounded fallback extraction when needed;
 - sequential execution only, with a memory/load guard before each target;
 - Baloo file indexing was temporarily suspended during the run because it was
   consuming several GiB while indexing generated experiment output.
@@ -295,7 +301,7 @@ failure_codes=[CALL_GRAPH_EMPTY]
 
 ## Fallback And Scalability Cases
 
-These repositories completed with bounded source-only fallback and therefore
+These repositories completed with bounded legacy fallback and therefore
 do not contribute SootUp edge-matching evidence in this run:
 
 ```text
@@ -315,7 +321,7 @@ spring-projects/spring-security
 testcontainers/testcontainers-java
 ```
 
-Other source-only/no-call-graph successes:
+Other legacy fallback successes:
 
 ```text
 kevinsawicki/http-request

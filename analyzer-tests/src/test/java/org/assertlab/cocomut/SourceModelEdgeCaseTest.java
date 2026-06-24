@@ -9,6 +9,8 @@ import org.junit.Test;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -49,7 +51,10 @@ public class SourceModelEdgeCaseTest {
                         @Override
                         public String transform(final String input) throws IOException {
                             this.last = input;
-                            Class.forName("demo.Generated");
+                            try {
+                                Class.forName("demo.Generated");
+                            } catch (ClassNotFoundException ignored) {
+                            }
                             return input.trim();
                         }
 
@@ -76,6 +81,7 @@ public class SourceModelEdgeCaseTest {
                     }
                     """);
 
+            compileProject(project);
             ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
             List<SourceMethod> methods = SourceBackends.spoon().findMethods(model);
 
@@ -142,11 +148,12 @@ public class SourceModelEdgeCaseTest {
                     .buildSystem("none")
                     .javaVersion("17")
                     .sourceRoot(project)
-                    .classpath(List.of())
-                    .compiles(false)
-                    .compileStatus("BUILD NOT ATTEMPTED")
+                    .classpath(List.of(project.resolve("classes")))
+                    .compiles(true)
+                    .compileStatus("BUILD SUCCESS")
                     .build();
 
+            compileProject(project);
             ProjectModel model = ProjectModel.from(metadata);
             List<SourceMethod> methods = SourceBackends.spoon().findMethods(model);
             long matching = methods.stream()
@@ -181,6 +188,7 @@ public class SourceModelEdgeCaseTest {
                     }
                     """);
 
+            compileProject(project);
             ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
             List<SourceMethod> methods = SourceBackends.spoon().findMethods(model).stream()
                     .filter(method -> method.className().equals("demo.GenericOverloads"))
@@ -225,6 +233,7 @@ public class SourceModelEdgeCaseTest {
                     }
                     """);
 
+            compileProject(project);
             ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
             SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
                     .filter(method -> method.methodName().equals("value"))
@@ -284,11 +293,15 @@ public class SourceModelEdgeCaseTest {
                     package demo;
 
                     import java.util.Arrays;
+                    import java.util.Map;
                     import java.util.regex.*;
 
                     /** Child docs. */
                     public class Child extends Base {
                         /** Exercises Javadoc reference resolution.
+                         * Inline reference: {@link #sameName(String) same-name link}.
+                         * Spaced inline reference: {@linkplain Map#put(Object, Object) map put}.
+                         * Invalid external member: {@link java.util.List#add(Integer) invalid add}.
                          * @see #sameName
                          * @see #sameName(String)
                          * @see #TOKEN
@@ -315,6 +328,7 @@ public class SourceModelEdgeCaseTest {
                     }
                     """);
 
+            compileProject(project);
             ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
             SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
                     .filter(method -> method.className().equals("demo.Child"))
@@ -395,6 +409,23 @@ public class SourceModelEdgeCaseTest {
             assertEquals("add(Object)", external.get("external_member"));
             assertEquals("method", external.get("external_member_kind"));
 
+            Map<String, Object> invalidExternal = referenceByTarget(refs, "java.util.List#add(Integer)");
+            assertEquals("unresolved", invalidExternal.get("resolution"));
+            assertEquals("unknown", invalidExternal.get("external_member_kind"));
+            assertEquals("symbol_only", invalidExternal.get("external_member_resolution"));
+
+            Map<String, Object> inlineExact = referenceByTargetAndTag(refs, "#sameName(String)", "link");
+            assertEquals("link", inlineExact.get("tag"));
+            assertEquals("same-name link", inlineExact.get("label"));
+            assertEquals("resolved_method", inlineExact.get("resolution"));
+
+            Map<String, Object> spacedInline = referenceByTarget(refs, "Map#put(Object, Object)");
+            assertEquals("linkplain", spacedInline.get("tag"));
+            assertEquals("map put", spacedInline.get("label"));
+            assertEquals("external_symbol", spacedInline.get("resolution"));
+            assertEquals("java.util.Map", spacedInline.get("external_class"));
+            assertEquals("method", spacedInline.get("external_member_kind"));
+
             Map<String, Object> modulePrefixed = referenceByTarget(refs, "java.base/java.util.List#remove(Object)");
             assertEquals("external_symbol", modulePrefixed.get("resolution"));
             assertEquals("java.util.List", modulePrefixed.get("external_class"));
@@ -434,19 +465,19 @@ public class SourceModelEdgeCaseTest {
     }
 
     @Test
-    public void spoonAutoResolutionUsesClasspathWhenCompiledClassesExist() throws Exception {
+    public void spoonBackendUsesClasspathWhenCompiledClassesExist() throws Exception {
         TestFixtures.ensureMinimalMavenProjectCompiled();
         ProjectMetadata metadata = new ProjectAnalyzer(TestFixtures.minimalMavenProjectRoot()).analyze();
         ProjectModel model = ProjectModel.from(metadata);
 
-        SourceMethod focal = SourceBackends.spoon(ContextRequest.SourceResolution.AUTO)
+        SourceMethod focal = SourceBackends.spoon()
                 .findMethods(model)
                 .stream()
                 .filter(method -> method.methodName().equals("greet"))
                 .findFirst()
                 .orElseThrow();
 
-        SourceContext context = SourceBackends.spoon(ContextRequest.SourceResolution.AUTO)
+        SourceContext context = SourceBackends.spoon()
                 .extractContext(model, focal.methodUri())
                 .orElseThrow();
 
@@ -458,9 +489,57 @@ public class SourceModelEdgeCaseTest {
         Files.writeString(path, text, StandardCharsets.UTF_8);
     }
 
+    private static void compileProject(Path project) throws Exception {
+        Path classes = project.resolve("classes");
+        Files.createDirectories(classes);
+        List<String> command = new ArrayList<>();
+        command.add(javac());
+        command.add("-d");
+        command.add(classes.toString());
+        try (var walk = Files.walk(project.resolve("src/main/java"))) {
+            walk.filter(path -> path.toString().endsWith(".java"))
+                    .sorted(Comparator.comparing(Path::toString))
+                    .forEach(path -> command.add(path.toString()));
+        }
+        Process process = new ProcessBuilder(command)
+                .directory(project.toFile())
+                .redirectErrorStream(true)
+                .start();
+        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        int exit = process.waitFor();
+        if (exit != 0) {
+            throw new AssertionError("javac failed:\n" + output);
+        }
+    }
+
+    private static String javac() {
+        Path javaHome = Path.of(System.getProperty("java.home"));
+        Path javac = javaHome.resolve("bin").resolve("javac");
+        if (Files.isRegularFile(javac)) {
+            return javac.toString();
+        }
+        Path parentJavac = javaHome.getParent() == null
+                ? null
+                : javaHome.getParent().resolve("bin").resolve("javac");
+        if (parentJavac != null && Files.isRegularFile(parentJavac)) {
+            return parentJavac.toString();
+        }
+        return "javac";
+    }
+
     private static Map<String, Object> referenceByTarget(List<Map<String, Object>> references, String target) {
         return references.stream()
                 .filter(reference -> target.equals(reference.get("target")))
+                .findFirst()
+                .orElseThrow();
+    }
+
+    private static Map<String, Object> referenceByTargetAndTag(List<Map<String, Object>> references,
+                                                               String target,
+                                                               String tag) {
+        return references.stream()
+                .filter(reference -> target.equals(reference.get("target")))
+                .filter(reference -> tag.equals(reference.get("tag")))
                 .findFirst()
                 .orElseThrow();
     }

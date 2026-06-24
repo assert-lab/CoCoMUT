@@ -18,7 +18,8 @@ The tool combines:
 
 - Spoon for source, Javadoc, symbols, method/type/package selection, and
   source-level context;
-- optional SootUp CHA/RTA call graphs when compiled bytecode is available;
+- static bytecode call context from compiled class directories or supplied
+  bytecode/classpath artifacts;
 - JSONL output designed for downstream empirical analysis and model prompts.
 
 CoCoMUT must remain a product-style tool, not an experiment dump. Prefer small,
@@ -31,9 +32,8 @@ change touches shared models, schema fields, project resolution, or extraction
 control flow, consider all of these paths:
 
 - default source and Javadoc extraction;
-- Spoon no-classpath fallback;
-- classpath-aware source extraction when build/classpath evidence is available;
-- optional SootUp CHA/RTA call graph extraction;
+- classpath-aware source extraction over compiled projects;
+- static bytecode call-context extraction;
 - CLI extraction;
 - Java API extraction;
 - JSONL schema and sample output;
@@ -63,17 +63,16 @@ documented, and tested.
 
 - Keep the implementation small, readable, and testable.
 - Do not add fragile project-specific patches, dead code, unused abstractions,
-  or complicated fallback paths without evidence.
+  or complicated alternate execution paths without evidence.
 - Prefer one clear release path over many permanent semantic variants.
 - Diagnostic switches are acceptable when they validate or explain the intended
   behavior. Avoid long-lived flags that create multiple incompatible meanings
   for the same output field.
 - Comment important extraction logic where source/bytecode identity, Javadoc
-  resolution, fallback behavior, cache lifetime, or schema semantics are not
+  resolution, cache lifetime, or schema semantics are not
   obvious from the local code.
 - Prefer compact comments beside the implementation over detached design notes
-  when the comment explains why a matching rule, fallback, or memory policy
-  exists.
+  when the comment explains why a matching rule or memory policy exists.
 - Keep public APIs narrow. CLI and API layers should not know Spoon `Ct*`
   internals or SootUp implementation details. Hide those behind internal
   adapters and product-level request/result objects.
@@ -190,18 +189,19 @@ External JDK/library Javadoc text is intentionally not fetched. External
 references can be symbol-level metadata only unless there is a deliberate,
 well-tested source/Javadoc-jar feature.
 
-## Source and Build Resolution
+## Source And Build Resolution
 
 Product direction:
 
-- if build/classpath is available, use classpath-aware source extraction and
-  optional SootUp call graph;
-- if build/classpath fails or is too expensive, fall back to Spoon no-classpath
-  source extraction and mark call graph unavailable when needed.
+- CoCoMUT requires a compiled Java project or supplied class/JAR artifacts;
+- Maven/Gradle projects should compile during phase 1 when their build files are
+  usable in the local environment;
+- plain-source projects must provide class files or a compatible build layout;
+- source extraction is classpath-aware and call context is bytecode-backed.
 
-Do not force a repository to compile for source/Javadoc extraction. Many public
-repositories need unavailable SDKs, services, generated code, or special local
-setup.
+Do not reintroduce product modes that silently continue without bytecode. If a
+public repository cannot compile in the evaluation environment, record that as a
+failure or limitation instead of emitting source-only success.
 
 ## Selection Semantics
 
@@ -234,8 +234,8 @@ Risk-based testing:
 
 ### Source Extraction Changes
 
-Run source-model tests and cover both no-classpath and classpath-aware behavior
-when the change could affect project parsing or symbol resolution.
+Run source-model tests and cover classpath-aware behavior when the change could
+affect project parsing or symbol resolution.
 
 Suggested commands:
 
@@ -250,7 +250,7 @@ compiled repository with:
 
 ```bash
 ./bin/cocomut --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project \
-  --compile --resolution auto --call-graph none --source-set main --scope all \
+  --source-set main --scope all \
   --output-dir /tmp/cocomut-minimal-source-test
 ```
 
@@ -285,8 +285,8 @@ Run call graph and JSON output tests:
   -Dsurefire.failIfNoSpecifiedTests=false test
 ```
 
-If the join logic changes, test a compiled repository with `--call-graph auto`
-and inspect the distribution of:
+If the join logic changes, test a compiled repository and inspect the
+distribution of:
 
 - `target_kind`;
 - `resolution`;
