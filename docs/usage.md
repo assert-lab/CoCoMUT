@@ -139,6 +139,10 @@ Useful options:
 --exclude-path GLOB            Exclude source path glob relative to project root
 --skip-build                   Do not execute Maven/Gradle; use existing or
                                 explicitly supplied bytecode artifacts
+--allow-build                  Explicitly allow unsandboxed Maven/Gradle
+                                execution on the host
+--externally-sandboxed-build   Allow Maven/Gradle and record that the caller
+                                provided external sandboxing
 --class-output DIR             Project class-output directory, repeatable or
                                 comma-separated
 --project-jar JAR              Project artifact JAR, repeatable or comma-separated
@@ -147,28 +151,29 @@ Useful options:
                                 or path-separated
 ```
 
-CoCoMUT performs static bytecode analysis. The analyzed checkout must compile,
-or it must already contain usable project class directories, project build
-outputs, or project JARs in a conventional build layout. Maven and Gradle
-projects are compiled during phase 1 when their build files are present; plain
-Java projects must provide project class files under conventional directories
-such as `target/classes`, `build/classes/java/main`, `bin`, `classes`, or
-project JARs under conventional artifact directories such as `target/` or
-`build/libs/`.
+CoCoMUT performs static bytecode analysis. The analyzed checkout must provide
+usable project bytecode through project class directories or project JARs. By
+default CoCoMUT does not execute Maven or Gradle; this avoids running
+repository-controlled build logic on the host. To build during extraction, pass
+`--allow-build` or `--externally-sandboxed-build`.
 
-For Maven and Gradle projects, phase 1 performs a clean compile without running
+For Maven and Gradle projects, an allowed phase-1 build compiles without running
 tests. A main-only request uses main compilation (`mvn compile` or Gradle
 `classes`). Requests that include test source sets use test compilation
-(`mvn test-compile` or Gradle `testClasses`). Project class output directories
-and dependency JARs are collected after that build from the project build tool,
-not by scanning arbitrary global dependency caches. Dependency JARs help resolve
-types and call targets but do not satisfy the project-bytecode requirement by
-themselves.
+(`mvn test-compile` or Gradle `testClasses`). CoCoMUT does not invoke `clean`:
+prepared artifacts are not deleted before analysis. Project class output
+directories and dependency JARs are collected after that build from the project
+build tool, not by scanning arbitrary global dependency caches. Dependency JARs
+help resolve types and call targets but do not satisfy the project-bytecode
+requirement by themselves.
 
-Compilation runs the subject repository's Maven or Gradle build logic. For
-untrusted public repositories, run CoCoMUT in a disposable container or VM with
-an unprivileged user, scrubbed environment, isolated writable build/cache
-directories, and CPU, memory, process, wall-clock, and network limits.
+Build execution runs the subject repository's Maven or Gradle build logic. For
+untrusted public repositories, keep the default denied-build policy and provide
+prebuilt artifacts, or run CoCoMUT in a disposable container or VM with an
+unprivileged user, scrubbed environment, isolated writable build/cache
+directories, and CPU, memory, process, wall-clock, and network limits. Use
+`--externally-sandboxed-build` only when that external protection is actually in
+place; CoCoMUT records the policy but does not provide a container itself.
 
 If the project was already compiled elsewhere, or if build execution is not
 acceptable, use the explicit artifact path:
@@ -184,10 +189,11 @@ acceptable, use the explicit artifact path:
 
 `--class-output` and `--project-jar` are project bytecode inputs. They can
 satisfy CoCoMUT's project-bytecode requirement. `--dependency-jar` and entries
-from `--classpath-file` help type/call-target resolution, but dependency JARs
-alone do not count as analyzed project bytecode. `--skip-build` also suppresses
-Gradle metadata tasks, because those tasks still evaluate the target project's
-build scripts.
+from `--classpath-file` help type/call-target resolution, but dependency
+directories/JARs alone do not count as analyzed project bytecode. When
+`--skip-build` is used with explicit project artifacts, CoCoMUT treats those
+artifacts as exact project bytecode inputs and does not merge stale conventional
+outputs such as `target/classes`.
 
 `--call-graph rta` is the default. Use `--call-graph cha` when the study design
 needs class-hierarchy analysis instead of rapid type analysis.
@@ -402,14 +408,16 @@ pipeline through `ContextRequest` and `ContextExtractorService`.
 | Include path glob | `--include-path GLOB` | `.includePathGlob("GLOB")` or `.includePathGlobs(Set.of(...))` |
 | Exclude path glob | `--exclude-path GLOB` | `.excludePathGlob("GLOB")` or `.excludePathGlobs(Set.of(...))` |
 | Skip build execution | `--skip-build` | `.skipBuild(true)` |
+| Allow host build | `--allow-build` | `.allowUnsandboxedBuild()` |
+| Externally sandboxed build | `--externally-sandboxed-build` | `.externallySandboxedBuild()` |
 | Project class output | `--class-output target/classes` | `.classOutputDir(Path.of("target/classes"))` |
 | Project JAR | `--project-jar target/app.jar` | `.projectJar(Path.of("target/app.jar"))` |
 | Dependency JAR | `--dependency-jar lib.jar` | `.dependencyJar(Path.of("lib.jar"))` |
 | Classpath file | `--classpath-file cp.txt` | `.classpathFile(Path.of("cp.txt"))` |
 
-Default behavior is aligned as well: both CLI/JAR and API default to all
-methods, classpath-aware source extraction, static bytecode analysis, build
-attempts for supported build systems, and the same output directory policy.
+Default behavior is aligned as well: CLI/JAR and API default to all methods,
+classpath-aware source extraction, static bytecode analysis, denied build
+execution, and the same output directory policy.
 
 ## Static Analysis Boundaries
 
@@ -423,12 +431,11 @@ Current static-analysis boundaries:
 - call context comes from static bytecode analysis over compiled class
   directories and project artifacts, with dependency JARs loaded as libraries
   for target resolution rather than as application entry points;
-- build-tool compilation is part of phase 1 for supported Maven/Gradle projects;
-  otherwise CoCoMUT requires pre-existing project class files or project JARs in
-  a conventional build layout or through explicit `--class-output` /
-  `--project-jar` inputs;
-- `--skip-build` disables Maven/Gradle execution and relies on existing or
-  explicitly supplied bytecode, which is the preferred policy for untrusted
+- build-tool compilation is available only when `--allow-build` or
+  `--externally-sandboxed-build` is passed; otherwise CoCoMUT requires
+  pre-existing project class files or project JARs in a conventional build
+  layout or through explicit `--class-output` / `--project-jar` inputs;
+- the default denied-build policy is the preferred policy for untrusted
   repositories unless the build runs in an external sandbox;
 - reflection, proxies, generated code, Lombok, service loaders, and dependency
   injection can reduce precision, but common dynamic-feature hints are labeled

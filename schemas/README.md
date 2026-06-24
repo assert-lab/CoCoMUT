@@ -134,21 +134,36 @@ selection                       Same selection provenance stored in JSONL rows
 project.name/path/build_system  Analyzed project identity
 project.git.remote_url          Git remote when the checkout exposes one
 project.git.commit              Git commit when available
-project.git.dirty               Whether the checkout had uncommitted changes
+project.git.dirty               Boolean when known, null when git state is unknown
 build.attempted                 Whether CoCoMUT executed Maven/Gradle
-build.skipped                   Whether `--skip-build` was requested
-build.sandboxed                 Currently false; sandboxing is an external policy
-build.policy                    `allow_unsandboxed` or `skip`
+build.exit_code                 Build-process exit code, or -1 when not attempted
+build.succeeded                 Whether the attempted build command succeeded
+build.timed_out                 Whether the attempted build timed out
+build.skipped                   Whether build execution was denied
+build.sandboxed                 Whether caller claims external sandboxing
+build.policy                    DENY_BUILD, ALLOW_UNSANDBOXED_BUILD, or
+                                EXTERNALLY_SANDBOXED_BUILD
+build.bytecode_available        Whether project bytecode was found
+build.bytecode_origin           generated_this_run, preexisting, explicit, or none
+build.analysis_can_proceed      Whether extraction has project bytecode to analyze
 artifacts.*                     Source roots, class outputs, jars, explicit inputs
-hashes.classpath_sha256         Hash over classpath files/directories
-hashes.project_bytecode_sha256  Hash over project class outputs and project JARs
-hashes.dependency_classpath_sha256
-                                Hash over dependency JARs
+hashes.algorithm/format         Hash algorithm and deterministic digest format
+hashes.main_bytecode            Hash over main outputs and project JARs
+hashes.test_bytecode            Hash over test outputs
+hashes.combined_project_bytecode
+                                Hash over main, test, and project JAR bytecode
+hashes.dependency_classpath     Hash over dependency JARs/directories
+hashes.emitted_jsonl            Hash over generated JSONL when present
 ```
 
 The manifest is intentionally separate from the JSONL rows. Dataset rows remain
 method-centric, while repository revision, build policy, and artifact hashes are
 auditable at extraction-run granularity.
+
+Each hash entry has `{role, sha256, status, errors}`. `sha256` is a 64-character
+hex digest when `status` is `ok`; it is `null` for `empty`, `missing`, or
+`error`. Artifact hashes do not include host-specific absolute paths, so two
+checkouts with identical artifact content can be compared across machines.
 
 When a target omits parameters, for example `@see #parse`, CoCoMUT resolves it
 only if there is a single project method named `parse` in the target class. If

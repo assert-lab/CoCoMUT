@@ -25,8 +25,15 @@ public class ProjectMetadata {
     private final boolean compiles;
     private final String compileStatus;
     private final boolean buildAttempted;
+    private final int buildExitCode;
+    private final boolean buildSucceeded;
+    private final boolean buildTimedOut;
     private final boolean buildSkipped;
     private final boolean buildSandboxed;
+    private final ContextRequest.BuildPolicy buildPolicy;
+    private final boolean bytecodeAvailable;
+    private final String bytecodeOrigin;
+    private final boolean analysisCanProceed;
     private final List<Path> explicitClassOutputDirs;
     private final List<Path> explicitProjectJars;
     private final List<Path> explicitDependencyJars;
@@ -48,8 +55,15 @@ public class ProjectMetadata {
         this.compiles = builder.compiles;
         this.compileStatus = builder.compileStatus;
         this.buildAttempted = builder.buildAttempted;
+        this.buildExitCode = builder.buildExitCode;
+        this.buildSucceeded = builder.buildSucceeded;
+        this.buildTimedOut = builder.buildTimedOut;
         this.buildSkipped = builder.buildSkipped;
         this.buildSandboxed = builder.buildSandboxed;
+        this.buildPolicy = builder.buildPolicy;
+        this.bytecodeAvailable = builder.bytecodeAvailable;
+        this.bytecodeOrigin = builder.bytecodeOrigin;
+        this.analysisCanProceed = builder.analysisCanProceed;
         this.explicitClassOutputDirs = Collections.unmodifiableList(safeList(builder.explicitClassOutputDirs));
         this.explicitProjectJars = Collections.unmodifiableList(safeList(builder.explicitProjectJars));
         this.explicitDependencyJars = Collections.unmodifiableList(safeList(builder.explicitDependencyJars));
@@ -121,12 +135,40 @@ public class ProjectMetadata {
         return buildAttempted;
     }
 
+    public int getBuildExitCode() {
+        return buildExitCode;
+    }
+
+    public boolean isBuildSucceeded() {
+        return buildSucceeded;
+    }
+
+    public boolean isBuildTimedOut() {
+        return buildTimedOut;
+    }
+
     public boolean isBuildSkipped() {
         return buildSkipped;
     }
 
     public boolean isBuildSandboxed() {
         return buildSandboxed;
+    }
+
+    public ContextRequest.BuildPolicy getBuildPolicy() {
+        return buildPolicy;
+    }
+
+    public boolean isBytecodeAvailable() {
+        return bytecodeAvailable;
+    }
+
+    public String getBytecodeOrigin() {
+        return bytecodeOrigin;
+    }
+
+    public boolean isAnalysisCanProceed() {
+        return analysisCanProceed;
     }
 
     public List<Path> getExplicitClassOutputDirs() {
@@ -189,8 +231,15 @@ public class ProjectMetadata {
         private boolean compiles = false;
         private String compileStatus = "";
         private boolean buildAttempted = false;
+        private int buildExitCode = -1;
+        private boolean buildSucceeded = false;
+        private boolean buildTimedOut = false;
         private boolean buildSkipped = false;
         private boolean buildSandboxed = false;
+        private ContextRequest.BuildPolicy buildPolicy = ContextRequest.BuildPolicy.DENY_BUILD;
+        private boolean bytecodeAvailable = false;
+        private String bytecodeOrigin = "none";
+        private boolean analysisCanProceed = false;
         private List<Path> explicitClassOutputDirs = Collections.emptyList();
         private List<Path> explicitProjectJars = Collections.emptyList();
         private List<Path> explicitDependencyJars = Collections.emptyList();
@@ -218,8 +267,15 @@ public class ProjectMetadata {
                     .compiles(src.compiles)
                     .compileStatus(src.compileStatus)
                     .buildAttempted(src.buildAttempted)
+                    .buildExitCode(src.buildExitCode)
+                    .buildSucceeded(src.buildSucceeded)
+                    .buildTimedOut(src.buildTimedOut)
                     .buildSkipped(src.buildSkipped)
                     .buildSandboxed(src.buildSandboxed)
+                    .buildPolicy(src.buildPolicy)
+                    .bytecodeAvailable(src.bytecodeAvailable)
+                    .bytecodeOrigin(src.bytecodeOrigin)
+                    .analysisCanProceed(src.analysisCanProceed)
                     .explicitClassOutputDirs(src.explicitClassOutputDirs)
                     .explicitProjectJars(src.explicitProjectJars)
                     .explicitDependencyJars(src.explicitDependencyJars)
@@ -301,6 +357,21 @@ public class ProjectMetadata {
             return this;
         }
 
+        public Builder buildExitCode(int buildExitCode) {
+            this.buildExitCode = buildExitCode;
+            return this;
+        }
+
+        public Builder buildSucceeded(boolean buildSucceeded) {
+            this.buildSucceeded = buildSucceeded;
+            return this;
+        }
+
+        public Builder buildTimedOut(boolean buildTimedOut) {
+            this.buildTimedOut = buildTimedOut;
+            return this;
+        }
+
         public Builder buildSkipped(boolean buildSkipped) {
             this.buildSkipped = buildSkipped;
             return this;
@@ -308,6 +379,26 @@ public class ProjectMetadata {
 
         public Builder buildSandboxed(boolean buildSandboxed) {
             this.buildSandboxed = buildSandboxed;
+            return this;
+        }
+
+        public Builder buildPolicy(ContextRequest.BuildPolicy buildPolicy) {
+            this.buildPolicy = buildPolicy == null ? ContextRequest.BuildPolicy.DENY_BUILD : buildPolicy;
+            return this;
+        }
+
+        public Builder bytecodeAvailable(boolean bytecodeAvailable) {
+            this.bytecodeAvailable = bytecodeAvailable;
+            return this;
+        }
+
+        public Builder bytecodeOrigin(String bytecodeOrigin) {
+            this.bytecodeOrigin = bytecodeOrigin == null || bytecodeOrigin.isBlank() ? "none" : bytecodeOrigin;
+            return this;
+        }
+
+        public Builder analysisCanProceed(boolean analysisCanProceed) {
+            this.analysisCanProceed = analysisCanProceed;
             return this;
         }
 

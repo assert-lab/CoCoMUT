@@ -19,6 +19,12 @@ public final class ContextRequest {
         ENTRY_POINTS
     }
 
+    public enum BuildPolicy {
+        DENY_BUILD,
+        ALLOW_UNSANDBOXED_BUILD,
+        EXTERNALLY_SANDBOXED_BUILD
+    }
+
     private final Path projectRoot;
     private final Scope scope;
     private final CallGraphGenerator.Algorithm callGraphAlgorithm;
@@ -33,7 +39,7 @@ public final class ContextRequest {
     private final Set<String> excludePathGlobs;
     private final Set<SymbolTarget> targets;
     private final Path outputDirectory;
-    private final boolean skipBuild;
+    private final BuildPolicy buildPolicy;
     private final Set<Path> classOutputDirs;
     private final Set<Path> projectJars;
     private final Set<Path> dependencyJars;
@@ -59,7 +65,7 @@ public final class ContextRequest {
         this.outputDirectory = builder.outputDirectory != null
                 ? builder.outputDirectory.toAbsolutePath().normalize()
                 : null;
-        this.skipBuild = builder.skipBuild;
+        this.buildPolicy = Objects.requireNonNull(builder.buildPolicy, "buildPolicy cannot be null");
         this.classOutputDirs = normalizePaths(builder.classOutputDirs);
         this.projectJars = normalizePaths(builder.projectJars);
         this.dependencyJars = normalizePaths(builder.dependencyJars);
@@ -131,7 +137,11 @@ public final class ContextRequest {
     }
 
     public boolean skipBuild() {
-        return skipBuild;
+        return buildPolicy == BuildPolicy.DENY_BUILD;
+    }
+
+    public BuildPolicy buildPolicy() {
+        return buildPolicy;
     }
 
     public Set<Path> classOutputDirs() {
@@ -165,7 +175,7 @@ public final class ContextRequest {
         private Set<String> excludePathGlobs = new LinkedHashSet<>();
         private Set<SymbolTarget> targets = new LinkedHashSet<>();
         private Path outputDirectory;
-        private boolean skipBuild;
+        private BuildPolicy buildPolicy = BuildPolicy.DENY_BUILD;
         private Set<Path> classOutputDirs = new LinkedHashSet<>();
         private Set<Path> projectJars = new LinkedHashSet<>();
         private Set<Path> dependencyJars = new LinkedHashSet<>();
@@ -330,7 +340,22 @@ public final class ContextRequest {
         }
 
         public Builder skipBuild(boolean skipBuild) {
-            this.skipBuild = skipBuild;
+            this.buildPolicy = skipBuild ? BuildPolicy.DENY_BUILD : BuildPolicy.ALLOW_UNSANDBOXED_BUILD;
+            return this;
+        }
+
+        public Builder buildPolicy(BuildPolicy buildPolicy) {
+            this.buildPolicy = Objects.requireNonNull(buildPolicy, "buildPolicy cannot be null");
+            return this;
+        }
+
+        public Builder allowUnsandboxedBuild() {
+            this.buildPolicy = BuildPolicy.ALLOW_UNSANDBOXED_BUILD;
+            return this;
+        }
+
+        public Builder externallySandboxedBuild() {
+            this.buildPolicy = BuildPolicy.EXTERNALLY_SANDBOXED_BUILD;
             return this;
         }
 

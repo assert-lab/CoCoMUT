@@ -53,6 +53,18 @@ public class ContextRequestTest {
                 .build();
 
         assertEquals(CallGraphGenerator.Algorithm.RTA, request.callGraphAlgorithm());
+        assertEquals(ContextRequest.BuildPolicy.DENY_BUILD, request.buildPolicy());
+    }
+
+    @Test
+    public void buildPolicyRequiresExplicitBuildPermission() {
+        ContextRequest request = ContextRequest.builder()
+                .projectRoot(Path.of("."))
+                .allowUnsandboxedBuild()
+                .build();
+
+        assertEquals(ContextRequest.BuildPolicy.ALLOW_UNSANDBOXED_BUILD, request.buildPolicy());
+        assertTrue(!request.skipBuild());
     }
 
     @Test

@@ -156,9 +156,9 @@ public class AnalyzerFacadeTest {
         JsonNode manifestJson = new ObjectMapper().readTree(manifest.toFile());
         assertTrue("Manifest should record skipped build policy",
                 manifestJson.path("build").path("skipped").asBoolean());
-        assertEquals("skip", manifestJson.path("build").path("policy").asText());
+        assertEquals("DENY_BUILD", manifestJson.path("build").path("policy").asText());
         assertFalse("Manifest should include project bytecode hash",
-                manifestJson.path("hashes").path("project_bytecode_sha256").asText().isBlank());
+                manifestJson.path("hashes").path("combined_project_bytecode").path("sha256").asText().isBlank());
     }
 
     private JsonNode findJsonlRowForMethod(Path jsonl, String methodName) throws Exception {

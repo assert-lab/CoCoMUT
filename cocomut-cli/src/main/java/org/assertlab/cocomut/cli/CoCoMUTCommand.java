@@ -87,6 +87,14 @@ public final class CoCoMUTCommand implements Callable<Integer> {
             description = "Do not execute Maven/Gradle. Use existing or explicitly supplied class/JAR artifacts.")
     private boolean skipBuild;
 
+    @Option(names = "--allow-build",
+            description = "Explicitly allow unsandboxed Maven/Gradle execution on the host.")
+    private boolean allowBuild;
+
+    @Option(names = "--externally-sandboxed-build",
+            description = "Allow Maven/Gradle execution and record that the caller provided external sandboxing.")
+    private boolean externallySandboxedBuild;
+
     @Option(names = "--class-output", split = ",",
             description = "Project class-output directory to analyze. May be repeated or comma-separated.")
     private Set<Path> classOutputs;
@@ -121,7 +129,7 @@ public final class CoCoMUTCommand implements Callable<Integer> {
                 .visibilities(emptyIfNull(visibilities))
                 .includePathGlobs(emptyIfNull(includePaths))
                 .excludePathGlobs(emptyIfNull(excludePaths))
-                .skipBuild(skipBuild)
+                .buildPolicy(buildPolicy())
                 .classOutputDirs(emptyPathSetIfNull(classOutputs))
                 .projectJars(emptyPathSetIfNull(projectJars))
                 .dependencyJars(emptyPathSetIfNull(dependencyJars))
@@ -132,6 +140,19 @@ public final class CoCoMUTCommand implements Callable<Integer> {
         ExtractionReport report = ContextExtractorService.createDefault().extract(request);
         report.asMap().forEach((key, value) -> System.out.printf("%s=%s%n", key, value));
         return report.successful() ? 0 : 1;
+    }
+
+    private ContextRequest.BuildPolicy buildPolicy() {
+        if (skipBuild) {
+            return ContextRequest.BuildPolicy.DENY_BUILD;
+        }
+        if (externallySandboxedBuild) {
+            return ContextRequest.BuildPolicy.EXTERNALLY_SANDBOXED_BUILD;
+        }
+        if (allowBuild) {
+            return ContextRequest.BuildPolicy.ALLOW_UNSANDBOXED_BUILD;
+        }
+        return ContextRequest.BuildPolicy.DENY_BUILD;
     }
 
     private static ContextRequest.Scope toScope(String value) {

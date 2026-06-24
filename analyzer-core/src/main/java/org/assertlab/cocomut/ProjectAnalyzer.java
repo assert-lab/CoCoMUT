@@ -32,12 +32,12 @@ public class ProjectAnalyzer {
     private final boolean autoDetectJavaVersion;
     private final String buildSystem;
     private final boolean includeTests;
-    private final boolean skipBuild;
+    private final ContextRequest.BuildPolicy buildPolicy;
     private final Set<Path> explicitClassOutputDirs;
     private final Set<Path> explicitProjectJars;
     private final Set<Path> explicitDependencyJars;
     private final Set<Path> explicitClasspathFiles;
-    private boolean lastBuildAttempted;
+    private BuildResult lastBuildResult = BuildResult.notAttempted("BUILD DENIED");
 
     /**
      * Create a ProjectAnalyzer for the given project path
@@ -59,12 +59,12 @@ public class ProjectAnalyzer {
 
     public ProjectAnalyzer(Path projectPath, boolean autoDetectJavaVersion, String buildSystem, boolean includeTests) {
         this(projectPath, autoDetectJavaVersion, buildSystem, includeTests,
-                false, Set.of(), Set.of(), Set.of(), Set.of());
+                ContextRequest.BuildPolicy.ALLOW_UNSANDBOXED_BUILD, Set.of(), Set.of(), Set.of(), Set.of());
     }
 
     public ProjectAnalyzer(ContextRequest request) {
         this(request.projectRoot(), true, "auto", includeTestBytecode(request),
-                request.skipBuild(),
+                request.buildPolicy(),
                 request.classOutputDirs(),
                 request.projectJars(),
                 request.dependencyJars(),
@@ -75,7 +75,7 @@ public class ProjectAnalyzer {
                            boolean autoDetectJavaVersion,
                            String buildSystem,
                            boolean includeTests,
-                           boolean skipBuild,
+                           ContextRequest.BuildPolicy buildPolicy,
                            Set<Path> explicitClassOutputDirs,
                            Set<Path> explicitProjectJars,
                            Set<Path> explicitDependencyJars,
@@ -84,7 +84,7 @@ public class ProjectAnalyzer {
         this.autoDetectJavaVersion = autoDetectJavaVersion;
         this.buildSystem = buildSystem;
         this.includeTests = includeTests;
-        this.skipBuild = skipBuild;
+        this.buildPolicy = buildPolicy == null ? ContextRequest.BuildPolicy.DENY_BUILD : buildPolicy;
         this.explicitClassOutputDirs = explicitClassOutputDirs == null ? Set.of() : Set.copyOf(explicitClassOutputDirs);
         this.explicitProjectJars = explicitProjectJars == null ? Set.of() : Set.copyOf(explicitProjectJars);
         this.explicitDependencyJars = explicitDependencyJars == null ? Set.of() : Set.copyOf(explicitDependencyJars);
@@ -107,19 +107,31 @@ public class ProjectAnalyzer {
         List<Path> sourceRoots = findSourceRoots();
         List<Path> testSourceRoots = includeTests ? findTestSourceRoots() : List.of();
         List<Path> classpathFileEntries = readClasspathFiles();
-        boolean compiles = validateProjectCompiles();
-        List<Path> mainClassOutputs = mergePaths(existingMainClassOutputDirs(detectedBuildSystem),
-                existingClassDirs(explicitClassOutputDirs),
-                existingClassDirsFromClasspathFile(classpathFileEntries));
-        List<Path> testClassOutputs = includeTests ? existingTestClassOutputDirs(detectedBuildSystem) : List.of();
+        boolean explicitProjectBytecode = !explicitClassOutputDirs.isEmpty() || !explicitProjectJars.isEmpty();
+        BuildResult buildResult = runBuildIfAllowed(detectedBuildSystem);
+        List<Path> discoveredMainOutputs = explicitMode(explicitProjectBytecode)
+                ? List.of()
+                : existingMainClassOutputDirs(detectedBuildSystem);
+        List<Path> discoveredTestOutputs = includeTests && !explicitMode(explicitProjectBytecode)
+                ? existingTestClassOutputDirs(detectedBuildSystem)
+                : List.of();
+        List<Path> discoveredProjectJars = explicitMode(explicitProjectBytecode)
+                ? List.of()
+                : existingProjectArtifactJars(detectedBuildSystem);
+        List<Path> mainClassOutputs = mergePaths(discoveredMainOutputs,
+                existingClassDirs(explicitClassOutputDirs));
+        List<Path> testClassOutputs = discoveredTestOutputs;
         List<Path> dependencyClasspath = mergePaths(buildDependencyClasspath(detectedBuildSystem),
                 existingJars(explicitDependencyJars),
-                existingJarsFromClasspathFile(classpathFileEntries));
-        List<Path> projectArtifactJars = mergePaths(existingProjectArtifactJars(detectedBuildSystem),
+                existingJarsFromClasspathFile(classpathFileEntries),
+                existingClassDirsFromClasspathFile(classpathFileEntries));
+        List<Path> projectArtifactJars = mergePaths(discoveredProjectJars,
                 existingJars(explicitProjectJars));
         List<Path> classpath = combinedClasspath(sourceRoot, mainClassOutputs, testClassOutputs,
                 projectArtifactJars, dependencyClasspath);
-        compiles = compiles || !mainClassOutputs.isEmpty() || !projectArtifactJars.isEmpty();
+        boolean bytecodeAvailable = !mainClassOutputs.isEmpty() || !projectArtifactJars.isEmpty();
+        String bytecodeOrigin = bytecodeOrigin(explicitProjectBytecode, buildResult, bytecodeAvailable);
+        boolean analysisCanProceed = bytecodeAvailable;
 
         String projectName = projectPath.getFileName().toString();
 
@@ -136,16 +148,27 @@ public class ProjectAnalyzer {
                 .testClassOutputs(testClassOutputs)
                 .projectArtifactJars(projectArtifactJars)
                 .dependencyClasspath(dependencyClasspath)
-                .compiles(compiles)
-                .compileStatus(compileStatus(compiles))
-                .buildAttempted(lastBuildAttempted)
-                .buildSkipped(skipBuild)
-                .buildSandboxed(false)
+                .compiles(analysisCanProceed)
+                .compileStatus(compileStatus(buildResult, bytecodeAvailable))
+                .buildAttempted(buildResult.attempted())
+                .buildExitCode(buildResult.exitCode())
+                .buildSucceeded(buildResult.succeeded())
+                .buildTimedOut(buildResult.timedOut())
+                .buildSkipped(buildPolicy == ContextRequest.BuildPolicy.DENY_BUILD)
+                .buildSandboxed(buildPolicy == ContextRequest.BuildPolicy.EXTERNALLY_SANDBOXED_BUILD)
+                .buildPolicy(buildPolicy)
+                .bytecodeAvailable(bytecodeAvailable)
+                .bytecodeOrigin(bytecodeOrigin)
+                .analysisCanProceed(analysisCanProceed)
                 .explicitClassOutputDirs(new ArrayList<>(explicitClassOutputDirs))
                 .explicitProjectJars(new ArrayList<>(explicitProjectJars))
                 .explicitDependencyJars(new ArrayList<>(explicitDependencyJars))
                 .explicitClasspathFiles(new ArrayList<>(explicitClasspathFiles))
                 .build();
+    }
+
+    private boolean explicitMode(boolean explicitProjectBytecode) {
+        return buildPolicy == ContextRequest.BuildPolicy.DENY_BUILD && explicitProjectBytecode;
     }
 
     private static boolean includeTestBytecode(ContextRequest request) {
@@ -154,11 +177,31 @@ public class ProjectAnalyzer {
                 || sourceSets.stream().anyMatch(set -> !"main".equals(set));
     }
 
-    private String compileStatus(boolean compiles) {
-        if (skipBuild) {
-            return compiles ? "BUILD SKIPPED; EXISTING ARTIFACTS FOUND" : "BUILD SKIPPED; NO PROJECT ARTIFACTS FOUND";
+    private String compileStatus(BuildResult buildResult, boolean bytecodeAvailable) {
+        if (!buildResult.attempted()) {
+            return bytecodeAvailable ? buildResult.status() + "; PROJECT BYTECODE AVAILABLE"
+                    : buildResult.status() + "; NO PROJECT BYTECODE";
         }
-        return compiles ? "BUILD SUCCESS" : "BUILD FAILED";
+        if (buildResult.succeeded()) {
+            return bytecodeAvailable ? "BUILD SUCCESS" : "BUILD SUCCESS; NO PROJECT BYTECODE";
+        }
+        if (bytecodeAvailable) {
+            return "BUILD FAILED; PREEXISTING PROJECT BYTECODE AVAILABLE";
+        }
+        return "BUILD FAILED; NO PROJECT BYTECODE";
+    }
+
+    private static String bytecodeOrigin(boolean explicitProjectBytecode, BuildResult buildResult, boolean available) {
+        if (!available) {
+            return "none";
+        }
+        if (explicitProjectBytecode) {
+            return "explicit";
+        }
+        if (buildResult.succeeded()) {
+            return "generated_this_run";
+        }
+        return "preexisting";
     }
 
     /**
@@ -431,7 +474,7 @@ public class ProjectAnalyzer {
     }
 
     private List<Path> buildDependencyClasspath(String buildSystem) throws IOException {
-        if (skipBuild) {
+        if (buildPolicy == ContextRequest.BuildPolicy.DENY_BUILD) {
             return List.of();
         }
         if ("maven".equals(buildSystem)) {
@@ -556,28 +599,18 @@ public class ProjectAnalyzer {
      *
      * @return true if compiled artifacts exist or the build succeeds
      */
-    private boolean validateProjectCompiles() {
-        lastBuildAttempted = false;
-        if (skipBuild) {
-            try {
-                return hasExistingCompiledArtifacts(detectBuildSystem());
-            } catch (IOException e) {
-                return hasExistingCompiledArtifacts(buildSystem);
-            }
-        }
-        String buildSystem;
-        try {
-            buildSystem = detectBuildSystem();
-        } catch (IOException e) {
-            return false;
+    private BuildResult runBuildIfAllowed(String buildSystem) {
+        if (buildPolicy == ContextRequest.BuildPolicy.DENY_BUILD) {
+            lastBuildResult = BuildResult.notAttempted("BUILD DENIED");
+            return lastBuildResult;
         }
 
         if (!"maven".equals(buildSystem) && !"gradle".equals(buildSystem)) {
-            return hasExistingCompiledArtifacts(buildSystem);
+            lastBuildResult = BuildResult.notAttempted("NO BUILD TOOL");
+            return lastBuildResult;
         }
 
         try {
-            lastBuildAttempted = true;
             boolean isWindows = System.getProperty("os.name", "")
                     .toLowerCase()
                     .contains("win");
@@ -585,18 +618,23 @@ public class ProjectAnalyzer {
 
             if ("maven".equals(buildSystem)) {
                 String mvn = executableWithWrapper("mvn", isWindows);
-                command = List.of(mvn, "-q", "-DskipTests", "clean", includeTests ? "test-compile" : "compile");
+                command = List.of(mvn, "-q", "-DskipTests", includeTests ? "test-compile" : "compile");
             } else if ("gradle".equals(buildSystem)) {
                 String gradle = executableWithWrapper("gradle", isWindows);
-                command = List.of(gradle, "--no-daemon", "clean", includeTests ? "testClasses" : "classes",
+                command = List.of(gradle, "--no-daemon", includeTests ? "testClasses" : "classes",
                         "-x", "test", "--build-cache", "-q");
             } else {
-                return false;
+                lastBuildResult = BuildResult.notAttempted("NO BUILD TOOL");
+                return lastBuildResult;
             }
 
-            return runCommand(command).exitCode() == 0;
+            CommandResult result = runCommand(command);
+            lastBuildResult = new BuildResult(true, result.exitCode(), result.exitCode() == 0,
+                    result.timedOut(), result.timedOut() ? "BUILD TIMED OUT" : (result.exitCode() == 0 ? "BUILD SUCCESS" : "BUILD FAILED"));
+            return lastBuildResult;
         } catch (Exception e) {
-            return false;
+            lastBuildResult = new BuildResult(true, -1, false, false, "BUILD FAILED: " + e.getClass().getSimpleName());
+            return lastBuildResult;
         }
     }
 
@@ -644,10 +682,10 @@ public class ProjectAnalyzer {
         if (!completed) {
             process.destroyForcibly();
             drainer.join(1000);
-            return new CommandResult(-1, output.toString());
+            return new CommandResult(-1, output.toString(), true);
         }
         drainer.join(1000);
-        return new CommandResult(process.exitValue(), output.toString());
+        return new CommandResult(process.exitValue(), output.toString(), false);
     }
 
     private static List<Path> parsePathList(String raw) {
@@ -666,7 +704,13 @@ public class ProjectAnalyzer {
         return paths;
     }
 
-    private record CommandResult(int exitCode, String output) {}
+    private record CommandResult(int exitCode, String output, boolean timedOut) {}
+
+    private record BuildResult(boolean attempted, int exitCode, boolean succeeded, boolean timedOut, String status) {
+        static BuildResult notAttempted(String status) {
+            return new BuildResult(false, -1, false, false, status);
+        }
+    }
 
     private static long compileTimeoutSeconds() {
         String configured = System.getProperty("cocomut.compileTimeoutSeconds");
@@ -694,8 +738,7 @@ public class ProjectAnalyzer {
             return !existingMainClassOutputDirs(buildSystem).isEmpty()
                     || !existingProjectArtifactJars(buildSystem).isEmpty()
                     || !existingClassDirs(explicitClassOutputDirs).isEmpty()
-                    || !existingJars(explicitProjectJars).isEmpty()
-                    || !existingClassDirsFromClasspathFile(readClasspathFiles()).isEmpty();
+                    || !existingJars(explicitProjectJars).isEmpty();
         } catch (IOException e) {
             return !existingMainClassOutputDirs(buildSystem).isEmpty()
                     || !existingClassDirs(explicitClassOutputDirs).isEmpty()

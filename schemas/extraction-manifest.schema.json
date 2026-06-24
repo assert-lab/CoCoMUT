@@ -3,6 +3,7 @@
   "$id": "https://assert-lab.github.io/cocomut/schemas/extraction-manifest.schema.json",
   "title": "CoCoMUT Extraction Manifest",
   "type": "object",
+  "additionalProperties": false,
   "required": [
     "schema_version",
     "generated_at",
@@ -13,18 +14,21 @@
     "project",
     "build",
     "artifacts",
-    "hashes"
+    "hashes",
+    "execution"
   ],
   "properties": {
     "schema_version": { "type": "string" },
-    "generated_at": { "type": "string" },
+    "generated_at": { "type": "string", "format": "date-time" },
     "tool": { "const": "CoCoMUT" },
     "tool_version": { "type": "string" },
-    "request_hash": { "type": "string" },
-    "jsonl_file": { "type": "string" },
+    "request_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "jsonl_file": { "type": ["string", "null"] },
     "selection": { "type": "object" },
+    "execution": { "type": "object" },
     "project": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["name", "path", "build_system", "java_version", "git"],
       "properties": {
         "name": { "type": "string" },
@@ -33,43 +37,131 @@
         "java_version": { "type": "string" },
         "git": {
           "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "available",
+            "root",
+            "relative_project_path",
+            "remote_url",
+            "commit",
+            "dirty",
+            "error"
+          ],
           "properties": {
+            "available": { "type": "boolean" },
+            "root": { "type": "string" },
+            "relative_project_path": { "type": "string" },
             "remote_url": { "type": "string" },
             "commit": { "type": "string" },
-            "dirty": { "enum": ["true", "false", ""] }
+            "dirty": { "type": ["boolean", "null"] },
+            "error": { "type": "string" }
           }
         }
       }
     },
     "build": {
       "type": "object",
-      "required": ["attempted", "skipped", "sandboxed", "status", "policy"],
+      "additionalProperties": false,
+      "required": [
+        "attempted",
+        "exit_code",
+        "succeeded",
+        "timed_out",
+        "skipped",
+        "sandboxed",
+        "status",
+        "policy",
+        "bytecode_available",
+        "bytecode_origin",
+        "analysis_can_proceed"
+      ],
       "properties": {
         "attempted": { "type": "boolean" },
+        "exit_code": { "type": "integer" },
+        "succeeded": { "type": "boolean" },
+        "timed_out": { "type": "boolean" },
         "skipped": { "type": "boolean" },
         "sandboxed": { "type": "boolean" },
         "status": { "type": "string" },
-        "policy": { "enum": ["allow_unsandboxed", "skip"] }
+        "policy": {
+          "enum": ["DENY_BUILD", "ALLOW_UNSANDBOXED_BUILD", "EXTERNALLY_SANDBOXED_BUILD", "UNKNOWN"]
+        },
+        "bytecode_available": { "type": "boolean" },
+        "bytecode_origin": { "enum": ["generated_this_run", "preexisting", "explicit", "none"] },
+        "analysis_can_proceed": { "type": "boolean" }
       }
     },
     "artifacts": {
       "type": "object",
-      "additionalProperties": {
-        "type": "array",
-        "items": { "type": "string" }
+      "additionalProperties": false,
+      "required": [
+        "source_roots",
+        "test_source_roots",
+        "main_class_outputs",
+        "test_class_outputs",
+        "project_jars",
+        "dependency_classpath",
+        "explicit_class_output_dirs",
+        "explicit_project_jars",
+        "explicit_dependency_jars",
+        "explicit_classpath_files"
+      ],
+      "properties": {
+        "source_roots": { "$ref": "#/$defs/pathArray" },
+        "test_source_roots": { "$ref": "#/$defs/pathArray" },
+        "main_class_outputs": { "$ref": "#/$defs/pathArray" },
+        "test_class_outputs": { "$ref": "#/$defs/pathArray" },
+        "project_jars": { "$ref": "#/$defs/pathArray" },
+        "dependency_classpath": { "$ref": "#/$defs/pathArray" },
+        "explicit_class_output_dirs": { "$ref": "#/$defs/pathArray" },
+        "explicit_project_jars": { "$ref": "#/$defs/pathArray" },
+        "explicit_dependency_jars": { "$ref": "#/$defs/pathArray" },
+        "explicit_classpath_files": { "$ref": "#/$defs/pathArray" }
       }
     },
     "hashes": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
-        "classpath_sha256",
-        "project_bytecode_sha256",
-        "dependency_classpath_sha256"
+        "algorithm",
+        "format",
+        "main_bytecode",
+        "test_bytecode",
+        "combined_project_bytecode",
+        "dependency_classpath",
+        "emitted_jsonl"
       ],
       "properties": {
-        "classpath_sha256": { "type": "string" },
-        "project_bytecode_sha256": { "type": "string" },
-        "dependency_classpath_sha256": { "type": "string" }
+        "algorithm": { "const": "sha-256" },
+        "format": { "const": "cocomut-artifact-v1" },
+        "main_bytecode": { "$ref": "#/$defs/hashEntry" },
+        "test_bytecode": { "$ref": "#/$defs/hashEntry" },
+        "combined_project_bytecode": { "$ref": "#/$defs/hashEntry" },
+        "dependency_classpath": { "$ref": "#/$defs/hashEntry" },
+        "emitted_jsonl": { "$ref": "#/$defs/hashEntry" }
+      }
+    }
+  },
+  "$defs": {
+    "pathArray": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "hashEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "sha256", "status", "errors"],
+      "properties": {
+        "role": { "type": "string" },
+        "sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "status": { "enum": ["ok", "empty", "missing", "error"] },
+        "errors": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
       }
     }
   }

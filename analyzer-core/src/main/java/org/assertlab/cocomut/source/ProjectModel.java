@@ -50,7 +50,9 @@ public final class ProjectModel {
         addIfDirectory(sourceRoots, metadata.getSourceRoot());
         metadata.getSourceRoots().forEach(path -> addIfDirectory(sourceRoots, path));
         metadata.getTestSourceRoots().forEach(path -> addIfDirectory(testSourceRoots, path));
-        addStandardRoots(projectRoot, sourceRoots, testSourceRoots, classOutputDirs);
+        if (sourceRoots.isEmpty() && testSourceRoots.isEmpty()) {
+            addStandardRoots(projectRoot, sourceRoots, testSourceRoots, classOutputDirs);
+        }
 
         metadata.getMainClassOutputs().forEach(path -> addIfClassDirectory(classOutputDirs, path));
         metadata.getTestClassOutputs().forEach(path -> addIfClassDirectory(classOutputDirs, path));
@@ -62,16 +64,6 @@ public final class ProjectModel {
                 .filter(path -> path.toString().endsWith(".jar") && Files.isRegularFile(path))
                 .map(ProjectModel::normalize)
                 .forEach(dependencyJars::add);
-
-        for (Path cp : metadata.getClasspath()) {
-            if (Files.isDirectory(cp)) {
-                if (containsClassFile(cp)) {
-                    classOutputDirs.add(normalize(cp));
-                }
-            } else if (cp.toString().endsWith(".jar") && Files.isRegularFile(cp)) {
-                dependencyJars.add(normalize(cp));
-            }
-        }
 
         return new ProjectModel(metadata,
                 new ArrayList<>(sourceRoots),

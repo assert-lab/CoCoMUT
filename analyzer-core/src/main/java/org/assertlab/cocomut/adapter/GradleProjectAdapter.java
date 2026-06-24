@@ -90,6 +90,13 @@ public class GradleProjectAdapter implements ProjectAdapter {
         mainOutputs.addAll(nativeModel.mainOutputs());
         Set<Path> testOutputs = new LinkedHashSet<>(base.getTestClassOutputs());
         testOutputs.addAll(nativeModel.testOutputs());
+        Set<Path> dependencies = new LinkedHashSet<>(base.getDependencyClasspath());
+        Set<Path> projectOutputs = new LinkedHashSet<>();
+        projectOutputs.addAll(mainOutputs);
+        projectOutputs.addAll(testOutputs);
+        nativeModel.classpath().stream()
+                .filter(path -> !projectOutputs.contains(path))
+                .forEach(dependencies::add);
 
         return ProjectMetadata.Builder.from(base)
                 .javaVersion(!"unknown".equals(nativeModel.javaVersion()) ? nativeModel.javaVersion() : base.getJavaVersion())
@@ -98,6 +105,7 @@ public class GradleProjectAdapter implements ProjectAdapter {
                 .classpath(new ArrayList<>(merged))
                 .mainClassOutputs(new ArrayList<>(mainOutputs))
                 .testClassOutputs(new ArrayList<>(testOutputs))
+                .dependencyClasspath(new ArrayList<>(dependencies))
                 .build();
     }
 

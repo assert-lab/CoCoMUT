@@ -37,10 +37,10 @@ public interface ProjectAdapter {
      * @return metadata used by the five extraction phases
      * @throws IOException if source roots or classpath cannot be resolved
      */
-    ProjectMetadata toMetadata() throws IOException;
+    ProjectMetadata toMetadata(ContextRequest request) throws IOException;
 
-    default ProjectMetadata toMetadata(ContextRequest request) throws IOException {
-        return toMetadata();
+    default ProjectMetadata toMetadata() throws IOException {
+        throw new UnsupportedOperationException("ProjectAdapter requires a ContextRequest");
     }
 
     /**

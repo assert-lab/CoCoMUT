@@ -183,6 +183,7 @@ final class Orchestrator {
             executionReport.put("failure_codes", failureCodes.isEmpty()
                     ? List.of(FailureCode.NONE.toString())
                     : failureCodes.stream().map(Enum::toString).toList());
+            writeManifestIfPossible();
             writeExecutionReportIfPossible();
             closeSourceSession();
             restoreSourceFileLimit();
@@ -204,10 +205,15 @@ final class Orchestrator {
             executionReport.put("phase_1_compiles", projectMetadata.isCompiles());
             executionReport.put("phase_1_compile_status", projectMetadata.getCompileStatus());
             executionReport.put("phase_1_build_attempted", projectMetadata.isBuildAttempted());
+            executionReport.put("phase_1_build_exit_code", projectMetadata.getBuildExitCode());
+            executionReport.put("phase_1_build_succeeded", projectMetadata.isBuildSucceeded());
+            executionReport.put("phase_1_build_timed_out", projectMetadata.isBuildTimedOut());
             executionReport.put("phase_1_build_skipped", projectMetadata.isBuildSkipped());
             executionReport.put("phase_1_build_sandboxed", projectMetadata.isBuildSandboxed());
-            executionReport.put("phase_1_build_execution_policy",
-                    projectMetadata.isBuildSkipped() ? "skip" : "allow_unsandboxed");
+            executionReport.put("phase_1_build_execution_policy", projectMetadata.getBuildPolicy().toString());
+            executionReport.put("phase_1_bytecode_available", projectMetadata.isBytecodeAvailable());
+            executionReport.put("phase_1_bytecode_origin", projectMetadata.getBytecodeOrigin());
+            executionReport.put("phase_1_analysis_can_proceed", projectMetadata.isAnalysisCanProceed());
             projectModel = ProjectModel.from(projectMetadata);
             executionReport.put("phase_1_source_available", projectModel.sourceAvailable());
             executionReport.put("phase_1_source_roots", projectModel.sourceRoots().size());
@@ -224,7 +230,7 @@ final class Orchestrator {
             executionReport.put("phase_1_explicit_dependency_jars", projectMetadata.getExplicitDependencyJars().size());
             executionReport.put("phase_1_explicit_classpath_files", projectMetadata.getExplicitClasspathFiles().size());
 
-            if (!projectMetadata.isCompiles()) {
+            if (!projectMetadata.isAnalysisCanProceed()) {
                 failureCodes.add(FailureCode.BUILD_FAILED);
                 executionReport.put("phase_1_error",
                         "CoCoMUT requires compiled project bytecode. Build the project or provide compiled class files.");
@@ -532,7 +538,7 @@ final class Orchestrator {
             executionReport.put("phase_5_files_generated", jsonlRows);
             executionReport.put("phase_5_call_edges_serialized", serializedCallEdgeCount(methodContexts));
             Path manifestPath = ExtractionManifest.write(root, projectMetadata, projectModel,
-                    selectionProvenance(), requestHash(), jsonlPath);
+                    selectionProvenance(), requestHash(), jsonlPath, executionReport);
             executionReport.put("extraction_manifest_file", manifestPath.toString());
             if (jsonlRows != methodContexts.size() || jsonlRows != methodInfos.size()) {
                 failureCodes.add(FailureCode.JSON_GENERATION_FAILED);
@@ -645,6 +651,23 @@ final class Orchestrator {
             OBJECT_MAPPER.writerWithDefaultPrettyPrinter().writeValue(reportPath.toFile(), executionReport);
         } catch (Exception e) {
             executionReport.put("extraction_report_error", e.getMessage());
+        }
+    }
+
+    private void writeManifestIfPossible() {
+        try {
+            Path root = outputRoot();
+            Files.createDirectories(root);
+            Path jsonlPath = null;
+            Object jsonl = executionReport.get("phase_5_jsonl_file");
+            if (jsonl != null && !String.valueOf(jsonl).isBlank()) {
+                jsonlPath = Path.of(String.valueOf(jsonl));
+            }
+            Path manifestPath = ExtractionManifest.write(root, projectMetadata, projectModel,
+                    selectionProvenance(), requestHash(), jsonlPath, executionReport);
+            executionReport.put("extraction_manifest_file", manifestPath.toString());
+        } catch (Exception e) {
+            executionReport.put("extraction_manifest_error", e.getMessage());
         }
     }
 
@@ -825,7 +848,7 @@ final class Orchestrator {
     private String outputJsonlFilename() {
         String selection = selectionLabel();
         String base = selection.isBlank() ? "method_contexts" : sanitize(selection);
-        return base + "__" + requestHash() + ".jsonl";
+        return base + "__" + requestHashPrefix() + ".jsonl";
     }
 
     private String selectionLabel() {
@@ -848,6 +871,7 @@ final class Orchestrator {
 
     private String requestHash() {
         Map<String, Object> request = new LinkedHashMap<>();
+        request.put("project", projectPath.toAbsolutePath().normalize().toString());
         request.put("scope", scope.toString());
         request.put("source_sets", sourceSets.stream().sorted().toList());
         request.put("packages", packageFilters.stream().sorted().toList());
@@ -863,10 +887,15 @@ final class Orchestrator {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(OBJECT_MAPPER.writeValueAsBytes(request));
-            return HexFormat.of().formatHex(digest, 0, 4);
+            return HexFormat.of().formatHex(digest);
         } catch (Exception e) {
             return Integer.toHexString(request.hashCode());
         }
+    }
+
+    private String requestHashPrefix() {
+        String hash = requestHash();
+        return hash.length() > 16 ? hash.substring(0, 16) : hash;
     }
 
     private static String sanitize(String value) {

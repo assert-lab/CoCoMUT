@@ -1,9 +1,13 @@
 package org.assertlab.cocomut;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
@@ -159,6 +163,117 @@ public class ProjectAnalyzerTest {
         ProjectMetadata metadata = customAnalyzer.analyze();
         assertNotNull("Custom analyzer should work", metadata);
         assertEquals("Should use specified Maven system", "maven", metadata.getBuildSystem());
+    }
+
+    @Test
+    public void classpathFileDependencyDirectoryDoesNotSatisfyProjectBytecode() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-classpath-file-project-");
+        Path dependencyDir = Files.createTempDirectory("cocomut-exploded-dependency-");
+        Path classpathFile = Files.createTempFile("cocomut-classpath", ".txt");
+        try {
+            Files.createDirectories(project.resolve("src/main/java/demo"));
+            Files.writeString(project.resolve("src/main/java/demo/App.java"), "package demo; class App {}\n");
+            Files.createDirectories(dependencyDir.resolve("lib"));
+            Files.write(dependencyDir.resolve("lib/Dependency.class"), new byte[] {0, 0, 0, 0});
+            Files.writeString(classpathFile, dependencyDir.toString());
+
+            ProjectMetadata metadata = new ProjectAnalyzer(ContextRequest.builder()
+                    .projectRoot(project)
+                    .skipBuild(true)
+                    .classpathFile(classpathFile)
+                    .build()).analyze();
+
+            assertTrue("Classpath-file directory should be dependency classpath",
+                    metadata.getDependencyClasspath().contains(dependencyDir.toAbsolutePath().normalize()));
+            assertEquals("Classpath-file directory must not become project bytecode",
+                    0, metadata.getMainClassOutputs().size());
+            assertTrue("No project bytecode means analysis cannot proceed",
+                    !metadata.isAnalysisCanProceed());
+        } finally {
+            deleteRecursively(project);
+            deleteRecursively(dependencyDir);
+            Files.deleteIfExists(classpathFile);
+        }
+    }
+
+    @Test
+    public void explicitProjectArtifactsDoNotMergeStaleConventionalOutputs() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-explicit-artifact-project-");
+        Path explicitOutput = Files.createTempDirectory("cocomut-explicit-output-");
+        try {
+            Files.createDirectories(project.resolve("target/classes/stale"));
+            Files.write(project.resolve("target/classes/stale/Stale.class"), new byte[] {0, 0, 0, 0});
+            Files.createDirectories(explicitOutput.resolve("demo"));
+            Files.write(explicitOutput.resolve("demo/App.class"), new byte[] {1, 2, 3, 4});
+
+            ProjectMetadata metadata = new ProjectAnalyzer(ContextRequest.builder()
+                    .projectRoot(project)
+                    .skipBuild(true)
+                    .classOutputDir(explicitOutput)
+                    .build()).analyze();
+
+            assertEquals("Explicit bytecode mode should use only the supplied project output",
+                    List.of(explicitOutput.toAbsolutePath().normalize()), metadata.getMainClassOutputs());
+            assertEquals("explicit", metadata.getBytecodeOrigin());
+        } finally {
+            deleteRecursively(project);
+            deleteRecursively(explicitOutput);
+        }
+    }
+
+    @Test
+    public void manifestBytecodeHashIsStableAcrossCheckoutPaths() throws Exception {
+        Path rootA = Files.createTempDirectory("cocomut-hash-a-");
+        Path rootB = Files.createTempDirectory("cocomut-hash-b-");
+        Path outA = Files.createTempDirectory("cocomut-manifest-a-");
+        Path outB = Files.createTempDirectory("cocomut-manifest-b-");
+        try {
+            Path classesA = rootA.resolve("target/classes/demo");
+            Path classesB = rootB.resolve("target/classes/demo");
+            Files.createDirectories(classesA);
+            Files.createDirectories(classesB);
+            Files.write(classesA.resolve("Same.class"), new byte[] {1, 2, 3});
+            Files.write(classesB.resolve("Same.class"), new byte[] {1, 2, 3});
+
+            Path manifestA = ExtractionManifest.write(outA, manifestMetadata(rootA, rootA.resolve("target/classes")),
+                    null, java.util.Map.of(), "hash-a", null, java.util.Map.of("status", "FAILED"));
+            Path manifestB = ExtractionManifest.write(outB, manifestMetadata(rootB, rootB.resolve("target/classes")),
+                    null, java.util.Map.of(), "hash-b", null, java.util.Map.of("status", "FAILED"));
+
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode hashA = mapper.readTree(manifestA.toFile()).path("hashes").path("combined_project_bytecode").path("sha256");
+            JsonNode hashB = mapper.readTree(manifestB.toFile()).path("hashes").path("combined_project_bytecode").path("sha256");
+            assertEquals("Identical bytecode content should hash identically across checkout paths",
+                    hashA.asText(), hashB.asText());
+        } finally {
+            deleteRecursively(rootA);
+            deleteRecursively(rootB);
+            deleteRecursively(outA);
+            deleteRecursively(outB);
+        }
+    }
+
+    private static ProjectMetadata manifestMetadata(Path project, Path classOutput) {
+        return new ProjectMetadata.Builder()
+                .projectName(project.getFileName().toString())
+                .projectPath(project)
+                .buildSystem("none")
+                .javaVersion("unknown")
+                .sourceRoot(project)
+                .sourceRoots(List.of())
+                .testSourceRoots(List.of())
+                .classpath(List.of(classOutput))
+                .mainClassOutputs(List.of(classOutput))
+                .testClassOutputs(List.of())
+                .projectArtifactJars(List.of())
+                .dependencyClasspath(List.of())
+                .compiles(true)
+                .compileStatus("BUILD DENIED; PROJECT BYTECODE AVAILABLE")
+                .buildPolicy(ContextRequest.BuildPolicy.DENY_BUILD)
+                .bytecodeAvailable(true)
+                .bytecodeOrigin("preexisting")
+                .analysisCanProceed(true)
+                .build();
     }
 
     private static void deleteRecursively(Path root) throws IOException {
