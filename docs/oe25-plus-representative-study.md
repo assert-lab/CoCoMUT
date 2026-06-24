@@ -53,7 +53,7 @@ pre-mandatory-bytecode optional compile/source-resolution/call-graph modes
 Legacy fallbacks:
 
 ```text
-ordinary nonzero exit      -> retry with --call-graph none
+ordinary nonzero exit      -> retry with legacy disabled-call-graph mode
 timeout/OOM/StackOverflow  -> retry source-only, bounded by source files/methods
 ```
 

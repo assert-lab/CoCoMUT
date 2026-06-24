@@ -33,7 +33,6 @@ jobs:
             --project analyzer-tests/src/test/resources/fixtures/minimal-maven-project \
             --scope entry-points \
             --source-set main \
-            --call-graph none \
             --max-methods 1 \
             --output-dir /tmp/cocomut-ci-smoke
           test -s /tmp/cocomut-ci-smoke/method_contexts.jsonl
