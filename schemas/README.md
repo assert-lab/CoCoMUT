@@ -141,8 +141,9 @@ build.succeeded                 Whether the attempted build command succeeded
 build.timed_out                 Whether the attempted build timed out
 build.skipped                   Whether build execution was denied
 build.sandboxed                 Whether caller claims external sandboxing
-build.policy                    DENY_BUILD, ALLOW_UNSANDBOXED_BUILD, or
-                                EXTERNALLY_SANDBOXED_BUILD
+build.policy                    DENY_BUILD, ALLOW_UNSANDBOXED_BUILD,
+                                EXTERNALLY_SANDBOXED_BUILD, or
+                                ALLOW_PREEXISTING_BYTECODE_AFTER_BUILD_FAILURE
 build.bytecode_available        Whether project bytecode was found
 build.bytecode_origin           generated_this_run, preexisting, explicit, or none
 build.analysis_can_proceed      Whether extraction has project bytecode to analyze
@@ -152,7 +153,9 @@ hashes.main_bytecode            Hash over main outputs and project JARs
 hashes.test_bytecode            Hash over test outputs
 hashes.combined_project_bytecode
                                 Hash over main, test, and project JAR bytecode
-hashes.dependency_classpath     Hash over dependency JARs/directories
+hashes.dependency_classpath     Ordered hash over dependency JARs/directories
+hashes.dependency_classpath_content_set
+                                Order-insensitive hash over the same entries
 hashes.emitted_jsonl            Hash over generated JSONL when present
 ```
 
@@ -162,8 +165,9 @@ auditable at extraction-run granularity.
 
 Each hash entry has `{role, sha256, status, errors}`. `sha256` is a 64-character
 hex digest when `status` is `ok`; it is `null` for `empty`, `missing`, or
-`error`. Artifact hashes do not include host-specific absolute paths, so two
-checkouts with identical artifact content can be compared across machines.
+`error`. Artifact hashes do not include host-specific absolute paths. The
+ordered dependency hash preserves classpath order because order can affect
+resolution when multiple entries contain the same class.
 
 When a target omits parameters, for example `@see #parse`, CoCoMUT resolves it
 only if there is a single project method named `parse` in the target class. If

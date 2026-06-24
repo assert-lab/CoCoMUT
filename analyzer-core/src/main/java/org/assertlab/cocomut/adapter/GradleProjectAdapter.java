@@ -82,14 +82,18 @@ public class GradleProjectAdapter implements ProjectAdapter {
         System.out.printf("[GradleProjectAdapter] resolved %d classpath entries via Gradle%n",
                 merged.size());
 
-        Set<Path> sourceRoots = new LinkedHashSet<>(base.getSourceRoots());
-        sourceRoots.addAll(nativeModel.sourceRoots());
-        Set<Path> testSourceRoots = new LinkedHashSet<>(base.getTestSourceRoots());
-        testSourceRoots.addAll(nativeModel.testSourceRoots());
-        Set<Path> mainOutputs = new LinkedHashSet<>(base.getMainClassOutputs());
-        mainOutputs.addAll(nativeModel.mainOutputs());
-        Set<Path> testOutputs = new LinkedHashSet<>(base.getTestClassOutputs());
-        testOutputs.addAll(nativeModel.testOutputs());
+        Set<Path> sourceRoots = nativeModel.sourceRoots().isEmpty()
+                ? new LinkedHashSet<>(base.getSourceRoots())
+                : new LinkedHashSet<>(nativeModel.sourceRoots());
+        Set<Path> testSourceRoots = nativeModel.testSourceRoots().isEmpty()
+                ? new LinkedHashSet<>(base.getTestSourceRoots())
+                : new LinkedHashSet<>(nativeModel.testSourceRoots());
+        Set<Path> mainOutputs = nativeModel.mainOutputs().isEmpty()
+                ? new LinkedHashSet<>(base.getMainClassOutputs())
+                : new LinkedHashSet<>(nativeModel.mainOutputs());
+        Set<Path> testOutputs = nativeModel.testOutputs().isEmpty()
+                ? new LinkedHashSet<>(base.getTestClassOutputs())
+                : new LinkedHashSet<>(nativeModel.testOutputs());
         Set<Path> dependencies = new LinkedHashSet<>(base.getDependencyClasspath());
         Set<Path> projectOutputs = new LinkedHashSet<>();
         projectOutputs.addAll(mainOutputs);
@@ -228,8 +232,10 @@ public class GradleProjectAdapter implements ProjectAdapter {
                 "                    println '" + JAVA_PREFIX + "' + (toolchain ?: sourceCompat ?: '')\n" +
                 "                    try {\n" +
                 "                        javaExt.sourceSets.each { ss ->\n" +
-                "                            ss.allJava.srcDirs.each { d -> if (d.exists()) println((ss.name == 'test' ? '" + TEST_SOURCE_PREFIX + "' : '" + SOURCE_PREFIX + "') + d.absolutePath) }\n" +
-                "                            ss.output.classesDirs.files.each { d -> if (d.exists()) println((ss.name == 'test' ? '" + TEST_OUTPUT_PREFIX + "' : '" + OUTPUT_PREFIX + "') + d.absolutePath) }\n" +
+                "                            if (ss.name == 'main' || ss.name == 'test') {\n" +
+                "                                ss.allJava.srcDirs.each { d -> if (d.exists()) println((ss.name == 'test' ? '" + TEST_SOURCE_PREFIX + "' : '" + SOURCE_PREFIX + "') + d.absolutePath) }\n" +
+                "                                ss.output.classesDirs.files.each { d -> if (d.exists()) println((ss.name == 'test' ? '" + TEST_OUTPUT_PREFIX + "' : '" + OUTPUT_PREFIX + "') + d.absolutePath) }\n" +
+                "                            }\n" +
                 "                        }\n" +
                 "                    } catch (Throwable ignored) { }\n" +
                 "            }\n" +

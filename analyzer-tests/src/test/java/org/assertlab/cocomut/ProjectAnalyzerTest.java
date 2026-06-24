@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -12,6 +13,7 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import org.junit.Before;
@@ -120,10 +122,10 @@ public class ProjectAnalyzerTest {
 
     @Test
     public void testCompilationValidation() throws IOException {
-        // analyzer-core/target/classes is populated by the reactor before tests run.
         ProjectMetadata metadata = analyzer.analyze();
         assertNotNull("Compile status should be set", metadata.getCompileStatus());
-        assertTrue("Project should compile successfully", metadata.isCompiles());
+        assertFalse("Direct ProjectAnalyzer use must not execute builds by default", metadata.isBuildAttempted());
+        assertFalse("compiles means the build command succeeded, not that bytecode exists", metadata.isCompiles());
     }
 
     @Test
@@ -235,10 +237,12 @@ public class ProjectAnalyzerTest {
             Files.write(classesA.resolve("Same.class"), new byte[] {1, 2, 3});
             Files.write(classesB.resolve("Same.class"), new byte[] {1, 2, 3});
 
+            String validHashA = "a".repeat(64);
+            String validHashB = "b".repeat(64);
             Path manifestA = ExtractionManifest.write(outA, manifestMetadata(rootA, rootA.resolve("target/classes")),
-                    null, java.util.Map.of(), "hash-a", null, java.util.Map.of("status", "FAILED"));
+                    null, java.util.Map.of(), validHashA, null, java.util.Map.of("status", "FAILED"));
             Path manifestB = ExtractionManifest.write(outB, manifestMetadata(rootB, rootB.resolve("target/classes")),
-                    null, java.util.Map.of(), "hash-b", null, java.util.Map.of("status", "FAILED"));
+                    null, java.util.Map.of(), validHashB, null, java.util.Map.of("status", "FAILED"));
 
             ObjectMapper mapper = new ObjectMapper();
             JsonNode hashA = mapper.readTree(manifestA.toFile()).path("hashes").path("combined_project_bytecode").path("sha256");
@@ -250,6 +254,197 @@ public class ProjectAnalyzerTest {
             deleteRecursively(rootB);
             deleteRecursively(outA);
             deleteRecursively(outB);
+        }
+    }
+
+    @Test
+    public void gitDirtyManifestStateTracksCleanAndModifiedRepositories() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-git-dirty-");
+        Path output = Files.createTempDirectory("cocomut-git-dirty-out-");
+        try {
+            run(project, "git", "init");
+            run(project, "git", "config", "user.email", "test@example.com");
+            run(project, "git", "config", "user.name", "CoCoMUT Test");
+            Files.writeString(project.resolve("Tracked.java"), "class Tracked {}\n");
+            run(project, "git", "add", ".");
+            run(project, "git", "commit", "-m", "initial");
+
+            Path cleanManifest = ExtractionManifest.write(output, manifestMetadata(project, project),
+                    null, java.util.Map.of(), "c".repeat(64), null, java.util.Map.of("status", "FAILED"));
+            ObjectMapper mapper = new ObjectMapper();
+            assertFalse("Clean repositories must not be dirty",
+                    mapper.readTree(cleanManifest.toFile()).path("project").path("git").path("dirty").asBoolean());
+
+            Files.writeString(project.resolve("Tracked.java"), "class Tracked { int changed; }\n");
+            Path dirtyManifest = ExtractionManifest.write(output, manifestMetadata(project, project),
+                    null, java.util.Map.of(), "d".repeat(64), null, java.util.Map.of("status", "FAILED"));
+            assertTrue("Modified repositories must be dirty",
+                    mapper.readTree(dirtyManifest.toFile()).path("project").path("git").path("dirty").asBoolean());
+        } finally {
+            deleteRecursively(project);
+            deleteRecursively(output);
+        }
+    }
+
+    @Test
+    public void failedBuildWithStaleBytecodeDoesNotProceedByDefault() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-stale-bytecode-");
+        try {
+            createBrokenMavenProjectWithStaleBytecode(project);
+
+            ProjectMetadata metadata = new ProjectAnalyzer(ContextRequest.builder()
+                    .projectRoot(project)
+                    .allowUnsandboxedBuild()
+                    .build()).analyze();
+
+            assertTrue(metadata.isBuildAttempted());
+            assertFalse(metadata.isBuildSucceeded());
+            assertTrue(metadata.isBytecodeAvailable());
+            assertEquals("preexisting", metadata.getBytecodeOrigin());
+            assertFalse("Failed attempted builds must not proceed with stale bytecode by default",
+                    metadata.isAnalysisCanProceed());
+
+            ProjectMetadata explicitRisk = new ProjectAnalyzer(ContextRequest.builder()
+                    .projectRoot(project)
+                    .allowPreexistingBytecodeAfterBuildFailure()
+                    .build()).analyze();
+            assertTrue("The risky stale-bytecode path requires an explicit policy",
+                    explicitRisk.isAnalysisCanProceed());
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void requestHashIncludesExplicitProjectArtifacts() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-request-hash-");
+        Path artifactA = project.resolve("artifact-a/classes");
+        Path artifactB = project.resolve("artifact-b/classes");
+        try {
+            Files.createDirectories(artifactA);
+            Files.createDirectories(artifactB);
+            Files.write(artifactA.resolve("A.class"), new byte[] {1});
+            Files.write(artifactB.resolve("A.class"), new byte[] {2});
+
+            String hashA = requestHash(ContextRequest.builder()
+                    .projectRoot(project)
+                    .skipBuild(true)
+                    .classOutputDir(project.relativize(artifactA))
+                    .build());
+            String hashB = requestHash(ContextRequest.builder()
+                    .projectRoot(project)
+                    .skipBuild(true)
+                    .classOutputDir(project.relativize(artifactB))
+                    .build());
+
+            assertNotEquals("Different explicit project artifacts must produce different request hashes",
+                    hashA, hashB);
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void dependencyClassDirectoriesReachProjectModel() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-dep-dir-model-");
+        Path dependency = Files.createTempDirectory("cocomut-dep-dir-");
+        try {
+            Files.createDirectories(dependency.resolve("api"));
+            Files.write(dependency.resolve("api/GeneratedApi.class"), new byte[] {1, 2, 3});
+            ProjectMetadata metadata = new ProjectMetadata.Builder()
+                    .projectName("dep-dir")
+                    .projectPath(project)
+                    .buildSystem("none")
+                    .javaVersion("17")
+                    .sourceRoot(project)
+                    .sourceRoots(List.of(project))
+                    .testSourceRoots(List.of())
+                    .classpath(List.of(dependency))
+                    .mainClassOutputs(List.of())
+                    .testClassOutputs(List.of())
+                    .projectArtifactJars(List.of())
+                    .dependencyClasspath(List.of(dependency))
+                    .compileStatus("BUILD DENIED; NO PROJECT BYTECODE")
+                    .buildPolicy(ContextRequest.BuildPolicy.DENY_BUILD)
+                    .build();
+
+            org.assertlab.cocomut.source.ProjectModel model =
+                    org.assertlab.cocomut.source.ProjectModel.from(metadata);
+
+            assertTrue("Dependency class directories must be passed to the source backend classpath",
+                    model.dependencyClasspath().contains(dependency.toAbsolutePath().normalize()));
+        } finally {
+            deleteRecursively(project);
+            deleteRecursively(dependency);
+        }
+    }
+
+    @Test
+    public void projectArtifactJarsAreNotReportedAsDependencyJars() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-project-jar-model-");
+        try {
+            Path projectJar = project.resolve("app.jar");
+            Path dependencyJar = project.resolve("dependency.jar");
+            Files.write(projectJar, new byte[] {1, 2, 3});
+            Files.write(dependencyJar, new byte[] {4, 5, 6});
+            ProjectMetadata metadata = new ProjectMetadata.Builder()
+                    .projectName("project-jar")
+                    .projectPath(project)
+                    .buildSystem("none")
+                    .javaVersion("17")
+                    .sourceRoot(project)
+                    .sourceRoots(List.of(project))
+                    .testSourceRoots(List.of())
+                    .classpath(List.of(projectJar, dependencyJar))
+                    .mainClassOutputs(List.of())
+                    .testClassOutputs(List.of())
+                    .projectArtifactJars(List.of(projectJar))
+                    .dependencyClasspath(List.of(dependencyJar))
+                    .compileStatus("BUILD DENIED; PROJECT BYTECODE AVAILABLE")
+                    .buildPolicy(ContextRequest.BuildPolicy.DENY_BUILD)
+                    .build();
+
+            org.assertlab.cocomut.source.ProjectModel model =
+                    org.assertlab.cocomut.source.ProjectModel.from(metadata);
+
+            assertTrue(model.projectArtifactJars().contains(projectJar.toAbsolutePath().normalize()));
+            assertFalse("Project artifact JARs must not inflate the dependency JAR count",
+                    model.dependencyJars().contains(projectJar.toAbsolutePath().normalize()));
+            assertTrue(model.dependencyJars().contains(dependencyJar.toAbsolutePath().normalize()));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void dependencyClasspathHashPreservesOrderSeparatelyFromContentSet() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-classpath-order-");
+        Path outputA = Files.createTempDirectory("cocomut-classpath-order-a-");
+        Path outputB = Files.createTempDirectory("cocomut-classpath-order-b-");
+        try {
+            Path first = project.resolve("first.jar");
+            Path second = project.resolve("second.jar");
+            Files.write(first, new byte[] {1});
+            Files.write(second, new byte[] {2});
+
+            ObjectMapper mapper = new ObjectMapper();
+            Path manifestA = ExtractionManifest.write(outputA, manifestMetadataWithDependencies(project, List.of(first, second)),
+                    null, java.util.Map.of(), "e".repeat(64), null, java.util.Map.of("status", "FAILED"));
+            Path manifestB = ExtractionManifest.write(outputB, manifestMetadataWithDependencies(project, List.of(second, first)),
+                    null, java.util.Map.of(), "f".repeat(64), null, java.util.Map.of("status", "FAILED"));
+
+            JsonNode hashesA = mapper.readTree(manifestA.toFile()).path("hashes");
+            JsonNode hashesB = mapper.readTree(manifestB.toFile()).path("hashes");
+            assertNotEquals("Ordered classpath hash must distinguish classpath order",
+                    hashesA.path("dependency_classpath").path("sha256").asText(),
+                    hashesB.path("dependency_classpath").path("sha256").asText());
+            assertEquals("Content-set hash should remain stable for the same dependency set",
+                    hashesA.path("dependency_classpath_content_set").path("sha256").asText(),
+                    hashesB.path("dependency_classpath_content_set").path("sha256").asText());
+        } finally {
+            deleteRecursively(project);
+            deleteRecursively(outputA);
+            deleteRecursively(outputB);
         }
     }
 
@@ -274,6 +469,65 @@ public class ProjectAnalyzerTest {
                 .bytecodeOrigin("preexisting")
                 .analysisCanProceed(true)
                 .build();
+    }
+
+    private static ProjectMetadata manifestMetadataWithDependencies(Path project, List<Path> dependencyClasspath) {
+        return new ProjectMetadata.Builder()
+                .projectName(project.getFileName().toString())
+                .projectPath(project)
+                .buildSystem("none")
+                .javaVersion("unknown")
+                .sourceRoot(project)
+                .sourceRoots(List.of())
+                .testSourceRoots(List.of())
+                .classpath(dependencyClasspath)
+                .mainClassOutputs(List.of())
+                .testClassOutputs(List.of())
+                .projectArtifactJars(List.of())
+                .dependencyClasspath(dependencyClasspath)
+                .compileStatus("BUILD DENIED; NO PROJECT BYTECODE")
+                .buildPolicy(ContextRequest.BuildPolicy.DENY_BUILD)
+                .bytecodeAvailable(false)
+                .bytecodeOrigin("none")
+                .analysisCanProceed(false)
+                .build();
+    }
+
+    private static void createBrokenMavenProjectWithStaleBytecode(Path project) throws IOException {
+        Files.writeString(project.resolve("pom.xml"), """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <project xmlns="http://maven.apache.org/POM/4.0.0">
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>demo</groupId>
+                  <artifactId>broken</artifactId>
+                  <version>1.0-SNAPSHOT</version>
+                  <properties>
+                    <maven.compiler.release>17</maven.compiler.release>
+                  </properties>
+                </project>
+                """);
+        Files.createDirectories(project.resolve("src/main/java/demo"));
+        Files.writeString(project.resolve("src/main/java/demo/Broken.java"),
+                "package demo; public class Broken { syntax error }\n");
+        Files.createDirectories(project.resolve("target/classes/demo"));
+        Files.write(project.resolve("target/classes/demo/Broken.class"), new byte[] {0, 1, 2, 3});
+    }
+
+    private static String requestHash(ContextRequest request) throws Exception {
+        Orchestrator orchestrator = new Orchestrator(request);
+        Method method = Orchestrator.class.getDeclaredMethod("requestHash");
+        method.setAccessible(true);
+        return String.valueOf(method.invoke(orchestrator));
+    }
+
+    private static void run(Path cwd, String... command) throws IOException, InterruptedException {
+        Process process = new ProcessBuilder(command)
+                .directory(cwd.toFile())
+                .redirectErrorStream(true)
+                .start();
+        if (!process.waitFor(10, java.util.concurrent.TimeUnit.SECONDS) || process.exitValue() != 0) {
+            throw new IOException("Command failed: " + String.join(" ", command));
+        }
     }
 
     private static void deleteRecursively(Path root) throws IOException {

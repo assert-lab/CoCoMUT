@@ -22,7 +22,8 @@ public final class ContextRequest {
     public enum BuildPolicy {
         DENY_BUILD,
         ALLOW_UNSANDBOXED_BUILD,
-        EXTERNALLY_SANDBOXED_BUILD
+        EXTERNALLY_SANDBOXED_BUILD,
+        ALLOW_PREEXISTING_BYTECODE_AFTER_BUILD_FAILURE
     }
 
     private final Path projectRoot;
@@ -66,10 +67,10 @@ public final class ContextRequest {
                 ? builder.outputDirectory.toAbsolutePath().normalize()
                 : null;
         this.buildPolicy = Objects.requireNonNull(builder.buildPolicy, "buildPolicy cannot be null");
-        this.classOutputDirs = normalizePaths(builder.classOutputDirs);
-        this.projectJars = normalizePaths(builder.projectJars);
-        this.dependencyJars = normalizePaths(builder.dependencyJars);
-        this.classpathFiles = normalizePaths(builder.classpathFiles);
+        this.classOutputDirs = normalizePaths(builder.classOutputDirs, this.projectRoot);
+        this.projectJars = normalizePaths(builder.projectJars, this.projectRoot);
+        this.dependencyJars = normalizePaths(builder.dependencyJars, this.projectRoot);
+        this.classpathFiles = normalizePaths(builder.classpathFiles, this.projectRoot);
     }
 
     public static Builder builder() {
@@ -359,6 +360,11 @@ public final class ContextRequest {
             return this;
         }
 
+        public Builder allowPreexistingBytecodeAfterBuildFailure() {
+            this.buildPolicy = BuildPolicy.ALLOW_PREEXISTING_BYTECODE_AFTER_BUILD_FAILURE;
+            return this;
+        }
+
         public Builder classOutputDirs(Set<Path> classOutputDirs) {
             this.classOutputDirs = classOutputDirs == null ? new LinkedHashSet<>() : new LinkedHashSet<>(classOutputDirs);
             return this;
@@ -468,14 +474,15 @@ public final class ContextRequest {
         }
     }
 
-    private static Set<Path> normalizePaths(Set<Path> values) {
+    private static Set<Path> normalizePaths(Set<Path> values, Path projectRoot) {
         if (values == null || values.isEmpty()) {
             return Set.of();
         }
         LinkedHashSet<Path> normalized = new LinkedHashSet<>();
         for (Path value : values) {
             if (value != null) {
-                normalized.add(value.toAbsolutePath().normalize());
+                Path resolved = value.isAbsolute() ? value : projectRoot.resolve(value);
+                normalized.add(resolved.toAbsolutePath().normalize());
             }
         }
         return Collections.unmodifiableSet(normalized);

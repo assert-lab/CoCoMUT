@@ -47,6 +47,11 @@ final class Orchestrator {
     private Set<SymbolTarget> targetFilters = Set.of();
     private Path outputDirectory;
     private ProjectMetadata providedProjectMetadata;
+    private ContextRequest.BuildPolicy buildPolicy = ContextRequest.BuildPolicy.DENY_BUILD;
+    private Set<Path> explicitClassOutputDirs = Set.of();
+    private Set<Path> explicitProjectJars = Set.of();
+    private Set<Path> explicitDependencyJars = Set.of();
+    private Set<Path> explicitClasspathFiles = Set.of();
 
     // Pipeline state passed between phases
     private ProjectMetadata projectMetadata;
@@ -80,6 +85,11 @@ final class Orchestrator {
         this.excludePathGlobs = request.excludePathGlobs();
         this.targetFilters = request.targets();
         this.outputDirectory = request.outputDirectory();
+        this.buildPolicy = request.buildPolicy();
+        this.explicitClassOutputDirs = request.classOutputDirs();
+        this.explicitProjectJars = request.projectJars();
+        this.explicitDependencyJars = request.dependencyJars();
+        this.explicitClasspathFiles = request.classpathFiles();
     }
 
     Orchestrator(ContextRequest request, ProjectMetadata metadata) {
@@ -195,7 +205,12 @@ final class Orchestrator {
             if (providedProjectMetadata != null) {
                 projectMetadata = providedProjectMetadata;
             } else {
-                ProjectAnalyzer analyzer = new ProjectAnalyzer(projectPath, true, "auto", includeTestBytecode());
+                ProjectAnalyzer analyzer = new ProjectAnalyzer(projectPath, true, "auto", includeTestBytecode(),
+                        buildPolicy,
+                        explicitClassOutputDirs,
+                        explicitProjectJars,
+                        explicitDependencyJars,
+                        explicitClasspathFiles);
                 projectMetadata = analyzer.analyze();
             }
 
@@ -232,8 +247,7 @@ final class Orchestrator {
 
             if (!projectMetadata.isAnalysisCanProceed()) {
                 failureCodes.add(FailureCode.BUILD_FAILED);
-                executionReport.put("phase_1_error",
-                        "CoCoMUT requires compiled project bytecode. Build the project or provide compiled class files.");
+                executionReport.put("phase_1_error", projectMetadata.getCompileStatus());
                 return false;
             }
             if (projectBytecodeLocations().isEmpty()) {
@@ -261,6 +275,7 @@ final class Orchestrator {
         }
         List<Path> locations = new ArrayList<>();
         locations.addAll(projectMetadata.getMainClassOutputs());
+        locations.addAll(projectMetadata.getTestClassOutputs());
         locations.addAll(projectMetadata.getProjectArtifactJars());
         return locations;
     }
@@ -537,9 +552,6 @@ final class Orchestrator {
             executionReport.put("phase_5_jsonl_rows", jsonlRows);
             executionReport.put("phase_5_files_generated", jsonlRows);
             executionReport.put("phase_5_call_edges_serialized", serializedCallEdgeCount(methodContexts));
-            Path manifestPath = ExtractionManifest.write(root, projectMetadata, projectModel,
-                    selectionProvenance(), requestHash(), jsonlPath, executionReport);
-            executionReport.put("extraction_manifest_file", manifestPath.toString());
             if (jsonlRows != methodContexts.size() || jsonlRows != methodInfos.size()) {
                 failureCodes.add(FailureCode.JSON_GENERATION_FAILED);
                 executionReport.put("phase_5_warning",
@@ -871,7 +883,9 @@ final class Orchestrator {
 
     private String requestHash() {
         Map<String, Object> request = new LinkedHashMap<>();
-        request.put("project", projectPath.toAbsolutePath().normalize().toString());
+        request.put("schema", "cocomut-request-v2");
+        request.put("project_selector", "project-root");
+        request.put("project_name", projectName());
         request.put("scope", scope.toString());
         request.put("source_sets", sourceSets.stream().sorted().toList());
         request.put("packages", packageFilters.stream().sorted().toList());
@@ -884,12 +898,86 @@ final class Orchestrator {
         request.put("max_methods", maxMethods);
         request.put("max_source_files", maxSourceFiles);
         request.put("call_graph", callGraphAlgorithm.toString());
+        request.put("build_policy", buildPolicy.toString());
+        request.put("class_outputs", artifactIdentities(explicitClassOutputDirs));
+        request.put("project_jars", artifactIdentities(explicitProjectJars));
+        request.put("dependency_jars", artifactIdentities(explicitDependencyJars));
+        request.put("classpath_files", artifactIdentities(explicitClasspathFiles));
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(OBJECT_MAPPER.writeValueAsBytes(request));
             return HexFormat.of().formatHex(digest);
         } catch (Exception e) {
-            return Integer.toHexString(request.hashCode());
+            return sha256Hex("cocomut-request-fallback|" + request);
+        }
+    }
+
+    private static String sha256Hex(String value) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception impossible) {
+            return "0".repeat(64);
+        }
+    }
+
+    private List<String> artifactIdentities(Set<Path> paths) {
+        return (paths == null ? Set.<Path>of() : paths).stream()
+                .filter(Objects::nonNull)
+                .map(path -> artifactIdentity(path.toAbsolutePath().normalize()))
+                .sorted()
+                .toList();
+    }
+
+    private String artifactIdentity(Path path) {
+        String rolePath = stableRequestPath(path);
+        String content = contentDigest(path);
+        return rolePath + ":" + content;
+    }
+
+    private String stableRequestPath(Path path) {
+        Path root = projectPath.toAbsolutePath().normalize();
+        try {
+            if (path.startsWith(root)) {
+                return "project:" + root.relativize(path).toString().replace('\\', '/');
+            }
+        } catch (Exception ignored) {
+            // Fall through to location-independent external identity.
+        }
+        Path name = path.getFileName();
+        return "external:" + (name == null ? "artifact" : name.toString());
+    }
+
+    private static String contentDigest(Path path) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            if (Files.isRegularFile(path)) {
+                try (var input = Files.newInputStream(path)) {
+                    byte[] buffer = new byte[8192];
+                    int read;
+                    while ((read = input.read(buffer)) >= 0) {
+                        digest.update(buffer, 0, read);
+                    }
+                }
+                return HexFormat.of().formatHex(digest.digest());
+            }
+            if (Files.isDirectory(path)) {
+                try (var walk = Files.walk(path)) {
+                    for (Path file : walk.filter(Files::isRegularFile)
+                            .sorted(Comparator.comparing(p -> path.relativize(p).toString()))
+                            .toList()) {
+                        digest.update(path.relativize(file).toString().replace('\\', '/')
+                                .getBytes(StandardCharsets.UTF_8));
+                        digest.update((byte) 0);
+                        digest.update(Files.readAllBytes(file));
+                        digest.update((byte) 0);
+                    }
+                }
+                return HexFormat.of().formatHex(digest.digest());
+            }
+            return "missing";
+        } catch (Exception e) {
+            return "error:" + e.getClass().getSimpleName();
         }
     }
 

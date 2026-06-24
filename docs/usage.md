@@ -143,6 +143,10 @@ Useful options:
                                 execution on the host
 --externally-sandboxed-build   Allow Maven/Gradle and record that the caller
                                 provided external sandboxing
+--allow-preexisting-bytecode-after-build-failure
+                                Attempt Maven/Gradle, but allow analysis to
+                                continue with pre-existing bytecode if that
+                                attempted build fails
 --class-output DIR             Project class-output directory, repeatable or
                                 comma-separated
 --project-jar JAR              Project artifact JAR, repeatable or comma-separated
@@ -166,6 +170,11 @@ directories and dependency JARs are collected after that build from the project
 build tool, not by scanning arbitrary global dependency caches. Dependency JARs
 help resolve types and call targets but do not satisfy the project-bytecode
 requirement by themselves.
+
+If an attempted build fails, CoCoMUT fails the extraction by default even when
+stale bytecode is present. Continuing with pre-existing bytecode after a failed
+build is a deliberate, risky policy and requires
+`--allow-preexisting-bytecode-after-build-failure`.
 
 Build execution runs the subject repository's Maven or Gradle build logic. For
 untrusted public repositories, keep the default denied-build policy and provide
@@ -229,11 +238,12 @@ Layered selection is available when you do not want the whole repository:
 ```
 
 Repository-wide extraction writes a request-hashed JSONL file such as
-`method_contexts__4987c243.jsonl`. Package, class, or method-filtered extraction
+`method_contexts__4987c2439a31f002.jsonl`. Package, class, or method-filtered extraction
 writes a distinguishable JSONL filename based on the selected target plus the
-same request hash, for example `package__org.example.api__4987c243.jsonl`,
-`class__org.example.PublicApi__4987c243.jsonl`, or
-`method__parse__4987c243.jsonl`.
+same 16-character request-hash prefix, for example
+`package__org.example.api__4987c2439a31f002.jsonl`,
+`class__org.example.PublicApi__4987c2439a31f002.jsonl`, or
+`method__parse__4987c2439a31f002.jsonl`.
 
 CoCoMUT supports both filter-based package/class/method selection and exact URI
 targets through `--target-uri`, `--method-uri`, `--type-uri` / `--class-uri`,
@@ -410,6 +420,7 @@ pipeline through `ContextRequest` and `ContextExtractorService`.
 | Skip build execution | `--skip-build` | `.skipBuild(true)` |
 | Allow host build | `--allow-build` | `.allowUnsandboxedBuild()` |
 | Externally sandboxed build | `--externally-sandboxed-build` | `.externallySandboxedBuild()` |
+| Allow stale bytecode after failed build | `--allow-preexisting-bytecode-after-build-failure` | `.allowPreexistingBytecodeAfterBuildFailure()` |
 | Project class output | `--class-output target/classes` | `.classOutputDir(Path.of("target/classes"))` |
 | Project JAR | `--project-jar target/app.jar` | `.projectJar(Path.of("target/app.jar"))` |
 | Dependency JAR | `--dependency-jar lib.jar` | `.dependencyJar(Path.of("lib.jar"))` |

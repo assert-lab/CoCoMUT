@@ -106,8 +106,10 @@ final class ExtractionManifest {
         hashes.set("combined_project_bytecode", hashNode(hashPaths("combined_project_bytecode", projectPath,
                 metadata != null ? concat(metadata.getMainClassOutputs(), metadata.getTestClassOutputs(),
                         metadata.getProjectArtifactJars()) : List.of())));
-        hashes.set("dependency_classpath", hashNode(hashPaths("dependency_classpath", projectPath,
+        hashes.set("dependency_classpath", hashNode(hashPaths("dependency_classpath_ordered", projectPath,
                 metadata != null ? metadata.getDependencyClasspath() : List.of())));
+        hashes.set("dependency_classpath_content_set", hashNode(hashPaths("dependency_classpath_content_set", projectPath,
+                metadata != null ? metadata.getDependencyClasspath() : List.of(), false)));
         hashes.set("emitted_jsonl", hashNode(hashSingleFile("emitted_jsonl", jsonlPath)));
 
         Path manifest = outputRoot.resolve("extraction_manifest.json");
@@ -138,7 +140,7 @@ final class ExtractionManifest {
                 relative(root.output(), projectRoot),
                 remote.ok() ? sanitizeRemote(remote.output()) : "",
                 commit.ok() ? commit.output() : "",
-                status.ok() ? status.output().isBlank() : null,
+                status.ok() ? !status.output().isBlank() : null,
                 firstError(commit, status, remote));
     }
 
@@ -258,13 +260,20 @@ final class ExtractionManifest {
     }
 
     private static HashResult hashPaths(String role, Path stableRoot, List<Path> paths) {
+        return hashPaths(role, stableRoot, paths, true);
+    }
+
+    private static HashResult hashPaths(String role, Path stableRoot, List<Path> paths, boolean preserveOrder) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            List<Path> normalized = (paths == null ? List.<Path>of() : paths).stream()
+            java.util.stream.Stream<Path> stream = (paths == null ? List.<Path>of() : paths).stream()
                     .filter(Objects::nonNull)
-                    .map(path -> path.toAbsolutePath().normalize())
-                    .sorted(Comparator.comparing(Path::toString))
-                    .toList();
+                    .map(path -> path.toAbsolutePath().normalize());
+            List<Path> normalized = preserveOrder
+                    ? stream.distinct().toList()
+                    : stream.distinct()
+                            .sorted(Comparator.comparing(path -> stableArtifactLabel(stableRoot, path)))
+                            .toList();
             if (normalized.isEmpty()) {
                 return new HashResult(role, null, "empty", List.of());
             }
@@ -298,9 +307,11 @@ final class ExtractionManifest {
     private static String fileEntryName(Path stableRoot, Path file) {
         if (stableRoot != null) {
             try {
-                return stableRoot.toAbsolutePath().normalize()
-                        .relativize(file.toAbsolutePath().normalize())
-                        .toString();
+                Path root = stableRoot.toAbsolutePath().normalize();
+                Path normalized = file.toAbsolutePath().normalize();
+                if (normalized.startsWith(root)) {
+                    return root.relativize(normalized).toString();
+                }
             } catch (Exception ignored) {
                 // Use stable file name below for external artifacts.
             }
@@ -325,6 +336,22 @@ final class ExtractionManifest {
                 digest.update(buffer, 0, read);
             }
         }
+    }
+
+    private static String stableArtifactLabel(Path stableRoot, Path path) {
+        if (stableRoot != null) {
+            try {
+                Path root = stableRoot.toAbsolutePath().normalize();
+                Path normalized = path.toAbsolutePath().normalize();
+                if (normalized.startsWith(root)) {
+                    return "project:" + root.relativize(normalized).toString().replace('\\', '/');
+                }
+            } catch (Exception ignored) {
+                // Fall through to path-independent external label.
+            }
+        }
+        Path fileName = path.getFileName();
+        return "external:" + (fileName == null ? "artifact" : fileName.toString());
     }
 
     private static ObjectNode hashNode(HashResult result) {

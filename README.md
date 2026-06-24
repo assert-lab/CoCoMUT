@@ -55,12 +55,13 @@ Run CoCoMUT on a Java project:
 ./bin/cocomut \
   --project /path/to/java/project \
   --scope entry-points \
-  --source-set main
+  --source-set main \
+  --allow-build
 ```
 
-The project must compile, or the checkout must already contain usable project
-class files, conventional build output directories, or project JARs for static
-bytecode analysis.
+Use `--allow-build` only for trusted checkouts. For untrusted repositories,
+compile elsewhere and pass explicit artifacts instead, for example
+`--skip-build --class-output target/classes`.
 
 The default output goes to:
 

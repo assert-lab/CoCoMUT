@@ -169,7 +169,7 @@ public class OrchestratorTest {
             assertEquals(1, report.get("failed_at_phase"));
             assertEquals(false, report.get("phase_1_compiles"));
             assertEquals(true, report.get("phase_1_source_available"));
-            assertTrue(String.valueOf(report.get("phase_1_error")).contains("compiled project bytecode"));
+            assertTrue(String.valueOf(report.get("phase_1_error")).contains("NO PROJECT BYTECODE"));
             assertTrue(Files.isRegularFile(Path.of(String.valueOf(report.get("extraction_report_file")))));
         } finally {
             deleteRecursively(project);
@@ -212,9 +212,10 @@ public class OrchestratorTest {
             Orchestrator testOnly = new Orchestrator(ContextRequest.builder()
                     .projectRoot(project)
                     .sourceSets(java.util.Set.of("test"))
+                    .allowUnsandboxedBuild()
                     .build());
 
-            assertTrue(testOnly.execute());
+            assertTrue(String.valueOf(testOnly.getExecutionReport()), testOnly.execute());
             assertEquals("SUCCESS", testOnly.getExecutionReport().get("status"));
             assertTrue(testOnly.getMethodInfos().stream()
                     .anyMatch(method -> "test".equals(method.getSourceSet())

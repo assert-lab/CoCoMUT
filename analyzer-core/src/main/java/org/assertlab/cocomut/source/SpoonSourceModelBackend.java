@@ -359,7 +359,8 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
         List<String> entries = new ArrayList<>();
         project.classOutputDirs().forEach(path -> entries.add(path.toString()));
-        project.dependencyJars().forEach(path -> entries.add(path.toString()));
+        project.projectArtifactJars().forEach(path -> entries.add(path.toString()));
+        project.dependencyClasspath().forEach(path -> entries.add(path.toString()));
         return entries;
     }
 
@@ -1429,7 +1430,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     private static ClassLoader projectClassLoader(ProjectModel project) {
         try {
             List<URL> urls = new ArrayList<>();
-            java.util.stream.Stream.concat(project.classOutputDirs().stream(), project.dependencyJars().stream())
+            java.util.stream.Stream.concat(project.classOutputDirs().stream(), project.dependencyClasspath().stream())
                     .distinct()
                     .filter(Files::exists)
                     .map(path -> {

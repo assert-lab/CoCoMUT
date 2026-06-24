@@ -59,7 +59,7 @@ public class ProjectAnalyzer {
 
     public ProjectAnalyzer(Path projectPath, boolean autoDetectJavaVersion, String buildSystem, boolean includeTests) {
         this(projectPath, autoDetectJavaVersion, buildSystem, includeTests,
-                ContextRequest.BuildPolicy.ALLOW_UNSANDBOXED_BUILD, Set.of(), Set.of(), Set.of(), Set.of());
+                ContextRequest.BuildPolicy.DENY_BUILD, Set.of(), Set.of(), Set.of(), Set.of());
     }
 
     public ProjectAnalyzer(ContextRequest request) {
@@ -129,9 +129,11 @@ public class ProjectAnalyzer {
                 existingJars(explicitProjectJars));
         List<Path> classpath = combinedClasspath(sourceRoot, mainClassOutputs, testClassOutputs,
                 projectArtifactJars, dependencyClasspath);
-        boolean bytecodeAvailable = !mainClassOutputs.isEmpty() || !projectArtifactJars.isEmpty();
+        boolean bytecodeAvailable = !mainClassOutputs.isEmpty()
+                || !testClassOutputs.isEmpty()
+                || !projectArtifactJars.isEmpty();
         String bytecodeOrigin = bytecodeOrigin(explicitProjectBytecode, buildResult, bytecodeAvailable);
-        boolean analysisCanProceed = bytecodeAvailable;
+        boolean analysisCanProceed = bytecodeAvailable && canTrustBytecodeForAnalysis(buildResult);
 
         String projectName = projectPath.getFileName().toString();
 
@@ -148,7 +150,7 @@ public class ProjectAnalyzer {
                 .testClassOutputs(testClassOutputs)
                 .projectArtifactJars(projectArtifactJars)
                 .dependencyClasspath(dependencyClasspath)
-                .compiles(analysisCanProceed)
+                .compiles(buildResult.succeeded())
                 .compileStatus(compileStatus(buildResult, bytecodeAvailable))
                 .buildAttempted(buildResult.attempted())
                 .buildExitCode(buildResult.exitCode())
@@ -169,6 +171,16 @@ public class ProjectAnalyzer {
 
     private boolean explicitMode(boolean explicitProjectBytecode) {
         return buildPolicy == ContextRequest.BuildPolicy.DENY_BUILD && explicitProjectBytecode;
+    }
+
+    private boolean canTrustBytecodeForAnalysis(BuildResult buildResult) {
+        if (!buildResult.attempted()) {
+            return true;
+        }
+        if (buildResult.succeeded()) {
+            return true;
+        }
+        return buildPolicy == ContextRequest.BuildPolicy.ALLOW_PREEXISTING_BYTECODE_AFTER_BUILD_FAILURE;
     }
 
     private static boolean includeTestBytecode(ContextRequest request) {
@@ -533,15 +545,6 @@ public class ProjectAnalyzer {
      */
     private List<Path> buildGradleClasspath() throws IOException {
         List<Path> jars = new ArrayList<>();
-
-        // Check build/libs directory
-        Path buildLibs = projectPath.resolve("build/libs");
-        if (Files.exists(buildLibs)) {
-            try (var stream = Files.list(buildLibs)) {
-                stream.filter(p -> p.toString().endsWith(".jar"))
-                        .forEach(jars::add);
-            }
-        }
 
         boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
         String gradle = executableWithWrapper("gradle", isWindows);

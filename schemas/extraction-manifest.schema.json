@@ -84,7 +84,13 @@
         "sandboxed": { "type": "boolean" },
         "status": { "type": "string" },
         "policy": {
-          "enum": ["DENY_BUILD", "ALLOW_UNSANDBOXED_BUILD", "EXTERNALLY_SANDBOXED_BUILD", "UNKNOWN"]
+          "enum": [
+            "DENY_BUILD",
+            "ALLOW_UNSANDBOXED_BUILD",
+            "EXTERNALLY_SANDBOXED_BUILD",
+            "ALLOW_PREEXISTING_BYTECODE_AFTER_BUILD_FAILURE",
+            "UNKNOWN"
+          ]
         },
         "bytecode_available": { "type": "boolean" },
         "bytecode_origin": { "enum": ["generated_this_run", "preexisting", "explicit", "none"] },
@@ -129,6 +135,7 @@
         "test_bytecode",
         "combined_project_bytecode",
         "dependency_classpath",
+        "dependency_classpath_content_set",
         "emitted_jsonl"
       ],
       "properties": {
@@ -138,6 +145,7 @@
         "test_bytecode": { "$ref": "#/$defs/hashEntry" },
         "combined_project_bytecode": { "$ref": "#/$defs/hashEntry" },
         "dependency_classpath": { "$ref": "#/$defs/hashEntry" },
+        "dependency_classpath_content_set": { "$ref": "#/$defs/hashEntry" },
         "emitted_jsonl": { "$ref": "#/$defs/hashEntry" }
       }
     }
