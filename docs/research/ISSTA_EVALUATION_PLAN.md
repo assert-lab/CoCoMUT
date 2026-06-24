@@ -1,5 +1,12 @@
 # ISSTA Evaluation Plan
 
+> **Deprecated plan. Do not follow this evaluation plan.**
+>
+> This document is kept only as a historical draft from an earlier evaluation
+> direction. We will not use this plan for the paper or the artifact evaluation.
+> Future evaluation work should be written in a new document that matches the
+> current compiled-bytecode requirement and the final study design.
+
 CoCoMUT does not have a complete oracle for arbitrary Java repositories: for a
 real project, there is usually no trusted external file that says exactly which
 methods, documentation links, bytecode targets, and source joins should appear
