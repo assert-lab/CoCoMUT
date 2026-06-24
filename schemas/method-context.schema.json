@@ -120,7 +120,10 @@
           "type": "array",
           "items": {"$ref": "#/$defs/javadocReference"}
         },
-        "file_references": {"type": "array"},
+        "file_references": {
+          "type": "array",
+          "description": "Auxiliary documentation file/path references. Entries include parser, parse_confidence, source_form, containment-checked resolved_path, and exists."
+        },
         "structured_tags": {
           "type": "object",
           "description": "Parser-backed param/return/throws/since/apiNote/implSpec/implNote/deprecated tags. Includes parser and parse_confidence."
@@ -208,6 +211,10 @@
         "spoon_reference": {
           "type": "string",
           "description": "Spoon-javadoc typed reference rendering when available."
+        },
+        "raw_pairing_confidence": {
+          "type": "string",
+          "description": "Confidence for pairing legacy raw target spelling with Spoon's typed reference; low/none pairings do not drive semantic resolution."
         },
         "kind": {"type": "string"},
         "resolution": {"type": "string"},

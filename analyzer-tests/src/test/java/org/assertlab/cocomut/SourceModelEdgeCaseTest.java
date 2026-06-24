@@ -348,6 +348,7 @@ public class SourceModelEdgeCaseTest {
                          * @see Arrays#sort(byte[])
                          * @see Long#MIN_VALUE
                          * @see Pattern#DOTALL
+                         * @since 2.0
                          * @see "Reference text without a generated link"
                          */
                         public void focal() {
@@ -381,6 +382,14 @@ public class SourceModelEdgeCaseTest {
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> refs = (List<Map<String, Object>>) context.javadocMetadata()
                     .get("javadoc_references");
+
+            @SuppressWarnings("unchecked")
+            List<String> seeTargets = (List<String>) context.javadocMetadata().get("see");
+            assertTrue("Legacy see metadata should be Spoon-derived and include complete multiline signatures",
+                    seeTargets.toString().contains("sameName(java.lang.String,int)"));
+            assertFalse("Legacy see metadata should not keep line-truncated target fragments",
+                    seeTargets.toString().contains("#sameName(String,"));
+            assertTrue(context.javadocMetadata().get("since").toString().contains("2.0"));
 
             Map<String, Object> ambiguous = referenceByTarget(refs, "#sameName");
             assertEquals("overload_ambiguous", ambiguous.get("resolution"));
@@ -526,6 +535,93 @@ public class SourceModelEdgeCaseTest {
     }
 
     @Test
+    public void javadocFileReferencesCarryParserProvenanceAndStayInsideProject() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-javadoc-file-references");
+        Path outsideSecret = project.getParent().resolve(project.getFileName() + "-secret.txt");
+        try {
+            write(project.resolve("src/main/java/demo/doc-files/protocol.html"), "<html>protocol</html>");
+            write(project.resolve("src/main/java/demo/doc-files/diagram.svg"), "<svg></svg>");
+            write(project.resolve("src/main/java/demo/examples/Usage.java"), """
+                    package demo.examples;
+                    public class Usage {}
+                    """);
+            write(project.resolve("src/main/java/demo/examples/Sample.java"), """
+                    package demo.examples;
+                    public class Sample {}
+                    """);
+            write(project.resolve("src/main/java/demo/examples/ParseExample.java"), """
+                    package demo.examples;
+                    public class ParseExample {}
+                    """);
+            Files.writeString(outsideSecret, "outside", StandardCharsets.UTF_8);
+            write(project.resolve("src/main/java/demo/FileDocs.java"), """
+                    package demo;
+
+                    public class FileDocs {
+                        /**
+                         * See {@docRoot}/doc-files/protocol.html.
+                         * See doc-files/diagram.svg.
+                         * See examples/Usage.java.
+                         * @filename examples/Sample.java
+                         * {@snippet file="examples/ParseExample.java" region="main"}
+                         * Do not resolve ../../../../../%s.
+                         */
+                        public void files() {
+                        }
+                    }
+                    """.formatted(outsideSecret.getFileName()));
+
+            compileProject(project);
+            ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
+            SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
+                    .filter(method -> method.className().equals("demo.FileDocs"))
+                    .filter(method -> method.methodName().equals("files"))
+                    .findFirst()
+                    .orElseThrow();
+
+            SourceContext context = SourceBackends.spoon()
+                    .extractContext(model, focal.methodUri())
+                    .orElseThrow();
+
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> files = (List<Map<String, Object>>) context.javadocMetadata()
+                    .get("file_references");
+
+            Map<String, Object> protocol = fileReferenceByPath(files, "doc-files/protocol.html");
+            assertEquals("html", protocol.get("kind"));
+            assertEquals("cocomut-file-regex", protocol.get("parser"));
+            assertEquals("low", protocol.get("parse_confidence"));
+            assertEquals("doc_root", protocol.get("source_form"));
+            assertEquals(true, protocol.get("exists"));
+
+            Map<String, Object> diagram = fileReferenceByPath(files, "doc-files/diagram.svg");
+            assertEquals("image", diagram.get("kind"));
+            assertEquals("doc_files", diagram.get("source_form"));
+            assertEquals(true, diagram.get("exists"));
+
+            Map<String, Object> usage = fileReferenceByPath(files, "examples/Usage.java");
+            assertEquals("sample_source", usage.get("kind"));
+            assertEquals("regex_text", usage.get("source_form"));
+            assertEquals(true, usage.get("exists"));
+
+            Map<String, Object> filename = fileReferenceByPath(files, "examples/Sample.java");
+            assertEquals("filename_tag", filename.get("source_form"));
+            assertEquals(true, filename.get("exists"));
+
+            Map<String, Object> snippet = fileReferenceByPath(files, "examples/ParseExample.java");
+            assertEquals("snippet_file_attribute", snippet.get("source_form"));
+            assertEquals(true, snippet.get("exists"));
+
+            Map<String, Object> traversal = fileReferenceByPath(files, "../../../../../" + outsideSecret.getFileName());
+            assertEquals(false, traversal.get("exists"));
+            assertEquals("", traversal.get("resolved_path"));
+        } finally {
+            Files.deleteIfExists(outsideSecret);
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void spoonBackendUsesClasspathWhenCompiledClassesExist() throws Exception {
         TestFixtures.ensureMinimalMavenProjectCompiled();
         ProjectMetadata metadata = new ProjectAnalyzer(TestFixtures.minimalMavenProjectRoot()).analyze();
@@ -601,6 +697,13 @@ public class SourceModelEdgeCaseTest {
         return references.stream()
                 .filter(reference -> target.equals(reference.get("target")))
                 .filter(reference -> tag.equals(reference.get("tag")))
+                .findFirst()
+                .orElseThrow();
+    }
+
+    private static Map<String, Object> fileReferenceByPath(List<Map<String, Object>> references, String path) {
+        return references.stream()
+                .filter(reference -> path.equals(reference.get("path")))
                 .findFirst()
                 .orElseThrow();
     }

@@ -220,6 +220,7 @@ spoon_reference      typed Spoon reference rendering used for semantic resolutio
 reference_target_kind method|field|type|url|text|method_or_field|unknown
 reference_domain    project|external_jdk|external_library|external_web|text|unresolved
 reference_scope     same_type|same_package|same_module|external|text|unknown
+raw_pairing_confidence low|none when raw spelling could not be paired confidently
 method_uri           present for resolved project methods
 field_uri            present for resolved project fields
 type_uri             present for resolved project types
@@ -237,6 +238,13 @@ whether `@see` points to the same type, another type in the same package, a
 different project package, an external JDK/library symbol, a web URL, or a text
 reference. They do not replace canonical CoCoMUT URIs for resolved project
 symbols.
+
+Auxiliary documentation file paths are reported separately under
+`javadoc_metadata.file_references`. They are not program-element references.
+Each file-reference entry includes `parser=cocomut-file-regex`,
+`parse_confidence=low`, a `source_form` marker such as `doc_root`,
+`doc_files`, `filename_tag`, `snippet_file_attribute`, or `regex_text`, and a
+project-root-contained `resolved_path` when one can be safely formed.
 
 For project-local method references, `referenced_method` intentionally embeds a
 compact method context rather than only an excerpt. It includes the referenced

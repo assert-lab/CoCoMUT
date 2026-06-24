@@ -9,8 +9,8 @@ for a single project such as Apache Commons Lang.
 
 ## Supported Tags
 
-CoCoMUT extracts structured metadata for common block and inline tags used in
-method documentation:
+CoCoMUT extracts structured metadata for common block tags used in method
+documentation:
 
 - `@param`
 - `@return`
@@ -21,6 +21,11 @@ method documentation:
 - `@implSpec`
 - `@implNote`
 - `@see`
+
+CoCoMUT also parses common inline tags as part of rendered text, reference
+metadata, and documentation metrics. They are not emitted as first-class
+`structured_tags` objects unless the schema names them explicitly:
+
 - `{@link ...}`
 - `{@linkplain ...}`
 - `{@code ...}`
@@ -80,14 +85,22 @@ additional Javadoc syntax and should not replace canonical method/type/field
 URIs when a project-local target is resolved.
 
 CoCoMUT keeps a fallback text parser only for cases where `spoon-javadoc` cannot
-produce reference or structured-tag elements. Fallback objects are emitted for
-coverage and auditability, but are marked with `parser=cocomut-fallback` and
-low confidence.
+produce reference or structured-tag elements. If Spoon parses some references
+but misses a raw reference that CoCoMUT's compatibility scanner can recognize,
+the fallback object is still emitted for coverage and auditability, marked with
+`parser=cocomut-fallback`, `parse_confidence=low`, and a fallback reason.
 
 When `spoon-javadoc` produces a typed `CtReference`, CoCoMUT resolves semantics
 from that typed Spoon reference rather than reparsing `target`. The raw
 `target` field remains the source spelling for audit and compatibility; it is
 not the authoritative semantic identity when `spoon_reference` is present.
+
+Auxiliary documentation files such as `doc-files/...`, `{@docRoot}/...`,
+`@filename ...`, and `{@snippet file="..."}` are recorded under
+`file_references`. These are path references, not program-element references.
+They use conservative project-root containment checks and include
+`parser=cocomut-file-regex`, `parse_confidence=low`, and a `source_form` marker
+describing the recognized textual form.
 
 ## Resolution Policy
 

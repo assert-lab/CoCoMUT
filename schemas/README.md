@@ -63,10 +63,11 @@ selection. See
 Important `javadoc_metadata` fields:
 
 ```text
-see                       Raw @see targets
-inline_links              Raw inline {@link ...}/{@linkplain ...} targets
+see                       Spoon-derived @see targets, with fallback raw targets when parsing fails
+inline_links              Inline {@link ...}/{@linkplain ...} targets
 javadoc_references        Resolved reference objects for @see/link/linkplain targets
 file_references           Referenced doc-files/images/html/text/sample-source paths when present
+                          plus parser, parse_confidence, and source_form
 structured_tags           Parsed param/return/throws/since/apiNote/implSpec/implNote/deprecated text
                           plus parser and parse_confidence
 inheritdoc_resolution     not_used|resolved_candidate|unresolved
@@ -80,7 +81,12 @@ inherited_javadoc_candidates
 tag                       see|link|linkplain
 raw                       Raw Javadoc reference text
 target                    Parsed reference target
+canonical_target          Spoon-normalized target when it differs from target
 label                     Optional rendered-label text
+parser                    spoon-javadoc|spoon-javadoc-text-fallback|cocomut-fallback
+parse_confidence          high|medium|low
+spoon_reference           typed Spoon reference rendering when available
+raw_pairing_confidence    low/none when raw spelling was not trusted for typed resolution
 kind                      type_reference|member_reference|field_reference|external_url|text_reference
 resolution                resolved_type|resolved_method|resolved_field|
                           resolved_inherited_method|resolved_inherited_field|
@@ -117,9 +123,9 @@ HTML anchor links, and program-element references such as
 symbol lookup.
 
 Javadoc reference and structured-tag parsing uses Spoon's official
-`spoon-javadoc` parser first. CoCoMUT keeps a text fallback only when Spoon does
-not produce parseable reference/tag elements; fallback-derived objects are marked
-with `parser=cocomut-fallback` and `parse_confidence=low`.
+`spoon-javadoc` parser first. CoCoMUT keeps a text fallback for raw references
+that Spoon cannot represent; fallback-derived objects are marked with
+`parser=cocomut-fallback`, `parse_confidence=low`, and a fallback reason.
 
 External references are intentionally symbol-level only in the current schema.
 CoCoMUT does not fetch JDK/dependency source jars or generated Javadoc pages for
