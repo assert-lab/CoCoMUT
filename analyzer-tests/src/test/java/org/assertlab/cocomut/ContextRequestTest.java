@@ -68,6 +68,28 @@ public class ContextRequestTest {
     }
 
     @Test
+    public void skipBuildFalseDoesNotEnableHostBuilds() {
+        ContextRequest request = ContextRequest.builder()
+                .projectRoot(Path.of("."))
+                .skipBuild(false)
+                .build();
+
+        assertEquals(ContextRequest.BuildPolicy.DENY_BUILD, request.buildPolicy());
+    }
+
+    @Test
+    public void failedBuildFallbackIsSeparateFromBuildExecutionPolicy() {
+        ContextRequest request = ContextRequest.builder()
+                .projectRoot(Path.of("."))
+                .allowUnsandboxedBuild()
+                .allowPreexistingBytecodeAfterBuildFailure()
+                .build();
+
+        assertEquals(ContextRequest.BuildPolicy.ALLOW_UNSANDBOXED_BUILD, request.buildPolicy());
+        assertTrue(request.allowPreexistingBytecodeAfterBuildFailure());
+    }
+
+    @Test
     public void builderAcceptsChaBytecodeAnalysis() {
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(Path.of("."))

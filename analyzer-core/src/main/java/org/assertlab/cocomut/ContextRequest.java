@@ -2,6 +2,7 @@ package org.assertlab.cocomut;
 
 import java.nio.file.Path;
 import java.util.Collections;
+import java.util.List;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Objects;
@@ -22,8 +23,7 @@ public final class ContextRequest {
     public enum BuildPolicy {
         DENY_BUILD,
         ALLOW_UNSANDBOXED_BUILD,
-        EXTERNALLY_SANDBOXED_BUILD,
-        ALLOW_PREEXISTING_BYTECODE_AFTER_BUILD_FAILURE
+        EXTERNALLY_SANDBOXED_BUILD
     }
 
     private final Path projectRoot;
@@ -41,10 +41,12 @@ public final class ContextRequest {
     private final Set<SymbolTarget> targets;
     private final Path outputDirectory;
     private final BuildPolicy buildPolicy;
-    private final Set<Path> classOutputDirs;
-    private final Set<Path> projectJars;
-    private final Set<Path> dependencyJars;
-    private final Set<Path> classpathFiles;
+    private final boolean allowPreexistingBytecodeAfterBuildFailure;
+    private final List<Path> classOutputDirs;
+    private final List<Path> testClassOutputDirs;
+    private final List<Path> projectJars;
+    private final List<Path> dependencyJars;
+    private final List<Path> classpathFiles;
 
     private ContextRequest(Builder builder) {
         this.projectRoot = Objects.requireNonNull(builder.projectRoot, "projectRoot cannot be null")
@@ -67,7 +69,9 @@ public final class ContextRequest {
                 ? builder.outputDirectory.toAbsolutePath().normalize()
                 : null;
         this.buildPolicy = Objects.requireNonNull(builder.buildPolicy, "buildPolicy cannot be null");
+        this.allowPreexistingBytecodeAfterBuildFailure = builder.allowPreexistingBytecodeAfterBuildFailure;
         this.classOutputDirs = normalizePaths(builder.classOutputDirs, this.projectRoot);
+        this.testClassOutputDirs = normalizePaths(builder.testClassOutputDirs, this.projectRoot);
         this.projectJars = normalizePaths(builder.projectJars, this.projectRoot);
         this.dependencyJars = normalizePaths(builder.dependencyJars, this.projectRoot);
         this.classpathFiles = normalizePaths(builder.classpathFiles, this.projectRoot);
@@ -145,19 +149,27 @@ public final class ContextRequest {
         return buildPolicy;
     }
 
-    public Set<Path> classOutputDirs() {
+    public boolean allowPreexistingBytecodeAfterBuildFailure() {
+        return allowPreexistingBytecodeAfterBuildFailure;
+    }
+
+    public List<Path> classOutputDirs() {
         return classOutputDirs;
     }
 
-    public Set<Path> projectJars() {
+    public List<Path> testClassOutputDirs() {
+        return testClassOutputDirs;
+    }
+
+    public List<Path> projectJars() {
         return projectJars;
     }
 
-    public Set<Path> dependencyJars() {
+    public List<Path> dependencyJars() {
         return dependencyJars;
     }
 
-    public Set<Path> classpathFiles() {
+    public List<Path> classpathFiles() {
         return classpathFiles;
     }
 
@@ -177,10 +189,12 @@ public final class ContextRequest {
         private Set<SymbolTarget> targets = new LinkedHashSet<>();
         private Path outputDirectory;
         private BuildPolicy buildPolicy = BuildPolicy.DENY_BUILD;
-        private Set<Path> classOutputDirs = new LinkedHashSet<>();
-        private Set<Path> projectJars = new LinkedHashSet<>();
-        private Set<Path> dependencyJars = new LinkedHashSet<>();
-        private Set<Path> classpathFiles = new LinkedHashSet<>();
+        private boolean allowPreexistingBytecodeAfterBuildFailure;
+        private List<Path> classOutputDirs = new java.util.ArrayList<>();
+        private List<Path> testClassOutputDirs = new java.util.ArrayList<>();
+        private List<Path> projectJars = new java.util.ArrayList<>();
+        private List<Path> dependencyJars = new java.util.ArrayList<>();
+        private List<Path> classpathFiles = new java.util.ArrayList<>();
 
         public Builder projectRoot(Path projectRoot) {
             this.projectRoot = projectRoot;
@@ -341,7 +355,7 @@ public final class ContextRequest {
         }
 
         public Builder skipBuild(boolean skipBuild) {
-            this.buildPolicy = skipBuild ? BuildPolicy.DENY_BUILD : BuildPolicy.ALLOW_UNSANDBOXED_BUILD;
+            this.buildPolicy = skipBuild ? BuildPolicy.DENY_BUILD : this.buildPolicy;
             return this;
         }
 
@@ -361,12 +375,17 @@ public final class ContextRequest {
         }
 
         public Builder allowPreexistingBytecodeAfterBuildFailure() {
-            this.buildPolicy = BuildPolicy.ALLOW_PREEXISTING_BYTECODE_AFTER_BUILD_FAILURE;
+            this.allowPreexistingBytecodeAfterBuildFailure = true;
             return this;
         }
 
         public Builder classOutputDirs(Set<Path> classOutputDirs) {
-            this.classOutputDirs = classOutputDirs == null ? new LinkedHashSet<>() : new LinkedHashSet<>(classOutputDirs);
+            this.classOutputDirs = classOutputDirs == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(classOutputDirs);
+            return this;
+        }
+
+        public Builder classOutputDirs(List<Path> classOutputDirs) {
+            this.classOutputDirs = classOutputDirs == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(classOutputDirs);
             return this;
         }
 
@@ -375,8 +394,28 @@ public final class ContextRequest {
             return this;
         }
 
+        public Builder testClassOutputDirs(Set<Path> testClassOutputDirs) {
+            this.testClassOutputDirs = testClassOutputDirs == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(testClassOutputDirs);
+            return this;
+        }
+
+        public Builder testClassOutputDirs(List<Path> testClassOutputDirs) {
+            this.testClassOutputDirs = testClassOutputDirs == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(testClassOutputDirs);
+            return this;
+        }
+
+        public Builder testClassOutputDir(Path testClassOutputDir) {
+            addPath(this.testClassOutputDirs, testClassOutputDir);
+            return this;
+        }
+
         public Builder projectJars(Set<Path> projectJars) {
-            this.projectJars = projectJars == null ? new LinkedHashSet<>() : new LinkedHashSet<>(projectJars);
+            this.projectJars = projectJars == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(projectJars);
+            return this;
+        }
+
+        public Builder projectJars(List<Path> projectJars) {
+            this.projectJars = projectJars == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(projectJars);
             return this;
         }
 
@@ -386,7 +425,12 @@ public final class ContextRequest {
         }
 
         public Builder dependencyJars(Set<Path> dependencyJars) {
-            this.dependencyJars = dependencyJars == null ? new LinkedHashSet<>() : new LinkedHashSet<>(dependencyJars);
+            this.dependencyJars = dependencyJars == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(dependencyJars);
+            return this;
+        }
+
+        public Builder dependencyJars(List<Path> dependencyJars) {
+            this.dependencyJars = dependencyJars == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(dependencyJars);
             return this;
         }
 
@@ -396,7 +440,12 @@ public final class ContextRequest {
         }
 
         public Builder classpathFiles(Set<Path> classpathFiles) {
-            this.classpathFiles = classpathFiles == null ? new LinkedHashSet<>() : new LinkedHashSet<>(classpathFiles);
+            this.classpathFiles = classpathFiles == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(classpathFiles);
+            return this;
+        }
+
+        public Builder classpathFiles(List<Path> classpathFiles) {
+            this.classpathFiles = classpathFiles == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(classpathFiles);
             return this;
         }
 
@@ -467,24 +516,24 @@ public final class ContextRequest {
             return normalized;
         }
 
-        private static void addPath(Set<Path> values, Path value) {
+        private static void addPath(List<Path> values, Path value) {
             if (value != null) {
                 values.add(value);
             }
         }
     }
 
-    private static Set<Path> normalizePaths(Set<Path> values, Path projectRoot) {
+    private static List<Path> normalizePaths(List<Path> values, Path projectRoot) {
         if (values == null || values.isEmpty()) {
-            return Set.of();
+            return List.of();
         }
-        LinkedHashSet<Path> normalized = new LinkedHashSet<>();
+        java.util.ArrayList<Path> normalized = new java.util.ArrayList<>();
         for (Path value : values) {
             if (value != null) {
                 Path resolved = value.isAbsolute() ? value : projectRoot.resolve(value);
                 normalized.add(resolved.toAbsolutePath().normalize());
             }
         }
-        return Collections.unmodifiableSet(normalized);
+        return Collections.unmodifiableList(normalized);
     }
 }

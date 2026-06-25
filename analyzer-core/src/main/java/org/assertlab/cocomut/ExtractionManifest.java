@@ -41,6 +41,18 @@ final class ExtractionManifest {
                       String requestHash,
                       Path jsonlPath,
                       Map<String, Object> executionReport) throws IOException {
+        return write(outputRoot, metadata, model, selection, requestHash, jsonlPath, executionReport,
+                captureGitInfo(metadata != null ? metadata.getProjectPath() : null));
+    }
+
+    static Path write(Path outputRoot,
+                      ProjectMetadata metadata,
+                      ProjectModel model,
+                      Map<String, Object> selection,
+                      String requestHash,
+                      Path jsonlPath,
+                      Map<String, Object> executionReport,
+                      GitInfo gitAtStart) throws IOException {
         Objects.requireNonNull(outputRoot, "outputRoot cannot be null");
 
         ObjectNode root = MAPPER.createObjectNode();
@@ -59,7 +71,7 @@ final class ExtractionManifest {
         project.put("path", projectPath == null ? "" : projectPath.toAbsolutePath().normalize().toString());
         project.put("build_system", metadata != null ? metadata.getBuildSystem() : "unknown");
         project.put("java_version", metadata != null ? metadata.getJavaVersion() : "unknown");
-        project.set("git", MAPPER.valueToTree(gitInfo(projectPath)));
+        project.set("git", MAPPER.valueToTree(gitAtStart != null ? gitAtStart : captureGitInfo(projectPath)));
 
         ObjectNode build = root.putObject("build");
         build.put("attempted", metadata != null && metadata.isBuildAttempted());
@@ -70,6 +82,8 @@ final class ExtractionManifest {
         build.put("sandboxed", metadata != null && metadata.isBuildSandboxed());
         build.put("status", metadata != null ? metadata.getCompileStatus() : "NOT_ANALYZED");
         build.put("policy", metadata != null ? metadata.getBuildPolicy().toString() : "UNKNOWN");
+        build.put("allow_preexisting_bytecode_after_build_failure",
+                metadata != null && metadata.isAllowPreexistingBytecodeAfterBuildFailure());
         build.put("bytecode_available", metadata != null && metadata.isBytecodeAvailable());
         build.put("bytecode_origin", metadata != null ? metadata.getBytecodeOrigin() : "none");
         build.put("analysis_can_proceed", metadata != null && metadata.isAnalysisCanProceed());
@@ -89,6 +103,8 @@ final class ExtractionManifest {
                 metadata != null ? metadata.getDependencyClasspath() : List.of()));
         artifacts.set("explicit_class_output_dirs", paths(projectPath,
                 metadata != null ? metadata.getExplicitClassOutputDirs() : List.of()));
+        artifacts.set("explicit_test_class_output_dirs", paths(projectPath,
+                metadata != null ? metadata.getExplicitTestClassOutputDirs() : List.of()));
         artifacts.set("explicit_project_jars", paths(projectPath,
                 metadata != null ? metadata.getExplicitProjectJars() : List.of()));
         artifacts.set("explicit_dependency_jars", paths(projectPath,
@@ -124,7 +140,7 @@ final class ExtractionManifest {
         return version == null || version.isBlank() ? "0.1.0" : version;
     }
 
-    private static GitInfo gitInfo(Path projectRoot) {
+    static GitInfo captureGitInfo(Path projectRoot) {
         if (projectRoot == null || !Files.isDirectory(projectRoot)) {
             return GitInfo.unavailable("project path unavailable");
         }
@@ -272,10 +288,18 @@ final class ExtractionManifest {
             List<Path> normalized = preserveOrder
                     ? stream.distinct().toList()
                     : stream.distinct()
-                            .sorted(Comparator.comparing(path -> stableArtifactLabel(stableRoot, path)))
+                            .sorted(Comparator.comparing(ExtractionManifest::artifactContentKey)
+                                    .thenComparing(path -> stableArtifactLabel(stableRoot, path)))
                             .toList();
             if (normalized.isEmpty()) {
                 return new HashResult(role, null, "empty", List.of());
+            }
+            List<String> missing = normalized.stream()
+                    .filter(path -> !Files.isRegularFile(path) && !Files.isDirectory(path))
+                    .map(Path::toString)
+                    .toList();
+            if (!missing.isEmpty()) {
+                return new HashResult(role, null, "missing", missing);
             }
             for (int i = 0; i < normalized.size(); i++) {
                 updateDigest(digest, role, stableRoot, i, normalized.get(i));
@@ -354,6 +378,43 @@ final class ExtractionManifest {
         return "external:" + (fileName == null ? "artifact" : fileName.toString());
     }
 
+    private static String artifactContentKey(Path path) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            if (Files.isRegularFile(path)) {
+                updateContentDigest(digest, path);
+            } else if (Files.isDirectory(path)) {
+                try (var walk = Files.walk(path)) {
+                    for (Path file : walk.filter(Files::isRegularFile)
+                            .sorted(Comparator.comparing(file -> path.relativize(file).toString()))
+                            .toList()) {
+                        digest.update(path.relativize(file).toString().replace('\\', '/')
+                                .getBytes(StandardCharsets.UTF_8));
+                        digest.update((byte) 0);
+                        updateContentDigest(digest, file);
+                    }
+                }
+            } else {
+                return "missing:" + path;
+            }
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (Exception e) {
+            return "error:" + e.getClass().getSimpleName() + ":" + path.getFileName();
+        }
+    }
+
+    private static void updateContentDigest(MessageDigest digest, Path file) throws IOException {
+        digest.update(Long.toString(Files.size(file)).getBytes(StandardCharsets.UTF_8));
+        digest.update((byte) 0);
+        try (InputStream input = Files.newInputStream(file)) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) >= 0) {
+                digest.update(buffer, 0, read);
+            }
+        }
+    }
+
     private static ObjectNode hashNode(HashResult result) {
         ObjectNode node = MAPPER.createObjectNode();
         node.put("role", result.role());
@@ -370,13 +431,13 @@ final class ExtractionManifest {
 
     private record GitCommand(boolean ok, String output, String error) {}
 
-    private record GitInfo(boolean available,
-                           String root,
-                           String relative_project_path,
-                           String remote_url,
-                           String commit,
-                           Boolean dirty,
-                           String error) {
+    record GitInfo(boolean available,
+                   String root,
+                   String relative_project_path,
+                   String remote_url,
+                   String commit,
+                   Boolean dirty,
+                   String error) {
         static GitInfo unavailable(String error) {
             return new GitInfo(false, "", "", "", "", null, error == null ? "" : error);
         }

@@ -128,23 +128,6 @@ public class CallGraphGenerator {
                 }
             }
 
-            Path projectRoot = projectMetadata.getProjectPath();
-            try (var stream = Files.walk(projectRoot, 4)) {
-                stream.filter(p -> {
-                            Path fn = p.getFileName();
-                            return fn != null && fn.toString().equals("classes")
-                                    && p.getParent() != null
-                                    && "target".equals(p.getParent().getFileName().toString());
-                        })
-                        .filter(p -> p.toFile().isDirectory())
-                        .filter(p -> containsClassFiles(p))
-                        .forEach(p -> {
-                            if (seenPaths.add(p.toAbsolutePath().toString())) {
-                                inputLocations.add(new JavaClassPathAnalysisInputLocation(p.toString()));
-                            }
-                        });
-            } catch (Exception ignored) {}
-
             if (inputLocations.isEmpty()) {
                 System.err.println("[CallGraphGenerator] no bytecode locations found under " + projectMetadata.getProjectPath());
                 return false;

@@ -101,25 +101,29 @@ public final class CoCoMUTCommand implements Callable<Integer> {
 
     @Option(names = "--class-output", split = ",",
             description = "Project class-output directory to analyze. May be repeated or comma-separated.")
-    private Set<Path> classOutputs;
+    private java.util.List<Path> classOutputs;
+
+    @Option(names = "--test-class-output", split = ",",
+            description = "Project test class-output directory to analyze. May be repeated or comma-separated.")
+    private java.util.List<Path> testClassOutputs;
 
     @Option(names = "--project-jar", split = ",",
             description = "Project artifact JAR to analyze. May be repeated or comma-separated.")
-    private Set<Path> projectJars;
+    private java.util.List<Path> projectJars;
 
     @Option(names = "--dependency-jar", split = ",",
             description = "Dependency JAR for source/type resolution. May be repeated or comma-separated.")
-    private Set<Path> dependencyJars;
+    private java.util.List<Path> dependencyJars;
 
     @Option(names = "--classpath-file", split = ",",
             description = "File containing classpath entries, one per line or path-separated.")
-    private Set<Path> classpathFiles;
+    private java.util.List<Path> classpathFiles;
 
     @Override
     public Integer call() throws Exception {
         ContextRequest.Scope selectedScope = toScope(entryPoints ? "entry-points" : scope);
 
-        ContextRequest request = ContextRequest.builder()
+        ContextRequest.Builder builder = ContextRequest.builder()
                 .projectRoot(project)
                 .scope(selectedScope)
                 .callGraphAlgorithm(toCallGraphAlgorithm(callGraph))
@@ -134,12 +138,16 @@ public final class CoCoMUTCommand implements Callable<Integer> {
                 .includePathGlobs(emptyIfNull(includePaths))
                 .excludePathGlobs(emptyIfNull(excludePaths))
                 .buildPolicy(buildPolicy())
-                .classOutputDirs(emptyPathSetIfNull(classOutputs))
-                .projectJars(emptyPathSetIfNull(projectJars))
-                .dependencyJars(emptyPathSetIfNull(dependencyJars))
-                .classpathFiles(emptyPathSetIfNull(classpathFiles))
-                .outputDirectory(outputDir)
-                .build();
+                .classOutputDirs(emptyPathListIfNull(classOutputs))
+                .testClassOutputDirs(emptyPathListIfNull(testClassOutputs))
+                .projectJars(emptyPathListIfNull(projectJars))
+                .dependencyJars(emptyPathListIfNull(dependencyJars))
+                .classpathFiles(emptyPathListIfNull(classpathFiles))
+                .outputDirectory(outputDir);
+        if (allowPreexistingBytecodeAfterBuildFailure) {
+            builder.allowPreexistingBytecodeAfterBuildFailure();
+        }
+        ContextRequest request = builder.build();
 
         ExtractionReport report = ContextExtractorService.createDefault().extract(request);
         report.asMap().forEach((key, value) -> System.out.printf("%s=%s%n", key, value));
@@ -149,20 +157,20 @@ public final class CoCoMUTCommand implements Callable<Integer> {
     private ContextRequest.BuildPolicy buildPolicy() {
         int selected = (skipBuild ? 1 : 0)
                 + (allowBuild ? 1 : 0)
-                + (externallySandboxedBuild ? 1 : 0)
-                + (allowPreexistingBytecodeAfterBuildFailure ? 1 : 0);
+                + (externallySandboxedBuild ? 1 : 0);
         if (selected > 1) {
-            throw new IllegalArgumentException("Choose only one build policy flag: --skip-build, --allow-build, "
-                    + "--externally-sandboxed-build, or --allow-preexisting-bytecode-after-build-failure");
+            throw new IllegalArgumentException("Choose only one build execution policy flag: --skip-build, "
+                    + "--allow-build, or --externally-sandboxed-build");
+        }
+        if (allowPreexistingBytecodeAfterBuildFailure && !allowBuild && !externallySandboxedBuild) {
+            throw new IllegalArgumentException("--allow-preexisting-bytecode-after-build-failure requires "
+                    + "--allow-build or --externally-sandboxed-build");
         }
         if (skipBuild) {
             return ContextRequest.BuildPolicy.DENY_BUILD;
         }
         if (externallySandboxedBuild) {
             return ContextRequest.BuildPolicy.EXTERNALLY_SANDBOXED_BUILD;
-        }
-        if (allowPreexistingBytecodeAfterBuildFailure) {
-            return ContextRequest.BuildPolicy.ALLOW_PREEXISTING_BYTECODE_AFTER_BUILD_FAILURE;
         }
         if (allowBuild) {
             return ContextRequest.BuildPolicy.ALLOW_UNSANDBOXED_BUILD;
@@ -200,8 +208,8 @@ public final class CoCoMUTCommand implements Callable<Integer> {
         return values == null ? Set.of() : values;
     }
 
-    private static Set<Path> emptyPathSetIfNull(Set<Path> values) {
-        return values == null ? Set.of() : values;
+    private static java.util.List<Path> emptyPathListIfNull(java.util.List<Path> values) {
+        return values == null ? java.util.List.of() : values;
     }
 
     private static Set<SymbolTarget> toTargets(Set<String> targetUris, Set<String> methodUris,

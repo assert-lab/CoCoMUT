@@ -55,9 +55,11 @@ public final class ProjectModel {
         Set<Path> dependencyJars = new LinkedHashSet<>();
         Set<Path> dependencyClasspath = new LinkedHashSet<>();
 
-        addIfDirectory(sourceRoots, metadata.getSourceRoot());
         metadata.getSourceRoots().forEach(path -> addIfDirectory(sourceRoots, path));
         metadata.getTestSourceRoots().forEach(path -> addIfDirectory(testSourceRoots, path));
+        if (sourceRoots.isEmpty() && testSourceRoots.isEmpty()) {
+            addIfDirectory(sourceRoots, metadata.getSourceRoot());
+        }
         if (sourceRoots.isEmpty() && testSourceRoots.isEmpty()) {
             addStandardRoots(projectRoot, sourceRoots, testSourceRoots, classOutputDirs);
         }

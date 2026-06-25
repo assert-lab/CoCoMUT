@@ -17,6 +17,10 @@ public class RunCoCoMUT {
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(project)
                 .scope(ContextRequest.Scope.ENTRY_POINTS)
+                // This toy analyzes a trusted local fixture. For untrusted
+                // repositories, keep the default denied-build policy and pass
+                // explicit --class-output / --project-jar artifacts instead.
+                .allowUnsandboxedBuild()
                 .build();
 
         ExtractionReport report = ContextExtractorService.createDefault().extract(request);

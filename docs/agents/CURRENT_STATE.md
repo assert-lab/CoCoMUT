@@ -6,7 +6,7 @@ technical rules in `AGENTS.md`.
 
 ## Active Baseline
 
-- Repository: `assert-lab/Code-Context-Extractor`
+- Repository: `assert-lab/CoCoMUT`
 - Main branch: `main`
 - Current task branch: `task/call-edge-nextwork`
 

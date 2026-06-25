@@ -18,7 +18,7 @@
     "execution"
   ],
   "properties": {
-    "schema_version": { "type": "string" },
+    "schema_version": { "const": "0.2.0" },
     "generated_at": { "type": "string", "format": "date-time" },
     "tool": { "const": "CoCoMUT" },
     "tool_version": { "type": "string" },
@@ -71,6 +71,7 @@
         "sandboxed",
         "status",
         "policy",
+        "allow_preexisting_bytecode_after_build_failure",
         "bytecode_available",
         "bytecode_origin",
         "analysis_can_proceed"
@@ -88,10 +89,10 @@
             "DENY_BUILD",
             "ALLOW_UNSANDBOXED_BUILD",
             "EXTERNALLY_SANDBOXED_BUILD",
-            "ALLOW_PREEXISTING_BYTECODE_AFTER_BUILD_FAILURE",
             "UNKNOWN"
           ]
         },
+        "allow_preexisting_bytecode_after_build_failure": { "type": "boolean" },
         "bytecode_available": { "type": "boolean" },
         "bytecode_origin": { "enum": ["generated_this_run", "preexisting", "explicit", "none"] },
         "analysis_can_proceed": { "type": "boolean" }
@@ -108,6 +109,7 @@
         "project_jars",
         "dependency_classpath",
         "explicit_class_output_dirs",
+        "explicit_test_class_output_dirs",
         "explicit_project_jars",
         "explicit_dependency_jars",
         "explicit_classpath_files"
@@ -120,6 +122,7 @@
         "project_jars": { "$ref": "#/$defs/pathArray" },
         "dependency_classpath": { "$ref": "#/$defs/pathArray" },
         "explicit_class_output_dirs": { "$ref": "#/$defs/pathArray" },
+        "explicit_test_class_output_dirs": { "$ref": "#/$defs/pathArray" },
         "explicit_project_jars": { "$ref": "#/$defs/pathArray" },
         "explicit_dependency_jars": { "$ref": "#/$defs/pathArray" },
         "explicit_classpath_files": { "$ref": "#/$defs/pathArray" }
@@ -170,7 +173,37 @@
           "type": "array",
           "items": { "type": "string" }
         }
-      }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "status": { "const": "ok" },
+            "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "errors": { "maxItems": 0 }
+          }
+        },
+        {
+          "properties": {
+            "status": { "const": "empty" },
+            "sha256": { "type": "null" },
+            "errors": { "maxItems": 0 }
+          }
+        },
+        {
+          "properties": {
+            "status": { "const": "missing" },
+            "sha256": { "type": "null" },
+            "errors": { "minItems": 1 }
+          }
+        },
+        {
+          "properties": {
+            "status": { "const": "error" },
+            "sha256": { "type": "null" },
+            "errors": { "minItems": 1 }
+          }
+        }
+      ]
     }
   }
 }

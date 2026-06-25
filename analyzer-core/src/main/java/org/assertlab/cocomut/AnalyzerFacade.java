@@ -38,11 +38,12 @@ final class AnalyzerFacade {
             orchestrator.execute();
             return orchestrator.getExecutionReport();
         } catch (Exception e) {
+            ExtractionManifest.GitInfo gitAtStart = ExtractionManifest.captureGitInfo(request.projectRoot());
             Map<String, Object> report = new LinkedHashMap<>();
             report.put("status", "ERROR");
             report.put("failed_at_phase", 1);
             report.put("phase_1_error", e.getMessage());
-            report.put("failure_codes", java.util.List.of(FailureCode.BUILD_FAILED.toString()));
+            report.put("failure_codes", java.util.List.of(FailureCode.METADATA_RESOLUTION_FAILED.toString()));
             Path outputRoot = request.outputDirectory() != null
                     ? request.outputDirectory().toAbsolutePath().normalize()
                     : Path.of(System.getProperty("user.dir")).resolve("cocomut_output")
@@ -52,11 +53,24 @@ final class AnalyzerFacade {
             Files.createDirectories(outputRoot);
             ProjectMetadata metadata = failedMetadata(request);
             Path manifest = ExtractionManifest.write(outputRoot, metadata, null,
-                    Map.of("kind", "project", "selector", "project"),
-                    failedRequestHash(request), null, report);
+                    selection(request),
+                    RequestFingerprint.hash(request), null, report, gitAtStart);
             report.put("extraction_manifest_file", manifest.toString());
+            writeExecutionReport(outputRoot, report);
             return report;
         }
+    }
+
+    private static Map<String, Object> selection(ContextRequest request) {
+        Map<String, Object> selection = new LinkedHashMap<>();
+        selection.put("kind", request.targets().isEmpty() ? "project" : "target");
+        selection.put("selector", request.targets().isEmpty() ? "project"
+                : request.targets().stream().map(SymbolTarget::prefixedUri).toList());
+        selection.put("packages", request.packages());
+        selection.put("classes", request.classes());
+        selection.put("methods", request.methods());
+        selection.put("source_sets", request.sourceSets());
+        return selection;
     }
 
     private static ProjectMetadata failedMetadata(ContextRequest request) {
@@ -75,32 +89,18 @@ final class AnalyzerFacade {
                 .dependencyClasspath(java.util.List.of())
                 .compileStatus("METADATA RESOLUTION FAILED")
                 .buildPolicy(request.buildPolicy())
+                .allowPreexistingBytecodeAfterBuildFailure(request.allowPreexistingBytecodeAfterBuildFailure())
                 .buildSkipped(request.skipBuild())
                 .buildSandboxed(request.buildPolicy() == ContextRequest.BuildPolicy.EXTERNALLY_SANDBOXED_BUILD)
+                .explicitClassOutputDirs(request.classOutputDirs())
+                .explicitTestClassOutputDirs(request.testClassOutputDirs())
+                .explicitProjectJars(request.projectJars())
+                .explicitDependencyJars(request.dependencyJars())
+                .explicitClasspathFiles(request.classpathFiles())
                 .bytecodeAvailable(false)
                 .bytecodeOrigin("none")
                 .analysisCanProceed(false)
                 .build();
-    }
-
-    private static String failedRequestHash(ContextRequest request) {
-        String value = request.scope() + "|" + request.callGraphAlgorithm() + "|" + request.buildPolicy()
-                + "|" + request.sourceSets() + "|" + request.targets();
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (Exception e) {
-            return sha256Hex("cocomut-failed-request-fallback|" + value);
-        }
-    }
-
-    private static String sha256Hex(String value) {
-        try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (Exception impossible) {
-            return "0".repeat(64);
-        }
     }
 
     private static String shortProjectHash(Path projectRoot) {
@@ -116,5 +116,12 @@ final class AnalyzerFacade {
 
     private static String sanitize(String value) {
         return value.replaceAll("[^A-Za-z0-9._#()\\-]+", "_");
+    }
+
+    private static void writeExecutionReport(Path outputRoot, Map<String, Object> report) throws IOException {
+        Path reportPath = outputRoot.resolve("extraction_report.json");
+        report.put("extraction_report_file", reportPath.toString());
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        mapper.writerWithDefaultPrettyPrinter().writeValue(reportPath.toFile(), report);
     }
 }

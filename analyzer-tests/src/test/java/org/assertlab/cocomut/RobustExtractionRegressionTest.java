@@ -71,7 +71,7 @@ public class RobustExtractionRegressionTest {
             assertCompleted(mainOnly);
             assertEquals(1, mainOnly.methodsIdentified());
             assertEquals("main", mainOnly.asMap().get("phase_2_source_set_filter"));
-            assertEquals(2, ((Number) mainOnly.asMap().get("phase_2_source_set_filter_before")).intValue());
+            assertEquals(1, ((Number) mainOnly.asMap().get("phase_2_source_set_filter_before")).intValue());
             assertEquals(1, ((Number) mainOnly.asMap().get("phase_2_source_set_filter_after")).intValue());
         } finally {
             deleteRecursively(project);

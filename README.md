@@ -44,8 +44,8 @@ static, reproducible, bytecode-backed, and explicit about failure modes.
 ## Quickstart
 
 ```bash
-git clone https://github.com/assert-lab/Code-Context-Extractor.git
-cd Code-Context-Extractor
+git clone https://github.com/assert-lab/CoCoMUT.git
+cd CoCoMUT
 ./mvnw test
 ```
 
@@ -131,7 +131,7 @@ is available.
   title        = {CoCoMUT: Context Constructor for MUT},
   author       = {{ASSERT Lab}},
   year         = {2026},
-  howpublished = {\url{https://github.com/assert-lab/Code-Context-Extractor}},
+  howpublished = {\url{https://github.com/assert-lab/CoCoMUT}},
   note         = {Version 0.1.0}
 }
 ```

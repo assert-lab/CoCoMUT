@@ -31,10 +31,12 @@ public class ProjectMetadata {
     private final boolean buildSkipped;
     private final boolean buildSandboxed;
     private final ContextRequest.BuildPolicy buildPolicy;
+    private final boolean allowPreexistingBytecodeAfterBuildFailure;
     private final boolean bytecodeAvailable;
     private final String bytecodeOrigin;
     private final boolean analysisCanProceed;
     private final List<Path> explicitClassOutputDirs;
+    private final List<Path> explicitTestClassOutputDirs;
     private final List<Path> explicitProjectJars;
     private final List<Path> explicitDependencyJars;
     private final List<Path> explicitClasspathFiles;
@@ -61,10 +63,12 @@ public class ProjectMetadata {
         this.buildSkipped = builder.buildSkipped;
         this.buildSandboxed = builder.buildSandboxed;
         this.buildPolicy = builder.buildPolicy;
+        this.allowPreexistingBytecodeAfterBuildFailure = builder.allowPreexistingBytecodeAfterBuildFailure;
         this.bytecodeAvailable = builder.bytecodeAvailable;
         this.bytecodeOrigin = builder.bytecodeOrigin;
         this.analysisCanProceed = builder.analysisCanProceed;
         this.explicitClassOutputDirs = Collections.unmodifiableList(safeList(builder.explicitClassOutputDirs));
+        this.explicitTestClassOutputDirs = Collections.unmodifiableList(safeList(builder.explicitTestClassOutputDirs));
         this.explicitProjectJars = Collections.unmodifiableList(safeList(builder.explicitProjectJars));
         this.explicitDependencyJars = Collections.unmodifiableList(safeList(builder.explicitDependencyJars));
         this.explicitClasspathFiles = Collections.unmodifiableList(safeList(builder.explicitClasspathFiles));
@@ -159,6 +163,10 @@ public class ProjectMetadata {
         return buildPolicy;
     }
 
+    public boolean isAllowPreexistingBytecodeAfterBuildFailure() {
+        return allowPreexistingBytecodeAfterBuildFailure;
+    }
+
     public boolean isBytecodeAvailable() {
         return bytecodeAvailable;
     }
@@ -173,6 +181,10 @@ public class ProjectMetadata {
 
     public List<Path> getExplicitClassOutputDirs() {
         return explicitClassOutputDirs;
+    }
+
+    public List<Path> getExplicitTestClassOutputDirs() {
+        return explicitTestClassOutputDirs;
     }
 
     public List<Path> getExplicitProjectJars() {
@@ -207,6 +219,7 @@ public class ProjectMetadata {
                 ", buildAttempted=" + buildAttempted +
                 ", buildSkipped=" + buildSkipped +
                 ", explicitClassOutputDirs=" + explicitClassOutputDirs.size() +
+                ", explicitTestClassOutputDirs=" + explicitTestClassOutputDirs.size() +
                 ", explicitProjectJars=" + explicitProjectJars.size() +
                 ", explicitDependencyJars=" + explicitDependencyJars.size() +
                 '}';
@@ -237,10 +250,12 @@ public class ProjectMetadata {
         private boolean buildSkipped = false;
         private boolean buildSandboxed = false;
         private ContextRequest.BuildPolicy buildPolicy = ContextRequest.BuildPolicy.DENY_BUILD;
+        private boolean allowPreexistingBytecodeAfterBuildFailure = false;
         private boolean bytecodeAvailable = false;
         private String bytecodeOrigin = "none";
         private boolean analysisCanProceed = false;
         private List<Path> explicitClassOutputDirs = Collections.emptyList();
+        private List<Path> explicitTestClassOutputDirs = Collections.emptyList();
         private List<Path> explicitProjectJars = Collections.emptyList();
         private List<Path> explicitDependencyJars = Collections.emptyList();
         private List<Path> explicitClasspathFiles = Collections.emptyList();
@@ -273,10 +288,12 @@ public class ProjectMetadata {
                     .buildSkipped(src.buildSkipped)
                     .buildSandboxed(src.buildSandboxed)
                     .buildPolicy(src.buildPolicy)
+                    .allowPreexistingBytecodeAfterBuildFailure(src.allowPreexistingBytecodeAfterBuildFailure)
                     .bytecodeAvailable(src.bytecodeAvailable)
                     .bytecodeOrigin(src.bytecodeOrigin)
                     .analysisCanProceed(src.analysisCanProceed)
                     .explicitClassOutputDirs(src.explicitClassOutputDirs)
+                    .explicitTestClassOutputDirs(src.explicitTestClassOutputDirs)
                     .explicitProjectJars(src.explicitProjectJars)
                     .explicitDependencyJars(src.explicitDependencyJars)
                     .explicitClasspathFiles(src.explicitClasspathFiles);
@@ -387,6 +404,11 @@ public class ProjectMetadata {
             return this;
         }
 
+        public Builder allowPreexistingBytecodeAfterBuildFailure(boolean allowPreexistingBytecodeAfterBuildFailure) {
+            this.allowPreexistingBytecodeAfterBuildFailure = allowPreexistingBytecodeAfterBuildFailure;
+            return this;
+        }
+
         public Builder bytecodeAvailable(boolean bytecodeAvailable) {
             this.bytecodeAvailable = bytecodeAvailable;
             return this;
@@ -404,6 +426,11 @@ public class ProjectMetadata {
 
         public Builder explicitClassOutputDirs(List<Path> explicitClassOutputDirs) {
             this.explicitClassOutputDirs = explicitClassOutputDirs;
+            return this;
+        }
+
+        public Builder explicitTestClassOutputDirs(List<Path> explicitTestClassOutputDirs) {
+            this.explicitTestClassOutputDirs = explicitTestClassOutputDirs;
             return this;
         }
 

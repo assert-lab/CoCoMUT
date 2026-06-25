@@ -11,7 +11,7 @@
     <packaging>pom</packaging>
     <name>CoCoMUT — Parent</name>
     <description>Static Java method-context extraction for documentation research and documentation-generation systems.</description>
-    <url>https://github.com/assert-lab/Code-Context-Extractor</url>
+    <url>https://github.com/assert-lab/CoCoMUT</url>
 
     <licenses>
         <license>
@@ -30,15 +30,15 @@
     </developers>
 
     <scm>
-        <connection>scm:git:https://github.com/assert-lab/Code-Context-Extractor.git</connection>
-        <developerConnection>scm:git:https://github.com/assert-lab/Code-Context-Extractor.git</developerConnection>
-        <url>https://github.com/assert-lab/Code-Context-Extractor</url>
+        <connection>scm:git:https://github.com/assert-lab/CoCoMUT.git</connection>
+        <developerConnection>scm:git:https://github.com/assert-lab/CoCoMUT.git</developerConnection>
+        <url>https://github.com/assert-lab/CoCoMUT</url>
         <tag>HEAD</tag>
     </scm>
 
     <issueManagement>
         <system>GitHub Issues</system>
-        <url>https://github.com/assert-lab/Code-Context-Extractor/issues</url>
+        <url>https://github.com/assert-lab/CoCoMUT/issues</url>
     </issueManagement>
 
     <modules>

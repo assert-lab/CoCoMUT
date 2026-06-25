@@ -142,8 +142,10 @@ build.timed_out                 Whether the attempted build timed out
 build.skipped                   Whether build execution was denied
 build.sandboxed                 Whether caller claims external sandboxing
 build.policy                    DENY_BUILD, ALLOW_UNSANDBOXED_BUILD,
-                                EXTERNALLY_SANDBOXED_BUILD, or
-                                ALLOW_PREEXISTING_BYTECODE_AFTER_BUILD_FAILURE
+                                EXTERNALLY_SANDBOXED_BUILD, or UNKNOWN
+build.allow_preexisting_bytecode_after_build_failure
+                                Whether stale-bytecode fallback after a failed
+                                attempted build was explicitly allowed
 build.bytecode_available        Whether project bytecode was found
 build.bytecode_origin           generated_this_run, preexisting, explicit, or none
 build.analysis_can_proceed      Whether extraction has project bytecode to analyze

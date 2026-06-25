@@ -53,23 +53,23 @@ public class GradleProjectAdapter implements ProjectAdapter {
 
     @Override
     public ProjectMetadata toMetadata() throws IOException {
-        ProjectMetadata base = new ProjectAnalyzer(projectPath).analyze();
-        return enrichWithGradleModel(base, false);
+        return new ProjectAnalyzer(projectPath).analyze();
     }
 
     @Override
     public ProjectMetadata toMetadata(ContextRequest request) throws IOException {
         ProjectMetadata base = new ProjectAnalyzer(request).analyze();
-        return enrichWithGradleModel(base, request.skipBuild());
+        return enrichWithGradleModel(base, request);
     }
 
-    private ProjectMetadata enrichWithGradleModel(ProjectMetadata base, boolean skipGradleInvocation) {
-        if (skipGradleInvocation) {
+    private ProjectMetadata enrichWithGradleModel(ProjectMetadata base, ContextRequest request) {
+        if (request.skipBuild()) {
             System.out.println("[GradleProjectAdapter] --skip-build active; Gradle metadata task not executed");
             return base;
         }
 
-        GradleModel nativeModel = resolveGradleModel();
+        boolean includeTests = includeTests(request);
+        GradleModel nativeModel = resolveGradleModel(includeTests);
         if (nativeModel.isEmpty()) {
             System.out.println("[GradleProjectAdapter] native classpath resolution "
                     + "unavailable — using base metadata");
@@ -102,25 +102,83 @@ public class GradleProjectAdapter implements ProjectAdapter {
                 .filter(path -> !projectOutputs.contains(path))
                 .forEach(dependencies::add);
 
+        boolean bytecodeAvailable = !mainOutputs.isEmpty()
+                || !testOutputs.isEmpty()
+                || !base.getProjectArtifactJars().isEmpty();
+        boolean analysisCanProceed = bytecodeAvailable && canTrustBytecodeForAnalysis(base);
+        boolean explicitProjectBytecode = !base.getExplicitClassOutputDirs().isEmpty()
+                || !base.getExplicitTestClassOutputDirs().isEmpty()
+                || !base.getExplicitProjectJars().isEmpty();
+        Path authoritativeRoot = !sourceRoots.isEmpty()
+                ? sourceRoots.iterator().next()
+                : (!testSourceRoots.isEmpty() ? testSourceRoots.iterator().next() : base.getSourceRoot());
+
         return ProjectMetadata.Builder.from(base)
                 .javaVersion(!"unknown".equals(nativeModel.javaVersion()) ? nativeModel.javaVersion() : base.getJavaVersion())
+                .sourceRoot(authoritativeRoot)
                 .sourceRoots(new ArrayList<>(sourceRoots))
                 .testSourceRoots(new ArrayList<>(testSourceRoots))
                 .classpath(new ArrayList<>(merged))
                 .mainClassOutputs(new ArrayList<>(mainOutputs))
                 .testClassOutputs(new ArrayList<>(testOutputs))
                 .dependencyClasspath(new ArrayList<>(dependencies))
+                .compiles(base.isBuildSucceeded())
+                .compileStatus(compileStatus(base, bytecodeAvailable))
+                .bytecodeAvailable(bytecodeAvailable)
+                .bytecodeOrigin(bytecodeOrigin(explicitProjectBytecode, base, bytecodeAvailable))
+                .analysisCanProceed(analysisCanProceed)
                 .build();
+    }
+
+    private static boolean includeTests(ContextRequest request) {
+        return request.sourceSets() == null
+                || request.sourceSets().isEmpty()
+                || request.sourceSets().stream().anyMatch(set -> !"main".equals(set));
+    }
+
+    private static boolean canTrustBytecodeForAnalysis(ProjectMetadata base) {
+        if (!base.isBuildAttempted()) {
+            return true;
+        }
+        if (base.isBuildSucceeded()) {
+            return true;
+        }
+        return base.isAllowPreexistingBytecodeAfterBuildFailure();
+    }
+
+    private static String compileStatus(ProjectMetadata base, boolean bytecodeAvailable) {
+        if (!base.isBuildAttempted()) {
+            return bytecodeAvailable ? base.getCompileStatus().replace("; NO PROJECT BYTECODE", "; PROJECT BYTECODE AVAILABLE")
+                    : base.getCompileStatus();
+        }
+        if (base.isBuildSucceeded()) {
+            return bytecodeAvailable ? "BUILD SUCCESS" : "BUILD SUCCESS; NO PROJECT BYTECODE";
+        }
+        return bytecodeAvailable ? "BUILD FAILED; PREEXISTING PROJECT BYTECODE AVAILABLE"
+                : "BUILD FAILED; NO PROJECT BYTECODE";
+    }
+
+    private static String bytecodeOrigin(boolean explicitProjectBytecode, ProjectMetadata base, boolean available) {
+        if (!available) {
+            return "none";
+        }
+        if (explicitProjectBytecode) {
+            return "explicit";
+        }
+        if (base.isBuildSucceeded()) {
+            return "generated_this_run";
+        }
+        return "preexisting";
     }
 
     /**
      * Run Gradle with an init script to print the compile classpath.
      * Returns an empty list on any failure (Gradle missing, offline, timeout, etc.).
      */
-    private GradleModel resolveGradleModel() {
+    private GradleModel resolveGradleModel(boolean includeTests) {
         Path initScript = null;
         try {
-            initScript = writeInitScript();
+            initScript = writeInitScript(includeTests);
             List<String> cmd = new ArrayList<>();
             cmd.add(gradleExecutable());
             cmd.add("--init-script");
@@ -210,13 +268,18 @@ public class GradleProjectAdapter implements ProjectAdapter {
      * Init script that registers a model-printing task on the root project,
      * without touching the target's build files.
      */
-    private Path writeInitScript() throws IOException {
+    private Path writeInitScript(boolean includeTests) throws IOException {
+        String configurationNames = includeTests
+                ? "['runtimeClasspath', 'compileClasspath', 'testRuntimeClasspath', 'testCompileClasspath']"
+                : "['runtimeClasspath', 'compileClasspath']";
+        String sourceSetNames = includeTests ? "['main', 'test']" : "['main']";
         String script =
                 "gradle.projectsEvaluated {\n" +
                 "    rootProject.tasks.register('analyzerPrintClasspath') {\n" +
                 "        doLast {\n" +
-                "            allprojects.each { p ->\n" +
-                "                def names = ['runtimeClasspath', 'compileClasspath', 'testRuntimeClasspath', 'testCompileClasspath']\n" +
+                "            rootProject.allprojects.each { p ->\n" +
+                "                def names = " + configurationNames + "\n" +
+                "                def sourceSetNames = " + sourceSetNames + "\n" +
                 "                def files = [] as LinkedHashSet\n" +
                 "                names.each { n ->\n" +
                 "                    def cp = p.configurations.findByName(n)\n" +
@@ -232,12 +295,13 @@ public class GradleProjectAdapter implements ProjectAdapter {
                 "                    println '" + JAVA_PREFIX + "' + (toolchain ?: sourceCompat ?: '')\n" +
                 "                    try {\n" +
                 "                        javaExt.sourceSets.each { ss ->\n" +
-                "                            if (ss.name == 'main' || ss.name == 'test') {\n" +
+                "                            if (sourceSetNames.contains(ss.name)) {\n" +
                 "                                ss.allJava.srcDirs.each { d -> if (d.exists()) println((ss.name == 'test' ? '" + TEST_SOURCE_PREFIX + "' : '" + SOURCE_PREFIX + "') + d.absolutePath) }\n" +
                 "                                ss.output.classesDirs.files.each { d -> if (d.exists()) println((ss.name == 'test' ? '" + TEST_OUTPUT_PREFIX + "' : '" + OUTPUT_PREFIX + "') + d.absolutePath) }\n" +
                 "                            }\n" +
                 "                        }\n" +
                 "                    } catch (Throwable ignored) { }\n" +
+                "                }\n" +
                 "            }\n" +
                 "        }\n" +
                 "    }\n" +

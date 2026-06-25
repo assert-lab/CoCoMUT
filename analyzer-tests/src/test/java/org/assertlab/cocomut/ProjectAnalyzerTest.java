@@ -2,6 +2,7 @@ package org.assertlab.cocomut;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.assertlab.cocomut.adapter.GradleProjectAdapter;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
@@ -18,6 +19,7 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.Assume;
 
 /**
  * Test suite for {@link ProjectAnalyzer} (Phase 1).
@@ -224,6 +226,143 @@ public class ProjectAnalyzerTest {
     }
 
     @Test
+    public void plainProjectLibJarsAreDependenciesNotProjectBytecode() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-plain-lib-");
+        try {
+            Files.createDirectories(project.resolve("src/main/java/demo"));
+            Files.writeString(project.resolve("src/main/java/demo/App.java"), "package demo; class App {}\n");
+            Files.createDirectories(project.resolve("lib"));
+            Path dependencyJar = project.resolve("lib/guava.jar");
+            Files.write(dependencyJar, new byte[] {1, 2, 3});
+
+            ProjectMetadata metadata = new ProjectAnalyzer(ContextRequest.builder()
+                    .projectRoot(project)
+                    .skipBuild(true)
+                    .build()).analyze();
+
+            assertEquals("Plain-project lib JARs must not become project artifacts",
+                    List.of(), metadata.getProjectArtifactJars());
+            assertTrue("Plain-project lib JARs remain dependency classpath",
+                    metadata.getDependencyClasspath().contains(dependencyJar.toAbsolutePath().normalize()));
+            assertFalse("Dependency JARs alone cannot satisfy project bytecode",
+                    metadata.isAnalysisCanProceed());
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void explicitTestClassOutputKeepsTestRole() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-explicit-test-output-");
+        Path testOutput = Files.createTempDirectory("cocomut-test-output-");
+        try {
+            Files.createDirectories(testOutput.resolve("demo"));
+            Files.write(testOutput.resolve("AppTest.class"), new byte[] {1, 2, 3});
+
+            ProjectMetadata metadata = new ProjectAnalyzer(ContextRequest.builder()
+                    .projectRoot(project)
+                    .skipBuild(true)
+                    .sourceSet("test")
+                    .testClassOutputDir(testOutput)
+                    .build()).analyze();
+
+            assertEquals("Explicit test bytecode should not be recorded as main bytecode",
+                    List.of(), metadata.getMainClassOutputs());
+            assertEquals("Explicit test bytecode should keep its test role",
+                    List.of(testOutput.toAbsolutePath().normalize()), metadata.getTestClassOutputs());
+            assertTrue("Test-only bytecode is enough for test-scope extraction",
+                    metadata.isAnalysisCanProceed());
+        } finally {
+            deleteRecursively(project);
+            deleteRecursively(testOutput);
+        }
+    }
+
+    @Test
+    public void mavenDeclaredSourceRootsDoNotIncludeUnrelatedNestedProjects() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-maven-roots-");
+        try {
+            Files.writeString(project.resolve("pom.xml"), """
+                    <project xmlns="http://maven.apache.org/POM/4.0.0">
+                      <modelVersion>4.0.0</modelVersion>
+                      <groupId>demo</groupId>
+                      <artifactId>root</artifactId>
+                      <version>1.0-SNAPSHOT</version>
+                      <packaging>pom</packaging>
+                      <modules><module>core</module></modules>
+                    </project>
+                    """);
+            Files.createDirectories(project.resolve("core/src/main/java/core"));
+            Files.writeString(project.resolve("core/src/main/java/core/App.java"), "package core; class App {}\n");
+            Files.writeString(project.resolve("core/pom.xml"), """
+                    <project xmlns="http://maven.apache.org/POM/4.0.0">
+                      <modelVersion>4.0.0</modelVersion>
+                      <parent><groupId>demo</groupId><artifactId>root</artifactId><version>1.0-SNAPSHOT</version></parent>
+                      <artifactId>core</artifactId>
+                    </project>
+                    """);
+            Files.createDirectories(project.resolve("vendor/demo/src/main/java/vendor"));
+            Files.writeString(project.resolve("vendor/demo/src/main/java/vendor/Vendor.java"),
+                    "package vendor; class Vendor {}\n");
+
+            ProjectMetadata metadata = new ProjectAnalyzer(ContextRequest.builder()
+                    .projectRoot(project)
+                    .skipBuild(true)
+                    .build()).analyze();
+
+            List<Path> roots = metadata.getSourceRoots();
+            assertTrue("Declared module source root should be present",
+                    roots.contains(project.resolve("core/src/main/java").toAbsolutePath().normalize()));
+            assertFalse("Unrelated nested Maven-looking projects must not be scanned when declared roots exist",
+                    roots.contains(project.resolve("vendor/demo/src/main/java").toAbsolutePath().normalize()));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void gradleModelUsesAuthoritativeMultiProjectRootsForMainScope() throws Exception {
+        Assume.assumeTrue("Gradle executable is required for this integration-style regression",
+                commandAvailable("gradle"));
+        Path project = Files.createTempDirectory("cocomut-gradle-multiproject-");
+        try {
+            Files.writeString(project.resolve("settings.gradle"), """
+                    pluginManagement { repositories { gradlePluginPortal(); mavenCentral() } }
+                    dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { mavenCentral() } }
+                    rootProject.name = 'cocomut-gradle-fixture'
+                    include 'app'
+                    """);
+            Files.createDirectories(project.resolve("app/src/main/java/app"));
+            Files.writeString(project.resolve("app/build.gradle"), "plugins { id 'java' }\n");
+            Files.writeString(project.resolve("app/src/main/java/app/App.java"),
+                    "package app; public class App { public int value() { return 1; } }\n");
+            Files.createDirectories(project.resolve("vendor/demo/src/main/java/vendor"));
+            Files.writeString(project.resolve("vendor/demo/src/main/java/vendor/Vendor.java"),
+                    "package vendor; public class Vendor {}\n");
+            Files.createDirectories(project.resolve("app/src/test/java/app"));
+            Files.writeString(project.resolve("app/src/test/java/app/AppTest.java"),
+                    "package app; class AppTest {}\n");
+
+            ProjectMetadata metadata = new GradleProjectAdapter(project).toMetadata(ContextRequest.builder()
+                    .projectRoot(project)
+                    .sourceSet("main")
+                    .allowUnsandboxedBuild()
+                    .build());
+
+            assertTrue("Gradle model should expose compiled app bytecode",
+                    metadata.isAnalysisCanProceed());
+            assertTrue("Gradle app source root should be present",
+                    metadata.getSourceRoots().contains(project.resolve("app/src/main/java").toAbsolutePath().normalize()));
+            assertFalse("Unrelated nested source roots must not leak into Gradle model output",
+                    metadata.getSourceRoots().contains(project.resolve("vendor/demo/src/main/java").toAbsolutePath().normalize()));
+            assertTrue("Main-scope Gradle metadata should not include test source roots",
+                    metadata.getTestSourceRoots().isEmpty());
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void manifestBytecodeHashIsStableAcrossCheckoutPaths() throws Exception {
         Path rootA = Files.createTempDirectory("cocomut-hash-a-");
         Path rootB = Files.createTempDirectory("cocomut-hash-b-");
@@ -306,6 +445,7 @@ public class ProjectAnalyzerTest {
 
             ProjectMetadata explicitRisk = new ProjectAnalyzer(ContextRequest.builder()
                     .projectRoot(project)
+                    .allowUnsandboxedBuild()
                     .allowPreexistingBytecodeAfterBuildFailure()
                     .build()).analyze();
             assertTrue("The risky stale-bytecode path requires an explicit policy",
@@ -448,6 +588,40 @@ public class ProjectAnalyzerTest {
         }
     }
 
+    @Test
+    public void dependencyContentSetHashHandlesEqualBasenames() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-classpath-same-name-");
+        Path outputA = Files.createTempDirectory("cocomut-classpath-same-name-a-");
+        Path outputB = Files.createTempDirectory("cocomut-classpath-same-name-b-");
+        try {
+            Path firstDir = Files.createDirectories(project.resolve("a"));
+            Path secondDir = Files.createDirectories(project.resolve("b"));
+            Path first = firstDir.resolve("lib.jar");
+            Path second = secondDir.resolve("lib.jar");
+            Files.write(first, new byte[] {1});
+            Files.write(second, new byte[] {2});
+
+            ObjectMapper mapper = new ObjectMapper();
+            Path manifestA = ExtractionManifest.write(outputA, manifestMetadataWithDependencies(project, List.of(first, second)),
+                    null, java.util.Map.of(), "1".repeat(64), null, java.util.Map.of("status", "FAILED"));
+            Path manifestB = ExtractionManifest.write(outputB, manifestMetadataWithDependencies(project, List.of(second, first)),
+                    null, java.util.Map.of(), "2".repeat(64), null, java.util.Map.of("status", "FAILED"));
+
+            JsonNode hashesA = mapper.readTree(manifestA.toFile()).path("hashes");
+            JsonNode hashesB = mapper.readTree(manifestB.toFile()).path("hashes");
+            assertNotEquals("Ordered classpath hash must preserve order even with identical filenames",
+                    hashesA.path("dependency_classpath").path("sha256").asText(),
+                    hashesB.path("dependency_classpath").path("sha256").asText());
+            assertEquals("Content-set hash should be order-independent even when filenames collide",
+                    hashesA.path("dependency_classpath_content_set").path("sha256").asText(),
+                    hashesB.path("dependency_classpath_content_set").path("sha256").asText());
+        } finally {
+            deleteRecursively(project);
+            deleteRecursively(outputA);
+            deleteRecursively(outputB);
+        }
+    }
+
     private static ProjectMetadata manifestMetadata(Path project, Path classOutput) {
         return new ProjectMetadata.Builder()
                 .projectName(project.getFileName().toString())
@@ -527,6 +701,17 @@ public class ProjectAnalyzerTest {
                 .start();
         if (!process.waitFor(10, java.util.concurrent.TimeUnit.SECONDS) || process.exitValue() != 0) {
             throw new IOException("Command failed: " + String.join(" ", command));
+        }
+    }
+
+    private static boolean commandAvailable(String command) {
+        try {
+            Process process = new ProcessBuilder("sh", "-c", "command -v " + command)
+                    .redirectErrorStream(true)
+                    .start();
+            return process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS) && process.exitValue() == 0;
+        } catch (Exception e) {
+            return false;
         }
     }
 

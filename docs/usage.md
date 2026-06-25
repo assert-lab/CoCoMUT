@@ -67,6 +67,7 @@ ContextRequest request = ContextRequest.builder()
         .projectRoot(Path.of("/path/to/java/project"))
         .entryPoints()
         .sourceSet("main")
+        .allowUnsandboxedBuild() // only for trusted checkouts
         .build();
 
 ExtractionReport report = ContextExtractorService.createDefault().extract(request);
@@ -144,11 +145,14 @@ Useful options:
 --externally-sandboxed-build   Allow Maven/Gradle and record that the caller
                                 provided external sandboxing
 --allow-preexisting-bytecode-after-build-failure
-                                Attempt Maven/Gradle, but allow analysis to
-                                continue with pre-existing bytecode if that
+                                With --allow-build or
+                                --externally-sandboxed-build, allow analysis
+                                to continue with pre-existing bytecode if the
                                 attempted build fails
 --class-output DIR             Project class-output directory, repeatable or
                                 comma-separated
+--test-class-output DIR        Project test class-output directory,
+                                repeatable or comma-separated
 --project-jar JAR              Project artifact JAR, repeatable or comma-separated
 --dependency-jar JAR           Dependency JAR, repeatable or comma-separated
 --classpath-file FILE          File containing classpath entries, one per line
@@ -174,7 +178,8 @@ requirement by themselves.
 If an attempted build fails, CoCoMUT fails the extraction by default even when
 stale bytecode is present. Continuing with pre-existing bytecode after a failed
 build is a deliberate, risky policy and requires
-`--allow-preexisting-bytecode-after-build-failure`.
+`--allow-preexisting-bytecode-after-build-failure` together with `--allow-build`
+or `--externally-sandboxed-build`.
 
 Build execution runs the subject repository's Maven or Gradle build logic. For
 untrusted public repositories, keep the default denied-build policy and provide
@@ -216,11 +221,16 @@ For documentation datasets, prefer a precise source-set and scope:
   --source-set main
 ```
 
-`--source-set main` excludes public methods found under test, generated,
-example, integration-test, or unknown source roots. Use `--source-set all` or
-omit the flag to preserve the default behavior.
+`--source-set main` excludes public methods found under source roots that
+CoCoMUT classifies as test, generated, example, integration-test, or unknown.
+Use `--source-set all` or omit the flag to preserve the default behavior.
 `--source-set test` uses standard test source roots such as `src/test/java` and
 the matching test bytecode when the build produces it.
+
+Maven source roots are derived from declared modules plus conventional roots.
+Gradle native metadata currently distinguishes `main` and `test` source sets;
+custom Gradle source sets such as `functionalTest` are retained as a known
+limitation until role-preserving Gradle source-set modeling is completed.
 
 ## Layered Selection
 
@@ -422,6 +432,7 @@ pipeline through `ContextRequest` and `ContextExtractorService`.
 | Externally sandboxed build | `--externally-sandboxed-build` | `.externallySandboxedBuild()` |
 | Allow stale bytecode after failed build | `--allow-preexisting-bytecode-after-build-failure` | `.allowPreexistingBytecodeAfterBuildFailure()` |
 | Project class output | `--class-output target/classes` | `.classOutputDir(Path.of("target/classes"))` |
+| Project test class output | `--test-class-output target/test-classes` | `.testClassOutputDir(Path.of("target/test-classes"))` |
 | Project JAR | `--project-jar target/app.jar` | `.projectJar(Path.of("target/app.jar"))` |
 | Dependency JAR | `--dependency-jar lib.jar` | `.dependencyJar(Path.of("lib.jar"))` |
 | Classpath file | `--classpath-file cp.txt` | `.classpathFile(Path.of("cp.txt"))` |

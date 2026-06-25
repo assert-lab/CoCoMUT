@@ -33,6 +33,7 @@ final class Orchestrator {
 
     private final Path projectPath;
     private final Map<String, Object> executionReport;
+    private ContextRequest request;
     private ContextRequest.Scope scope = ContextRequest.Scope.ALL;
     private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.RTA;
     private Integer maxMethods;
@@ -48,10 +49,12 @@ final class Orchestrator {
     private Path outputDirectory;
     private ProjectMetadata providedProjectMetadata;
     private ContextRequest.BuildPolicy buildPolicy = ContextRequest.BuildPolicy.DENY_BUILD;
-    private Set<Path> explicitClassOutputDirs = Set.of();
-    private Set<Path> explicitProjectJars = Set.of();
-    private Set<Path> explicitDependencyJars = Set.of();
-    private Set<Path> explicitClasspathFiles = Set.of();
+    private boolean allowPreexistingBytecodeAfterBuildFailure = false;
+    private List<Path> explicitClassOutputDirs = List.of();
+    private List<Path> explicitTestClassOutputDirs = List.of();
+    private List<Path> explicitProjectJars = List.of();
+    private List<Path> explicitDependencyJars = List.of();
+    private List<Path> explicitClasspathFiles = List.of();
 
     // Pipeline state passed between phases
     private ProjectMetadata projectMetadata;
@@ -64,6 +67,7 @@ final class Orchestrator {
     private Map<String, MethodContext> methodContexts;
     private Map<String, String> contextExtractionFailures = new LinkedHashMap<>();
     private final Set<FailureCode> failureCodes = new LinkedHashSet<>();
+    private ExtractionManifest.GitInfo gitAtStart;
 
     Orchestrator(Path projectPath) {
         this.projectPath = Objects.requireNonNull(projectPath, "projectPath cannot be null");
@@ -72,6 +76,7 @@ final class Orchestrator {
 
     Orchestrator(ContextRequest request) {
         this(request.projectRoot());
+        this.request = request;
         this.scope = request.scope();
         this.callGraphAlgorithm = request.callGraphAlgorithm();
         this.maxMethods = request.maxMethods();
@@ -86,7 +91,9 @@ final class Orchestrator {
         this.targetFilters = request.targets();
         this.outputDirectory = request.outputDirectory();
         this.buildPolicy = request.buildPolicy();
+        this.allowPreexistingBytecodeAfterBuildFailure = request.allowPreexistingBytecodeAfterBuildFailure();
         this.explicitClassOutputDirs = request.classOutputDirs();
+        this.explicitTestClassOutputDirs = request.testClassOutputDirs();
         this.explicitProjectJars = request.projectJars();
         this.explicitDependencyJars = request.dependencyJars();
         this.explicitClasspathFiles = request.classpathFiles();
@@ -161,6 +168,7 @@ final class Orchestrator {
         long startTime = System.currentTimeMillis();
         executionReport.put("start_time", new java.util.Date());
         executionReport.put("pipeline_phases", 5);
+        gitAtStart = ExtractionManifest.captureGitInfo(projectPath);
 
         boolean success = false;
         try {
@@ -194,6 +202,9 @@ final class Orchestrator {
                     ? List.of(FailureCode.NONE.toString())
                     : failureCodes.stream().map(Enum::toString).toList());
             writeManifestIfPossible();
+            executionReport.put("failure_codes", failureCodes.isEmpty()
+                    ? List.of(FailureCode.NONE.toString())
+                    : failureCodes.stream().map(Enum::toString).toList());
             writeExecutionReportIfPossible();
             closeSourceSession();
             restoreSourceFileLimit();
@@ -207,7 +218,9 @@ final class Orchestrator {
             } else {
                 ProjectAnalyzer analyzer = new ProjectAnalyzer(projectPath, true, "auto", includeTestBytecode(),
                         buildPolicy,
+                        allowPreexistingBytecodeAfterBuildFailure,
                         explicitClassOutputDirs,
+                        explicitTestClassOutputDirs,
                         explicitProjectJars,
                         explicitDependencyJars,
                         explicitClasspathFiles);
@@ -226,6 +239,8 @@ final class Orchestrator {
             executionReport.put("phase_1_build_skipped", projectMetadata.isBuildSkipped());
             executionReport.put("phase_1_build_sandboxed", projectMetadata.isBuildSandboxed());
             executionReport.put("phase_1_build_execution_policy", projectMetadata.getBuildPolicy().toString());
+            executionReport.put("phase_1_allow_preexisting_bytecode_after_build_failure",
+                    projectMetadata.isAllowPreexistingBytecodeAfterBuildFailure());
             executionReport.put("phase_1_bytecode_available", projectMetadata.isBytecodeAvailable());
             executionReport.put("phase_1_bytecode_origin", projectMetadata.getBytecodeOrigin());
             executionReport.put("phase_1_analysis_can_proceed", projectMetadata.isAnalysisCanProceed());
@@ -241,6 +256,8 @@ final class Orchestrator {
             executionReport.put("phase_1_dependency_locations", projectMetadata.getDependencyClasspath().size());
             executionReport.put("phase_1_dependency_jars", projectModel.dependencyJars().size());
             executionReport.put("phase_1_explicit_class_outputs", projectMetadata.getExplicitClassOutputDirs().size());
+            executionReport.put("phase_1_explicit_test_class_outputs",
+                    projectMetadata.getExplicitTestClassOutputDirs().size());
             executionReport.put("phase_1_explicit_project_jars", projectMetadata.getExplicitProjectJars().size());
             executionReport.put("phase_1_explicit_dependency_jars", projectMetadata.getExplicitDependencyJars().size());
             executionReport.put("phase_1_explicit_classpath_files", projectMetadata.getExplicitClasspathFiles().size());
@@ -676,10 +693,14 @@ final class Orchestrator {
                 jsonlPath = Path.of(String.valueOf(jsonl));
             }
             Path manifestPath = ExtractionManifest.write(root, projectMetadata, projectModel,
-                    selectionProvenance(), requestHash(), jsonlPath, executionReport);
+                    selectionProvenance(), requestHash(), jsonlPath, executionReport, gitAtStart);
             executionReport.put("extraction_manifest_file", manifestPath.toString());
         } catch (Exception e) {
             executionReport.put("extraction_manifest_error", e.getMessage());
+            failureCodes.add(FailureCode.PROVENANCE_FAILED);
+            if ("SUCCESS".equals(executionReport.get("status"))) {
+                executionReport.put("status", "PARTIAL");
+            }
         }
     }
 
@@ -882,6 +903,9 @@ final class Orchestrator {
     }
 
     private String requestHash() {
+        if (request != null) {
+            return RequestFingerprint.hash(request);
+        }
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("schema", "cocomut-request-v2");
         request.put("project_selector", "project-root");
@@ -899,7 +923,9 @@ final class Orchestrator {
         request.put("max_source_files", maxSourceFiles);
         request.put("call_graph", callGraphAlgorithm.toString());
         request.put("build_policy", buildPolicy.toString());
+        request.put("allow_preexisting_bytecode_after_build_failure", allowPreexistingBytecodeAfterBuildFailure);
         request.put("class_outputs", artifactIdentities(explicitClassOutputDirs));
+        request.put("test_class_outputs", artifactIdentities(explicitTestClassOutputDirs));
         request.put("project_jars", artifactIdentities(explicitProjectJars));
         request.put("dependency_jars", artifactIdentities(explicitDependencyJars));
         request.put("classpath_files", artifactIdentities(explicitClasspathFiles));
@@ -921,11 +947,10 @@ final class Orchestrator {
         }
     }
 
-    private List<String> artifactIdentities(Set<Path> paths) {
-        return (paths == null ? Set.<Path>of() : paths).stream()
+    private List<String> artifactIdentities(List<Path> paths) {
+        return (paths == null ? List.<Path>of() : paths).stream()
                 .filter(Objects::nonNull)
                 .map(path -> artifactIdentity(path.toAbsolutePath().normalize()))
-                .sorted()
                 .toList();
     }
 
@@ -969,7 +994,13 @@ final class Orchestrator {
                         digest.update(path.relativize(file).toString().replace('\\', '/')
                                 .getBytes(StandardCharsets.UTF_8));
                         digest.update((byte) 0);
-                        digest.update(Files.readAllBytes(file));
+                        try (var input = Files.newInputStream(file)) {
+                            byte[] buffer = new byte[8192];
+                            int read;
+                            while ((read = input.read(buffer)) >= 0) {
+                                digest.update(buffer, 0, read);
+                            }
+                        }
                         digest.update((byte) 0);
                     }
                 }

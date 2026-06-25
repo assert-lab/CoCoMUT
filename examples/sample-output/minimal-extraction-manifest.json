@@ -38,6 +38,7 @@
     "phase_1_build_skipped": true,
     "phase_1_build_sandboxed": false,
     "phase_1_build_execution_policy": "DENY_BUILD",
+    "phase_1_allow_preexisting_bytecode_after_build_failure": false,
     "phase_1_bytecode_available": true,
     "phase_1_bytecode_origin": "explicit",
     "phase_1_analysis_can_proceed": true,
@@ -126,7 +127,7 @@
       "available": true,
       "root": "<repo-root>",
       "relative_project_path": "analyzer-tests/src/test/resources/fixtures/minimal-maven-project",
-      "remote_url": "https://github.com/assert-lab/Code-Context-Extractor.git",
+      "remote_url": "https://github.com/assert-lab/CoCoMUT.git",
       "commit": "<tool-commit>",
       "dirty": null,
       "error": ""
@@ -141,6 +142,7 @@
     "sandboxed": false,
     "status": "BUILD DENIED; PROJECT BYTECODE AVAILABLE",
     "policy": "DENY_BUILD",
+    "allow_preexisting_bytecode_after_build_failure": false,
     "bytecode_available": true,
     "bytecode_origin": "explicit",
     "analysis_can_proceed": true
@@ -159,6 +161,7 @@
     "explicit_class_output_dirs": [
       "target/classes"
     ],
+    "explicit_test_class_output_dirs": [],
     "explicit_project_jars": [],
     "explicit_dependency_jars": [],
     "explicit_classpath_files": []

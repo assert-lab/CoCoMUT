@@ -6,7 +6,9 @@ package org.assertlab.cocomut;
 public enum FailureCode {
     NONE,
     NO_SOURCE_ROOT,
+    METADATA_RESOLUTION_FAILED,
     BUILD_FAILED,
+    PROVENANCE_FAILED,
     CALL_GRAPH_UNAVAILABLE,
     CALL_GRAPH_EMPTY,
     EMPTY_SELECTION,
