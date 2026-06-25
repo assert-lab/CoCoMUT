@@ -28,7 +28,7 @@ public class MethodContext {
     private final Map<String, String> classMethods;  // Other methods in class
     private final CallGraphResult callGraph;  // Call graph from Phase 3
     private final int linesOfCode;
-    private final int cyclomatic;             // McCabe complexity
+    private final int cyclomatic;             // lexical branch-keyword estimate
     private final List<String> annotations;
     private final List<String> thrownExceptions;
     private final List<String> fieldReads;
