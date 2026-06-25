@@ -73,7 +73,6 @@
         "sandboxed",
         "status",
         "policy",
-        "allow_preexisting_bytecode_after_build_failure",
         "bytecode_available",
         "bytecode_origin",
         "analysis_can_proceed",
@@ -95,7 +94,6 @@
             "UNKNOWN"
           ]
         },
-        "allow_preexisting_bytecode_after_build_failure": { "type": "boolean" },
         "bytecode_available": { "type": "boolean" },
         "bytecode_origin": { "enum": ["generated_this_run", "preexisting", "explicit", "none"] },
         "analysis_can_proceed": { "type": "boolean" },

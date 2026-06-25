@@ -44,7 +44,6 @@
     "sandboxed": false,
     "status": "BUILD DENIED; PROJECT BYTECODE AVAILABLE",
     "policy": "DENY_BUILD",
-    "allow_preexisting_bytecode_after_build_failure": false,
     "bytecode_available": true,
     "bytecode_origin": "explicit",
     "analysis_can_proceed": true,

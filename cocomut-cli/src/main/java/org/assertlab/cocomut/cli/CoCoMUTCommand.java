@@ -95,10 +95,6 @@ public final class CoCoMUTCommand implements Callable<Integer> {
             description = "Allow Maven/Gradle execution and record that the caller provided external sandboxing.")
     private boolean externallySandboxedBuild;
 
-    @Option(names = "--allow-preexisting-bytecode-after-build-failure",
-            description = "Allow analysis to continue with pre-existing project bytecode if an attempted build fails.")
-    private boolean allowPreexistingBytecodeAfterBuildFailure;
-
     @Option(names = "--class-output", split = ",",
             description = "Project class-output directory to analyze. May be repeated or comma-separated.")
     private java.util.List<Path> classOutputs;
@@ -154,9 +150,6 @@ public final class CoCoMUTCommand implements Callable<Integer> {
                 .sourceRoots(emptyPathListIfNull(sourceRoots))
                 .testSourceRoots(emptyPathListIfNull(testSourceRoots))
                 .outputDirectory(outputDir);
-        if (allowPreexistingBytecodeAfterBuildFailure) {
-            builder.allowPreexistingBytecodeAfterBuildFailure();
-        }
         ContextRequest request = builder.build();
 
         ExtractionReport report = ContextExtractorService.createDefault().extract(request);
@@ -171,10 +164,6 @@ public final class CoCoMUTCommand implements Callable<Integer> {
         if (selected > 1) {
             throw new IllegalArgumentException("Choose only one build execution policy flag: --skip-build, "
                     + "--allow-build, or --externally-sandboxed-build");
-        }
-        if (allowPreexistingBytecodeAfterBuildFailure && !allowBuild && !externallySandboxedBuild) {
-            throw new IllegalArgumentException("--allow-preexisting-bytecode-after-build-failure requires "
-                    + "--allow-build or --externally-sandboxed-build");
         }
         if (skipBuild) {
             return ContextRequest.BuildPolicy.DENY_BUILD;

@@ -5,7 +5,7 @@
 - Minimized the repository into a reusable Java library and CLI.
 - Added Spoon-backed source extraction and method URI identity.
 - Added JSONL output, source-set labels, Javadoc metadata, documentation metrics, and provenance fields.
-- Added optional SootUp call graph modes: `none`, `cha`, and `rta`.
+- Added SootUp call graph modes: `cha` and `rta`.
 - Added typed Java API objects and a standalone Picocli CLI distribution.
 - Added a versioned JSONL schema for method-context records. The schema is
   intentionally extensible through `additionalProperties` while the top-level

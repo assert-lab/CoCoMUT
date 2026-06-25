@@ -100,10 +100,6 @@ See [schemas/README.md](schemas/README.md) for the full schema.
 | Example JSONL output | [examples/sample-output/minimal-method-context.jsonl](examples/sample-output/minimal-method-context.jsonl) |
 | Method/type/package URIs | [docs/symbol-model.md](docs/symbol-model.md) |
 | Javadoc reference policy | [docs/javadoc-reference-policy.md](docs/javadoc-reference-policy.md) |
-| OE25 plus representative study | [docs/oe25-plus-representative-study.md](docs/oe25-plus-representative-study.md) |
-| Field-test notes | [docs/research/FIELD_TEST_RESULTS.md](docs/research/FIELD_TEST_RESULTS.md) |
-| Documentation-context notes | [docs/research/DOC_CONTEXT_RETRIEVAL_NOTES.md](docs/research/DOC_CONTEXT_RETRIEVAL_NOTES.md) |
-| Call-edge resolution notes | [docs/research/CALL_EDGE_RESOLUTION_REPORT.md](docs/research/CALL_EDGE_RESOLUTION_REPORT.md) |
 | Agent instructions | [AGENTS.md](AGENTS.md) |
 | Parallel worktrees | [docs/agents/PARALLEL_WORKFLOW.md](docs/agents/PARALLEL_WORKFLOW.md) |
 | Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |

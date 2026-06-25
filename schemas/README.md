@@ -164,9 +164,6 @@ build.skipped                   Whether build execution was denied
 build.sandboxed                 Whether caller claims external sandboxing
 build.policy                    DENY_BUILD, ALLOW_UNSANDBOXED_BUILD,
                                 EXTERNALLY_SANDBOXED_BUILD, or UNKNOWN
-build.allow_preexisting_bytecode_after_build_failure
-                                Whether stale-bytecode fallback after a failed
-                                attempted build was explicitly allowed
 build.bytecode_available        Whether project bytecode was found
 build.bytecode_origin           generated_this_run, preexisting, explicit, or none
 build.analysis_can_proceed      Whether extraction has project bytecode to analyze
@@ -349,6 +346,5 @@ Generated method-context rows include:
 metadata.schema_version
 ```
 
-Schema changes should preserve backward-compatible fields where possible. If a
-field is renamed, removed, or changes meaning, update this README and the
-schema file.
+If a field is renamed, removed, or changes meaning before a release, update this
+README, the schema file, the emitter, and sample output together.

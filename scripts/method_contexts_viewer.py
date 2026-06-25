@@ -6,7 +6,7 @@ Usage examples:
     # Inspect one CoCoMUT output file.
     python3 scripts/method_contexts_viewer.py /tmp/cocomut-commons-lang-test/method_contexts__4987c243.jsonl
 
-    # Inspect every *.jsonl file under an output directory.
+    # Inspect method-context JSONL files under an output directory.
     python3 scripts/method_contexts_viewer.py /tmp/cocomut-commons-lang-test
 
     # Inspect multiple outputs at once.
@@ -32,9 +32,10 @@ Common workflow:
        reference scope/domain/target kind, source set, visibility, backend
        mode, call graph, method size, and documentation presence.
 
-The viewer accepts any mix of JSONL files and directories. Directories are
-searched recursively for *.jsonl files, so it works for project-wide,
-package-wide, type-wide, and method-targeted CoCoMUT outputs wherever they live.
+The viewer accepts any mix of JSONL files and directories. Directory scans
+prefer method_contexts*.jsonl files and ignore failure-artifact JSONL files, so
+row counts match the method-context output instead of diagnostics such as
+failed_source_files.jsonl.
 """
 
 from __future__ import annotations
@@ -499,6 +500,29 @@ HTML_PAGE = r"""<!DOCTYPE html>
       <option value="RTA">RTA</option>
     </select>
   </label>
+  <label>Call target kind
+    <select id="filterCallTargetKind">
+      <option value="">Any</option>
+      <option value="project_method">project_method</option>
+      <option value="unresolved_project_method">unresolved_project_method</option>
+      <option value="jdk_method">jdk_method</option>
+      <option value="external_method">external_method</option>
+      <option value="synthetic_or_compiler_method">synthetic_or_compiler_method</option>
+      <option value="invokedynamic_method">invokedynamic_method</option>
+      <option value="bytecode_method">bytecode_method</option>
+      <option value="missing">missing</option>
+    </select>
+  </label>
+  <label>Call resolution
+    <select id="filterCallResolution">
+      <option value="">Any</option>
+      <option value="resolved">resolved</option>
+      <option value="unresolved">unresolved</option>
+      <option value="ambiguous">ambiguous</option>
+      <option value="candidate">candidate</option>
+      <option value="missing">missing</option>
+    </select>
+  </label>
   <label>Minimum LOC
     <input type="number" id="filterMinLoc" min="0" placeholder="0">
   </label>
@@ -572,14 +596,16 @@ HTML_PAGE = r"""<!DOCTYPE html>
         <span id="graphPill" class="pill"></span>
       </div>
       <div class="tabs">
-        <button class="tab active" data-tab="callers">Callers</button>
+        <button class="tab active" data-tab="edgeSummary">Edge Summary</button>
+        <button class="tab" data-tab="callers">Callers</button>
         <button class="tab" data-tab="callees">Callees</button>
         <button class="tab" data-tab="metrics">Doc Metrics</button>
         <button class="tab" data-tab="docmeta">Javadoc Metadata</button>
         <button class="tab" data-tab="dynamic">Dynamic</button>
         <button class="tab" data-tab="raw">Raw Record</button>
       </div>
-      <pre class="code-block tab-pane" id="pane-callers"><code id="callers"></code></pre>
+      <pre class="code-block tab-pane" id="pane-edgeSummary"><code id="edgeSummary"></code></pre>
+      <pre class="code-block tab-pane hidden" id="pane-callers"><code id="callers"></code></pre>
       <pre class="code-block tab-pane hidden" id="pane-callees"><code id="callees"></code></pre>
       <pre class="code-block tab-pane hidden" id="pane-metrics"><code id="metrics"></code></pre>
       <pre class="code-block tab-pane hidden" id="pane-docmeta"><code id="docmeta"></code></pre>
@@ -698,6 +724,51 @@ function callGraphMeta(record) {
   };
 }
 
+function recordCallEdges(record) {
+  const callers = Array.isArray(record.callers) ? record.callers : [];
+  const callees = Array.isArray(record.callees) ? record.callees : [];
+  return { callers, callees, edges: [...callers, ...callees] };
+}
+
+function countBy(items, field) {
+  const counts = {};
+  for (const item of items) {
+    const key = item && item[field] ? String(item[field]) : "missing";
+    counts[key] = (counts[key] || 0) + 1;
+  }
+  return Object.fromEntries(Object.entries(counts).sort());
+}
+
+function ratio(numerator, denominator) {
+  if (!denominator) return "";
+  return (100 * numerator / denominator).toFixed(2) + "%";
+}
+
+function callEdgeSummary(record) {
+  const { callers, callees, edges } = recordCallEdges(record);
+  const withTargetUri = edges.filter((edge) => edge && edge.target_uri).length;
+  const withMethodUri = edges.filter((edge) => edge && edge.method_uri).length;
+  const projectAbstentions = edges.filter((edge) => edge && edge.target_kind === "unresolved_project_method").length;
+  const candidateEdges = edges.filter((edge) =>
+    edge && Array.isArray(edge.candidate_method_uris) && edge.candidate_method_uris.length > 0
+  ).length;
+  return {
+    total_edges: edges.length,
+    callers: callers.length,
+    callees: callees.length,
+    edges_with_target_uri: withTargetUri,
+    edges_with_method_uri: withMethodUri,
+    target_uri_rate: ratio(withTargetUri, edges.length),
+    all_edge_source_join_rate: ratio(withMethodUri, withTargetUri),
+    project_source_abstentions: projectAbstentions,
+    project_source_reconciliation_rate: ratio(withMethodUri, withMethodUri + projectAbstentions),
+    candidate_edges: candidateEdges,
+    target_kind_counts: countBy(edges, "target_kind"),
+    resolution_counts: countBy(edges, "resolution"),
+    unresolved_reason_counts: countBy(edges.filter((edge) => edge && edge.unresolved_reason), "unresolved_reason"),
+  };
+}
+
 function docFlags(metrics) {
   return [
     metrics.has_summary ? "summary" : "no summary",
@@ -735,7 +806,10 @@ async function loadDataset(id) {
   const info = await resp.json();
   totalRecords = info.records;
   filteredRecords = info.records;
-  $("datasetStats").textContent = `${info.records} records, ${info.size_mb} MB`;
+  const skipped = info.skipped_rows || 0;
+  const malformed = info.malformed_rows || 0;
+  const skippedText = skipped || malformed ? `, skipped ${skipped}, malformed ${malformed}` : "";
+  $("datasetStats").textContent = `${info.records} method records, ${info.size_mb} MB${skippedText}`;
   currentIndex = 0;
   currentPosition = 0;
   await applyFilters(0);
@@ -754,6 +828,8 @@ function collectFilters() {
     visibility: $("filterVisibility").value,
     backend: $("filterBackend").value,
     call_graph: $("filterCallGraph").value,
+    call_target_kind: $("filterCallTargetKind").value,
+    call_resolution: $("filterCallResolution").value,
     min_loc: $("filterMinLoc").value,
     min_cc: $("filterMinCc").value,
     has_javadoc: $("filterHasJavadoc").checked,
@@ -846,7 +922,8 @@ function renderRecord(record) {
   setText("sourcePill", `${asText(mut.source_set, "unknown")} / ${asText(mut.erased_return_type || mut.return_type, "return ?")}`);
   setText("schemaPill", `schema ${asText(metadata.schema_version, "?")}`);
   setText("docPill", docFlags(metrics));
-  setText("graphPill", `${(record.callers || []).length} callers / ${(record.callees || []).length} callees`);
+  const edgeStats = callEdgeSummary(record);
+  setText("graphPill", `${edgeStats.callers} callers / ${edgeStats.callees} callees / ${edgeStats.edges_with_method_uri} source joins`);
 
   setHtml("methodCode", highlightJava(mut.code));
   setText("javadocText", mut.javadoc || "(missing method javadoc)");
@@ -882,13 +959,17 @@ function renderRecord(record) {
   ]);
 
   setJson("sourceContext", mut.source_context || {});
-  setJson("javadocReferences", javadocMeta.javadoc_references || {
+  setJson("javadocReferences", {
+    javadoc_references: javadocMeta.javadoc_references || [],
     see: javadocMeta.see || [],
+    since: javadocMeta.since || [],
     inline_links: javadocMeta.inline_links || [],
-    inherited_javadoc_candidates: javadocMeta.inherited_javadoc_candidates || [],
     file_references: javadocMeta.file_references || [],
+    inherited_javadoc_candidates: javadocMeta.inherited_javadoc_candidates || [],
+    inheritdoc_resolution: javadocMeta.inheritdoc_resolution,
   });
   setJson("structuredTags", javadocMeta.structured_tags || {});
+  setJson("edgeSummary", edgeStats);
   setJson("callers", record.callers || []);
   setJson("callees", record.callees || []);
   setJson("metrics", metrics);
@@ -942,7 +1023,9 @@ $("clearFiltersBtn").addEventListener("click", () => {
     "filterSourceSet",
     "filterVisibility",
     "filterBackend",
-    "filterCallGraph"
+    "filterCallGraph",
+    "filterCallTargetKind",
+    "filterCallResolution"
   ]) {
     $(id).value = "";
   }
@@ -963,7 +1046,9 @@ for (const id of [
   "filterSourceSet",
   "filterVisibility",
   "filterBackend",
-  "filterCallGraph"
+  "filterCallGraph",
+  "filterCallTargetKind",
+  "filterCallResolution"
 ]) {
   $(id).addEventListener("change", () => applyFilters(0).catch((e) => showStatus(e.message)));
 }
@@ -1021,20 +1106,33 @@ class JsonlIndex:
                 return cached
 
             offsets: list[int] = []
+            malformed_rows = 0
+            skipped_rows = 0
             with path.open("rb") as handle:
                 while True:
                     offset = handle.tell()
                     line = handle.readline()
                     if not line:
                         break
-                    if line.strip():
+                    if not line.strip():
+                        continue
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError:
+                        malformed_rows += 1
+                        continue
+                    if is_method_context_record(record):
                         offsets.append(offset)
+                    else:
+                        skipped_rows += 1
 
             entry = {
                 "path": path,
                 "mtime_ns": stat.st_mtime_ns,
                 "size": stat.st_size,
                 "offsets": offsets,
+                "malformed_rows": malformed_rows,
+                "skipped_rows": skipped_rows,
             }
             self._cache[key] = entry
             return entry
@@ -1048,6 +1146,8 @@ class JsonlIndex:
                 "label": dataset.label,
                 "path": str(dataset.path),
                 "records": len(entry["offsets"]),
+                "malformed_rows": entry["malformed_rows"],
+                "skipped_rows": entry["skipped_rows"],
                 "size": entry["size"],
                 "size_mb": round(entry["size"] / (1024 * 1024), 2),
             })
@@ -1061,6 +1161,8 @@ class JsonlIndex:
             "label": dataset.label,
             "path": str(dataset.path),
             "records": len(entry["offsets"]),
+            "malformed_rows": entry["malformed_rows"],
+            "skipped_rows": entry["skipped_rows"],
             "size": entry["size"],
             "size_mb": round(entry["size"] / (1024 * 1024), 2),
         }
@@ -1158,6 +1260,8 @@ def normalize_filters(filters: dict[str, Any] | None) -> dict[str, Any]:
         "visibility",
         "backend",
         "call_graph",
+        "call_target_kind",
+        "call_resolution",
         "min_loc",
         "min_cc",
     ]:
@@ -1213,6 +1317,12 @@ def line_matches_filters(line: str, filters: dict[str, Any]) -> bool:
     if filters.get("backend") and metadata.get("source_backend_mode") != filters["backend"]:
         return False
     if filters.get("call_graph") and not matches_call_graph_filter(call_graph, metadata, filters["call_graph"]):
+        return False
+    if filters.get("call_target_kind") and not has_call_edge_field(
+            record, "target_kind", filters["call_target_kind"]):
+        return False
+    if filters.get("call_resolution") and not has_call_edge_field(
+            record, "resolution", filters["call_resolution"]):
         return False
     if filters.get("min_loc") and int_value(mut.get("lines_of_code")) < int_value(filters["min_loc"]):
         return False
@@ -1282,6 +1392,23 @@ def has_reference_field(javadoc_meta: dict[str, Any], field: str, value: str) ->
     return any(isinstance(ref, dict) and ref.get(field) == value for ref in refs)
 
 
+def has_call_edge_field(record: dict[str, Any], field: str, value: str) -> bool:
+    edges = list(record.get("callers") or []) + list(record.get("callees") or [])
+    for edge in edges:
+        if not isinstance(edge, dict):
+            continue
+        if field == "resolution" and value == "candidate" and edge.get("candidate_method_uris"):
+            return True
+        if field == "resolution" and value == "ambiguous":
+            resolution = str(edge.get("resolution") or "")
+            if "ambiguous" in resolution or edge.get("candidate_method_uris"):
+                return True
+        actual = edge.get(field) or "missing"
+        if actual == value:
+            return True
+    return False
+
+
 def matches_call_graph_filter(call_graph: dict[str, Any], metadata: dict[str, Any], wanted: str) -> bool:
     available = call_graph.get("available")
     if available is None:
@@ -1292,6 +1419,14 @@ def matches_call_graph_filter(call_graph: dict[str, Any], metadata: dict[str, An
     if wanted == "unavailable":
         return not bool(available)
     return str(algorithm).upper() == wanted.upper()
+
+
+def is_method_context_record(record: Any) -> bool:
+    if not isinstance(record, dict):
+        return False
+    mut = record.get("MUT")
+    metadata = record.get("metadata")
+    return isinstance(mut, dict) and isinstance(metadata, dict) and bool(mut.get("method_uri") or mut.get("signature"))
 
 
 class ViewerHandler(http.server.SimpleHTTPRequestHandler):
@@ -1381,6 +1516,18 @@ class ViewerHandler(http.server.SimpleHTTPRequestHandler):
         ))
 
 
+def likely_method_context_files(candidates: list[Path]) -> list[Path]:
+    method_files = [path for path in candidates if path.name.startswith("method_contexts") and path.suffix == ".jsonl"]
+    if method_files:
+        return sorted(method_files)
+    return sorted(
+        path for path in candidates
+        if path.suffix == ".jsonl"
+        and not path.name.startswith("failed_")
+        and "failure" not in path.name
+    )
+
+
 def discover_jsonl(paths: list[Path]) -> list[Path]:
     found: list[Path] = []
     seen: set[Path] = set()
@@ -1389,7 +1536,7 @@ def discover_jsonl(paths: list[Path]) -> list[Path]:
         if path.is_file() and path.suffix == ".jsonl":
             candidates = [path]
         elif path.is_dir():
-            candidates = sorted(child for child in path.rglob("*.jsonl") if child.is_file())
+            candidates = likely_method_context_files([child for child in path.rglob("*.jsonl") if child.is_file()])
         else:
             raise SystemExit(f"Not a JSONL file or directory: {raw}")
 
@@ -1430,7 +1577,7 @@ def parse_args() -> argparse.Namespace:
         "paths",
         nargs="*",
         type=Path,
-        help="JSONL files or directories to scan recursively for *.jsonl files.",
+        help="Method-context JSONL files or output directories to scan.",
     )
     parser.add_argument(
         "--jsonl",
@@ -1444,7 +1591,7 @@ def parse_args() -> argparse.Namespace:
         action="append",
         type=Path,
         default=[],
-        help="Directory to scan recursively for JSONL files. Can be passed multiple times.",
+        help="Directory to scan recursively for method-context JSONL files. Can be passed multiple times.",
     )
     parser.add_argument("--host", default="127.0.0.1", help="Host interface to bind. Default: 127.0.0.1.")
     parser.add_argument("--port", type=int, default=8080, help="HTTP port. Default: 8080.")
@@ -1461,7 +1608,7 @@ def main() -> int:
     files = discover_jsonl(inputs)
     datasets = make_datasets(files)
     if not datasets:
-        print("No .jsonl files found in the supplied paths.", file=sys.stderr)
+        print("No method-context .jsonl files found in the supplied paths.", file=sys.stderr)
         return 2
 
     ViewerHandler.index = JsonlIndex(datasets)

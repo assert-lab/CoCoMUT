@@ -49,7 +49,6 @@ final class Orchestrator {
     private Path outputDirectory;
     private ProjectMetadata providedProjectMetadata;
     private ContextRequest.BuildPolicy buildPolicy = ContextRequest.BuildPolicy.DENY_BUILD;
-    private boolean allowPreexistingBytecodeAfterBuildFailure = false;
     private List<Path> explicitClassOutputDirs = List.of();
     private List<Path> explicitTestClassOutputDirs = List.of();
     private List<Path> explicitProjectJars = List.of();
@@ -94,7 +93,6 @@ final class Orchestrator {
         this.targetFilters = request.targets();
         this.outputDirectory = request.outputDirectory();
         this.buildPolicy = request.buildPolicy();
-        this.allowPreexistingBytecodeAfterBuildFailure = request.allowPreexistingBytecodeAfterBuildFailure();
         this.explicitClassOutputDirs = request.classOutputDirs();
         this.explicitTestClassOutputDirs = request.testClassOutputDirs();
         this.explicitProjectJars = request.projectJars();
@@ -230,7 +228,6 @@ final class Orchestrator {
             } else {
                 ProjectAnalyzer analyzer = new ProjectAnalyzer(projectPath, true, "auto", includeTestBytecode(),
                         buildPolicy,
-                        allowPreexistingBytecodeAfterBuildFailure,
                         explicitClassOutputDirs,
                         explicitTestClassOutputDirs,
                         explicitProjectJars,
@@ -259,8 +256,6 @@ final class Orchestrator {
                 failureCodes.add(FailureCode.MODEL_RESOLUTION_PARTIAL);
             }
             executionReport.put("phase_1_build_execution_policy", projectMetadata.getBuildPolicy().toString());
-            executionReport.put("phase_1_allow_preexisting_bytecode_after_build_failure",
-                    projectMetadata.isAllowPreexistingBytecodeAfterBuildFailure());
             executionReport.put("phase_1_bytecode_available", projectMetadata.isBytecodeAvailable());
             executionReport.put("phase_1_bytecode_origin", projectMetadata.getBytecodeOrigin());
             executionReport.put("phase_1_analysis_can_proceed", projectMetadata.isAnalysisCanProceed());
@@ -956,7 +951,6 @@ final class Orchestrator {
         request.put("max_source_files", maxSourceFiles);
         request.put("call_graph", callGraphAlgorithm.toString());
         request.put("build_policy", buildPolicy.toString());
-        request.put("allow_preexisting_bytecode_after_build_failure", allowPreexistingBytecodeAfterBuildFailure);
         request.put("class_outputs", artifactIdentities(explicitClassOutputDirs));
         request.put("test_class_outputs", artifactIdentities(explicitTestClassOutputDirs));
         request.put("project_jars", artifactIdentities(explicitProjectJars));

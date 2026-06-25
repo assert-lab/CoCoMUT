@@ -78,26 +78,6 @@ public class ContextRequestTest {
     }
 
     @Test
-    public void failedBuildFallbackIsSeparateFromBuildExecutionPolicy() {
-        ContextRequest request = ContextRequest.builder()
-                .projectRoot(Path.of("."))
-                .allowUnsandboxedBuild()
-                .allowPreexistingBytecodeAfterBuildFailure()
-                .build();
-
-        assertEquals(ContextRequest.BuildPolicy.ALLOW_UNSANDBOXED_BUILD, request.buildPolicy());
-        assertTrue(request.allowPreexistingBytecodeAfterBuildFailure());
-    }
-
-    @Test(expected = IllegalArgumentException.class)
-    public void failedBuildFallbackRequiresBuildExecutionPolicyInApi() {
-        ContextRequest.builder()
-                .projectRoot(Path.of("."))
-                .allowPreexistingBytecodeAfterBuildFailure()
-                .build();
-    }
-
-    @Test
     public void builderAcceptsChaBytecodeAnalysis() {
         ContextRequest request = ContextRequest.builder()
                 .projectRoot(Path.of("."))

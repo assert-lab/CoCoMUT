@@ -33,7 +33,6 @@ public class ProjectAnalyzer {
     private final String buildSystem;
     private final boolean includeTests;
     private final ContextRequest.BuildPolicy buildPolicy;
-    private final boolean allowPreexistingBytecodeAfterBuildFailure;
     private final List<Path> explicitClassOutputDirs;
     private final List<Path> explicitTestClassOutputDirs;
     private final List<Path> explicitProjectJars;
@@ -63,14 +62,13 @@ public class ProjectAnalyzer {
 
     public ProjectAnalyzer(Path projectPath, boolean autoDetectJavaVersion, String buildSystem, boolean includeTests) {
         this(projectPath, autoDetectJavaVersion, buildSystem, includeTests,
-                ContextRequest.BuildPolicy.DENY_BUILD, false,
+                ContextRequest.BuildPolicy.DENY_BUILD,
                 List.of(), List.of(), List.of(), List.of(), List.of());
     }
 
     public ProjectAnalyzer(ContextRequest request) {
         this(request.projectRoot(), true, "auto", includeTestBytecode(request),
                 request.buildPolicy(),
-                request.allowPreexistingBytecodeAfterBuildFailure(),
                 request.classOutputDirs(),
                 request.testClassOutputDirs(),
                 request.projectJars(),
@@ -85,16 +83,14 @@ public class ProjectAnalyzer {
                            String buildSystem,
                            boolean includeTests,
                            ContextRequest.BuildPolicy buildPolicy,
-                           boolean allowPreexistingBytecodeAfterBuildFailure,
                            List<Path> explicitClassOutputDirs,
                            List<Path> explicitTestClassOutputDirs,
                            List<Path> explicitProjectJars,
                            List<Path> explicitDependencyJars,
                            List<Path> explicitClasspathFiles) {
         this(projectPath, autoDetectJavaVersion, buildSystem, includeTests, buildPolicy,
-                allowPreexistingBytecodeAfterBuildFailure, explicitClassOutputDirs,
-                explicitTestClassOutputDirs, explicitProjectJars, explicitDependencyJars,
-                explicitClasspathFiles, List.of(), List.of());
+                explicitClassOutputDirs, explicitTestClassOutputDirs, explicitProjectJars,
+                explicitDependencyJars, explicitClasspathFiles, List.of(), List.of());
     }
 
     public ProjectAnalyzer(Path projectPath,
@@ -102,7 +98,6 @@ public class ProjectAnalyzer {
                            String buildSystem,
                            boolean includeTests,
                            ContextRequest.BuildPolicy buildPolicy,
-                           boolean allowPreexistingBytecodeAfterBuildFailure,
                            List<Path> explicitClassOutputDirs,
                            List<Path> explicitTestClassOutputDirs,
                            List<Path> explicitProjectJars,
@@ -115,7 +110,6 @@ public class ProjectAnalyzer {
         this.buildSystem = buildSystem;
         this.includeTests = includeTests;
         this.buildPolicy = buildPolicy == null ? ContextRequest.BuildPolicy.DENY_BUILD : buildPolicy;
-        this.allowPreexistingBytecodeAfterBuildFailure = allowPreexistingBytecodeAfterBuildFailure;
         this.explicitClassOutputDirs = explicitClassOutputDirs == null ? List.of() : List.copyOf(explicitClassOutputDirs);
         this.explicitTestClassOutputDirs = explicitTestClassOutputDirs == null ? List.of() : List.copyOf(explicitTestClassOutputDirs);
         this.explicitProjectJars = explicitProjectJars == null ? List.of() : List.copyOf(explicitProjectJars);
@@ -204,7 +198,6 @@ public class ProjectAnalyzer {
                 .buildSkipped(buildPolicy == ContextRequest.BuildPolicy.DENY_BUILD)
                 .buildSandboxed(buildPolicy == ContextRequest.BuildPolicy.EXTERNALLY_SANDBOXED_BUILD)
                 .buildPolicy(buildPolicy)
-                .allowPreexistingBytecodeAfterBuildFailure(allowPreexistingBytecodeAfterBuildFailure)
                 .bytecodeAvailable(bytecodeAvailable)
                 .bytecodeOrigin(bytecodeOrigin)
                 .analysisCanProceed(analysisCanProceed)
@@ -230,7 +223,7 @@ public class ProjectAnalyzer {
         if (buildResult.succeeded()) {
             return true;
         }
-        return allowPreexistingBytecodeAfterBuildFailure;
+        return false;
     }
 
     private static boolean includeTestBytecode(ContextRequest request) {

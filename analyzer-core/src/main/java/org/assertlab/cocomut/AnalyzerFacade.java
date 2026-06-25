@@ -88,7 +88,6 @@ final class AnalyzerFacade {
                 .dependencyClasspath(java.util.List.of())
                 .compileStatus("METADATA RESOLUTION FAILED")
                 .buildPolicy(request.buildPolicy())
-                .allowPreexistingBytecodeAfterBuildFailure(request.allowPreexistingBytecodeAfterBuildFailure())
                 .buildSkipped(request.skipBuild())
                 .buildSandboxed(request.buildPolicy() == ContextRequest.BuildPolicy.EXTERNALLY_SANDBOXED_BUILD)
                 .explicitClassOutputDirs(request.classOutputDirs())
