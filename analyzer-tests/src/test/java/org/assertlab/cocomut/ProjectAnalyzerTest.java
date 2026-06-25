@@ -2,6 +2,10 @@ package org.assertlab.cocomut;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.networknt.schema.JsonSchema;
+import com.networknt.schema.JsonSchemaFactory;
+import com.networknt.schema.SpecVersion;
+import com.networknt.schema.ValidationMessage;
 import org.assertlab.cocomut.adapter.GradleProjectAdapter;
 
 import java.io.IOException;
@@ -10,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
@@ -357,6 +362,13 @@ public class ProjectAnalyzerTest {
                     metadata.getSourceRoots().contains(project.resolve("vendor/demo/src/main/java").toAbsolutePath().normalize()));
             assertTrue("Main-scope Gradle metadata should not include test source roots",
                     metadata.getTestSourceRoots().isEmpty());
+            assertTrue("Gradle module/source-set provenance should retain :app/main",
+                    metadata.getModuleSourceSets().stream().anyMatch(sourceSet ->
+                            ":app".equals(sourceSet.projectPath())
+                                    && "main".equals(sourceSet.sourceSet())
+                                    && sourceSet.sources().contains(project.resolve("app/src/main/java").toAbsolutePath().normalize())
+                                    && sourceSet.outputs().stream().anyMatch(path ->
+                                            path.endsWith(Path.of("app/build/classes/java/main")))));
         } finally {
             deleteRecursively(project);
         }
@@ -452,6 +464,103 @@ public class ProjectAnalyzerTest {
                     explicitRisk.isAnalysisCanProceed());
         } finally {
             deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void explicitSourceRootsSuppressHeuristicSourceScanning() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-explicit-source-roots-");
+        try {
+            Path appSource = Files.createDirectories(project.resolve("app/src/main/java/app"));
+            Files.writeString(appSource.resolve("App.java"), "package app; class App {}\n");
+            Path vendorSource = Files.createDirectories(project.resolve("vendor/old-demo/src/main/java/vendor"));
+            Files.writeString(vendorSource.resolve("Vendor.java"), "package vendor; class Vendor {}\n");
+            Path classes = Files.createDirectories(project.resolve("app/build/classes/java/main/app"));
+            Files.write(classes.resolve("App.class"), new byte[] {0, 0, 0, 0});
+            Files.writeString(project.resolve("settings.gradle"), "include 'app'\n");
+
+            ProjectMetadata metadata = new ProjectAnalyzer(ContextRequest.builder()
+                    .projectRoot(project)
+                    .skipBuild(true)
+                    .sourceRoot(project.resolve("app/src/main/java"))
+                    .classOutputDir(project.resolve("app/build/classes/java/main"))
+                    .build()).analyze();
+
+            assertEquals(List.of(project.resolve("app/src/main/java").toAbsolutePath().normalize()),
+                    metadata.getSourceRoots());
+            assertFalse(metadata.getSourceRoots().contains(
+                    project.resolve("vendor/old-demo/src/main/java").toAbsolutePath().normalize()));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void projectJarPathIsRemovedFromDependencyClasspath() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-disjoint-artifacts-");
+        try {
+            Path projectJar = project.resolve("app.jar");
+            Files.write(projectJar, new byte[] {1, 2, 3});
+            ProjectMetadata metadata = new ProjectAnalyzer(ContextRequest.builder()
+                    .projectRoot(project)
+                    .skipBuild(true)
+                    .projectJar(projectJar)
+                    .build()).analyze();
+
+            assertTrue(metadata.getProjectArtifactJars().contains(projectJar.toAbsolutePath().normalize()));
+            assertFalse("A project artifact must not also be reported as a dependency",
+                    metadata.getDependencyClasspath().contains(projectJar.toAbsolutePath().normalize()));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void failedManifestHasMissingJsonlDiagnosticsAndCurrentSchemaVersion() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-failed-manifest-");
+        Path output = Files.createTempDirectory("cocomut-failed-manifest-out-");
+        try {
+            java.util.Map<String, Object> report = new java.util.LinkedHashMap<>();
+            report.put("status", "ERROR");
+            Path manifest = ExtractionManifest.write(output, manifestMetadata(project, project),
+                    null, java.util.Map.of(), "3".repeat(64), null, report);
+
+            JsonNode root = new ObjectMapper().readTree(manifest.toFile());
+            assertEquals("0.3.0", root.path("schema_version").asText());
+            JsonNode emitted = root.path("hashes").path("emitted_jsonl");
+            assertEquals("missing", emitted.path("status").asText());
+            assertTrue("Missing JSONL hash entries must include an explanatory error",
+                    emitted.path("errors").size() > 0);
+            assertTrue("Manifest hash failures must be reflected into the execution report",
+                    root.path("execution").path("provenance_hash_failures").size() > 0);
+            assertValidExtractionManifest(manifest);
+        } finally {
+            deleteRecursively(project);
+            deleteRecursively(output);
+        }
+    }
+
+    @Test
+    public void manifestHashFailureDowngradesSuccessfulReportToPartial() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-provenance-status-");
+        Path output = Files.createTempDirectory("cocomut-provenance-status-out-");
+        try {
+            java.util.Map<String, Object> report = new java.util.LinkedHashMap<>();
+            report.put("status", "SUCCESS");
+            report.put("failure_codes", List.of("NONE"));
+
+            Path manifest = ExtractionManifest.write(output, manifestMetadata(project, project),
+                    null, java.util.Map.of(), "4".repeat(64), null, report);
+
+            JsonNode root = new ObjectMapper().readTree(manifest.toFile());
+            assertEquals("PARTIAL", root.path("execution").path("status").asText());
+            assertTrue(root.path("execution").path("failure_codes").toString().contains("PROVENANCE_FAILED"));
+            assertEquals("PARTIAL", report.get("status"));
+            assertTrue(String.valueOf(report.get("failure_codes")).contains("PROVENANCE_FAILED"));
+            assertValidExtractionManifest(manifest);
+        } finally {
+            deleteRecursively(project);
+            deleteRecursively(output);
         }
     }
 
@@ -713,6 +822,19 @@ public class ProjectAnalyzerTest {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    private static void assertValidExtractionManifest(Path manifest) throws IOException {
+        ObjectMapper mapper = new ObjectMapper();
+        Path schemaPath = Paths.get(System.getProperty("user.dir")).getParent()
+                .resolve("schemas/extraction-manifest.schema.json");
+        JsonNode schemaNode = mapper.readTree(schemaPath.toFile());
+        JsonNode manifestNode = mapper.readTree(manifest.toFile());
+        JsonSchema schema = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012)
+                .getSchema(schemaNode);
+        Set<ValidationMessage> errors = schema.validate(manifestNode);
+        assertTrue("Manifest should validate against extraction-manifest.schema.json: " + errors,
+                errors.isEmpty());
     }
 
     private static void deleteRecursively(Path root) throws IOException {

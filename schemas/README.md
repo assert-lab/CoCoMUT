@@ -126,10 +126,12 @@ Every extraction also writes `extraction_manifest.json` beside the JSONL file.
 This is run-level metadata, not method-level context. The manifest records:
 
 ```text
-schema_version                  Manifest schema version
+schema_version                  Manifest schema version, currently 0.3.0
 generated_at                    Timestamp for the extraction run
 tool / tool_version             CoCoMUT release identity
-request_hash                    Hash of selection and extraction options
+tool_git                        Git identity of the CoCoMUT checkout/build
+request_hash                    Cached hash of selection, build policy, and
+                                explicit request artifacts
 selection                       Same selection provenance stored in JSONL rows
 project.name/path/build_system  Analyzed project identity
 project.git.remote_url          Git remote when the checkout exposes one
@@ -149,7 +151,11 @@ build.allow_preexisting_bytecode_after_build_failure
 build.bytecode_available        Whether project bytecode was found
 build.bytecode_origin           generated_this_run, preexisting, explicit, or none
 build.analysis_can_proceed      Whether extraction has project bytecode to analyze
+build.gradle_model              Gradle model status, diagnostics, and partiality
 artifacts.*                     Source roots, class outputs, jars, explicit inputs
+artifacts.origins               Per-artifact origin labels such as explicit,
+                                preexisting, generated_this_run, dependency
+artifacts.module_source_sets    Gradle module/source-set provenance when available
 hashes.algorithm/format         Hash algorithm and deterministic digest format
 hashes.main_bytecode            Hash over main outputs and project JARs
 hashes.test_bytecode            Hash over test outputs

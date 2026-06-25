@@ -153,6 +153,10 @@ Useful options:
                                 comma-separated
 --test-class-output DIR        Project test class-output directory,
                                 repeatable or comma-separated
+--source-root DIR              Exact main source root to parse, repeatable or
+                                comma-separated
+--test-source-root DIR         Exact test source root to parse, repeatable or
+                                comma-separated
 --project-jar JAR              Project artifact JAR, repeatable or comma-separated
 --dependency-jar JAR           Dependency JAR, repeatable or comma-separated
 --classpath-file FILE          File containing classpath entries, one per line
@@ -196,6 +200,7 @@ acceptable, use the explicit artifact path:
 ./bin/cocomut \
   --project /path/to/java/project \
   --skip-build \
+  --source-root /path/to/java/project/src/main/java \
   --class-output /path/to/java/project/target/classes \
   --dependency-jar ~/.m2/repository/org/example/lib/1.0/lib-1.0.jar \
   --source-set main
@@ -207,7 +212,10 @@ from `--classpath-file` help type/call-target resolution, but dependency
 directories/JARs alone do not count as analyzed project bytecode. When
 `--skip-build` is used with explicit project artifacts, CoCoMUT treats those
 artifacts as exact project bytecode inputs and does not merge stale conventional
-outputs such as `target/classes`.
+outputs such as `target/classes`. For Gradle projects in denied-build mode,
+prefer `--source-root` / `--test-source-root` as well; otherwise CoCoMUT can only
+use safe conventional source-root discovery because it deliberately avoids
+executing Gradle metadata logic.
 
 `--call-graph rta` is the default. Use `--call-graph cha` when the study design
 needs class-hierarchy analysis instead of rapid type analysis.
@@ -228,6 +236,11 @@ Use `--source-set all` or omit the flag to preserve the default behavior.
 the matching test bytecode when the build produces it.
 
 Maven source roots are derived from declared modules plus conventional roots.
+Gradle source roots are authoritative only when Gradle model resolution is
+allowed and succeeds. Custom Gradle source sets are preserved in manifest
+module/source-set metadata, but output filtering is still normalized through
+CoCoMUT's public source-set labels (`main`, `test`, `integration_test`,
+`generated`, `example`, `unknown`).
 Gradle native metadata currently distinguishes `main` and `test` source sets;
 custom Gradle source sets such as `functionalTest` are retained as a known
 limitation until role-preserving Gradle source-set modeling is completed.
@@ -433,6 +446,8 @@ pipeline through `ContextRequest` and `ContextExtractorService`.
 | Allow stale bytecode after failed build | `--allow-preexisting-bytecode-after-build-failure` | `.allowPreexistingBytecodeAfterBuildFailure()` |
 | Project class output | `--class-output target/classes` | `.classOutputDir(Path.of("target/classes"))` |
 | Project test class output | `--test-class-output target/test-classes` | `.testClassOutputDir(Path.of("target/test-classes"))` |
+| Main source root | `--source-root src/main/java` | `.sourceRoot(Path.of("src/main/java"))` |
+| Test source root | `--test-source-root src/test/java` | `.testSourceRoot(Path.of("src/test/java"))` |
 | Project JAR | `--project-jar target/app.jar` | `.projectJar(Path.of("target/app.jar"))` |
 | Dependency JAR | `--dependency-jar lib.jar` | `.dependencyJar(Path.of("lib.jar"))` |
 | Classpath file | `--classpath-file cp.txt` | `.classpathFile(Path.of("cp.txt"))` |
@@ -457,6 +472,10 @@ Current static-analysis boundaries:
   `--externally-sandboxed-build` is passed; otherwise CoCoMUT requires
   pre-existing project class files or project JARs in a conventional build
   layout or through explicit `--class-output` / `--project-jar` inputs;
+- exact denied-build analyses should also provide `--source-root` /
+  `--test-source-root` when conventional source-root discovery would include
+  nested examples, vendored projects, or generated checkouts that are not part
+  of the intended analysis target;
 - the default denied-build policy is the preferred policy for untrusted
   repositories unless the build runs in an external sandbox;
 - reflection, proxies, generated code, Lombok, service loaders, and dependency

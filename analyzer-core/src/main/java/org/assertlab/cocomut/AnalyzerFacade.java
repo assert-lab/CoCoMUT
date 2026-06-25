@@ -3,11 +3,8 @@ package org.assertlab.cocomut;
 import org.assertlab.cocomut.adapter.ProjectAdapter;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -26,6 +23,7 @@ final class AnalyzerFacade {
 
     static Map<String, Object> analyze(ContextRequest request) throws IOException {
         Objects.requireNonNull(request, "request cannot be null");
+        RunSnapshot runSnapshot = RunSnapshot.capture(request);
 
         try {
             ProjectAdapter adapter = ProjectAdapter.of(request.projectRoot());
@@ -34,27 +32,28 @@ final class AnalyzerFacade {
                     adapter.getClass().getSimpleName(),
                     request.scope());
             ProjectMetadata metadata = adapter.toMetadata(request);
-            Orchestrator orchestrator = new Orchestrator(request, metadata);
+            Orchestrator orchestrator = new Orchestrator(request, metadata, runSnapshot);
             orchestrator.execute();
             return orchestrator.getExecutionReport();
         } catch (Exception e) {
-            ExtractionManifest.GitInfo gitAtStart = ExtractionManifest.captureGitInfo(request.projectRoot());
             Map<String, Object> report = new LinkedHashMap<>();
             report.put("status", "ERROR");
             report.put("failed_at_phase", 1);
             report.put("phase_1_error", e.getMessage());
             report.put("failure_codes", java.util.List.of(FailureCode.METADATA_RESOLUTION_FAILED.toString()));
+            report.put("start_time", new java.util.Date(runSnapshot.startMillis()));
+            report.put("duration_ms", System.currentTimeMillis() - runSnapshot.startMillis());
             Path outputRoot = request.outputDirectory() != null
                     ? request.outputDirectory().toAbsolutePath().normalize()
                     : Path.of(System.getProperty("user.dir")).resolve("cocomut_output")
                             .resolve(sanitize(request.projectRoot().getFileName().toString()) + "-"
-                                    + shortProjectHash(request.projectRoot()))
+                                    + runSnapshot.requestHash().substring(0, Math.min(16, runSnapshot.requestHash().length())))
                             .toAbsolutePath().normalize();
             Files.createDirectories(outputRoot);
             ProjectMetadata metadata = failedMetadata(request);
             Path manifest = ExtractionManifest.write(outputRoot, metadata, null,
                     selection(request),
-                    RequestFingerprint.hash(request), null, report, gitAtStart);
+                    runSnapshot.requestHash(), null, report, runSnapshot);
             report.put("extraction_manifest_file", manifest.toString());
             writeExecutionReport(outputRoot, report);
             return report;
@@ -80,8 +79,8 @@ final class AnalyzerFacade {
                 .buildSystem("unknown")
                 .javaVersion("unknown")
                 .sourceRoot(request.projectRoot())
-                .sourceRoots(java.util.List.of())
-                .testSourceRoots(java.util.List.of())
+                .sourceRoots(request.sourceRoots())
+                .testSourceRoots(request.testSourceRoots())
                 .classpath(java.util.List.of())
                 .mainClassOutputs(java.util.List.of())
                 .testClassOutputs(java.util.List.of())
@@ -97,21 +96,12 @@ final class AnalyzerFacade {
                 .explicitProjectJars(request.projectJars())
                 .explicitDependencyJars(request.dependencyJars())
                 .explicitClasspathFiles(request.classpathFiles())
+                .explicitSourceRoots(request.sourceRoots())
+                .explicitTestSourceRoots(request.testSourceRoots())
                 .bytecodeAvailable(false)
                 .bytecodeOrigin("none")
                 .analysisCanProceed(false)
                 .build();
-    }
-
-    private static String shortProjectHash(Path projectRoot) {
-        String normalized = projectRoot.toAbsolutePath().normalize().toString();
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest(normalized.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest, 0, 4);
-        } catch (Exception e) {
-            return Integer.toHexString(normalized.hashCode());
-        }
     }
 
     private static String sanitize(String value) {

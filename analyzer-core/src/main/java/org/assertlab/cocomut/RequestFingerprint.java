@@ -52,6 +52,8 @@ final class RequestFingerprint {
         node.set("project_jars", MAPPER.valueToTree(artifactIdentities(request.projectRoot(), request.projectJars())));
         node.set("dependency_jars", MAPPER.valueToTree(artifactIdentities(request.projectRoot(), request.dependencyJars())));
         node.set("classpath_files", MAPPER.valueToTree(artifactIdentities(request.projectRoot(), request.classpathFiles())));
+        node.set("source_roots", MAPPER.valueToTree(artifactIdentities(request.projectRoot(), request.sourceRoots())));
+        node.set("test_source_roots", MAPPER.valueToTree(artifactIdentities(request.projectRoot(), request.testSourceRoots())));
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                     .digest(MAPPER.writeValueAsBytes(node)));

@@ -53,17 +53,47 @@ final class ExtractionManifest {
                       Path jsonlPath,
                       Map<String, Object> executionReport,
                       GitInfo gitAtStart) throws IOException {
+        return writeInternal(outputRoot, metadata, model, selection, requestHash, jsonlPath, executionReport,
+                gitAtStart, null);
+    }
+
+    static Path write(Path outputRoot,
+                      ProjectMetadata metadata,
+                      ProjectModel model,
+                      Map<String, Object> selection,
+                      String requestHash,
+                      Path jsonlPath,
+                      Map<String, Object> executionReport,
+                      RunSnapshot runSnapshot) throws IOException {
+        return writeInternal(outputRoot, metadata, model, selection, requestHash, jsonlPath, executionReport,
+                runSnapshot.projectGitAtStart(), runSnapshot.toolGitAtStart());
+    }
+
+    private static Path writeInternal(Path outputRoot,
+                                      ProjectMetadata metadata,
+                                      ProjectModel model,
+                                      Map<String, Object> selection,
+                                      String requestHash,
+                                      Path jsonlPath,
+                                      Map<String, Object> executionReport,
+                                      GitInfo gitAtStart,
+                                      GitInfo toolGitAtStart) throws IOException {
         Objects.requireNonNull(outputRoot, "outputRoot cannot be null");
+        Map<String, Object> report = executionReport == null
+                ? new java.util.LinkedHashMap<>()
+                : new java.util.LinkedHashMap<>(executionReport);
 
         ObjectNode root = MAPPER.createObjectNode();
-        root.put("schema_version", "0.2.0");
+        root.put("schema_version", "0.3.0");
         root.put("generated_at", Instant.now().toString());
         root.put("tool", "CoCoMUT");
         root.put("tool_version", toolVersion());
         root.put("request_hash", requestHash == null ? "" : requestHash);
+        root.set("tool_git", MAPPER.valueToTree(toolGitAtStart != null
+                ? toolGitAtStart
+                : captureGitInfo(Path.of(System.getProperty("user.dir")))));
         root.set("selection", MAPPER.valueToTree(selection == null ? Map.of() : selection));
         root.put("jsonl_file", jsonlPath == null ? null : jsonlPath.getFileName().toString());
-        root.set("execution", MAPPER.valueToTree(executionReport == null ? Map.of() : executionReport));
 
         Path projectPath = metadata != null ? metadata.getProjectPath() : null;
         ObjectNode project = root.putObject("project");
@@ -87,6 +117,9 @@ final class ExtractionManifest {
         build.put("bytecode_available", metadata != null && metadata.isBytecodeAvailable());
         build.put("bytecode_origin", metadata != null ? metadata.getBytecodeOrigin() : "none");
         build.put("analysis_can_proceed", metadata != null && metadata.isAnalysisCanProceed());
+        build.set("gradle_model", MAPPER.valueToTree(metadata != null
+                ? metadata.getGradleModelReport()
+                : GradleModelReport.notAttempted()));
 
         ObjectNode artifacts = root.putObject("artifacts");
         List<Path> sourceRoots = model != null ? model.sourceRoots() : List.of();
@@ -111,22 +144,63 @@ final class ExtractionManifest {
                 metadata != null ? metadata.getExplicitDependencyJars() : List.of()));
         artifacts.set("explicit_classpath_files", paths(projectPath,
                 metadata != null ? metadata.getExplicitClasspathFiles() : List.of()));
+        artifacts.set("explicit_source_roots", paths(projectPath,
+                metadata != null ? metadata.getExplicitSourceRoots() : List.of()));
+        artifacts.set("explicit_test_source_roots", paths(projectPath,
+                metadata != null ? metadata.getExplicitTestSourceRoots() : List.of()));
+        artifacts.set("origins", MAPPER.valueToTree(metadata != null ? metadata.getArtifactOrigins() : Map.of()));
+        artifacts.set("module_source_sets", MAPPER.valueToTree(metadata != null
+                ? metadata.getModuleSourceSets().stream()
+                        .map(sourceSet -> moduleSourceSetNode(projectPath, sourceSet))
+                        .toList()
+                : List.of()));
 
         ObjectNode hashes = root.putObject("hashes");
         hashes.put("algorithm", "sha-256");
         hashes.put("format", HASH_FORMAT);
-        hashes.set("main_bytecode", hashNode(hashPaths("main_bytecode", projectPath,
-                metadata != null ? concat(metadata.getMainClassOutputs(), metadata.getProjectArtifactJars()) : List.of())));
-        hashes.set("test_bytecode", hashNode(hashPaths("test_bytecode", projectPath,
-                metadata != null ? metadata.getTestClassOutputs() : List.of())));
-        hashes.set("combined_project_bytecode", hashNode(hashPaths("combined_project_bytecode", projectPath,
+        List<HashResult> hashResults = new java.util.ArrayList<>();
+        HashResult mainHash = hashPaths("main_bytecode", projectPath,
+                metadata != null ? concat(metadata.getMainClassOutputs(), metadata.getProjectArtifactJars()) : List.of());
+        hashResults.add(mainHash);
+        hashes.set("main_bytecode", hashNode(mainHash));
+        HashResult testHash = hashPaths("test_bytecode", projectPath,
+                metadata != null ? metadata.getTestClassOutputs() : List.of());
+        hashResults.add(testHash);
+        hashes.set("test_bytecode", hashNode(testHash));
+        HashResult combinedHash = hashPaths("combined_project_bytecode", projectPath,
                 metadata != null ? concat(metadata.getMainClassOutputs(), metadata.getTestClassOutputs(),
-                        metadata.getProjectArtifactJars()) : List.of())));
-        hashes.set("dependency_classpath", hashNode(hashPaths("dependency_classpath_ordered", projectPath,
-                metadata != null ? metadata.getDependencyClasspath() : List.of())));
-        hashes.set("dependency_classpath_content_set", hashNode(hashPaths("dependency_classpath_content_set", projectPath,
-                metadata != null ? metadata.getDependencyClasspath() : List.of(), false)));
-        hashes.set("emitted_jsonl", hashNode(hashSingleFile("emitted_jsonl", jsonlPath)));
+                        metadata.getProjectArtifactJars()) : List.of());
+        hashResults.add(combinedHash);
+        hashes.set("combined_project_bytecode", hashNode(combinedHash));
+        HashResult dependencyHash = hashPaths("dependency_classpath_ordered", projectPath,
+                metadata != null ? metadata.getDependencyClasspath() : List.of());
+        hashResults.add(dependencyHash);
+        hashes.set("dependency_classpath", hashNode(dependencyHash));
+        HashResult dependencySetHash = hashPaths("dependency_classpath_content_set", projectPath,
+                metadata != null ? metadata.getDependencyClasspath() : List.of(), false);
+        hashResults.add(dependencySetHash);
+        hashes.set("dependency_classpath_content_set", hashNode(dependencySetHash));
+        HashResult jsonlHash = hashSingleFile("emitted_jsonl", jsonlPath);
+        hashResults.add(jsonlHash);
+        hashes.set("emitted_jsonl", hashNode(jsonlHash));
+
+        List<String> hashFailures = hashResults.stream()
+                .filter(result -> "missing".equals(result.status()) || "error".equals(result.status()))
+                .map(result -> result.role() + ":" + String.join(",", result.errors()))
+                .toList();
+        report.put("provenance_hash_failures", hashFailures);
+        applyHashFailureStatus(report, hashFailures);
+        if (executionReport != null) {
+            try {
+                executionReport.put("provenance_hash_failures", hashFailures);
+                applyHashFailureStatus(executionReport, hashFailures);
+            } catch (UnsupportedOperationException ignored) {
+                // Tests and utility callers may pass Map.of(); the manifest still
+                // receives the copied report above.
+            }
+        }
+
+        root.set("execution", MAPPER.valueToTree(report));
 
         Path manifest = outputRoot.resolve("extraction_manifest.json");
         Files.createDirectories(manifest.getParent());
@@ -134,10 +208,43 @@ final class ExtractionManifest {
         return manifest;
     }
 
+    private static void applyHashFailureStatus(Map<String, Object> report, List<String> hashFailures) {
+        if (report == null || hashFailures == null || hashFailures.isEmpty()) {
+            return;
+        }
+        if ("SUCCESS".equals(report.get("status"))) {
+            report.put("status", "PARTIAL");
+        }
+        java.util.LinkedHashSet<String> codes = new java.util.LinkedHashSet<>();
+        Object existing = report.get("failure_codes");
+        if (existing instanceof Iterable<?> iterable) {
+            for (Object item : iterable) {
+                if (item != null && !"NONE".equals(String.valueOf(item))) {
+                    codes.add(String.valueOf(item));
+                }
+            }
+        } else if (existing != null && !"NONE".equals(String.valueOf(existing))) {
+            codes.add(String.valueOf(existing));
+        }
+        codes.add(FailureCode.PROVENANCE_FAILED.toString());
+        report.put("failure_codes", new java.util.ArrayList<>(codes));
+    }
+
     private static String toolVersion() {
         Package pkg = ExtractionManifest.class.getPackage();
         String version = pkg != null ? pkg.getImplementationVersion() : null;
         return version == null || version.isBlank() ? "0.1.0" : version;
+    }
+
+    private static Map<String, Object> moduleSourceSetNode(Path projectRoot, ModuleSourceSet sourceSet) {
+        Map<String, Object> node = new java.util.LinkedHashMap<>();
+        node.put("project_path", sourceSet.projectPath());
+        node.put("source_set", sourceSet.sourceSet());
+        node.put("sources", sourceSet.sources().stream().map(path -> displayPath(projectRoot, path)).toList());
+        node.put("outputs", sourceSet.outputs().stream().map(path -> displayPath(projectRoot, path)).toList());
+        node.put("classpath", sourceSet.classpath().stream().map(path -> displayPath(projectRoot, path)).toList());
+        node.put("java_version", sourceSet.javaVersion());
+        return node;
     }
 
     static GitInfo captureGitInfo(Path projectRoot) {
@@ -445,7 +552,10 @@ final class ExtractionManifest {
 
     private record HashResult(String role, String sha256, String status, List<String> errors) {
         static HashResult missing(String role) {
-            return new HashResult(role, null, "missing", List.of());
+            String message = "emitted_jsonl".equals(role)
+                    ? "JSONL was not emitted"
+                    : "artifact is missing";
+            return new HashResult(role, null, "missing", List.of(message));
         }
     }
 }

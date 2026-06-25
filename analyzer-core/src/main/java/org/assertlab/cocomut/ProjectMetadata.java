@@ -2,6 +2,7 @@ package org.assertlab.cocomut;
 
 import java.nio.file.Path;
 import java.util.Collections;
+import java.util.Map;
 import java.util.List;
 import java.util.Objects;
 
@@ -40,6 +41,11 @@ public class ProjectMetadata {
     private final List<Path> explicitProjectJars;
     private final List<Path> explicitDependencyJars;
     private final List<Path> explicitClasspathFiles;
+    private final List<Path> explicitSourceRoots;
+    private final List<Path> explicitTestSourceRoots;
+    private final GradleModelReport gradleModelReport;
+    private final List<ModuleSourceSet> moduleSourceSets;
+    private final Map<String, String> artifactOrigins;
 
     private ProjectMetadata(Builder builder) {
         this.projectName = Objects.requireNonNull(builder.projectName, "projectName cannot be null");
@@ -72,6 +78,17 @@ public class ProjectMetadata {
         this.explicitProjectJars = Collections.unmodifiableList(safeList(builder.explicitProjectJars));
         this.explicitDependencyJars = Collections.unmodifiableList(safeList(builder.explicitDependencyJars));
         this.explicitClasspathFiles = Collections.unmodifiableList(safeList(builder.explicitClasspathFiles));
+        this.explicitSourceRoots = Collections.unmodifiableList(safeList(builder.explicitSourceRoots));
+        this.explicitTestSourceRoots = Collections.unmodifiableList(safeList(builder.explicitTestSourceRoots));
+        this.gradleModelReport = builder.gradleModelReport == null
+                ? GradleModelReport.notAttempted()
+                : builder.gradleModelReport;
+        this.moduleSourceSets = Collections.unmodifiableList(builder.moduleSourceSets == null
+                ? List.of()
+                : List.copyOf(builder.moduleSourceSets));
+        this.artifactOrigins = Collections.unmodifiableMap(builder.artifactOrigins == null
+                ? Map.of()
+                : Map.copyOf(builder.artifactOrigins));
     }
 
     private static List<Path> safeList(List<Path> paths) {
@@ -199,6 +216,26 @@ public class ProjectMetadata {
         return explicitClasspathFiles;
     }
 
+    public List<Path> getExplicitSourceRoots() {
+        return explicitSourceRoots;
+    }
+
+    public List<Path> getExplicitTestSourceRoots() {
+        return explicitTestSourceRoots;
+    }
+
+    public GradleModelReport getGradleModelReport() {
+        return gradleModelReport;
+    }
+
+    public List<ModuleSourceSet> getModuleSourceSets() {
+        return moduleSourceSets;
+    }
+
+    public Map<String, String> getArtifactOrigins() {
+        return artifactOrigins;
+    }
+
     @Override
     public String toString() {
         return "ProjectMetadata{" +
@@ -259,6 +296,11 @@ public class ProjectMetadata {
         private List<Path> explicitProjectJars = Collections.emptyList();
         private List<Path> explicitDependencyJars = Collections.emptyList();
         private List<Path> explicitClasspathFiles = Collections.emptyList();
+        private List<Path> explicitSourceRoots = Collections.emptyList();
+        private List<Path> explicitTestSourceRoots = Collections.emptyList();
+        private GradleModelReport gradleModelReport = GradleModelReport.notAttempted();
+        private List<ModuleSourceSet> moduleSourceSets = Collections.emptyList();
+        private Map<String, String> artifactOrigins = Collections.emptyMap();
 
         /**
          * Seed a builder from an existing metadata instance — useful for adapters
@@ -296,7 +338,12 @@ public class ProjectMetadata {
                     .explicitTestClassOutputDirs(src.explicitTestClassOutputDirs)
                     .explicitProjectJars(src.explicitProjectJars)
                     .explicitDependencyJars(src.explicitDependencyJars)
-                    .explicitClasspathFiles(src.explicitClasspathFiles);
+                    .explicitClasspathFiles(src.explicitClasspathFiles)
+                    .explicitSourceRoots(src.explicitSourceRoots)
+                    .explicitTestSourceRoots(src.explicitTestSourceRoots)
+                    .gradleModelReport(src.gradleModelReport)
+                    .moduleSourceSets(src.moduleSourceSets)
+                    .artifactOrigins(src.artifactOrigins);
         }
 
         public Builder projectName(String projectName) {
@@ -446,6 +493,31 @@ public class ProjectMetadata {
 
         public Builder explicitClasspathFiles(List<Path> explicitClasspathFiles) {
             this.explicitClasspathFiles = explicitClasspathFiles;
+            return this;
+        }
+
+        public Builder explicitSourceRoots(List<Path> explicitSourceRoots) {
+            this.explicitSourceRoots = explicitSourceRoots;
+            return this;
+        }
+
+        public Builder explicitTestSourceRoots(List<Path> explicitTestSourceRoots) {
+            this.explicitTestSourceRoots = explicitTestSourceRoots;
+            return this;
+        }
+
+        public Builder gradleModelReport(GradleModelReport gradleModelReport) {
+            this.gradleModelReport = gradleModelReport;
+            return this;
+        }
+
+        public Builder moduleSourceSets(List<ModuleSourceSet> moduleSourceSets) {
+            this.moduleSourceSets = moduleSourceSets;
+            return this;
+        }
+
+        public Builder artifactOrigins(Map<String, String> artifactOrigins) {
+            this.artifactOrigins = artifactOrigins;
             return this;
         }
 

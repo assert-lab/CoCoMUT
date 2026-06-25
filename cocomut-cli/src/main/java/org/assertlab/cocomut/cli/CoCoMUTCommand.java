@@ -119,6 +119,14 @@ public final class CoCoMUTCommand implements Callable<Integer> {
             description = "File containing classpath entries, one per line or path-separated.")
     private java.util.List<Path> classpathFiles;
 
+    @Option(names = "--source-root", split = ",",
+            description = "Exact main source root to parse. Useful with --skip-build and explicit bytecode.")
+    private java.util.List<Path> sourceRoots;
+
+    @Option(names = "--test-source-root", split = ",",
+            description = "Exact test source root to parse. Useful with --skip-build and explicit test bytecode.")
+    private java.util.List<Path> testSourceRoots;
+
     @Override
     public Integer call() throws Exception {
         ContextRequest.Scope selectedScope = toScope(entryPoints ? "entry-points" : scope);
@@ -143,6 +151,8 @@ public final class CoCoMUTCommand implements Callable<Integer> {
                 .projectJars(emptyPathListIfNull(projectJars))
                 .dependencyJars(emptyPathListIfNull(dependencyJars))
                 .classpathFiles(emptyPathListIfNull(classpathFiles))
+                .sourceRoots(emptyPathListIfNull(sourceRoots))
+                .testSourceRoots(emptyPathListIfNull(testSourceRoots))
                 .outputDirectory(outputDir);
         if (allowPreexistingBytecodeAfterBuildFailure) {
             builder.allowPreexistingBytecodeAfterBuildFailure();

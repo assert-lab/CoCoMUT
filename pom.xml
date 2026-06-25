@@ -55,6 +55,7 @@
         <sootup.version>2.0.0</sootup.version>
         <spoon.version>11.2.0</spoon.version>
         <picocli.version>4.7.6</picocli.version>
+        <json-schema-validator.version>1.5.6</json-schema-validator.version>
     </properties>
 
     <!-- Centralise all dependency versions; children declare without repeating them -->
@@ -99,6 +100,11 @@
                 <groupId>info.picocli</groupId>
                 <artifactId>picocli</artifactId>
                 <version>${picocli.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.networknt</groupId>
+                <artifactId>json-schema-validator</artifactId>
+                <version>${json-schema-validator.version}</version>
             </dependency>
             <!-- Internal: analyzer-tests depends on analyzer-core -->
             <dependency>

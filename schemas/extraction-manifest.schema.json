@@ -9,6 +9,7 @@
     "generated_at",
     "tool",
     "tool_version",
+    "tool_git",
     "request_hash",
     "selection",
     "project",
@@ -18,10 +19,11 @@
     "execution"
   ],
   "properties": {
-    "schema_version": { "const": "0.2.0" },
+    "schema_version": { "const": "0.3.0" },
     "generated_at": { "type": "string", "format": "date-time" },
     "tool": { "const": "CoCoMUT" },
     "tool_version": { "type": "string" },
+    "tool_git": { "$ref": "#/$defs/gitInfo" },
     "request_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "jsonl_file": { "type": ["string", "null"] },
     "selection": { "type": "object" },
@@ -74,7 +76,8 @@
         "allow_preexisting_bytecode_after_build_failure",
         "bytecode_available",
         "bytecode_origin",
-        "analysis_can_proceed"
+        "analysis_can_proceed",
+        "gradle_model"
       ],
       "properties": {
         "attempted": { "type": "boolean" },
@@ -95,7 +98,8 @@
         "allow_preexisting_bytecode_after_build_failure": { "type": "boolean" },
         "bytecode_available": { "type": "boolean" },
         "bytecode_origin": { "enum": ["generated_this_run", "preexisting", "explicit", "none"] },
-        "analysis_can_proceed": { "type": "boolean" }
+        "analysis_can_proceed": { "type": "boolean" },
+        "gradle_model": { "type": "object" }
       }
     },
     "artifacts": {
@@ -112,7 +116,11 @@
         "explicit_test_class_output_dirs",
         "explicit_project_jars",
         "explicit_dependency_jars",
-        "explicit_classpath_files"
+        "explicit_classpath_files",
+        "explicit_source_roots",
+        "explicit_test_source_roots",
+        "origins",
+        "module_source_sets"
       ],
       "properties": {
         "source_roots": { "$ref": "#/$defs/pathArray" },
@@ -125,7 +133,17 @@
         "explicit_test_class_output_dirs": { "$ref": "#/$defs/pathArray" },
         "explicit_project_jars": { "$ref": "#/$defs/pathArray" },
         "explicit_dependency_jars": { "$ref": "#/$defs/pathArray" },
-        "explicit_classpath_files": { "$ref": "#/$defs/pathArray" }
+        "explicit_classpath_files": { "$ref": "#/$defs/pathArray" },
+        "explicit_source_roots": { "$ref": "#/$defs/pathArray" },
+        "explicit_test_source_roots": { "$ref": "#/$defs/pathArray" },
+        "origins": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "module_source_sets": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
       }
     },
     "hashes": {
@@ -157,6 +175,28 @@
     "pathArray": {
       "type": "array",
       "items": { "type": "string" }
+    },
+    "gitInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "available",
+        "root",
+        "relative_project_path",
+        "remote_url",
+        "commit",
+        "dirty",
+        "error"
+      ],
+      "properties": {
+        "available": { "type": "boolean" },
+        "root": { "type": "string" },
+        "relative_project_path": { "type": "string" },
+        "remote_url": { "type": "string" },
+        "commit": { "type": "string" },
+        "dirty": { "type": ["boolean", "null"] },
+        "error": { "type": "string" }
+      }
     },
     "hashEntry": {
       "type": "object",

@@ -55,6 +55,9 @@ final class Orchestrator {
     private List<Path> explicitProjectJars = List.of();
     private List<Path> explicitDependencyJars = List.of();
     private List<Path> explicitClasspathFiles = List.of();
+    private List<Path> explicitSourceRoots = List.of();
+    private List<Path> explicitTestSourceRoots = List.of();
+    private RunSnapshot runSnapshot;
 
     // Pipeline state passed between phases
     private ProjectMetadata projectMetadata;
@@ -97,11 +100,18 @@ final class Orchestrator {
         this.explicitProjectJars = request.projectJars();
         this.explicitDependencyJars = request.dependencyJars();
         this.explicitClasspathFiles = request.classpathFiles();
+        this.explicitSourceRoots = request.sourceRoots();
+        this.explicitTestSourceRoots = request.testSourceRoots();
     }
 
     Orchestrator(ContextRequest request, ProjectMetadata metadata) {
         this(request);
         this.providedProjectMetadata = Objects.requireNonNull(metadata, "metadata cannot be null");
+    }
+
+    Orchestrator(ContextRequest request, ProjectMetadata metadata, RunSnapshot runSnapshot) {
+        this(request, metadata);
+        this.runSnapshot = runSnapshot;
     }
 
     Orchestrator setCallGraphAlgorithm(CallGraphGenerator.Algorithm algorithm) {
@@ -165,10 +175,12 @@ final class Orchestrator {
     }
 
     public boolean execute() {
-        long startTime = System.currentTimeMillis();
-        executionReport.put("start_time", new java.util.Date());
+        long startTime = runSnapshot != null ? runSnapshot.startMillis() : System.currentTimeMillis();
+        executionReport.put("start_time", new java.util.Date(startTime));
         executionReport.put("pipeline_phases", 5);
-        gitAtStart = ExtractionManifest.captureGitInfo(projectPath);
+        gitAtStart = runSnapshot != null
+                ? runSnapshot.projectGitAtStart()
+                : ExtractionManifest.captureGitInfo(projectPath);
 
         boolean success = false;
         try {
@@ -223,7 +235,9 @@ final class Orchestrator {
                         explicitTestClassOutputDirs,
                         explicitProjectJars,
                         explicitDependencyJars,
-                        explicitClasspathFiles);
+                        explicitClasspathFiles,
+                        explicitSourceRoots,
+                        explicitTestSourceRoots);
                 projectMetadata = analyzer.analyze();
             }
 
@@ -238,6 +252,12 @@ final class Orchestrator {
             executionReport.put("phase_1_build_timed_out", projectMetadata.isBuildTimedOut());
             executionReport.put("phase_1_build_skipped", projectMetadata.isBuildSkipped());
             executionReport.put("phase_1_build_sandboxed", projectMetadata.isBuildSandboxed());
+            executionReport.put("phase_1_gradle_model", projectMetadata.getGradleModelReport());
+            if (projectMetadata.getGradleModelReport().partial()
+                    || (projectMetadata.getGradleModelReport().attempted()
+                    && !projectMetadata.getGradleModelReport().succeeded())) {
+                failureCodes.add(FailureCode.MODEL_RESOLUTION_PARTIAL);
+            }
             executionReport.put("phase_1_build_execution_policy", projectMetadata.getBuildPolicy().toString());
             executionReport.put("phase_1_allow_preexisting_bytecode_after_build_failure",
                     projectMetadata.isAllowPreexistingBytecodeAfterBuildFailure());
@@ -692,9 +712,19 @@ final class Orchestrator {
             if (jsonl != null && !String.valueOf(jsonl).isBlank()) {
                 jsonlPath = Path.of(String.valueOf(jsonl));
             }
-            Path manifestPath = ExtractionManifest.write(root, projectMetadata, projectModel,
-                    selectionProvenance(), requestHash(), jsonlPath, executionReport, gitAtStart);
+            Path manifestPath = runSnapshot != null
+                    ? ExtractionManifest.write(root, projectMetadata, projectModel,
+                            selectionProvenance(), requestHash(), jsonlPath, executionReport, runSnapshot)
+                    : ExtractionManifest.write(root, projectMetadata, projectModel,
+                            selectionProvenance(), requestHash(), jsonlPath, executionReport, gitAtStart);
             executionReport.put("extraction_manifest_file", manifestPath.toString());
+            Object hashFailures = executionReport.get("provenance_hash_failures");
+            if (hashFailures instanceof Collection<?> failures && !failures.isEmpty()) {
+                failureCodes.add(FailureCode.PROVENANCE_FAILED);
+                if ("SUCCESS".equals(executionReport.get("status"))) {
+                    executionReport.put("status", "PARTIAL");
+                }
+            }
         } catch (Exception e) {
             executionReport.put("extraction_manifest_error", e.getMessage());
             failureCodes.add(FailureCode.PROVENANCE_FAILED);
@@ -854,7 +884,7 @@ final class Orchestrator {
         }
         return Path.of(System.getProperty("user.dir"))
                 .resolve("cocomut_output")
-                .resolve(sanitize(projectName()) + "-" + shortProjectHash())
+                .resolve(sanitize(projectName()) + "-" + requestHashPrefix())
                 .toAbsolutePath()
                 .normalize();
     }
@@ -872,7 +902,7 @@ final class Orchestrator {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(normalized.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest, 0, 4);
+            return HexFormat.of().formatHex(digest, 0, 8);
         } catch (Exception e) {
             return Integer.toHexString(normalized.hashCode());
         }
@@ -903,6 +933,9 @@ final class Orchestrator {
     }
 
     private String requestHash() {
+        if (runSnapshot != null) {
+            return runSnapshot.requestHash();
+        }
         if (request != null) {
             return RequestFingerprint.hash(request);
         }

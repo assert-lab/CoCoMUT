@@ -47,6 +47,8 @@ public final class ContextRequest {
     private final List<Path> projectJars;
     private final List<Path> dependencyJars;
     private final List<Path> classpathFiles;
+    private final List<Path> sourceRoots;
+    private final List<Path> testSourceRoots;
 
     private ContextRequest(Builder builder) {
         this.projectRoot = Objects.requireNonNull(builder.projectRoot, "projectRoot cannot be null")
@@ -75,6 +77,13 @@ public final class ContextRequest {
         this.projectJars = normalizePaths(builder.projectJars, this.projectRoot);
         this.dependencyJars = normalizePaths(builder.dependencyJars, this.projectRoot);
         this.classpathFiles = normalizePaths(builder.classpathFiles, this.projectRoot);
+        this.sourceRoots = normalizePaths(builder.sourceRoots, this.projectRoot);
+        this.testSourceRoots = normalizePaths(builder.testSourceRoots, this.projectRoot);
+        if (this.allowPreexistingBytecodeAfterBuildFailure
+                && this.buildPolicy == BuildPolicy.DENY_BUILD) {
+            throw new IllegalArgumentException("allowPreexistingBytecodeAfterBuildFailure requires "
+                    + "ALLOW_UNSANDBOXED_BUILD or EXTERNALLY_SANDBOXED_BUILD");
+        }
     }
 
     public static Builder builder() {
@@ -173,6 +182,14 @@ public final class ContextRequest {
         return classpathFiles;
     }
 
+    public List<Path> sourceRoots() {
+        return sourceRoots;
+    }
+
+    public List<Path> testSourceRoots() {
+        return testSourceRoots;
+    }
+
     public static final class Builder {
         private Path projectRoot;
         private Scope scope = Scope.ALL;
@@ -195,6 +212,8 @@ public final class ContextRequest {
         private List<Path> projectJars = new java.util.ArrayList<>();
         private List<Path> dependencyJars = new java.util.ArrayList<>();
         private List<Path> classpathFiles = new java.util.ArrayList<>();
+        private List<Path> sourceRoots = new java.util.ArrayList<>();
+        private List<Path> testSourceRoots = new java.util.ArrayList<>();
 
         public Builder projectRoot(Path projectRoot) {
             this.projectRoot = projectRoot;
@@ -379,6 +398,11 @@ public final class ContextRequest {
             return this;
         }
 
+        /**
+         * @deprecated Classpath-like inputs are order-sensitive. Prefer
+         * {@link #classOutputDirs(List)}.
+         */
+        @Deprecated(since = "0.1.0", forRemoval = false)
         public Builder classOutputDirs(Set<Path> classOutputDirs) {
             this.classOutputDirs = classOutputDirs == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(classOutputDirs);
             return this;
@@ -394,6 +418,11 @@ public final class ContextRequest {
             return this;
         }
 
+        /**
+         * @deprecated Classpath-like inputs are order-sensitive. Prefer
+         * {@link #testClassOutputDirs(List)}.
+         */
+        @Deprecated(since = "0.1.0", forRemoval = false)
         public Builder testClassOutputDirs(Set<Path> testClassOutputDirs) {
             this.testClassOutputDirs = testClassOutputDirs == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(testClassOutputDirs);
             return this;
@@ -409,6 +438,11 @@ public final class ContextRequest {
             return this;
         }
 
+        /**
+         * @deprecated Classpath-like inputs are order-sensitive. Prefer
+         * {@link #projectJars(List)}.
+         */
+        @Deprecated(since = "0.1.0", forRemoval = false)
         public Builder projectJars(Set<Path> projectJars) {
             this.projectJars = projectJars == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(projectJars);
             return this;
@@ -424,6 +458,11 @@ public final class ContextRequest {
             return this;
         }
 
+        /**
+         * @deprecated Classpath-like inputs are order-sensitive. Prefer
+         * {@link #dependencyJars(List)}.
+         */
+        @Deprecated(since = "0.1.0", forRemoval = false)
         public Builder dependencyJars(Set<Path> dependencyJars) {
             this.dependencyJars = dependencyJars == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(dependencyJars);
             return this;
@@ -439,6 +478,11 @@ public final class ContextRequest {
             return this;
         }
 
+        /**
+         * @deprecated Classpath-like inputs are order-sensitive. Prefer
+         * {@link #classpathFiles(List)}.
+         */
+        @Deprecated(since = "0.1.0", forRemoval = false)
         public Builder classpathFiles(Set<Path> classpathFiles) {
             this.classpathFiles = classpathFiles == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(classpathFiles);
             return this;
@@ -451,6 +495,26 @@ public final class ContextRequest {
 
         public Builder classpathFile(Path classpathFile) {
             addPath(this.classpathFiles, classpathFile);
+            return this;
+        }
+
+        public Builder sourceRoots(List<Path> sourceRoots) {
+            this.sourceRoots = sourceRoots == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(sourceRoots);
+            return this;
+        }
+
+        public Builder sourceRoot(Path sourceRoot) {
+            addPath(this.sourceRoots, sourceRoot);
+            return this;
+        }
+
+        public Builder testSourceRoots(List<Path> testSourceRoots) {
+            this.testSourceRoots = testSourceRoots == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(testSourceRoots);
+            return this;
+        }
+
+        public Builder testSourceRoot(Path testSourceRoot) {
+            addPath(this.testSourceRoots, testSourceRoot);
             return this;
         }
 

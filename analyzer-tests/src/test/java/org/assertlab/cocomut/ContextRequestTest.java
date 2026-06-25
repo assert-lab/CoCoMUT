@@ -89,6 +89,14 @@ public class ContextRequestTest {
         assertTrue(request.allowPreexistingBytecodeAfterBuildFailure());
     }
 
+    @Test(expected = IllegalArgumentException.class)
+    public void failedBuildFallbackRequiresBuildExecutionPolicyInApi() {
+        ContextRequest.builder()
+                .projectRoot(Path.of("."))
+                .allowPreexistingBytecodeAfterBuildFailure()
+                .build();
+    }
+
     @Test
     public void builderAcceptsChaBytecodeAnalysis() {
         ContextRequest request = ContextRequest.builder()
@@ -108,6 +116,8 @@ public class ContextRequestTest {
                 .projectJar(Path.of("target/example.jar"))
                 .dependencyJar(Path.of("lib/dependency.jar"))
                 .classpathFile(Path.of("classpath.txt"))
+                .sourceRoot(Path.of("src/main/java"))
+                .testSourceRoot(Path.of("src/test/java"))
                 .build();
 
         assertTrue(request.skipBuild());
@@ -115,5 +125,7 @@ public class ContextRequestTest {
         assertTrue(request.projectJars().contains(Path.of("target/example.jar").toAbsolutePath().normalize()));
         assertTrue(request.dependencyJars().contains(Path.of("lib/dependency.jar").toAbsolutePath().normalize()));
         assertTrue(request.classpathFiles().contains(Path.of("classpath.txt").toAbsolutePath().normalize()));
+        assertTrue(request.sourceRoots().contains(Path.of("src/main/java").toAbsolutePath().normalize()));
+        assertTrue(request.testSourceRoots().contains(Path.of("src/test/java").toAbsolutePath().normalize()));
     }
 }

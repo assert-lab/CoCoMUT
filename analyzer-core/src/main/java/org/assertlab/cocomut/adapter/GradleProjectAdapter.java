@@ -1,6 +1,8 @@
 package org.assertlab.cocomut.adapter;
 
 import org.assertlab.cocomut.ContextRequest;
+import org.assertlab.cocomut.GradleModelReport;
+import org.assertlab.cocomut.ModuleSourceSet;
 import org.assertlab.cocomut.ProjectAnalyzer;
 import org.assertlab.cocomut.ProjectMetadata;
 
@@ -11,6 +13,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -35,6 +39,12 @@ public class GradleProjectAdapter implements ProjectAdapter {
     private static final String OUTPUT_PREFIX = "ANALYZER_OUTPUT:";
     private static final String TEST_OUTPUT_PREFIX = "ANALYZER_TEST_OUTPUT:";
     private static final String JAVA_PREFIX = "ANALYZER_JAVA:";
+    private static final String DIAGNOSTIC_PREFIX = "ANALYZER_DIAGNOSTIC:";
+    private static final String PROJECT_PREFIX = "ANALYZER_PROJECT:";
+    private static final String SOURCESET_PREFIX = "ANALYZER_SOURCESET:";
+    private static final String SOURCESET_SOURCE_PREFIX = "ANALYZER_SS_SOURCE:";
+    private static final String SOURCESET_OUTPUT_PREFIX = "ANALYZER_SS_OUTPUT:";
+    private static final String SOURCESET_CP_PREFIX = "ANALYZER_SS_CP:";
 
     private final Path projectPath;
 
@@ -65,15 +75,20 @@ public class GradleProjectAdapter implements ProjectAdapter {
     private ProjectMetadata enrichWithGradleModel(ProjectMetadata base, ContextRequest request) {
         if (request.skipBuild()) {
             System.out.println("[GradleProjectAdapter] --skip-build active; Gradle metadata task not executed");
-            return base;
+            return ProjectMetadata.Builder.from(base)
+                    .gradleModelReport(GradleModelReport.skipped("--skip-build"))
+                    .build();
         }
 
         boolean includeTests = includeTests(request);
         GradleModel nativeModel = resolveGradleModel(includeTests);
-        if (nativeModel.isEmpty()) {
+        if (!nativeModel.report().succeeded()) {
             System.out.println("[GradleProjectAdapter] native classpath resolution "
                     + "unavailable — using base metadata");
-            return base;
+            return ProjectMetadata.Builder.from(base)
+                    .gradleModelReport(nativeModel.report())
+                    .moduleSourceSets(nativeModel.moduleSourceSets())
+                    .build();
         }
 
         // Merge: native entries first, then anything the base detected (deduped).
@@ -82,18 +97,10 @@ public class GradleProjectAdapter implements ProjectAdapter {
         System.out.printf("[GradleProjectAdapter] resolved %d classpath entries via Gradle%n",
                 merged.size());
 
-        Set<Path> sourceRoots = nativeModel.sourceRoots().isEmpty()
-                ? new LinkedHashSet<>(base.getSourceRoots())
-                : new LinkedHashSet<>(nativeModel.sourceRoots());
-        Set<Path> testSourceRoots = nativeModel.testSourceRoots().isEmpty()
-                ? new LinkedHashSet<>(base.getTestSourceRoots())
-                : new LinkedHashSet<>(nativeModel.testSourceRoots());
-        Set<Path> mainOutputs = nativeModel.mainOutputs().isEmpty()
-                ? new LinkedHashSet<>(base.getMainClassOutputs())
-                : new LinkedHashSet<>(nativeModel.mainOutputs());
-        Set<Path> testOutputs = nativeModel.testOutputs().isEmpty()
-                ? new LinkedHashSet<>(base.getTestClassOutputs())
-                : new LinkedHashSet<>(nativeModel.testOutputs());
+        Set<Path> sourceRoots = new LinkedHashSet<>(nativeModel.sourceRoots());
+        Set<Path> testSourceRoots = new LinkedHashSet<>(nativeModel.testSourceRoots());
+        Set<Path> mainOutputs = new LinkedHashSet<>(nativeModel.mainOutputs());
+        Set<Path> testOutputs = new LinkedHashSet<>(nativeModel.testOutputs());
         Set<Path> dependencies = new LinkedHashSet<>(base.getDependencyClasspath());
         Set<Path> projectOutputs = new LinkedHashSet<>();
         projectOutputs.addAll(mainOutputs);
@@ -122,12 +129,29 @@ public class GradleProjectAdapter implements ProjectAdapter {
                 .mainClassOutputs(new ArrayList<>(mainOutputs))
                 .testClassOutputs(new ArrayList<>(testOutputs))
                 .dependencyClasspath(new ArrayList<>(dependencies))
+                .gradleModelReport(nativeModel.report())
+                .moduleSourceSets(nativeModel.moduleSourceSets())
                 .compiles(base.isBuildSucceeded())
                 .compileStatus(compileStatus(base, bytecodeAvailable))
                 .bytecodeAvailable(bytecodeAvailable)
                 .bytecodeOrigin(bytecodeOrigin(explicitProjectBytecode, base, bytecodeAvailable))
                 .analysisCanProceed(analysisCanProceed)
+                .artifactOrigins(artifactOrigins(base, mainOutputs, testOutputs, base.getProjectArtifactJars(), dependencies))
                 .build();
+    }
+
+    private static java.util.Map<String, String> artifactOrigins(ProjectMetadata base,
+                                                                  Set<Path> mainOutputs,
+                                                                  Set<Path> testOutputs,
+                                                                  List<Path> projectJars,
+                                                                  Set<Path> dependencies) {
+        java.util.LinkedHashMap<String, String> origins = new java.util.LinkedHashMap<>(base.getArtifactOrigins());
+        String projectOrigin = base.isBuildSucceeded() ? "build_model_discovered" : "preexisting";
+        mainOutputs.forEach(path -> origins.put(path.toAbsolutePath().normalize().toString(), projectOrigin));
+        testOutputs.forEach(path -> origins.put(path.toAbsolutePath().normalize().toString(), projectOrigin));
+        projectJars.forEach(path -> origins.put(path.toAbsolutePath().normalize().toString(), projectOrigin));
+        dependencies.forEach(path -> origins.put(path.toAbsolutePath().normalize().toString(), "dependency"));
+        return origins;
     }
 
     private static boolean includeTests(ContextRequest request) {
@@ -206,11 +230,11 @@ public class GradleProjectAdapter implements ProjectAdapter {
             if (!p.waitFor(GRADLE_TIMEOUT_MIN, TimeUnit.MINUTES)) {
                 p.destroyForcibly();
                 drainer.join(1000);
-                return GradleModel.empty();
+                return GradleModel.failed(true, "Gradle model task timed out");
             }
             drainer.join(1000);
             if (p.exitValue() != 0) {
-                return GradleModel.empty();
+                return GradleModel.failed(false, firstLines(output.toString()));
             }
 
             List<Path> classpath = new ArrayList<>();
@@ -219,6 +243,9 @@ public class GradleProjectAdapter implements ProjectAdapter {
             List<Path> mainOutputs = new ArrayList<>();
             List<Path> testOutputs = new ArrayList<>();
             String javaVersion = "unknown";
+            List<String> diagnostics = new ArrayList<>();
+            Map<String, ModuleSourceSetBuilder> sourceSetBuilders = new LinkedHashMap<>();
+            int resolvedProjects = 0;
             for (String line : output.toString().split("\\R")) {
                 if (line.startsWith(CP_PREFIX)) {
                     Path jar = Path.of(line.substring(CP_PREFIX.length()).trim());
@@ -238,17 +265,75 @@ public class GradleProjectAdapter implements ProjectAdapter {
                     if (!detected.isBlank() && !"null".equals(detected)) {
                         javaVersion = detected;
                     }
+                } else if (line.startsWith(PROJECT_PREFIX)) {
+                    resolvedProjects++;
+                } else if (line.startsWith(DIAGNOSTIC_PREFIX)) {
+                    diagnostics.add(line.substring(DIAGNOSTIC_PREFIX.length()).trim());
+                } else if (line.startsWith(SOURCESET_PREFIX)) {
+                    String[] parts = line.substring(SOURCESET_PREFIX.length()).split("\\t", 3);
+                    if (parts.length == 3) {
+                        builder(sourceSetBuilders, parts[0], parts[1]).javaVersion(parts[2]);
+                    }
+                } else if (line.startsWith(SOURCESET_SOURCE_PREFIX)) {
+                    addSourceSetPath(sourceSetBuilders, line.substring(SOURCESET_SOURCE_PREFIX.length()), SourceSetPathRole.SOURCE);
+                } else if (line.startsWith(SOURCESET_OUTPUT_PREFIX)) {
+                    addSourceSetPath(sourceSetBuilders, line.substring(SOURCESET_OUTPUT_PREFIX.length()), SourceSetPathRole.OUTPUT);
+                } else if (line.startsWith(SOURCESET_CP_PREFIX)) {
+                    addSourceSetPath(sourceSetBuilders, line.substring(SOURCESET_CP_PREFIX.length()), SourceSetPathRole.CLASSPATH);
                 }
             }
+            GradleModelReport report = new GradleModelReport(true, true, false, !diagnostics.isEmpty(),
+                    resolvedProjects, diagnostics,
+                    diagnostics.stream().filter(value -> value.startsWith("classpath:")).toList());
+            List<ModuleSourceSet> sourceSets = sourceSetBuilders.values().stream()
+                    .map(ModuleSourceSetBuilder::build)
+                    .toList();
+            if (sourceSets.isEmpty()) {
+                sourceSets = List.of(new ModuleSourceSet(":", includeTests ? "main+test" : "main",
+                        unique(sourceRoots), concat(unique(mainOutputs), unique(testOutputs)), unique(classpath), javaVersion));
+            }
             return new GradleModel(unique(sourceRoots), unique(testSourceRoots), unique(mainOutputs),
-                    unique(testOutputs), unique(classpath), javaVersion);
+                    unique(testOutputs), unique(classpath), javaVersion, report, sourceSets);
         } catch (Exception e) {
-            return GradleModel.empty();
+            return GradleModel.failed(false, e.getClass().getSimpleName());
         } finally {
             if (initScript != null) {
                 try { Files.deleteIfExists(initScript); } catch (IOException ignored) { }
             }
         }
+    }
+
+    private static String firstLines(String output) {
+        if (output == null || output.isBlank()) {
+            return "Gradle model task failed";
+        }
+        return output.lines().limit(5).collect(java.util.stream.Collectors.joining(" | "));
+    }
+
+    private static void addSourceSetPath(Map<String, ModuleSourceSetBuilder> builders,
+                                         String raw,
+                                         SourceSetPathRole role) {
+        String[] parts = raw.split("\\t", 3);
+        if (parts.length != 3) {
+            return;
+        }
+        Path path = Path.of(parts[2].trim());
+        if (!Files.exists(path)) {
+            return;
+        }
+        ModuleSourceSetBuilder builder = builder(builders, parts[0], parts[1]);
+        switch (role) {
+            case SOURCE -> builder.sources.add(path.toAbsolutePath().normalize());
+            case OUTPUT -> builder.outputs.add(path.toAbsolutePath().normalize());
+            case CLASSPATH -> builder.classpath.add(path.toAbsolutePath().normalize());
+        }
+    }
+
+    private static ModuleSourceSetBuilder builder(Map<String, ModuleSourceSetBuilder> builders,
+                                                  String projectPath,
+                                                  String sourceSet) {
+        String key = projectPath + "\t" + sourceSet;
+        return builders.computeIfAbsent(key, ignored -> new ModuleSourceSetBuilder(projectPath, sourceSet));
     }
 
     /**
@@ -278,12 +363,13 @@ public class GradleProjectAdapter implements ProjectAdapter {
                 "    rootProject.tasks.register('analyzerPrintClasspath') {\n" +
                 "        doLast {\n" +
                 "            rootProject.allprojects.each { p ->\n" +
+                "                println '" + PROJECT_PREFIX + "' + p.path\n" +
                 "                def names = " + configurationNames + "\n" +
                 "                def sourceSetNames = " + sourceSetNames + "\n" +
                 "                def files = [] as LinkedHashSet\n" +
                 "                names.each { n ->\n" +
                 "                    def cp = p.configurations.findByName(n)\n" +
-                "                    if (cp != null) { try { files.addAll(cp.resolve()) } catch (Exception ignored) { } }\n" +
+                "                    if (cp != null) { try { files.addAll(cp.resolve()) } catch (Exception e) { println '" + DIAGNOSTIC_PREFIX + "classpath:' + p.path + ':' + n + ':' + e.class.simpleName } }\n" +
                 "                }\n" +
                 "                files.each { println '" + CP_PREFIX + "' + it.absolutePath }\n" +
                 "                def javaExt = p.extensions.findByName('java')\n" +
@@ -296,8 +382,16 @@ public class GradleProjectAdapter implements ProjectAdapter {
                 "                    try {\n" +
                 "                        javaExt.sourceSets.each { ss ->\n" +
                 "                            if (sourceSetNames.contains(ss.name)) {\n" +
+                "                                def javaLevel = (toolchain ?: sourceCompat ?: '')\n" +
+                "                                println '" + SOURCESET_PREFIX + "' + p.path + '\\t' + ss.name + '\\t' + javaLevel\n" +
                 "                                ss.allJava.srcDirs.each { d -> if (d.exists()) println((ss.name == 'test' ? '" + TEST_SOURCE_PREFIX + "' : '" + SOURCE_PREFIX + "') + d.absolutePath) }\n" +
+                "                                ss.allJava.srcDirs.each { d -> if (d.exists()) println '" + SOURCESET_SOURCE_PREFIX + "' + p.path + '\\t' + ss.name + '\\t' + d.absolutePath }\n" +
                 "                                ss.output.classesDirs.files.each { d -> if (d.exists()) println((ss.name == 'test' ? '" + TEST_OUTPUT_PREFIX + "' : '" + OUTPUT_PREFIX + "') + d.absolutePath) }\n" +
+                "                                ss.output.classesDirs.files.each { d -> if (d.exists()) println '" + SOURCESET_OUTPUT_PREFIX + "' + p.path + '\\t' + ss.name + '\\t' + d.absolutePath }\n" +
+                "                                def ssCp = [] as LinkedHashSet\n" +
+                "                                try { ssCp.addAll(ss.compileClasspath.files) } catch (Throwable e) { println '" + DIAGNOSTIC_PREFIX + "sourceSetClasspath:' + p.path + ':' + ss.name + ':compile:' + e.class.simpleName }\n" +
+                "                                try { ssCp.addAll(ss.runtimeClasspath.files) } catch (Throwable e) { println '" + DIAGNOSTIC_PREFIX + "sourceSetClasspath:' + p.path + ':' + ss.name + ':runtime:' + e.class.simpleName }\n" +
+                "                                ssCp.each { f -> if (f.exists()) println '" + SOURCESET_CP_PREFIX + "' + p.path + '\\t' + ss.name + '\\t' + f.absolutePath }\n" +
                 "                            }\n" +
                 "                        }\n" +
                 "                    } catch (Throwable ignored) { }\n" +
@@ -325,14 +419,58 @@ public class GradleProjectAdapter implements ProjectAdapter {
         return new ArrayList<>(new LinkedHashSet<>(paths));
     }
 
+    private static List<Path> concat(List<Path> first, List<Path> second) {
+        List<Path> paths = new ArrayList<>();
+        paths.addAll(first == null ? List.of() : first);
+        paths.addAll(second == null ? List.of() : second);
+        return unique(paths);
+    }
+
+    private enum SourceSetPathRole {
+        SOURCE,
+        OUTPUT,
+        CLASSPATH
+    }
+
+    private static final class ModuleSourceSetBuilder {
+        private final String projectPath;
+        private final String sourceSet;
+        private final List<Path> sources = new ArrayList<>();
+        private final List<Path> outputs = new ArrayList<>();
+        private final List<Path> classpath = new ArrayList<>();
+        private String javaVersion = "unknown";
+
+        ModuleSourceSetBuilder(String projectPath, String sourceSet) {
+            this.projectPath = projectPath;
+            this.sourceSet = sourceSet;
+        }
+
+        void javaVersion(String value) {
+            if (value != null && !value.isBlank() && !"null".equals(value)) {
+                this.javaVersion = value;
+            }
+        }
+
+        ModuleSourceSet build() {
+            return new ModuleSourceSet(projectPath, sourceSet,
+                    unique(sources), unique(outputs), unique(classpath), javaVersion);
+        }
+    }
+
     private record GradleModel(List<Path> sourceRoots,
                                List<Path> testSourceRoots,
                                List<Path> mainOutputs,
                                List<Path> testOutputs,
                                List<Path> classpath,
-                               String javaVersion) {
-        static GradleModel empty() {
-            return new GradleModel(List.of(), List.of(), List.of(), List.of(), List.of(), "unknown");
+                               String javaVersion,
+                               GradleModelReport report,
+                               List<ModuleSourceSet> moduleSourceSets) {
+        static GradleModel failed(boolean timedOut, String diagnostic) {
+            return new GradleModel(List.of(), List.of(), List.of(), List.of(), List.of(), "unknown",
+                    new GradleModelReport(true, false, timedOut, true, 0,
+                            diagnostic == null || diagnostic.isBlank() ? List.of() : List.of(diagnostic),
+                            List.of()),
+                    List.of());
         }
 
         boolean isEmpty() {
