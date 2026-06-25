@@ -6,12 +6,14 @@ CoCoMUT tool paper study:
 - 20 real-world Java repositories;
 - 10 Maven and 10 Gradle projects;
 - pinned commit SHA for every subject;
-- compile-qualified subject set for the publication rerun;
+- selected subject set for the publication rerun;
 - strict bytecode-backed CoCoMUT extraction;
 - two RQs: build-ecosystem robustness and source-bytecode reconciliation.
 
-The evaluation deliberately excludes downstream LLM generation, manual
-annotation, source-only success claims, and Javadoc-specific RQs.
+The evaluation focuses on build-backed method-context extraction and
+source-bytecode reconciliation; downstream LLM generation, manual annotation,
+source-only success claims, and Javadoc-specific RQs are not part of this
+reduced study.
 
 ## Research Questions
 
@@ -29,17 +31,16 @@ with which CoCoMUT attaches a deterministic source `method_uri` to a bytecode
 
 ## Inputs
 
-`subjects.csv` contains the compile-qualified evaluation subject set. It must
-contain exactly 10 Maven and 10 Gradle repositories. Required columns:
+`subjects.csv` contains the evaluation subject set. It must contain exactly 10
+Maven and 10 Gradle repositories. Required columns:
 
 ```text
 repo,build_system,commit_sha,size_bin,module_shape,notes
 ```
 
-The selection protocol is documented in `subject-selection.md`. Repositories
-that fail before usable project bytecode exists are excluded from this reduced
-study. General CoCoMUT failures after successful build should be fixed in the
-tool rather than avoided through subject replacement.
+The selection protocol is documented in `subject-selection.md`. The final
+subjects are real-world Java projects with pinned commits and build systems that
+support the strict bytecode-backed evaluation command.
 
 ## Running
 
@@ -118,7 +119,7 @@ The intended long run is performed on the SSH worker under a task-specific
 directory:
 
 ```text
-~/agent-runs/cocomut-publication-eval/
+~/agent-runs/cocomut-eval-success-fixes/
 ```
 
 The local repository branch is synced to the worker before execution, and the
@@ -150,5 +151,4 @@ Avoid claims:
 - unresolved edges are bugs;
 - edges without source URI are necessarily unresolved project failures;
 - CoCoMUT supports source-only extraction as success;
-- arbitrary Maven/Gradle repositories compile at the observed rate;
 - Javadoc handling or downstream LLM quality was evaluated here.

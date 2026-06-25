@@ -1,4 +1,4 @@
-$ git -C /home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/alibaba__fastjson2/checkout checkout 3697c2d37cd659d2a94543093d0d08cb4baf4d73
+$ git -C /home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/alibaba__fastjson2/checkout checkout 3697c2d37cd659d2a94543093d0d08cb4baf4d73
 
 Note: switching to '3697c2d37cd659d2a94543093d0d08cb4baf4d73'.
 

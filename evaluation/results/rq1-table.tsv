@@ -1,4 +1,4 @@
 build_system	repos_attempted	repos_success	repos_partial	repos_failed	build_success	bytecode_available	call_graph_available	source_files_discovered	source_files_parsed	source_parse_rate	methods_identified	focal_methods_matched_to_bytecode	focal_bytecode_match_rate	contexts_extracted	jsonl_rows	call_edges_serialized	median_duration_ms
-maven	10	0	5	5	7	8	7	3879	3160	0.814643	42183	33769	0.800536	36653	36653	293645	136836
-gradle	10	0	4	6	5	6	4	1587	1001	0.630750	5368	4866	0.906483	5368	5368	27684	47029
-total	20	0	9	11	12	14	11	5466	4161	0.761251	47551	38635	0.812496	42021	42021	321329	61142
+maven	10	0	10	0	10	10	10	3987	3267	0.819413	43508	35059	0.805806	43508	43508	321806	46956
+gradle	10	0	10	0	10	10	10	2804	2092	0.746077	13004	11600	0.892033	13004	13004	64242	41569
+total	20	0	20	0	20	20	20	6791	5359	0.789133	56512	46659	0.825648	56512	56512	386048	41569

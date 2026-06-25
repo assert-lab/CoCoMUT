@@ -6,117 +6,120 @@
 - 10 Gradle
 
 ## RQ1: Build-Ecosystem Robustness
-- Completion: 0 SUCCESS, 9 PARTIAL, 11 failed/error/timeout.
-- Build success: 12 / 20 repositories.
-- Bytecode available: 14 / 20 repositories.
-- Call graph available: 11 / 20 repositories.
-- Source parsing: 4161 / 5466 files (76.13%).
-- Focal methods matched to bytecode: 38635 / 47551 (81.25%).
-- Methods identified: 47551; contexts extracted: 42021; JSONL rows: 42021.
+- Completion: 0 SUCCESS, 20 PARTIAL, 0 failed/error/timeout.
+- Build success: 20 / 20 repositories.
+- Bytecode available: 20 / 20 repositories.
+- Call graph available: 20 / 20 repositories.
+- Source parsing: 5359 / 6791 files (78.91%).
+- Focal methods matched to bytecode: 46659 / 56512 (82.56%).
+- Methods identified: 56512; contexts extracted: 56512; JSONL rows: 56512.
 
 | build_system | repos_attempted | repos_success | repos_partial | repos_failed | build_success | bytecode_available | call_graph_available | source_files_discovered | source_files_parsed | source_parse_rate | methods_identified | focal_methods_matched_to_bytecode | focal_bytecode_match_rate | contexts_extracted | jsonl_rows | call_edges_serialized | median_duration_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| maven | 10 | 0 | 5 | 5 | 7 | 8 | 7 | 3879 | 3160 | 0.814643 | 42183 | 33769 | 0.800536 | 36653 | 36653 | 293645 | 136836 |
-| gradle | 10 | 0 | 4 | 6 | 5 | 6 | 4 | 1587 | 1001 | 0.630750 | 5368 | 4866 | 0.906483 | 5368 | 5368 | 27684 | 47029 |
-| total | 20 | 0 | 9 | 11 | 12 | 14 | 11 | 5466 | 4161 | 0.761251 | 47551 | 38635 | 0.812496 | 42021 | 42021 | 321329 | 61142 |
+| maven | 10 | 0 | 10 | 0 | 10 | 10 | 10 | 3987 | 3267 | 0.819413 | 43508 | 35059 | 0.805806 | 43508 | 43508 | 321806 | 46956 |
+| gradle | 10 | 0 | 10 | 0 | 10 | 10 | 10 | 2804 | 2092 | 0.746077 | 13004 | 11600 | 0.892033 | 13004 | 13004 | 64242 | 41569 |
+| total | 20 | 0 | 20 | 0 | 20 | 20 | 20 | 6791 | 5359 | 0.789133 | 56512 | 46659 | 0.825648 | 56512 | 56512 | 386048 | 41569 |
 
 ## RQ2: Source-Bytecode Reconciliation and Abstention
-- Serialized call-edge adjacency entries: 321329.
-- Unique directed relations: 321329.
+- Serialized call-edge adjacency entries: 386048.
+- Unique directed relations: 386048.
 - `target_uri` coverage: 100.00%.
-- All-edge source-join rate: 81.75%.
-- Recognized-project-target join rate: 98.18%.
-- Edges without source URI: 58643; ambiguous edges: 0; candidate edges: 0.
+- All-edge source-join rate: 76.22%.
+- Recognized-project-target join rate: 97.84%.
+- Edges without source URI: 91806; ambiguous edges: 0; candidate edges: 0.
 
 | build_system | serialized_edges | unique_directed_relations | edges_with_target_uri | target_uri_rate | edges_with_method_uri | source_join_rate | edges_without_source_uri | project_target_edges | project_target_edges_with_method_uri | recognized_project_target_join_rate | ambiguous_edges | candidate_edges | project_method_edges | unresolved_project_method_edges | jdk_method_edges | external_method_edges | synthetic_or_compiler_edges | invokedynamic_edges | median_serialized_edges | iqr_serialized_edges | median_unique_directed_relations | iqr_unique_directed_relations | median_source_join_rate | iqr_source_join_rate | median_recognized_project_target_join_rate | iqr_recognized_project_target_join_rate |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| maven | 293645 | 293645 | 293645 | 1.000000 | 247234 | 0.841949 | 46411 | 251176 | 247234 | 0.984306 | 0 | 0 | 247234 | 3942 | 28938 | 7706 | 3656 | 2169 | 2091 | 45864.000000 | 2091 | 45864.000000 | 0.815277 | 0.235149 | 0.972715 | 0.029721 |
-| gradle | 27684 | 27684 | 27684 | 1.000000 | 15452 | 0.558156 | 12232 | 16384 | 15452 | 0.943115 | 0 | 0 | 15452 | 932 | 5042 | 5317 | 304 | 637 | 0 | 987.500000 | 0 | 987.500000 | 0.370586 | 0.295271 | 0.942599 | 0.097520 |
-| total | 321329 | 321329 | 321329 | 1.000000 | 262686 | 0.817499 | 58643 | 267560 | 262686 | 0.981784 | 0 | 0 | 262686 | 4874 | 33980 | 13023 | 3960 | 2806 | 0 | 12214.500000 | 0 | 12214.500000 | 0.661317 | 0.454770 | 0.970401 | 0.033415 |
+| maven | 321806 | 321806 | 321806 | 1.000000 | 260096 | 0.808239 | 61710 | 264353 | 260096 | 0.983897 | 0 | 0 | 260096 | 4257 | 36103 | 13940 | 4302 | 3108 | 11493 | 42842.500000 | 11493 | 42842.500000 | 0.587614 | 0.374143 | 0.978792 | 0.028165 |
+| gradle | 64242 | 64242 | 64242 | 1.000000 | 34146 | 0.531521 | 30096 | 36390 | 34146 | 0.938335 | 0 | 0 | 34146 | 2244 | 12188 | 13063 | 1017 | 1584 | 5882 | 7307.750000 | 5882 | 7307.750000 | 0.417160 | 0.309257 | 0.953885 | 0.056207 |
+| total | 386048 | 386048 | 386048 | 1.000000 | 294242 | 0.762190 | 91806 | 300743 | 294242 | 0.978384 | 0 | 0 | 294242 | 6501 | 48291 | 27003 | 5319 | 4692 | 7657 | 10709.250000 | 7657 | 10709.250000 | 0.507810 | 0.308866 | 0.970003 | 0.036191 |
 
 ### Total Distributions
 
 Target-kind distribution:
-- `project_method`: 262686
-- `jdk_method`: 33980
-- `external_method`: 13023
-- `unresolved_project_method`: 4874
-- `synthetic_or_compiler_method`: 3960
-- `invokedynamic_method`: 2806
+- `project_method`: 294242
+- `jdk_method`: 48291
+- `external_method`: 27003
+- `unresolved_project_method`: 6501
+- `synthetic_or_compiler_method`: 5319
+- `invokedynamic_method`: 4692
 
 Resolution distribution:
-- `resolved`: 261814
-- `unresolved`: 54683
-- `synthetic_or_compiler_generated`: 3960
-- `resolved_return_mismatch_unique`: 872
+- `resolved`: 293212
+- `unresolved`: 86487
+- `synthetic_or_compiler_generated`: 5319
+- `resolved_return_mismatch_unique`: 1030
 
 Unresolved-reason distribution:
-- `jdk_or_platform_method_outside_project_source`: 33980
-- `external_or_unmodeled_bytecode_method`: 12905
-- `project_class_present_method_absent_synthetic_or_compiler_method`: 3283
-- `invokedynamic_or_lambda_bytecode_artifact`: 2806
-- `nested_bytecode_class_without_unique_source_method`: 1642
-- `project_class_present_method_absent_bytecode_method_not_selected`: 1555
-- `project_class_present_method_absent_no_matching_bytecode_method`: 1216
-- `project_method_name_present_but_signature_not_unique_or_compatible`: 728
-- `anonymous_or_local_class_bytecode`: 516
-- `project_class_present_method_absent_enum_generated_method`: 12
+- `jdk_or_platform_method_outside_project_source`: 48291
+- `external_or_unmodeled_bytecode_method`: 26315
+- `invokedynamic_or_lambda_bytecode_artifact`: 4692
+- `project_class_present_method_absent_synthetic_or_compiler_method`: 4556
+- `project_class_present_method_absent_bytecode_method_not_selected`: 1990
+- `nested_bytecode_class_without_unique_source_method`: 1867
+- `anonymous_or_local_class_bytecode`: 1600
+- `project_class_present_method_absent_no_matching_bytecode_method`: 1459
+- `project_method_name_present_but_signature_not_unique_or_compatible`: 988
+- `project_class_present_method_absent_enum_generated_method`: 37
+- `project_class_present_method_absent_record_component_accessor`: 11
 
 ### Maven Distributions
 
 Target-kind distribution:
-- `project_method`: 247234
-- `jdk_method`: 28938
-- `external_method`: 7706
-- `unresolved_project_method`: 3942
-- `synthetic_or_compiler_method`: 3656
-- `invokedynamic_method`: 2169
+- `project_method`: 260096
+- `jdk_method`: 36103
+- `external_method`: 13940
+- `synthetic_or_compiler_method`: 4302
+- `unresolved_project_method`: 4257
+- `invokedynamic_method`: 3108
 
 Resolution distribution:
-- `resolved`: 246419
-- `unresolved`: 42755
-- `synthetic_or_compiler_generated`: 3656
-- `resolved_return_mismatch_unique`: 815
+- `resolved`: 259219
+- `unresolved`: 57408
+- `synthetic_or_compiler_generated`: 4302
+- `resolved_return_mismatch_unique`: 877
 
 Unresolved-reason distribution:
-- `jdk_or_platform_method_outside_project_source`: 28938
-- `external_or_unmodeled_bytecode_method`: 7594
-- `project_class_present_method_absent_synthetic_or_compiler_method`: 2993
-- `invokedynamic_or_lambda_bytecode_artifact`: 2169
-- `nested_bytecode_class_without_unique_source_method`: 1257
-- `project_class_present_method_absent_bytecode_method_not_selected`: 1256
-- `project_class_present_method_absent_no_matching_bytecode_method`: 1198
-- `project_method_name_present_but_signature_not_unique_or_compatible`: 541
-- `anonymous_or_local_class_bytecode`: 454
-- `project_class_present_method_absent_enum_generated_method`: 11
+- `jdk_or_platform_method_outside_project_source`: 36103
+- `external_or_unmodeled_bytecode_method`: 13618
+- `project_class_present_method_absent_synthetic_or_compiler_method`: 3572
+- `invokedynamic_or_lambda_bytecode_artifact`: 3108
+- `nested_bytecode_class_without_unique_source_method`: 1390
+- `project_class_present_method_absent_bytecode_method_not_selected`: 1312
+- `project_class_present_method_absent_no_matching_bytecode_method`: 1231
+- `anonymous_or_local_class_bytecode`: 765
+- `project_method_name_present_but_signature_not_unique_or_compatible`: 578
+- `project_class_present_method_absent_enum_generated_method`: 28
+- `project_class_present_method_absent_record_component_accessor`: 5
 
 ### Gradle Distributions
 
 Target-kind distribution:
-- `project_method`: 15452
-- `external_method`: 5317
-- `jdk_method`: 5042
-- `unresolved_project_method`: 932
-- `invokedynamic_method`: 637
-- `synthetic_or_compiler_method`: 304
+- `project_method`: 34146
+- `external_method`: 13063
+- `jdk_method`: 12188
+- `unresolved_project_method`: 2244
+- `invokedynamic_method`: 1584
+- `synthetic_or_compiler_method`: 1017
 
 Resolution distribution:
-- `resolved`: 15395
-- `unresolved`: 11928
-- `synthetic_or_compiler_generated`: 304
-- `resolved_return_mismatch_unique`: 57
+- `resolved`: 33993
+- `unresolved`: 29079
+- `synthetic_or_compiler_generated`: 1017
+- `resolved_return_mismatch_unique`: 153
 
 Unresolved-reason distribution:
-- `external_or_unmodeled_bytecode_method`: 5311
-- `jdk_or_platform_method_outside_project_source`: 5042
-- `invokedynamic_or_lambda_bytecode_artifact`: 637
-- `nested_bytecode_class_without_unique_source_method`: 385
-- `project_class_present_method_absent_bytecode_method_not_selected`: 299
-- `project_class_present_method_absent_synthetic_or_compiler_method`: 290
-- `project_method_name_present_but_signature_not_unique_or_compatible`: 187
-- `anonymous_or_local_class_bytecode`: 62
-- `project_class_present_method_absent_no_matching_bytecode_method`: 18
-- `project_class_present_method_absent_enum_generated_method`: 1
+- `external_or_unmodeled_bytecode_method`: 12697
+- `jdk_or_platform_method_outside_project_source`: 12188
+- `invokedynamic_or_lambda_bytecode_artifact`: 1584
+- `project_class_present_method_absent_synthetic_or_compiler_method`: 984
+- `anonymous_or_local_class_bytecode`: 835
+- `project_class_present_method_absent_bytecode_method_not_selected`: 678
+- `nested_bytecode_class_without_unique_source_method`: 477
+- `project_method_name_present_but_signature_not_unique_or_compatible`: 410
+- `project_class_present_method_absent_no_matching_bytecode_method`: 228
+- `project_class_present_method_absent_enum_generated_method`: 9
+- `project_class_present_method_absent_record_component_accessor`: 6
 
 ## Interpretation
 - RQ1 measures construction robustness, not semantic correctness.

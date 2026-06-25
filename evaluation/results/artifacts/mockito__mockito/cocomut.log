@@ -1,4 +1,4 @@
-$ ./bin/cocomut --project /home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/mockito__mockito/checkout --scope all --source-set main --call-graph rta --allow-build --output-dir /home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/mockito__mockito/cocomut_output
+$ ./bin/cocomut --project /home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/mockito__mockito/checkout --scope all --source-set main --call-graph rta --allow-build --output-dir /home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/mockito__mockito/cocomut_output
 
 Picked up JAVA_TOOL_OPTIONS: -Xmx4g
 [AnalyzerFacade] Project: checkout | Adapter: GradleProjectAdapter | Scope: ALL
@@ -6,7 +6,7 @@ Picked up JAVA_TOOL_OPTIONS: -Xmx4g
 SLF4J(W): No SLF4J providers were found.
 SLF4J(W): Defaulting to no-operation (NOP) logger implementation
 SLF4J(W): See https://www.slf4j.org/codes.html#noProviders for further details.
-start_time=Thu Jun 25 12:23:54 CEST 2026
+start_time=Thu Jun 25 23:15:53 CEST 2026
 pipeline_phases=5
 phase_1_project=checkout
 phase_1_build_system=gradle
@@ -44,7 +44,7 @@ source_backend=spoon
 source_files_discovered=493
 source_files_parsed=487
 source_files_failed=6
-failed_source_files_file=/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/mockito__mockito/cocomut_output/failed_source_files.jsonl
+failed_source_files_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/mockito__mockito/cocomut_output/failed_source_files.jsonl
 phase_2_scope_filter_before=2631
 phase_2_scope_filter_after=2631
 phase_2_source_set_filter=main
@@ -63,7 +63,7 @@ selection={scope=all, source_sets=[main], packages=[], classes=[], methods=[], v
 phase_2_strategy=ALL
 phase_2_analysis_universe_methods=2631
 phase_2_methods_identified=2631
-phase_3_call_graph_file=/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/mockito__mockito/cocomut_output/Output_CallGraph_RTA.txt
+phase_3_call_graph_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/mockito__mockito/cocomut_output/Output_CallGraph_RTA.txt
 phase_3_available=true
 phase_3_algorithm=RTA
 phase_3_effective_algorithm=RTA
@@ -74,16 +74,16 @@ phase_3_non_empty_call_graphs=2188
 phase_3_call_edges_generated=11957
 phase_3_warning=One or more selected methods did not receive a matched bytecode call graph result.
 phase_4_contexts_extracted=2631
-output_directory=/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/mockito__mockito/cocomut_output
-phase_5_jsonl_file=/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/mockito__mockito/cocomut_output/method_contexts__491d337cfd6ee809.jsonl
+output_directory=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/mockito__mockito/cocomut_output
+phase_5_jsonl_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/mockito__mockito/cocomut_output/method_contexts__491d337cfd6ee809.jsonl
 phase_5_jsonl_rows=2631
 phase_5_files_generated=2631
 phase_5_call_edges_serialized=11957
 status=PARTIAL
 completed_phases=5
-duration_ms=221070
-end_time=Thu Jun 25 12:27:35 CEST 2026
+duration_ms=68153
+end_time=Thu Jun 25 23:17:01 CEST 2026
 failure_codes=[SOURCE_PARSE_FAILED, CALL_GRAPH_UNAVAILABLE]
 provenance_hash_failures=[]
-extraction_manifest_file=/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/mockito__mockito/cocomut_output/extraction_manifest.json
-extraction_report_file=/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/mockito__mockito/cocomut_output/extraction_report.json
+extraction_manifest_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/mockito__mockito/cocomut_output/extraction_manifest.json
+extraction_report_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/mockito__mockito/cocomut_output/extraction_report.json

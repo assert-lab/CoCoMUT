@@ -1,4 +1,4 @@
-$ ./bin/cocomut --project /home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/graphhopper__graphhopper/checkout --scope all --source-set main --call-graph rta --allow-build --output-dir /home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/graphhopper__graphhopper/cocomut_output
+$ ./bin/cocomut --project /home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/graphhopper__graphhopper/checkout --scope all --source-set main --call-graph rta --allow-build --output-dir /home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/graphhopper__graphhopper/cocomut_output
 
 Picked up JAVA_TOOL_OPTIONS: -Xmx4g
 [AnalyzerFacade] Project: checkout | Adapter: MavenProjectAdapter | Scope: ALL
@@ -9,44 +9,84 @@ The method public static Iterator<T> emptyIterator()  is wrongly tagged as conta
 The method public static Iterator<T> emptyIterator()  is wrongly tagged as containing missing types
 The method public static Iterator<T> emptyIterator()  is wrongly tagged as containing missing types
 The method public static Iterator<T> emptyIterator()  is wrongly tagged as containing missing types
-Exception in thread "main" java.lang.AssertionError: Unreachable
-	at spoon.javadoc.api.parsing.InlineTagParser.parseStandardTag(InlineTagParser.java:78)
-	at spoon.javadoc.api.parsing.InlineTagParser.parse(InlineTagParser.java:49)
-	at spoon.javadoc.api.parsing.JavadocParser.readInlineTag(JavadocParser.java:119)
-	at spoon.javadoc.api.parsing.JavadocParser.parse(JavadocParser.java:69)
-	at spoon.javadoc.api.parsing.BlockTagParser.parseRestFromScratch(BlockTagParser.java:175)
-	at spoon.javadoc.api.parsing.BlockTagParser.parseTagOneArgument(BlockTagParser.java:88)
-	at spoon.javadoc.api.parsing.BlockTagParser.parseStandardTag(BlockTagParser.java:68)
-	at spoon.javadoc.api.parsing.BlockTagParser.parse(BlockTagParser.java:52)
-	at spoon.javadoc.api.parsing.JavadocParser.readBlockTag(JavadocParser.java:146)
-	at spoon.javadoc.api.parsing.JavadocParser.parse(JavadocParser.java:71)
-	at java.base/java.util.stream.ReferencePipeline$3$1.accept(ReferencePipeline.java:197)
-	at java.base/java.util.stream.ReferencePipeline$3$1.accept(ReferencePipeline.java:197)
-	at java.base/java.util.stream.ReferencePipeline$2$1.accept(ReferencePipeline.java:179)
-	at java.base/java.util.ArrayList$ArrayListSpliterator.forEachRemaining(ArrayList.java:1625)
-	at java.base/java.util.stream.AbstractPipeline.copyInto(AbstractPipeline.java:509)
-	at java.base/java.util.stream.AbstractPipeline.wrapAndCopyInto(AbstractPipeline.java:499)
-	at java.base/java.util.stream.ReduceOps$ReduceOp.evaluateSequential(ReduceOps.java:921)
-	at java.base/java.util.stream.AbstractPipeline.evaluate(AbstractPipeline.java:234)
-	at java.base/java.util.stream.ReferencePipeline.collect(ReferencePipeline.java:682)
-	at spoon.javadoc.api.parsing.JavadocParser.forElement(JavadocParser.java:185)
-	at org.assertlab.cocomut.source.SpoonSourceModelBackend.spoonJavadocElements(SpoonSourceModelBackend.java:1309)
-	at org.assertlab.cocomut.source.SpoonSourceModelBackend.extractContext(SpoonSourceModelBackend.java:109)
-	at org.assertlab.cocomut.source.SpoonSourceModelBackend$SpoonSession.extractContext(SpoonSourceModelBackend.java:157)
-	at org.assertlab.cocomut.ContextExtractor.extractContext(ContextExtractor.java:61)
-	at org.assertlab.cocomut.ContextExtractor.extractContextForMethods(ContextExtractor.java:129)
-	at org.assertlab.cocomut.Orchestrator.executePhase4(Orchestrator.java:419)
-	at org.assertlab.cocomut.Orchestrator.execute(Orchestrator.java:192)
-	at org.assertlab.cocomut.AnalyzerFacade.analyze(AnalyzerFacade.java:36)
-	at org.assertlab.cocomut.ContextExtractorService.extract(ContextExtractorService.java:19)
-	at org.assertlab.cocomut.cli.CoCoMUTCommand.call(CoCoMUTCommand.java:162)
-	at org.assertlab.cocomut.cli.CoCoMUTCommand.call(CoCoMUTCommand.java:16)
-	at picocli.CommandLine.executeUserObject(CommandLine.java:2045)
-	at picocli.CommandLine.access$1500(CommandLine.java:148)
-	at picocli.CommandLine$RunLast.executeUserObjectOfLastSubcommandWithSameParent(CommandLine.java:2465)
-	at picocli.CommandLine$RunLast.handle(CommandLine.java:2457)
-	at picocli.CommandLine$RunLast.handle(CommandLine.java:2419)
-	at picocli.CommandLine$AbstractParseResultHandler.execute(CommandLine.java:2277)
-	at picocli.CommandLine$RunLast.execute(CommandLine.java:2421)
-	at picocli.CommandLine.execute(CommandLine.java:2174)
-	at org.assertlab.cocomut.cli.CoCoMUTCommand.main(CoCoMUTCommand.java:23)
+start_time=Thu Jun 25 23:37:07 CEST 2026
+pipeline_phases=5
+phase_1_project=checkout
+phase_1_build_system=maven
+phase_1_java_version=17
+phase_1_compiles=true
+phase_1_compile_status=BUILD SUCCESS
+phase_1_build_attempted=true
+phase_1_build_exit_code=0
+phase_1_build_succeeded=true
+phase_1_build_timed_out=false
+phase_1_build_skipped=false
+phase_1_build_sandboxed=false
+phase_1_gradle_model=GradleModelReport[attempted=false, succeeded=false, timedOut=false, partial=false, resolvedProjects=0, diagnostics=[], failedConfigurations=[]]
+phase_1_build_execution_policy=ALLOW_UNSANDBOXED_BUILD
+phase_1_allow_preexisting_bytecode_after_build_failure=false
+phase_1_bytecode_available=true
+phase_1_bytecode_origin=generated_this_run
+phase_1_analysis_can_proceed=true
+phase_1_source_available=true
+phase_1_source_roots=10
+phase_1_test_source_roots=0
+phase_1_class_output_dirs=10
+phase_1_main_class_outputs=10
+phase_1_test_class_outputs=0
+phase_1_project_artifact_jars=0
+phase_1_project_bytecode_locations=10
+phase_1_dependency_locations=0
+phase_1_dependency_jars=0
+phase_1_explicit_class_outputs=0
+phase_1_explicit_test_class_outputs=0
+phase_1_explicit_project_jars=0
+phase_1_explicit_dependency_jars=0
+phase_1_explicit_classpath_files=0
+source_backend=spoon
+source_files_discovered=679
+source_files_parsed=432
+source_files_failed=247
+failed_source_files_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/graphhopper__graphhopper/cocomut_output/failed_source_files.jsonl
+phase_2_scope_filter_before=2750
+phase_2_scope_filter_after=2750
+phase_2_source_set_filter=main
+phase_2_source_set_filter_before=2750
+phase_2_source_set_filter_after=2750
+phase_2_selection_filter_before=2750
+phase_2_selection_filter_after=2750
+phase_2_package_filter=all
+phase_2_class_filter=all
+phase_2_method_filter=all
+phase_2_visibility_filter=all
+phase_2_include_path_filter=all
+phase_2_exclude_path_filter=none
+phase_2_target_filter=all
+selection={scope=all, source_sets=[main], packages=[], classes=[], methods=[], visibilities=[], include_paths=[], exclude_paths=[], max_methods=null, max_source_files=null, kind=project, uri=project://checkout, project_name=checkout, selector=project}
+phase_2_strategy=ALL
+phase_2_analysis_universe_methods=2750
+phase_2_methods_identified=2750
+phase_3_call_graph_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/graphhopper__graphhopper/cocomut_output/Output_CallGraph_RTA.txt
+phase_3_available=true
+phase_3_algorithm=RTA
+phase_3_effective_algorithm=RTA
+phase_3_call_graph_artifact_exists=true
+phase_3_call_graphs_generated=2431
+phase_3_focal_methods_matched_to_bytecode=2431
+phase_3_non_empty_call_graphs=2185
+phase_3_call_edges_generated=13202
+phase_3_warning=One or more selected methods did not receive a matched bytecode call graph result.
+phase_4_contexts_extracted=2750
+output_directory=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/graphhopper__graphhopper/cocomut_output
+phase_5_jsonl_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/graphhopper__graphhopper/cocomut_output/method_contexts__491d337cfd6ee809.jsonl
+phase_5_jsonl_rows=2750
+phase_5_files_generated=2750
+phase_5_call_edges_serialized=13202
+status=PARTIAL
+completed_phases=5
+duration_ms=57639
+end_time=Thu Jun 25 23:38:04 CEST 2026
+failure_codes=[SOURCE_PARSE_FAILED, CALL_GRAPH_UNAVAILABLE]
+provenance_hash_failures=[]
+extraction_manifest_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/graphhopper__graphhopper/cocomut_output/extraction_manifest.json
+extraction_report_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/graphhopper__graphhopper/cocomut_output/extraction_report.json

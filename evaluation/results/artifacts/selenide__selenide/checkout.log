@@ -1,4 +1,4 @@
-$ git -C /home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/selenide__selenide/checkout checkout 98e0b84ad71c10788ebaedb0dca3d9c8fa9cdde1
+$ git -C /home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/selenide__selenide/checkout checkout 98e0b84ad71c10788ebaedb0dca3d9c8fa9cdde1
 
 Note: switching to '98e0b84ad71c10788ebaedb0dca3d9c8fa9cdde1'.
 

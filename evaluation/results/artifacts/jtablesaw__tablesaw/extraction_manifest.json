@@ -1,6 +1,6 @@
 {
   "schema_version" : "0.3.0",
-  "generated_at" : "2026-06-25T10:58:10.077864753Z",
+  "generated_at" : "2026-06-25T21:36:22.017708210Z",
   "tool" : "CoCoMUT",
   "tool_version" : "0.1.0",
   "request_hash" : "491d337cfd6ee809d10494fcebd0d046f4e5629e43c6279a2c4673928a211485",
@@ -32,12 +32,12 @@
   "jsonl_file" : "method_contexts__491d337cfd6ee809.jsonl",
   "project" : {
     "name" : "checkout",
-    "path" : "/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/jtablesaw__tablesaw/checkout",
+    "path" : "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/jtablesaw__tablesaw/checkout",
     "build_system" : "maven",
     "java_version" : "11",
     "git" : {
       "available" : true,
-      "root" : "/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/jtablesaw__tablesaw/checkout",
+      "root" : "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/jtablesaw__tablesaw/checkout",
       "relative_project_path" : "",
       "remote_url" : "https://github.com/jtablesaw/tablesaw.git",
       "commit" : "e36c3ff3c9e21026f4a04590a5319edfc27f5c84",
@@ -83,15 +83,15 @@
     "explicit_source_roots" : [ ],
     "explicit_test_source_roots" : [ ],
     "origins" : {
-      "/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/jtablesaw__tablesaw/checkout/saw/target/classes" : "generated_this_run",
-      "/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/jtablesaw__tablesaw/checkout/core/target/classes" : "generated_this_run",
-      "/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/jtablesaw__tablesaw/checkout/docs-src/target/classes" : "generated_this_run",
-      "/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/jtablesaw__tablesaw/checkout/excel/target/classes" : "generated_this_run",
-      "/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/jtablesaw__tablesaw/checkout/jsplot/target/classes" : "generated_this_run",
-      "/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/jtablesaw__tablesaw/checkout/json/target/classes" : "generated_this_run",
-      "/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/jtablesaw__tablesaw/checkout/html/target/classes" : "generated_this_run",
-      "/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/jtablesaw__tablesaw/checkout/arrow/target/classes" : "generated_this_run",
-      "/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/jtablesaw__tablesaw/checkout/beakerx/target/classes" : "generated_this_run"
+      "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/jtablesaw__tablesaw/checkout/excel/target/classes" : "generated_this_run",
+      "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/jtablesaw__tablesaw/checkout/docs-src/target/classes" : "generated_this_run",
+      "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/jtablesaw__tablesaw/checkout/saw/target/classes" : "generated_this_run",
+      "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/jtablesaw__tablesaw/checkout/core/target/classes" : "generated_this_run",
+      "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/jtablesaw__tablesaw/checkout/jsplot/target/classes" : "generated_this_run",
+      "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/jtablesaw__tablesaw/checkout/json/target/classes" : "generated_this_run",
+      "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/jtablesaw__tablesaw/checkout/html/target/classes" : "generated_this_run",
+      "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/jtablesaw__tablesaw/checkout/beakerx/target/classes" : "generated_this_run",
+      "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/jtablesaw__tablesaw/checkout/arrow/target/classes" : "generated_this_run"
     },
     "module_source_sets" : [ ]
   },
@@ -130,13 +130,13 @@
     },
     "emitted_jsonl" : {
       "role" : "emitted_jsonl",
-      "sha256" : "afda76f44260fad2180734cca63162f820d5d91e526a6206d21872d3203cacee",
+      "sha256" : "13b5fbcb28252fa4dae01138c882e67ae425ed10d6fe02ec89fd74f87d878f94",
       "status" : "ok",
       "errors" : [ ]
     }
   },
   "execution" : {
-    "start_time" : 1782384855305,
+    "start_time" : 1782423345743,
     "pipeline_phases" : 5,
     "phase_1_project" : "checkout",
     "phase_1_build_system" : "maven",
@@ -182,7 +182,7 @@
     "source_files_discovered" : 326,
     "source_files_parsed" : 147,
     "source_files_failed" : 179,
-    "failed_source_files_file" : "/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/jtablesaw__tablesaw/cocomut_output/failed_source_files.jsonl",
+    "failed_source_files_file" : "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/jtablesaw__tablesaw/cocomut_output/failed_source_files.jsonl",
     "phase_2_scope_filter_before" : 1247,
     "phase_2_scope_filter_after" : 1247,
     "phase_2_source_set_filter" : "main",
@@ -216,7 +216,7 @@
     "phase_2_strategy" : "ALL",
     "phase_2_analysis_universe_methods" : 1247,
     "phase_2_methods_identified" : 1247,
-    "phase_3_call_graph_file" : "/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/jtablesaw__tablesaw/cocomut_output/Output_CallGraph_RTA.txt",
+    "phase_3_call_graph_file" : "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/jtablesaw__tablesaw/cocomut_output/Output_CallGraph_RTA.txt",
     "phase_3_available" : true,
     "phase_3_algorithm" : "RTA",
     "phase_3_effective_algorithm" : "RTA",
@@ -227,15 +227,15 @@
     "phase_3_call_edges_generated" : 4183,
     "phase_3_warning" : "One or more selected methods did not receive a matched bytecode call graph result.",
     "phase_4_contexts_extracted" : 1247,
-    "output_directory" : "/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/jtablesaw__tablesaw/cocomut_output",
-    "phase_5_jsonl_file" : "/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/jtablesaw__tablesaw/cocomut_output/method_contexts__491d337cfd6ee809.jsonl",
+    "output_directory" : "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/jtablesaw__tablesaw/cocomut_output",
+    "phase_5_jsonl_file" : "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/jtablesaw__tablesaw/cocomut_output/method_contexts__491d337cfd6ee809.jsonl",
     "phase_5_jsonl_rows" : 1247,
     "phase_5_files_generated" : 1247,
     "phase_5_call_edges_serialized" : 4183,
     "status" : "PARTIAL",
     "completed_phases" : 5,
-    "duration_ms" : 234772,
-    "end_time" : 1782385090077,
+    "duration_ms" : 36274,
+    "end_time" : 1782423382017,
     "failure_codes" : [ "SOURCE_PARSE_FAILED", "CALL_GRAPH_UNAVAILABLE" ],
     "provenance_hash_failures" : [ ]
   }

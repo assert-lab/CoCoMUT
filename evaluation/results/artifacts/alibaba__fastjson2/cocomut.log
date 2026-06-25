@@ -1,4 +1,4 @@
-$ ./bin/cocomut --project /home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/alibaba__fastjson2/checkout --scope all --source-set main --call-graph rta --allow-build --output-dir /home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/alibaba__fastjson2/cocomut_output
+$ ./bin/cocomut --project /home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/alibaba__fastjson2/checkout --scope all --source-set main --call-graph rta --allow-build --output-dir /home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/alibaba__fastjson2/cocomut_output
 
 Picked up JAVA_TOOL_OPTIONS: -Xmx4g
 [AnalyzerFacade] Project: checkout | Adapter: MavenProjectAdapter | Scope: ALL
@@ -6,21 +6,21 @@ SLF4J(W): No SLF4J providers were found.
 SLF4J(W): Defaulting to no-operation (NOP) logger implementation
 SLF4J(W): See https://www.slf4j.org/codes.html#noProviders for further details.
 The method public T read(java.lang.reflect.Type)  is wrongly tagged as containing missing types
+The method public T read(java.lang.reflect.Type)  is wrongly tagged as containing missing types
+The method public static T parseObject(byte[], java.lang.reflect.Type)  is wrongly tagged as containing missing types
+The method public T read(java.lang.reflect.Type)  is wrongly tagged as containing missing types
+The method public T read(java.lang.reflect.Type)  is wrongly tagged as containing missing types
+The method public T read(java.lang.reflect.Type)  is wrongly tagged as containing missing types
+The method public T read(java.lang.reflect.Type)  is wrongly tagged as containing missing types
+The method public T read(java.lang.reflect.Type)  is wrongly tagged as containing missing types
+The method public T read(java.lang.reflect.Type)  is wrongly tagged as containing missing types
+The method public static T parseObject(byte[], java.lang.reflect.Type)  is wrongly tagged as containing missing types
 The method public static T parseObject(byte[], java.lang.reflect.Type)  is wrongly tagged as containing missing types
 The method public T read(java.lang.reflect.Type)  is wrongly tagged as containing missing types
 The method public T read(java.lang.reflect.Type)  is wrongly tagged as containing missing types
 The method public T read(java.lang.reflect.Type)  is wrongly tagged as containing missing types
 The method public T read(java.lang.reflect.Type)  is wrongly tagged as containing missing types
-The method public T read(java.lang.reflect.Type)  is wrongly tagged as containing missing types
-The method public T read(java.lang.reflect.Type)  is wrongly tagged as containing missing types
-The method public T read(java.lang.reflect.Type)  is wrongly tagged as containing missing types
-The method public static T parseObject(byte[], java.lang.reflect.Type)  is wrongly tagged as containing missing types
-The method public static T parseObject(byte[], java.lang.reflect.Type)  is wrongly tagged as containing missing types
-The method public T read(java.lang.reflect.Type)  is wrongly tagged as containing missing types
-The method public T read(java.lang.reflect.Type)  is wrongly tagged as containing missing types
-The method public T read(java.lang.reflect.Type)  is wrongly tagged as containing missing types
-The method public T read(java.lang.reflect.Type)  is wrongly tagged as containing missing types
-start_time=Thu Jun 25 13:02:18 CEST 2026
+start_time=Thu Jun 25 23:39:16 CEST 2026
 pipeline_phases=5
 phase_1_project=checkout
 phase_1_build_system=maven
@@ -58,7 +58,7 @@ source_backend=spoon
 source_files_discovered=856
 source_files_parsed=611
 source_files_failed=245
-failed_source_files_file=/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/alibaba__fastjson2/cocomut_output/failed_source_files.jsonl
+failed_source_files_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/alibaba__fastjson2/cocomut_output/failed_source_files.jsonl
 phase_2_scope_filter_before=8400
 phase_2_scope_filter_after=8400
 phase_2_source_set_filter=main
@@ -77,7 +77,7 @@ selection={scope=all, source_sets=[main], packages=[], classes=[], methods=[], v
 phase_2_strategy=ALL
 phase_2_analysis_universe_methods=8400
 phase_2_methods_identified=8400
-phase_3_call_graph_file=/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/alibaba__fastjson2/cocomut_output/Output_CallGraph_RTA.txt
+phase_3_call_graph_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/alibaba__fastjson2/cocomut_output/Output_CallGraph_RTA.txt
 phase_3_available=true
 phase_3_algorithm=RTA
 phase_3_effective_algorithm=RTA
@@ -88,16 +88,16 @@ phase_3_non_empty_call_graphs=7358
 phase_3_call_edges_generated=149487
 phase_3_warning=One or more selected methods did not receive a matched bytecode call graph result.
 phase_4_contexts_extracted=8400
-output_directory=/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/alibaba__fastjson2/cocomut_output
-phase_5_jsonl_file=/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/alibaba__fastjson2/cocomut_output/method_contexts__491d337cfd6ee809.jsonl
+output_directory=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/alibaba__fastjson2/cocomut_output
+phase_5_jsonl_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/alibaba__fastjson2/cocomut_output/method_contexts__491d337cfd6ee809.jsonl
 phase_5_jsonl_rows=8400
 phase_5_files_generated=8400
 phase_5_call_edges_serialized=149487
 status=PARTIAL
 completed_phases=5
-duration_ms=443066
-end_time=Thu Jun 25 13:09:41 CEST 2026
+duration_ms=246939
+end_time=Thu Jun 25 23:43:23 CEST 2026
 failure_codes=[SOURCE_PARSE_FAILED, CALL_GRAPH_UNAVAILABLE]
 provenance_hash_failures=[]
-extraction_manifest_file=/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/alibaba__fastjson2/cocomut_output/extraction_manifest.json
-extraction_report_file=/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/alibaba__fastjson2/cocomut_output/extraction_report.json
+extraction_manifest_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/alibaba__fastjson2/cocomut_output/extraction_manifest.json
+extraction_report_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/alibaba__fastjson2/cocomut_output/extraction_report.json

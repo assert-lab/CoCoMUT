@@ -1,6 +1,6 @@
 {
   "schema_version" : "0.3.0",
-  "generated_at" : "2026-06-25T10:36:37.062115871Z",
+  "generated_at" : "2026-06-25T21:30:43.011181014Z",
   "tool" : "CoCoMUT",
   "tool_version" : "0.1.0",
   "request_hash" : "491d337cfd6ee809d10494fcebd0d046f4e5629e43c6279a2c4673928a211485",
@@ -32,12 +32,12 @@
   "jsonl_file" : "method_contexts__491d337cfd6ee809.jsonl",
   "project" : {
     "name" : "checkout",
-    "path" : "/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/redis__jedis/checkout",
+    "path" : "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/redis__jedis/checkout",
     "build_system" : "maven",
     "java_version" : "8",
     "git" : {
       "available" : true,
-      "root" : "/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/redis__jedis/checkout",
+      "root" : "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/redis__jedis/checkout",
       "relative_project_path" : "",
       "remote_url" : "https://github.com/redis/jedis.git",
       "commit" : "60b6eaa041aac701f5a5c52a410eafc4a9d81c3c",
@@ -83,19 +83,19 @@
     "explicit_source_roots" : [ ],
     "explicit_test_source_roots" : [ ],
     "origins" : {
-      "/home/ale/.m2/repository/io/github/resilience4j/resilience4j-core/1.7.1/resilience4j-core-1.7.1.jar" : "dependency",
-      "/home/ale/.m2/repository/com/google/code/gson/gson/2.14.0/gson-2.14.0.jar" : "dependency",
-      "/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/redis__jedis/checkout/target/classes" : "generated_this_run",
-      "/home/ale/.m2/repository/io/github/resilience4j/resilience4j-all/1.7.1/resilience4j-all-1.7.1.jar" : "dependency",
-      "/home/ale/.m2/repository/org/json/json/20260522/json-20260522.jar" : "dependency",
-      "/home/ale/.m2/repository/com/google/errorprone/error_prone_annotations/2.48.0/error_prone_annotations-2.48.0.jar" : "dependency",
-      "/home/ale/.m2/repository/io/github/resilience4j/resilience4j-retry/1.7.1/resilience4j-retry-1.7.1.jar" : "dependency",
-      "/home/ale/.m2/repository/io/vavr/vavr/0.10.2/vavr-0.10.2.jar" : "dependency",
       "/home/ale/.m2/repository/org/apache/commons/commons-pool2/2.13.1/commons-pool2-2.13.1.jar" : "dependency",
-      "/home/ale/.m2/repository/org/slf4j/slf4j-api/1.7.36/slf4j-api-1.7.36.jar" : "dependency",
-      "/home/ale/.m2/repository/io/vavr/vavr-match/0.10.2/vavr-match-0.10.2.jar" : "dependency",
+      "/home/ale/.m2/repository/io/vavr/vavr/0.10.2/vavr-0.10.2.jar" : "dependency",
+      "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/redis__jedis/checkout/target/classes" : "generated_this_run",
+      "/home/ale/.m2/repository/io/github/resilience4j/resilience4j-retry/1.7.1/resilience4j-retry-1.7.1.jar" : "dependency",
+      "/home/ale/.m2/repository/com/google/errorprone/error_prone_annotations/2.48.0/error_prone_annotations-2.48.0.jar" : "dependency",
+      "/home/ale/.m2/repository/org/json/json/20260522/json-20260522.jar" : "dependency",
+      "/home/ale/.m2/repository/io/github/resilience4j/resilience4j-all/1.7.1/resilience4j-all-1.7.1.jar" : "dependency",
+      "/home/ale/.m2/repository/com/google/code/gson/gson/2.14.0/gson-2.14.0.jar" : "dependency",
+      "/home/ale/.m2/repository/io/github/resilience4j/resilience4j-core/1.7.1/resilience4j-core-1.7.1.jar" : "dependency",
+      "/home/ale/.m2/repository/io/github/resilience4j/resilience4j-circuitbreaker/1.7.1/resilience4j-circuitbreaker-1.7.1.jar" : "dependency",
       "/home/ale/.m2/repository/redis/clients/authentication/redis-authx-core/0.1.1-beta2/redis-authx-core-0.1.1-beta2.jar" : "dependency",
-      "/home/ale/.m2/repository/io/github/resilience4j/resilience4j-circuitbreaker/1.7.1/resilience4j-circuitbreaker-1.7.1.jar" : "dependency"
+      "/home/ale/.m2/repository/io/vavr/vavr-match/0.10.2/vavr-match-0.10.2.jar" : "dependency",
+      "/home/ale/.m2/repository/org/slf4j/slf4j-api/1.7.36/slf4j-api-1.7.36.jar" : "dependency"
     },
     "module_source_sets" : [ ]
   },
@@ -134,13 +134,13 @@
     },
     "emitted_jsonl" : {
       "role" : "emitted_jsonl",
-      "sha256" : "8c7ce8167f207bb5d68fa457c7c3650c50626ac0c40c9dd8e4d7dc09b9572857",
+      "sha256" : "dd0725a986b974bbdc2c74b1fadb618b71f1b11e16605f83bde94045374ab400",
       "status" : "ok",
       "errors" : [ ]
     }
   },
   "execution" : {
-    "start_time" : 1782383495534,
+    "start_time" : 1782422768299,
     "pipeline_phases" : 5,
     "phase_1_project" : "checkout",
     "phase_1_build_system" : "maven",
@@ -219,7 +219,7 @@
     "phase_2_strategy" : "ALL",
     "phase_2_analysis_universe_methods" : 10500,
     "phase_2_methods_identified" : 10500,
-    "phase_3_call_graph_file" : "/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/redis__jedis/cocomut_output/Output_CallGraph_RTA.txt",
+    "phase_3_call_graph_file" : "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/redis__jedis/cocomut_output/Output_CallGraph_RTA.txt",
     "phase_3_available" : true,
     "phase_3_algorithm" : "RTA",
     "phase_3_effective_algorithm" : "RTA",
@@ -230,15 +230,15 @@
     "phase_3_call_edges_generated" : 70165,
     "phase_3_warning" : "One or more selected methods did not receive a matched bytecode call graph result.",
     "phase_4_contexts_extracted" : 10500,
-    "output_directory" : "/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/redis__jedis/cocomut_output",
-    "phase_5_jsonl_file" : "/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/redis__jedis/cocomut_output/method_contexts__491d337cfd6ee809.jsonl",
+    "output_directory" : "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/redis__jedis/cocomut_output",
+    "phase_5_jsonl_file" : "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/redis__jedis/cocomut_output/method_contexts__491d337cfd6ee809.jsonl",
     "phase_5_jsonl_rows" : 10500,
     "phase_5_files_generated" : 10500,
     "phase_5_call_edges_serialized" : 70165,
     "status" : "PARTIAL",
     "completed_phases" : 5,
-    "duration_ms" : 301527,
-    "end_time" : 1782383797061,
+    "duration_ms" : 274711,
+    "end_time" : 1782423043010,
     "failure_codes" : [ "CALL_GRAPH_UNAVAILABLE" ],
     "provenance_hash_failures" : [ ]
   }

@@ -1,4 +1,4 @@
-$ git -C /home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/redis__jedis/checkout checkout 60b6eaa041aac701f5a5c52a410eafc4a9d81c3c
+$ git -C /home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/redis__jedis/checkout checkout 60b6eaa041aac701f5a5c52a410eafc4a9d81c3c
 
 Note: switching to '60b6eaa041aac701f5a5c52a410eafc4a9d81c3c'.
 

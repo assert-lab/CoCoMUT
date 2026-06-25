@@ -1,4 +1,4 @@
-$ git -C /home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/mockito__mockito/checkout checkout 9791e19830f967ec6ed0aa9f5aad7a946cc25b97
+$ git -C /home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/mockito__mockito/checkout checkout 9791e19830f967ec6ed0aa9f5aad7a946cc25b97
 
 Note: switching to '9791e19830f967ec6ed0aa9f5aad7a946cc25b97'.
 

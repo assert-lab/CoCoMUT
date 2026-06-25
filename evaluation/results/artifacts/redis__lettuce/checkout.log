@@ -1,4 +1,4 @@
-$ git -C /home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/redis__lettuce/checkout checkout 7ca3e9cc00b29db2ea499103f33a2c67c002c137
+$ git -C /home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/redis__lettuce/checkout checkout 7ca3e9cc00b29db2ea499103f33a2c67c002c137
 
 Note: switching to '7ca3e9cc00b29db2ea499103f33a2c67c002c137'.
 

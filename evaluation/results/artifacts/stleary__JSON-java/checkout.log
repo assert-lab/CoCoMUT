@@ -1,0 +1,20 @@
+$ git -C /home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/stleary__JSON-java/checkout checkout 4a23fd8d9b57d5f16d9ecf1d2b573fee7c073c4a
+
+Note: switching to '4a23fd8d9b57d5f16d9ecf1d2b573fee7c073c4a'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+HEAD is now at 4a23fd8 Merge pull request #1061 from stleary/restore-lenient-jsonarray

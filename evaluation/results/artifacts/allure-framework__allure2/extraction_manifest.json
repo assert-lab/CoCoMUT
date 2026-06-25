@@ -1,0 +1,350 @@
+{
+  "schema_version" : "0.3.0",
+  "generated_at" : "2026-06-25T21:17:45.168383119Z",
+  "tool" : "CoCoMUT",
+  "tool_version" : "0.1.0",
+  "request_hash" : "491d337cfd6ee809d10494fcebd0d046f4e5629e43c6279a2c4673928a211485",
+  "tool_git" : {
+    "available" : false,
+    "root" : "",
+    "relative_project_path" : "",
+    "remote_url" : "",
+    "commit" : "",
+    "dirty" : null,
+    "error" : "fatal: not a git repository (or any of the parent directories): .git"
+  },
+  "selection" : {
+    "scope" : "all",
+    "source_sets" : [ "main" ],
+    "packages" : [ ],
+    "classes" : [ ],
+    "methods" : [ ],
+    "visibilities" : [ ],
+    "include_paths" : [ ],
+    "exclude_paths" : [ ],
+    "max_methods" : null,
+    "max_source_files" : null,
+    "kind" : "project",
+    "uri" : "project://checkout",
+    "project_name" : "checkout",
+    "selector" : "project"
+  },
+  "jsonl_file" : "method_contexts__491d337cfd6ee809.jsonl",
+  "project" : {
+    "name" : "checkout",
+    "path" : "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/checkout",
+    "build_system" : "gradle",
+    "java_version" : "17",
+    "git" : {
+      "available" : true,
+      "root" : "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/checkout",
+      "relative_project_path" : "",
+      "remote_url" : "https://github.com/allure-framework/allure2.git",
+      "commit" : "ea1be8bbaf19af811afa6c44fdfc5d14a2770ae0",
+      "dirty" : false,
+      "error" : ""
+    }
+  },
+  "build" : {
+    "attempted" : true,
+    "exit_code" : 0,
+    "succeeded" : true,
+    "timed_out" : false,
+    "skipped" : false,
+    "sandboxed" : false,
+    "status" : "BUILD SUCCESS",
+    "policy" : "ALLOW_UNSANDBOXED_BUILD",
+    "allow_preexisting_bytecode_after_build_failure" : false,
+    "bytecode_available" : true,
+    "bytecode_origin" : "generated_this_run",
+    "analysis_can_proceed" : true,
+    "gradle_model" : {
+      "attempted" : true,
+      "succeeded" : true,
+      "timedOut" : false,
+      "partial" : true,
+      "resolvedProjects" : 15,
+      "diagnostics" : [ "classpath::allure-commandline:runtimeClasspath:IllegalResolutionException", "classpath::allure-commandline:compileClasspath:IllegalResolutionException", "sourceSetClasspath::allure-commandline:main:compile:IllegalResolutionException", "sourceSetClasspath::allure-commandline:main:runtime:IllegalResolutionException", "classpath::allure-generator:runtimeClasspath:IllegalResolutionException", "classpath::allure-generator:compileClasspath:IllegalResolutionException", "sourceSetClasspath::allure-generator:main:compile:IllegalResolutionException", "sourceSetClasspath::allure-generator:main:runtime:IllegalResolutionException", "classpath::allure-jira-commons:runtimeClasspath:IllegalResolutionException", "classpath::allure-jira-commons:compileClasspath:IllegalResolutionException", "sourceSetClasspath::allure-jira-commons:main:compile:IllegalResolutionException", "sourceSetClasspath::allure-jira-commons:main:runtime:IllegalResolutionException", "classpath::allure-plugin-api:runtimeClasspath:IllegalResolutionException", "classpath::allure-plugin-api:compileClasspath:IllegalResolutionException", "sourceSetClasspath::allure-plugin-api:main:compile:IllegalResolutionException", "sourceSetClasspath::allure-plugin-api:main:runtime:IllegalResolutionException", "classpath::behaviors-plugin:runtimeClasspath:IllegalResolutionException", "classpath::behaviors-plugin:compileClasspath:IllegalResolutionException", "sourceSetClasspath::behaviors-plugin:main:compile:IllegalResolutionException", "sourceSetClasspath::behaviors-plugin:main:runtime:IllegalResolutionException", "classpath::custom-logo-plugin:runtimeClasspath:IllegalResolutionException", "classpath::custom-logo-plugin:compileClasspath:IllegalResolutionException", "sourceSetClasspath::custom-logo-plugin:main:compile:IllegalResolutionException", "sourceSetClasspath::custom-logo-plugin:main:runtime:IllegalResolutionException", "classpath::jira-plugin:runtimeClasspath:IllegalResolutionException", "classpath::jira-plugin:compileClasspath:IllegalResolutionException", "sourceSetClasspath::jira-plugin:main:compile:IllegalResolutionException", "sourceSetClasspath::jira-plugin:main:runtime:IllegalResolutionException", "classpath::junit-xml-plugin:runtimeClasspath:IllegalResolutionException", "classpath::junit-xml-plugin:compileClasspath:IllegalResolutionException", "sourceSetClasspath::junit-xml-plugin:main:compile:IllegalResolutionException", "sourceSetClasspath::junit-xml-plugin:main:runtime:IllegalResolutionException", "classpath::packages-plugin:runtimeClasspath:IllegalResolutionException", "classpath::packages-plugin:compileClasspath:IllegalResolutionException", "sourceSetClasspath::packages-plugin:main:compile:IllegalResolutionException", "sourceSetClasspath::packages-plugin:main:runtime:IllegalResolutionException", "classpath::screen-diff-plugin:runtimeClasspath:IllegalResolutionException", "classpath::screen-diff-plugin:compileClasspath:IllegalResolutionException", "sourceSetClasspath::screen-diff-plugin:main:compile:IllegalResolutionException", "sourceSetClasspath::screen-diff-plugin:main:runtime:IllegalResolutionException", "classpath::trx-plugin:runtimeClasspath:IllegalResolutionException", "classpath::trx-plugin:compileClasspath:IllegalResolutionException", "sourceSetClasspath::trx-plugin:main:compile:IllegalResolutionException", "sourceSetClasspath::trx-plugin:main:runtime:IllegalResolutionException", "classpath::xctest-plugin:runtimeClasspath:IllegalResolutionException", "classpath::xctest-plugin:compileClasspath:IllegalResolutionException", "sourceSetClasspath::xctest-plugin:main:compile:IllegalResolutionException", "sourceSetClasspath::xctest-plugin:main:runtime:IllegalResolutionException", "classpath::xray-plugin:runtimeClasspath:IllegalResolutionException", "classpath::xray-plugin:compileClasspath:IllegalResolutionException", "sourceSetClasspath::xray-plugin:main:compile:IllegalResolutionException", "sourceSetClasspath::xray-plugin:main:runtime:IllegalResolutionException", "classpath::xunit-xml-plugin:runtimeClasspath:IllegalResolutionException", "classpath::xunit-xml-plugin:compileClasspath:IllegalResolutionException", "sourceSetClasspath::xunit-xml-plugin:main:compile:IllegalResolutionException", "sourceSetClasspath::xunit-xml-plugin:main:runtime:IllegalResolutionException" ],
+      "failedConfigurations" : [ "classpath::allure-commandline:runtimeClasspath:IllegalResolutionException", "classpath::allure-commandline:compileClasspath:IllegalResolutionException", "classpath::allure-generator:runtimeClasspath:IllegalResolutionException", "classpath::allure-generator:compileClasspath:IllegalResolutionException", "classpath::allure-jira-commons:runtimeClasspath:IllegalResolutionException", "classpath::allure-jira-commons:compileClasspath:IllegalResolutionException", "classpath::allure-plugin-api:runtimeClasspath:IllegalResolutionException", "classpath::allure-plugin-api:compileClasspath:IllegalResolutionException", "classpath::behaviors-plugin:runtimeClasspath:IllegalResolutionException", "classpath::behaviors-plugin:compileClasspath:IllegalResolutionException", "classpath::custom-logo-plugin:runtimeClasspath:IllegalResolutionException", "classpath::custom-logo-plugin:compileClasspath:IllegalResolutionException", "classpath::jira-plugin:runtimeClasspath:IllegalResolutionException", "classpath::jira-plugin:compileClasspath:IllegalResolutionException", "classpath::junit-xml-plugin:runtimeClasspath:IllegalResolutionException", "classpath::junit-xml-plugin:compileClasspath:IllegalResolutionException", "classpath::packages-plugin:runtimeClasspath:IllegalResolutionException", "classpath::packages-plugin:compileClasspath:IllegalResolutionException", "classpath::screen-diff-plugin:runtimeClasspath:IllegalResolutionException", "classpath::screen-diff-plugin:compileClasspath:IllegalResolutionException", "classpath::trx-plugin:runtimeClasspath:IllegalResolutionException", "classpath::trx-plugin:compileClasspath:IllegalResolutionException", "classpath::xctest-plugin:runtimeClasspath:IllegalResolutionException", "classpath::xctest-plugin:compileClasspath:IllegalResolutionException", "classpath::xray-plugin:runtimeClasspath:IllegalResolutionException", "classpath::xray-plugin:compileClasspath:IllegalResolutionException", "classpath::xunit-xml-plugin:runtimeClasspath:IllegalResolutionException", "classpath::xunit-xml-plugin:compileClasspath:IllegalResolutionException" ]
+    }
+  },
+  "artifacts" : {
+    "source_roots" : [ "allure-commandline/src/main/java", "allure-generator/src/main/java", "allure-jira-commons/src/main/java", "allure-plugin-api/src/main/java", "plugins/behaviors-plugin/src/main/java", "plugins/jira-plugin/src/main/java", "plugins/junit-xml-plugin/src/main/java", "plugins/packages-plugin/src/main/java", "plugins/trx-plugin/src/main/java", "plugins/xctest-plugin/src/main/java", "plugins/xray-plugin/src/main/java", "plugins/xunit-xml-plugin/src/main/java" ],
+    "test_source_roots" : [ ],
+    "main_class_outputs" : [ "allure-commandline/build/classes/java/main", "allure-generator/build/classes/java/main", "allure-jira-commons/build/classes/java/main", "allure-plugin-api/build/classes/java/main", "plugins/behaviors-plugin/build/classes/java/main", "plugins/jira-plugin/build/classes/java/main", "plugins/junit-xml-plugin/build/classes/java/main", "plugins/packages-plugin/build/classes/java/main", "plugins/trx-plugin/build/classes/java/main", "plugins/xctest-plugin/build/classes/java/main", "plugins/xray-plugin/build/classes/java/main", "plugins/xunit-xml-plugin/build/classes/java/main" ],
+    "test_class_outputs" : [ ],
+    "project_jars" : [ ],
+    "dependency_classpath" : [ ],
+    "explicit_class_output_dirs" : [ ],
+    "explicit_test_class_output_dirs" : [ ],
+    "explicit_project_jars" : [ ],
+    "explicit_dependency_jars" : [ ],
+    "explicit_classpath_files" : [ ],
+    "explicit_source_roots" : [ ],
+    "explicit_test_source_roots" : [ ],
+    "origins" : {
+      "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/checkout/plugins/trx-plugin/build/classes/java/main" : "build_model_discovered",
+      "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/checkout/plugins/junit-xml-plugin/build/classes/java/main" : "build_model_discovered",
+      "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/checkout/plugins/xunit-xml-plugin/build/classes/java/main" : "build_model_discovered",
+      "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/checkout/plugins/jira-plugin/build/classes/java/main" : "build_model_discovered",
+      "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/checkout/allure-commandline/build/classes/java/main" : "build_model_discovered",
+      "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/checkout/allure-generator/build/classes/java/main" : "build_model_discovered",
+      "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/checkout/plugins/xray-plugin/build/classes/java/main" : "build_model_discovered",
+      "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/checkout/allure-jira-commons/build/classes/java/main" : "build_model_discovered",
+      "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/checkout/plugins/packages-plugin/build/classes/java/main" : "build_model_discovered",
+      "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/checkout/plugins/xctest-plugin/build/classes/java/main" : "build_model_discovered",
+      "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/checkout/plugins/behaviors-plugin/build/classes/java/main" : "build_model_discovered",
+      "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/checkout/allure-plugin-api/build/classes/java/main" : "build_model_discovered"
+    },
+    "module_source_sets" : [ {
+      "project_path" : ":",
+      "source_set" : "main",
+      "sources" : [ ],
+      "outputs" : [ ],
+      "classpath" : [ "build/resources/main" ],
+      "java_version" : "17"
+    }, {
+      "project_path" : ":allure-commandline",
+      "source_set" : "main",
+      "sources" : [ "allure-commandline/src/main/java" ],
+      "outputs" : [ "allure-commandline/build/classes/java/main" ],
+      "classpath" : [ ],
+      "java_version" : "17"
+    }, {
+      "project_path" : ":allure-generator",
+      "source_set" : "main",
+      "sources" : [ "allure-generator/src/main/java" ],
+      "outputs" : [ "allure-generator/build/classes/java/main" ],
+      "classpath" : [ ],
+      "java_version" : "17"
+    }, {
+      "project_path" : ":allure-jira-commons",
+      "source_set" : "main",
+      "sources" : [ "allure-jira-commons/src/main/java" ],
+      "outputs" : [ "allure-jira-commons/build/classes/java/main" ],
+      "classpath" : [ ],
+      "java_version" : "17"
+    }, {
+      "project_path" : ":allure-plugin-api",
+      "source_set" : "main",
+      "sources" : [ "allure-plugin-api/src/main/java" ],
+      "outputs" : [ "allure-plugin-api/build/classes/java/main" ],
+      "classpath" : [ ],
+      "java_version" : "17"
+    }, {
+      "project_path" : ":behaviors-plugin",
+      "source_set" : "main",
+      "sources" : [ "plugins/behaviors-plugin/src/main/java" ],
+      "outputs" : [ "plugins/behaviors-plugin/build/classes/java/main" ],
+      "classpath" : [ ],
+      "java_version" : "17"
+    }, {
+      "project_path" : ":custom-logo-plugin",
+      "source_set" : "main",
+      "sources" : [ ],
+      "outputs" : [ ],
+      "classpath" : [ ],
+      "java_version" : "17"
+    }, {
+      "project_path" : ":jira-plugin",
+      "source_set" : "main",
+      "sources" : [ "plugins/jira-plugin/src/main/java" ],
+      "outputs" : [ "plugins/jira-plugin/build/classes/java/main" ],
+      "classpath" : [ ],
+      "java_version" : "17"
+    }, {
+      "project_path" : ":junit-xml-plugin",
+      "source_set" : "main",
+      "sources" : [ "plugins/junit-xml-plugin/src/main/java" ],
+      "outputs" : [ "plugins/junit-xml-plugin/build/classes/java/main" ],
+      "classpath" : [ ],
+      "java_version" : "17"
+    }, {
+      "project_path" : ":packages-plugin",
+      "source_set" : "main",
+      "sources" : [ "plugins/packages-plugin/src/main/java" ],
+      "outputs" : [ "plugins/packages-plugin/build/classes/java/main" ],
+      "classpath" : [ ],
+      "java_version" : "17"
+    }, {
+      "project_path" : ":screen-diff-plugin",
+      "source_set" : "main",
+      "sources" : [ ],
+      "outputs" : [ ],
+      "classpath" : [ ],
+      "java_version" : "17"
+    }, {
+      "project_path" : ":trx-plugin",
+      "source_set" : "main",
+      "sources" : [ "plugins/trx-plugin/src/main/java" ],
+      "outputs" : [ "plugins/trx-plugin/build/classes/java/main" ],
+      "classpath" : [ ],
+      "java_version" : "17"
+    }, {
+      "project_path" : ":xctest-plugin",
+      "source_set" : "main",
+      "sources" : [ "plugins/xctest-plugin/src/main/java" ],
+      "outputs" : [ "plugins/xctest-plugin/build/classes/java/main" ],
+      "classpath" : [ ],
+      "java_version" : "17"
+    }, {
+      "project_path" : ":xray-plugin",
+      "source_set" : "main",
+      "sources" : [ "plugins/xray-plugin/src/main/java" ],
+      "outputs" : [ "plugins/xray-plugin/build/classes/java/main" ],
+      "classpath" : [ ],
+      "java_version" : "17"
+    }, {
+      "project_path" : ":xunit-xml-plugin",
+      "source_set" : "main",
+      "sources" : [ "plugins/xunit-xml-plugin/src/main/java" ],
+      "outputs" : [ "plugins/xunit-xml-plugin/build/classes/java/main" ],
+      "classpath" : [ ],
+      "java_version" : "17"
+    } ]
+  },
+  "hashes" : {
+    "algorithm" : "sha-256",
+    "format" : "cocomut-artifact-v1",
+    "main_bytecode" : {
+      "role" : "main_bytecode",
+      "sha256" : "3c1ab9da7ae3d4f04fd19e20fe467c26fc00dfb2bc9d420dcf02f441beedf0f2",
+      "status" : "ok",
+      "errors" : [ ]
+    },
+    "test_bytecode" : {
+      "role" : "test_bytecode",
+      "sha256" : null,
+      "status" : "empty",
+      "errors" : [ ]
+    },
+    "combined_project_bytecode" : {
+      "role" : "combined_project_bytecode",
+      "sha256" : "316e8967ef678fe7417dbeff9ba9246243f0208a429de7d85b9cc6b30dbe6ea2",
+      "status" : "ok",
+      "errors" : [ ]
+    },
+    "dependency_classpath" : {
+      "role" : "dependency_classpath_ordered",
+      "sha256" : null,
+      "status" : "empty",
+      "errors" : [ ]
+    },
+    "dependency_classpath_content_set" : {
+      "role" : "dependency_classpath_content_set",
+      "sha256" : null,
+      "status" : "empty",
+      "errors" : [ ]
+    },
+    "emitted_jsonl" : {
+      "role" : "emitted_jsonl",
+      "sha256" : "af3d223e2bdb24b6c4cc455227aee24ccd2c37bd45d421b3b0e34ebe2962e0e3",
+      "status" : "ok",
+      "errors" : [ ]
+    }
+  },
+  "execution" : {
+    "start_time" : 1782422228641,
+    "pipeline_phases" : 5,
+    "phase_1_project" : "checkout",
+    "phase_1_build_system" : "gradle",
+    "phase_1_java_version" : "17",
+    "phase_1_compiles" : true,
+    "phase_1_compile_status" : "BUILD SUCCESS",
+    "phase_1_build_attempted" : true,
+    "phase_1_build_exit_code" : 0,
+    "phase_1_build_succeeded" : true,
+    "phase_1_build_timed_out" : false,
+    "phase_1_build_skipped" : false,
+    "phase_1_build_sandboxed" : false,
+    "phase_1_gradle_model" : {
+      "attempted" : true,
+      "succeeded" : true,
+      "timedOut" : false,
+      "partial" : true,
+      "resolvedProjects" : 15,
+      "diagnostics" : [ "classpath::allure-commandline:runtimeClasspath:IllegalResolutionException", "classpath::allure-commandline:compileClasspath:IllegalResolutionException", "sourceSetClasspath::allure-commandline:main:compile:IllegalResolutionException", "sourceSetClasspath::allure-commandline:main:runtime:IllegalResolutionException", "classpath::allure-generator:runtimeClasspath:IllegalResolutionException", "classpath::allure-generator:compileClasspath:IllegalResolutionException", "sourceSetClasspath::allure-generator:main:compile:IllegalResolutionException", "sourceSetClasspath::allure-generator:main:runtime:IllegalResolutionException", "classpath::allure-jira-commons:runtimeClasspath:IllegalResolutionException", "classpath::allure-jira-commons:compileClasspath:IllegalResolutionException", "sourceSetClasspath::allure-jira-commons:main:compile:IllegalResolutionException", "sourceSetClasspath::allure-jira-commons:main:runtime:IllegalResolutionException", "classpath::allure-plugin-api:runtimeClasspath:IllegalResolutionException", "classpath::allure-plugin-api:compileClasspath:IllegalResolutionException", "sourceSetClasspath::allure-plugin-api:main:compile:IllegalResolutionException", "sourceSetClasspath::allure-plugin-api:main:runtime:IllegalResolutionException", "classpath::behaviors-plugin:runtimeClasspath:IllegalResolutionException", "classpath::behaviors-plugin:compileClasspath:IllegalResolutionException", "sourceSetClasspath::behaviors-plugin:main:compile:IllegalResolutionException", "sourceSetClasspath::behaviors-plugin:main:runtime:IllegalResolutionException", "classpath::custom-logo-plugin:runtimeClasspath:IllegalResolutionException", "classpath::custom-logo-plugin:compileClasspath:IllegalResolutionException", "sourceSetClasspath::custom-logo-plugin:main:compile:IllegalResolutionException", "sourceSetClasspath::custom-logo-plugin:main:runtime:IllegalResolutionException", "classpath::jira-plugin:runtimeClasspath:IllegalResolutionException", "classpath::jira-plugin:compileClasspath:IllegalResolutionException", "sourceSetClasspath::jira-plugin:main:compile:IllegalResolutionException", "sourceSetClasspath::jira-plugin:main:runtime:IllegalResolutionException", "classpath::junit-xml-plugin:runtimeClasspath:IllegalResolutionException", "classpath::junit-xml-plugin:compileClasspath:IllegalResolutionException", "sourceSetClasspath::junit-xml-plugin:main:compile:IllegalResolutionException", "sourceSetClasspath::junit-xml-plugin:main:runtime:IllegalResolutionException", "classpath::packages-plugin:runtimeClasspath:IllegalResolutionException", "classpath::packages-plugin:compileClasspath:IllegalResolutionException", "sourceSetClasspath::packages-plugin:main:compile:IllegalResolutionException", "sourceSetClasspath::packages-plugin:main:runtime:IllegalResolutionException", "classpath::screen-diff-plugin:runtimeClasspath:IllegalResolutionException", "classpath::screen-diff-plugin:compileClasspath:IllegalResolutionException", "sourceSetClasspath::screen-diff-plugin:main:compile:IllegalResolutionException", "sourceSetClasspath::screen-diff-plugin:main:runtime:IllegalResolutionException", "classpath::trx-plugin:runtimeClasspath:IllegalResolutionException", "classpath::trx-plugin:compileClasspath:IllegalResolutionException", "sourceSetClasspath::trx-plugin:main:compile:IllegalResolutionException", "sourceSetClasspath::trx-plugin:main:runtime:IllegalResolutionException", "classpath::xctest-plugin:runtimeClasspath:IllegalResolutionException", "classpath::xctest-plugin:compileClasspath:IllegalResolutionException", "sourceSetClasspath::xctest-plugin:main:compile:IllegalResolutionException", "sourceSetClasspath::xctest-plugin:main:runtime:IllegalResolutionException", "classpath::xray-plugin:runtimeClasspath:IllegalResolutionException", "classpath::xray-plugin:compileClasspath:IllegalResolutionException", "sourceSetClasspath::xray-plugin:main:compile:IllegalResolutionException", "sourceSetClasspath::xray-plugin:main:runtime:IllegalResolutionException", "classpath::xunit-xml-plugin:runtimeClasspath:IllegalResolutionException", "classpath::xunit-xml-plugin:compileClasspath:IllegalResolutionException", "sourceSetClasspath::xunit-xml-plugin:main:compile:IllegalResolutionException", "sourceSetClasspath::xunit-xml-plugin:main:runtime:IllegalResolutionException" ],
+      "failedConfigurations" : [ "classpath::allure-commandline:runtimeClasspath:IllegalResolutionException", "classpath::allure-commandline:compileClasspath:IllegalResolutionException", "classpath::allure-generator:runtimeClasspath:IllegalResolutionException", "classpath::allure-generator:compileClasspath:IllegalResolutionException", "classpath::allure-jira-commons:runtimeClasspath:IllegalResolutionException", "classpath::allure-jira-commons:compileClasspath:IllegalResolutionException", "classpath::allure-plugin-api:runtimeClasspath:IllegalResolutionException", "classpath::allure-plugin-api:compileClasspath:IllegalResolutionException", "classpath::behaviors-plugin:runtimeClasspath:IllegalResolutionException", "classpath::behaviors-plugin:compileClasspath:IllegalResolutionException", "classpath::custom-logo-plugin:runtimeClasspath:IllegalResolutionException", "classpath::custom-logo-plugin:compileClasspath:IllegalResolutionException", "classpath::jira-plugin:runtimeClasspath:IllegalResolutionException", "classpath::jira-plugin:compileClasspath:IllegalResolutionException", "classpath::junit-xml-plugin:runtimeClasspath:IllegalResolutionException", "classpath::junit-xml-plugin:compileClasspath:IllegalResolutionException", "classpath::packages-plugin:runtimeClasspath:IllegalResolutionException", "classpath::packages-plugin:compileClasspath:IllegalResolutionException", "classpath::screen-diff-plugin:runtimeClasspath:IllegalResolutionException", "classpath::screen-diff-plugin:compileClasspath:IllegalResolutionException", "classpath::trx-plugin:runtimeClasspath:IllegalResolutionException", "classpath::trx-plugin:compileClasspath:IllegalResolutionException", "classpath::xctest-plugin:runtimeClasspath:IllegalResolutionException", "classpath::xctest-plugin:compileClasspath:IllegalResolutionException", "classpath::xray-plugin:runtimeClasspath:IllegalResolutionException", "classpath::xray-plugin:compileClasspath:IllegalResolutionException", "classpath::xunit-xml-plugin:runtimeClasspath:IllegalResolutionException", "classpath::xunit-xml-plugin:compileClasspath:IllegalResolutionException" ]
+    },
+    "phase_1_build_execution_policy" : "ALLOW_UNSANDBOXED_BUILD",
+    "phase_1_allow_preexisting_bytecode_after_build_failure" : false,
+    "phase_1_bytecode_available" : true,
+    "phase_1_bytecode_origin" : "generated_this_run",
+    "phase_1_analysis_can_proceed" : true,
+    "phase_1_source_available" : true,
+    "phase_1_source_roots" : 12,
+    "phase_1_test_source_roots" : 0,
+    "phase_1_class_output_dirs" : 12,
+    "phase_1_main_class_outputs" : 12,
+    "phase_1_test_class_outputs" : 0,
+    "phase_1_project_artifact_jars" : 0,
+    "phase_1_project_bytecode_locations" : 12,
+    "phase_1_dependency_locations" : 0,
+    "phase_1_dependency_jars" : 0,
+    "phase_1_explicit_class_outputs" : 0,
+    "phase_1_explicit_test_class_outputs" : 0,
+    "phase_1_explicit_project_jars" : 0,
+    "phase_1_explicit_dependency_jars" : 0,
+    "phase_1_explicit_classpath_files" : 0,
+    "source_backend" : "spoon",
+    "source_files_discovered" : 215,
+    "source_files_parsed" : 91,
+    "source_files_failed" : 124,
+    "failed_source_files_file" : "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/cocomut_output/failed_source_files.jsonl",
+    "phase_2_scope_filter_before" : 328,
+    "phase_2_scope_filter_after" : 328,
+    "phase_2_source_set_filter" : "main",
+    "phase_2_source_set_filter_before" : 328,
+    "phase_2_source_set_filter_after" : 328,
+    "phase_2_selection_filter_before" : 328,
+    "phase_2_selection_filter_after" : 328,
+    "phase_2_package_filter" : "all",
+    "phase_2_class_filter" : "all",
+    "phase_2_method_filter" : "all",
+    "phase_2_visibility_filter" : "all",
+    "phase_2_include_path_filter" : "all",
+    "phase_2_exclude_path_filter" : "none",
+    "phase_2_target_filter" : "all",
+    "selection" : {
+      "scope" : "all",
+      "source_sets" : [ "main" ],
+      "packages" : [ ],
+      "classes" : [ ],
+      "methods" : [ ],
+      "visibilities" : [ ],
+      "include_paths" : [ ],
+      "exclude_paths" : [ ],
+      "max_methods" : null,
+      "max_source_files" : null,
+      "kind" : "project",
+      "uri" : "project://checkout",
+      "project_name" : "checkout",
+      "selector" : "project"
+    },
+    "phase_2_strategy" : "ALL",
+    "phase_2_analysis_universe_methods" : 328,
+    "phase_2_methods_identified" : 328,
+    "phase_3_call_graph_file" : "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/cocomut_output/Output_CallGraph_RTA.txt",
+    "phase_3_available" : true,
+    "phase_3_algorithm" : "RTA",
+    "phase_3_effective_algorithm" : "RTA",
+    "phase_3_call_graph_artifact_exists" : true,
+    "phase_3_call_graphs_generated" : 279,
+    "phase_3_focal_methods_matched_to_bytecode" : 279,
+    "phase_3_non_empty_call_graphs" : 241,
+    "phase_3_call_edges_generated" : 1176,
+    "phase_3_warning" : "One or more selected methods did not receive a matched bytecode call graph result.",
+    "phase_4_contexts_extracted" : 328,
+    "output_directory" : "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/cocomut_output",
+    "phase_5_jsonl_file" : "/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/cocomut_output/method_contexts__491d337cfd6ee809.jsonl",
+    "phase_5_jsonl_rows" : 328,
+    "phase_5_files_generated" : 328,
+    "phase_5_call_edges_serialized" : 1176,
+    "status" : "PARTIAL",
+    "completed_phases" : 5,
+    "duration_ms" : 36526,
+    "end_time" : 1782422265167,
+    "failure_codes" : [ "MODEL_RESOLUTION_PARTIAL", "SOURCE_PARSE_FAILED", "CALL_GRAPH_UNAVAILABLE" ],
+    "provenance_hash_failures" : [ ]
+  }
+}
