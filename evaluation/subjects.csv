@@ -1,13 +1,13 @@
 repo,build_system,commit_sha,size_bin,module_shape,notes
-Netflix/concurrency-limits,gradle,78a74b9878d38c4c048b0304ce12a162ab7b7222,small,single-module,Small Gradle concurrency library; prior sweep compiled with RTA call graph
+allure-framework/allure2,gradle,ea1be8bbaf19af811afa6c44fdfc5d14a2770ae0,small,multi-module,Gradle report framework; replacement from prior sweep with compiled RTA call graph
 MultiPaper/MultiPaper,gradle,7af143b66299c68a50a7dce3997214ac5cb39c9a,medium,multi-module,Gradle Minecraft server fork; prior sweep compiled with RTA call graph
 json-path/JsonPath,gradle,62a4c9f0f65ba3f625aa0867d64c528ba72d09ec,medium,multi-module,Gradle JSONPath library; prior sweep compiled with RTA call graph
 wiztools/rest-client,gradle,e4e25f05f3b9d7468f8dc08620d535ededbda178,medium,single-module,Gradle REST client project; prior sweep compiled with RTA call graph
-Netflix/ribbon,gradle,2a55b5da9749cd416350193b0ea739d7cd6b2a2e,medium,multi-module,Gradle Netflix library; prior sweep compiled with RTA call graph
-Netflix/zuul,gradle,fc4cd30a71450919afda27d9b314b93dfa2ff0dc,medium,multi-module,Gradle gateway project; prior sweep compiled with RTA call graph
+dreamhead/moco,gradle,5ed23ff30d7128487c6ca6fdf595594e5436ef21,medium,multi-module,Gradle HTTP stub framework; replacement from prior sweep with compiled RTA call graph
+spring-projects/spring-authorization-server,gradle,b90fb09362aae9eb6ee64e536d0ad7d589af917f,medium,multi-module,Gradle Spring security server; replacement from prior sweep with compiled RTA call graph
 FXMisc/RichTextFX,gradle,99ef5c5a0dc31efc59959fd799ccb42b8ccdfe8d,medium,single-module,Gradle JavaFX library; prior sweep compiled with RTA call graph
 Netflix/eureka,gradle,8227a727534338909ef8c3b5ee3dca7641921f62,large,multi-module,Gradle service discovery project; prior sweep compiled with RTA call graph
-JFormDesigner/FlatLaf,gradle,188de9360dc527eef0307d2aecbe188c5bdfc123,large,multi-module,Gradle Swing look-and-feel project; prior sweep compiled with RTA call graph
+embulk/embulk,gradle,c1340f69320a60d57a9942d83bde063c6178393a,medium,multi-module,Gradle data loading framework; replacement from prior sweep with compiled RTA call graph
 controlsfx/controlsfx,gradle,cb982c86167cf007c894cfa0854e2e33e74a58fb,large,multi-module,Gradle JavaFX controls project; prior sweep compiled with RTA call graph
 apache/commons-weaver,maven,d6b1aa0b191452fbbe2182ada00a30902ee1c55d,small,multi-module,Apache Commons Maven project from OE25; prior sweep compiled with RTA call graph
 java-diff-utils/java-diff-utils,maven,5e2e5b981533964aaeb19e2ba56d0f53dbd8b2dc,small,multi-module,Maven diff utility; prior sweep compiled with RTA call graph

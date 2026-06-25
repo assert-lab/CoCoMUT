@@ -281,7 +281,7 @@ def run_subject(subject: dict[str, str], args: argparse.Namespace, output_root: 
         duration_ms = int((time.monotonic() - start) * 1000)
         report = read_extraction_report(cocomut_output)
 
-    jsonl_files = sorted(cocomut_output.rglob("*.jsonl")) if cocomut_output.exists() else []
+    jsonl_files = method_context_jsonl_files(cocomut_output)
     jsonl_metrics, call_metrics = parse_jsonl_edges(jsonl_files)
 
     row = repository_row(subject, clone_status, checkout_status, exit_code, timed_out, duration_ms,
@@ -289,6 +289,18 @@ def run_subject(subject: dict[str, str], args: argparse.Namespace, output_root: 
     call_row = call_edge_row(repo, build_system, call_metrics)
     failure_row = failure_row_from(row, report, subject.get("notes", ""))
     return row, call_row, failure_row
+
+
+def method_context_jsonl_files(cocomut_output: Path) -> list[Path]:
+    if not cocomut_output.exists():
+        return []
+    files = sorted(cocomut_output.rglob("method_contexts*.jsonl"))
+    if files:
+        return files
+    return sorted(
+        path for path in cocomut_output.rglob("*.jsonl")
+        if not path.name.startswith("failed_")
+    )
 
 
 def clone_or_reuse(repo: str, checkout_dir: Path, force: bool, log_dir: Path) -> str:

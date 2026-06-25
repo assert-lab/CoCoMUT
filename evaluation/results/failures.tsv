@@ -1,0 +1,21 @@
+repo	build_system	status	failed_at_phase	failure_codes	phase_1_compile_status	phase_1_error	phase_2_error	phase_3_error	phase_4_error	phase_5_error	note
+allure-framework/allure2	gradle	PARTIAL		"[""MODEL_RESOLUTION_PARTIAL"", ""SOURCE_PARSE_FAILED"", ""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Gradle report framework; replacement from prior sweep with compiled RTA call graph
+MultiPaper/MultiPaper	gradle	PARTIAL		"[""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Gradle Minecraft server fork; prior sweep compiled with RTA call graph
+json-path/JsonPath	gradle	PARTIAL		"[""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Gradle JSONPath library; prior sweep compiled with RTA call graph
+wiztools/rest-client	gradle	PARTIAL		"[""SOURCE_PARSE_FAILED"", ""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Gradle REST client project; prior sweep compiled with RTA call graph
+dreamhead/moco	gradle	PARTIAL		"[""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Gradle HTTP stub framework; replacement from prior sweep with compiled RTA call graph
+spring-projects/spring-authorization-server	gradle	PARTIAL		"[""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Gradle Spring security server; replacement from prior sweep with compiled RTA call graph
+FXMisc/RichTextFX	gradle	PARTIAL		"[""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Gradle JavaFX library; prior sweep compiled with RTA call graph
+Netflix/eureka	gradle	PARTIAL		"[""SOURCE_PARSE_FAILED"", ""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Gradle service discovery project; prior sweep compiled with RTA call graph
+embulk/embulk	gradle	PARTIAL		"[""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Gradle data loading framework; replacement from prior sweep with compiled RTA call graph
+controlsfx/controlsfx	gradle	PARTIAL		"[""SOURCE_PARSE_FAILED"", ""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Gradle JavaFX controls project; prior sweep compiled with RTA call graph
+apache/commons-weaver	maven	PARTIAL		"[""SOURCE_PARSE_FAILED"", ""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Apache Commons Maven project from OE25; prior sweep compiled with RTA call graph
+java-diff-utils/java-diff-utils	maven	PARTIAL		"[""SOURCE_PARSE_FAILED"", ""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Maven diff utility; prior sweep compiled with RTA call graph
+eirslett/frontend-maven-plugin	maven	PARTIAL		"[""SOURCE_PARSE_FAILED"", ""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Maven plugin project; prior sweep compiled with RTA call graph
+DerekYRC/mini-spring	maven	PARTIAL		"[""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Maven educational framework with real multi-module build; prior sweep compiled with RTA call graph
+ulisesbocchio/jasypt-spring-boot	maven	PARTIAL		"[""SOURCE_PARSE_FAILED"", ""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Maven Spring Boot library; prior sweep compiled with RTA call graph
+monkeyWie/proxyee	maven	PARTIAL		"[""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Maven proxy library; prior sweep compiled with RTA call graph
+devnied/EMV-NFC-Paycard-Enrollment	maven	PARTIAL		"[""SOURCE_PARSE_FAILED"", ""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Maven NFC card parser; prior sweep compiled with RTA call graph
+stleary/JSON-java	maven	PARTIAL		"[""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						OE25 JSON library; prior sweep compiled with RTA call graph
+apache/commons-dbutils	maven	PARTIAL		"[""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Apache Commons Maven project from OE25; prior sweep compiled with RTA call graph
+apache/commons-pool	maven	PARTIAL		"[""SOURCE_PARSE_FAILED"", ""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Apache Commons Maven project from OE25; prior sweep compiled with RTA call graph
