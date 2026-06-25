@@ -1,0 +1,105 @@
+$ ./bin/cocomut --project /home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/checkout --scope all --source-set main --call-graph rta --allow-build --output-dir /home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/cocomut_output
+
+Picked up JAVA_TOOL_OPTIONS: -Xmx4g
+[AnalyzerFacade] Project: checkout | Adapter: GradleProjectAdapter | Scope: ALL
+[GradleProjectAdapter] resolved 13 classpath entries via Gradle
+SLF4J(W): No SLF4J providers were found.
+SLF4J(W): Defaulting to no-operation (NOP) logger implementation
+SLF4J(W): See https://www.slf4j.org/codes.html#noProviders for further details.
+The method public abstract Stream<R> map(Function<? super java.nio.file.Path,? extends R>)  is wrongly tagged as containing missing types
+The method public abstract Stream<R> map(Function<? super java.nio.file.Path,? extends R>)  is wrongly tagged as containing missing types
+The method public static Optional<T> empty()  is wrongly tagged as containing missing types
+The method public static Optional<T> empty()  is wrongly tagged as containing missing types
+The method public static Stream<T> empty()  is wrongly tagged as containing missing types
+The method public static Stream<T> empty()  is wrongly tagged as containing missing types
+The method public static Optional<T> empty()  is wrongly tagged as containing missing types
+The method public static Optional<T> empty()  is wrongly tagged as containing missing types
+The method public static Stream<T> empty()  is wrongly tagged as containing missing types
+The method public static Stream<T> empty()  is wrongly tagged as containing missing types
+The method public static Optional<T> empty()  is wrongly tagged as containing missing types
+The method public static Optional<T> empty()  is wrongly tagged as containing missing types
+The method public abstract Stream<R> map(Function<? super java.nio.file.Path,? extends R>)  is wrongly tagged as containing missing types
+The method public abstract Stream<R> map(Function<? super java.nio.file.Path,? extends R>)  is wrongly tagged as containing missing types
+The method public static Optional<T> empty()  is wrongly tagged as containing missing types
+The method public static Optional<T> empty()  is wrongly tagged as containing missing types
+start_time=Thu Jun 25 23:17:08 CEST 2026
+pipeline_phases=5
+phase_1_project=checkout
+phase_1_build_system=gradle
+phase_1_java_version=17
+phase_1_compiles=true
+phase_1_compile_status=BUILD SUCCESS
+phase_1_build_attempted=true
+phase_1_build_exit_code=0
+phase_1_build_succeeded=true
+phase_1_build_timed_out=false
+phase_1_build_skipped=false
+phase_1_build_sandboxed=false
+phase_1_gradle_model=GradleModelReport[attempted=true, succeeded=true, timedOut=false, partial=true, resolvedProjects=15, diagnostics=[classpath::allure-commandline:runtimeClasspath:IllegalResolutionException, classpath::allure-commandline:compileClasspath:IllegalResolutionException, sourceSetClasspath::allure-commandline:main:compile:IllegalResolutionException, sourceSetClasspath::allure-commandline:main:runtime:IllegalResolutionException, classpath::allure-generator:runtimeClasspath:IllegalResolutionException, classpath::allure-generator:compileClasspath:IllegalResolutionException, sourceSetClasspath::allure-generator:main:compile:IllegalResolutionException, sourceSetClasspath::allure-generator:main:runtime:IllegalResolutionException, classpath::allure-jira-commons:runtimeClasspath:IllegalResolutionException, classpath::allure-jira-commons:compileClasspath:IllegalResolutionException, sourceSetClasspath::allure-jira-commons:main:compile:IllegalResolutionException, sourceSetClasspath::allure-jira-commons:main:runtime:IllegalResolutionException, classpath::allure-plugin-api:runtimeClasspath:IllegalResolutionException, classpath::allure-plugin-api:compileClasspath:IllegalResolutionException, sourceSetClasspath::allure-plugin-api:main:compile:IllegalResolutionException, sourceSetClasspath::allure-plugin-api:main:runtime:IllegalResolutionException, classpath::behaviors-plugin:runtimeClasspath:IllegalResolutionException, classpath::behaviors-plugin:compileClasspath:IllegalResolutionException, sourceSetClasspath::behaviors-plugin:main:compile:IllegalResolutionException, sourceSetClasspath::behaviors-plugin:main:runtime:IllegalResolutionException, classpath::custom-logo-plugin:runtimeClasspath:IllegalResolutionException, classpath::custom-logo-plugin:compileClasspath:IllegalResolutionException, sourceSetClasspath::custom-logo-plugin:main:compile:IllegalResolutionException, sourceSetClasspath::custom-logo-plugin:main:runtime:IllegalResolutionException, classpath::jira-plugin:runtimeClasspath:IllegalResolutionException, classpath::jira-plugin:compileClasspath:IllegalResolutionException, sourceSetClasspath::jira-plugin:main:compile:IllegalResolutionException, sourceSetClasspath::jira-plugin:main:runtime:IllegalResolutionException, classpath::junit-xml-plugin:runtimeClasspath:IllegalResolutionException, classpath::junit-xml-plugin:compileClasspath:IllegalResolutionException, sourceSetClasspath::junit-xml-plugin:main:compile:IllegalResolutionException, sourceSetClasspath::junit-xml-plugin:main:runtime:IllegalResolutionException, classpath::packages-plugin:runtimeClasspath:IllegalResolutionException, classpath::packages-plugin:compileClasspath:IllegalResolutionException, sourceSetClasspath::packages-plugin:main:compile:IllegalResolutionException, sourceSetClasspath::packages-plugin:main:runtime:IllegalResolutionException, classpath::screen-diff-plugin:runtimeClasspath:IllegalResolutionException, classpath::screen-diff-plugin:compileClasspath:IllegalResolutionException, sourceSetClasspath::screen-diff-plugin:main:compile:IllegalResolutionException, sourceSetClasspath::screen-diff-plugin:main:runtime:IllegalResolutionException, classpath::trx-plugin:runtimeClasspath:IllegalResolutionException, classpath::trx-plugin:compileClasspath:IllegalResolutionException, sourceSetClasspath::trx-plugin:main:compile:IllegalResolutionException, sourceSetClasspath::trx-plugin:main:runtime:IllegalResolutionException, classpath::xctest-plugin:runtimeClasspath:IllegalResolutionException, classpath::xctest-plugin:compileClasspath:IllegalResolutionException, sourceSetClasspath::xctest-plugin:main:compile:IllegalResolutionException, sourceSetClasspath::xctest-plugin:main:runtime:IllegalResolutionException, classpath::xray-plugin:runtimeClasspath:IllegalResolutionException, classpath::xray-plugin:compileClasspath:IllegalResolutionException, sourceSetClasspath::xray-plugin:main:compile:IllegalResolutionException, sourceSetClasspath::xray-plugin:main:runtime:IllegalResolutionException, classpath::xunit-xml-plugin:runtimeClasspath:IllegalResolutionException, classpath::xunit-xml-plugin:compileClasspath:IllegalResolutionException, sourceSetClasspath::xunit-xml-plugin:main:compile:IllegalResolutionException, sourceSetClasspath::xunit-xml-plugin:main:runtime:IllegalResolutionException], failedConfigurations=[classpath::allure-commandline:runtimeClasspath:IllegalResolutionException, classpath::allure-commandline:compileClasspath:IllegalResolutionException, classpath::allure-generator:runtimeClasspath:IllegalResolutionException, classpath::allure-generator:compileClasspath:IllegalResolutionException, classpath::allure-jira-commons:runtimeClasspath:IllegalResolutionException, classpath::allure-jira-commons:compileClasspath:IllegalResolutionException, classpath::allure-plugin-api:runtimeClasspath:IllegalResolutionException, classpath::allure-plugin-api:compileClasspath:IllegalResolutionException, classpath::behaviors-plugin:runtimeClasspath:IllegalResolutionException, classpath::behaviors-plugin:compileClasspath:IllegalResolutionException, classpath::custom-logo-plugin:runtimeClasspath:IllegalResolutionException, classpath::custom-logo-plugin:compileClasspath:IllegalResolutionException, classpath::jira-plugin:runtimeClasspath:IllegalResolutionException, classpath::jira-plugin:compileClasspath:IllegalResolutionException, classpath::junit-xml-plugin:runtimeClasspath:IllegalResolutionException, classpath::junit-xml-plugin:compileClasspath:IllegalResolutionException, classpath::packages-plugin:runtimeClasspath:IllegalResolutionException, classpath::packages-plugin:compileClasspath:IllegalResolutionException, classpath::screen-diff-plugin:runtimeClasspath:IllegalResolutionException, classpath::screen-diff-plugin:compileClasspath:IllegalResolutionException, classpath::trx-plugin:runtimeClasspath:IllegalResolutionException, classpath::trx-plugin:compileClasspath:IllegalResolutionException, classpath::xctest-plugin:runtimeClasspath:IllegalResolutionException, classpath::xctest-plugin:compileClasspath:IllegalResolutionException, classpath::xray-plugin:runtimeClasspath:IllegalResolutionException, classpath::xray-plugin:compileClasspath:IllegalResolutionException, classpath::xunit-xml-plugin:runtimeClasspath:IllegalResolutionException, classpath::xunit-xml-plugin:compileClasspath:IllegalResolutionException]]
+phase_1_build_execution_policy=ALLOW_UNSANDBOXED_BUILD
+phase_1_allow_preexisting_bytecode_after_build_failure=false
+phase_1_bytecode_available=true
+phase_1_bytecode_origin=generated_this_run
+phase_1_analysis_can_proceed=true
+phase_1_source_available=true
+phase_1_source_roots=12
+phase_1_test_source_roots=0
+phase_1_class_output_dirs=12
+phase_1_main_class_outputs=12
+phase_1_test_class_outputs=0
+phase_1_project_artifact_jars=0
+phase_1_project_bytecode_locations=12
+phase_1_dependency_locations=0
+phase_1_dependency_jars=0
+phase_1_explicit_class_outputs=0
+phase_1_explicit_test_class_outputs=0
+phase_1_explicit_project_jars=0
+phase_1_explicit_dependency_jars=0
+phase_1_explicit_classpath_files=0
+source_backend=spoon
+source_files_discovered=215
+source_files_parsed=91
+source_files_failed=124
+failed_source_files_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/cocomut_output/failed_source_files.jsonl
+phase_2_scope_filter_before=328
+phase_2_scope_filter_after=328
+phase_2_source_set_filter=main
+phase_2_source_set_filter_before=328
+phase_2_source_set_filter_after=328
+phase_2_selection_filter_before=328
+phase_2_selection_filter_after=328
+phase_2_package_filter=all
+phase_2_class_filter=all
+phase_2_method_filter=all
+phase_2_visibility_filter=all
+phase_2_include_path_filter=all
+phase_2_exclude_path_filter=none
+phase_2_target_filter=all
+selection={scope=all, source_sets=[main], packages=[], classes=[], methods=[], visibilities=[], include_paths=[], exclude_paths=[], max_methods=null, max_source_files=null, kind=project, uri=project://checkout, project_name=checkout, selector=project}
+phase_2_strategy=ALL
+phase_2_analysis_universe_methods=328
+phase_2_methods_identified=328
+phase_3_call_graph_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/cocomut_output/Output_CallGraph_RTA.txt
+phase_3_available=true
+phase_3_algorithm=RTA
+phase_3_effective_algorithm=RTA
+phase_3_call_graph_artifact_exists=true
+phase_3_call_graphs_generated=279
+phase_3_focal_methods_matched_to_bytecode=279
+phase_3_non_empty_call_graphs=241
+phase_3_call_edges_generated=1176
+phase_3_warning=One or more selected methods did not receive a matched bytecode call graph result.
+phase_4_contexts_extracted=328
+output_directory=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/cocomut_output
+phase_5_jsonl_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/cocomut_output/method_contexts__491d337cfd6ee809.jsonl
+phase_5_jsonl_rows=328
+phase_5_files_generated=328
+phase_5_call_edges_serialized=1176
+status=PARTIAL
+completed_phases=5
+duration_ms=36526
+end_time=Thu Jun 25 23:17:45 CEST 2026
+failure_codes=[MODEL_RESOLUTION_PARTIAL, SOURCE_PARSE_FAILED, CALL_GRAPH_UNAVAILABLE]
+provenance_hash_failures=[]
+extraction_manifest_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/cocomut_output/extraction_manifest.json
+extraction_report_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/allure-framework__allure2/cocomut_output/extraction_report.json

@@ -1,0 +1,68 @@
+{
+  "random_seed": 20260626,
+  "repositories": [
+    {
+      "commit_sha": "7af143b66299c68a50a7dce3997214ac5cb39c9a",
+      "jsonl_rows": 826,
+      "repo": "MultiPaper/MultiPaper",
+      "sample_count": 5
+    },
+    {
+      "commit_sha": "62a4c9f0f65ba3f625aa0867d64c528ba72d09ec",
+      "jsonl_rows": 1308,
+      "repo": "json-path/JsonPath",
+      "sample_count": 7
+    },
+    {
+      "commit_sha": "5ed23ff30d7128487c6ca6fdf595594e5436ef21",
+      "jsonl_rows": 1925,
+      "repo": "dreamhead/moco",
+      "sample_count": 11
+    },
+    {
+      "commit_sha": "99ef5c5a0dc31efc59959fd799ccb42b8ccdfe8d",
+      "jsonl_rows": 1920,
+      "repo": "FXMisc/RichTextFX",
+      "sample_count": 11
+    },
+    {
+      "commit_sha": "9791e19830f967ec6ed0aa9f5aad7a946cc25b97",
+      "jsonl_rows": 2631,
+      "repo": "mockito/mockito",
+      "sample_count": 15
+    },
+    {
+      "commit_sha": "a57f14febb20f7887227598193781a290585a39d",
+      "jsonl_rows": 2177,
+      "repo": "jhy/jsoup",
+      "sample_count": 12
+    },
+    {
+      "commit_sha": "60b6eaa041aac701f5a5c52a410eafc4a9d81c3c",
+      "jsonl_rows": 10500,
+      "repo": "redis/jedis",
+      "sample_count": 60
+    },
+    {
+      "commit_sha": "2f5c6eb4bd5152576749bddba31e6d985b21ca6a",
+      "jsonl_rows": 2780,
+      "repo": "spring-cloud/spring-cloud-gateway",
+      "sample_count": 16
+    },
+    {
+      "commit_sha": "94b348e027610e68f17737b1e4a080f697b15930",
+      "jsonl_rows": 2750,
+      "repo": "graphhopper/graphhopper",
+      "sample_count": 15
+    },
+    {
+      "commit_sha": "3697c2d37cd659d2a94543093d0d08cb4baf4d73",
+      "jsonl_rows": 8400,
+      "repo": "alibaba/fastjson2",
+      "sample_count": 48
+    }
+  ],
+  "repository_count": 10,
+  "sample_csv_sha256": "936aa4bee6cc2eb2717bed1840bb75cb22d97e36755d6298ddbbdff2101e6548",
+  "sample_size": 200
+}

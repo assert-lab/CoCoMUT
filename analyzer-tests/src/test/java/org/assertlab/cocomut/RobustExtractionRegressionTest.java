@@ -180,6 +180,79 @@ public class RobustExtractionRegressionTest {
         }
     }
 
+    @Test
+    public void unsupportedInlineJavadocTagDoesNotAbortExtraction() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-unsupported-javadoc-tag");
+        try {
+            write(project.resolve("src/main/java/demo/JavadocEdge.java"), """
+                    package demo;
+                    public class JavadocEdge {
+                        /** Parser-hostile inline standard tag: {@return not valid inline usage}. */
+                        public String value() { return "ok"; }
+                    }
+                    """);
+            compileProject(project);
+
+            ExtractionReport report = ContextExtractorService.createDefault().extract(ContextRequest.builder()
+                    .projectRoot(project)
+                    .scope(ContextRequest.Scope.ALL)
+                    .build());
+
+            assertCompleted(report);
+            assertEquals(1, report.methodsIdentified());
+            assertEquals(1, report.jsonlRows());
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void newerDependencyClassfileDoesNotAbortSourceParsing() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-newer-bytecode-project");
+        Path dependency = Files.createTempDirectory("cocomut-newer-bytecode-dep");
+        try {
+            write(project.resolve("src/main/java/demo/UsesFuture.java"), """
+                    package demo;
+                    public class UsesFuture {
+                        public String value() { return "ok"; }
+                    }
+                    """);
+            compileProject(project);
+
+            write(dependency.resolve("src/future/FutureThing.java"), """
+                    package future;
+                    public class FutureThing {}
+                    """);
+            Path dependencyClasses = dependency.resolve("classes");
+            compileJavaFiles(dependency.resolve("src"), dependencyClasses);
+            makeClassfileTooNew(dependencyClasses.resolve("future/FutureThing.class"));
+
+            write(project.resolve("src/main/java/demo/UsesFuture.java"), """
+                    package demo;
+                    import future.FutureThing;
+                    public class UsesFuture {
+                        private FutureThing future;
+                        public String value() { return "ok"; }
+                    }
+                    """);
+            Path classpathFile = project.resolve("classpath.txt");
+            write(classpathFile, dependencyClasses.toString() + System.lineSeparator());
+
+            ExtractionReport report = ContextExtractorService.createDefault().extract(ContextRequest.builder()
+                    .projectRoot(project)
+                    .scope(ContextRequest.Scope.ALL)
+                    .classpathFile(classpathFile)
+                    .build());
+
+            assertCompleted(report);
+            assertEquals(1, report.methodsIdentified());
+            assertEquals(1, report.jsonlRows());
+        } finally {
+            deleteRecursively(project);
+            deleteRecursively(dependency);
+        }
+    }
+
     private static void write(Path path, String text) throws Exception {
         Files.createDirectories(path.getParent());
         Files.writeString(path, text, StandardCharsets.UTF_8);
@@ -192,12 +265,16 @@ public class RobustExtractionRegressionTest {
 
     private static void compileProject(Path project) throws Exception {
         Path classes = project.resolve("target/classes");
+        compileJavaFiles(project, classes);
+    }
+
+    private static void compileJavaFiles(Path sourceRoot, Path classes) throws Exception {
         Files.createDirectories(classes);
         List<String> command = new ArrayList<>();
         command.add(javac());
         command.add("-d");
         command.add(classes.toString());
-        try (var walk = Files.walk(project)) {
+        try (var walk = Files.walk(sourceRoot)) {
             walk.filter(path -> path.toString().endsWith(".java"))
                     .sorted(Comparator.comparing(Path::toString))
                     .map(Path::toString)
@@ -208,11 +285,18 @@ public class RobustExtractionRegressionTest {
         Process process = builder.start();
         if (!process.waitFor(60, java.util.concurrent.TimeUnit.SECONDS)) {
             process.destroyForcibly();
-            throw new AssertionError("javac timed out for " + project);
+            throw new AssertionError("javac timed out for " + sourceRoot);
         }
         if (process.exitValue() != 0) {
-            throw new AssertionError("javac failed for " + project);
+            throw new AssertionError("javac failed for " + sourceRoot);
         }
+    }
+
+    private static void makeClassfileTooNew(Path classFile) throws Exception {
+        byte[] bytes = Files.readAllBytes(classFile);
+        bytes[6] = 0;
+        bytes[7] = 70;
+        Files.write(classFile, bytes);
     }
 
     private static String javac() {

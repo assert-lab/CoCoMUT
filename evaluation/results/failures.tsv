@@ -1,0 +1,21 @@
+repo	build_system	status	failed_at_phase	failure_codes	phase_1_compile_status	phase_1_error	phase_2_error	phase_3_error	phase_4_error	phase_5_error	note
+MultiPaper/MultiPaper	gradle	PARTIAL		"[""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Selected Gradle subject from the Java repository pool; pinned commit; publication evaluation cohort
+spring-projects/spring-authorization-server	gradle	PARTIAL		"[""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Selected Gradle subject from the Java repository pool; pinned commit; publication evaluation cohort
+selenide/selenide	gradle	PARTIAL		"[""MODEL_RESOLUTION_PARTIAL"", ""SOURCE_PARSE_FAILED"", ""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Selected Gradle subject from the Java repository pool; pinned commit; publication evaluation cohort
+json-path/JsonPath	gradle	PARTIAL		"[""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Selected Gradle subject from the Java repository pool; pinned commit; publication evaluation cohort
+testcontainers/testcontainers-java	gradle	PARTIAL		"[""MODEL_RESOLUTION_PARTIAL"", ""SOURCE_PARSE_FAILED"", ""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Selected Gradle subject from the Java repository pool; pinned commit; publication evaluation cohort
+dreamhead/moco	gradle	PARTIAL		"[""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Selected Gradle subject from the Java repository pool; pinned commit; publication evaluation cohort
+FXMisc/RichTextFX	gradle	PARTIAL		"[""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Selected Gradle subject from the Java repository pool; pinned commit; publication evaluation cohort
+mockito/mockito	gradle	PARTIAL		"[""SOURCE_PARSE_FAILED"", ""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Selected Gradle subject from the Java repository pool; pinned commit; publication evaluation cohort
+allure-framework/allure2	gradle	PARTIAL		"[""MODEL_RESOLUTION_PARTIAL"", ""SOURCE_PARSE_FAILED"", ""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Selected Gradle subject from the Java repository pool; pinned commit; publication evaluation cohort
+wiztools/rest-client	gradle	PARTIAL		"[""SOURCE_PARSE_FAILED"", ""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Selected Gradle subject from the Java repository pool; pinned commit; publication evaluation cohort
+jhy/jsoup	maven	PARTIAL		"[""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Selected Maven subject from the Java repository pool; pinned commit; publication evaluation cohort
+java-diff-utils/java-diff-utils	maven	PARTIAL		"[""SOURCE_PARSE_FAILED"", ""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Selected Maven subject from the Java repository pool; pinned commit; publication evaluation cohort
+redis/jedis	maven	PARTIAL		"[""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Selected Maven subject from the Java repository pool; pinned commit; publication evaluation cohort
+spring-cloud/spring-cloud-gateway	maven	PARTIAL		"[""SOURCE_PARSE_FAILED"", ""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Selected Maven subject from the Java repository pool; pinned commit; publication evaluation cohort
+stleary/JSON-java	maven	PARTIAL		"[""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Selected Maven subject from the Java repository pool; pinned commit; publication evaluation cohort
+apache/commons-dbutils	maven	PARTIAL		"[""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Selected Maven subject from the Java repository pool; pinned commit; publication evaluation cohort
+redis/lettuce	maven	PARTIAL		"[""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Selected Maven subject from the Java repository pool; pinned commit; publication evaluation cohort
+jtablesaw/tablesaw	maven	PARTIAL		"[""SOURCE_PARSE_FAILED"", ""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Selected Maven subject from the Java repository pool; pinned commit; publication evaluation cohort
+graphhopper/graphhopper	maven	PARTIAL		"[""SOURCE_PARSE_FAILED"", ""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Selected Maven subject from the Java repository pool; pinned commit; publication evaluation cohort
+alibaba/fastjson2	maven	PARTIAL		"[""SOURCE_PARSE_FAILED"", ""CALL_GRAPH_UNAVAILABLE""]"	BUILD SUCCESS						Selected Maven subject from the Java repository pool; pinned commit; publication evaluation cohort

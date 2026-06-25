@@ -1,0 +1,88 @@
+$ ./bin/cocomut --project /home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/spring-projects__spring-authorization-server/checkout --scope all --source-set main --call-graph rta --allow-build --output-dir /home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/spring-projects__spring-authorization-server/cocomut_output
+
+Picked up JAVA_TOOL_OPTIONS: -Xmx4g
+[AnalyzerFacade] Project: checkout | Adapter: GradleProjectAdapter | Scope: ALL
+[GradleProjectAdapter] resolved 148 classpath entries via Gradle
+SLF4J(W): No SLF4J providers were found.
+SLF4J(W): Defaulting to no-operation (NOP) logger implementation
+SLF4J(W): See https://www.slf4j.org/codes.html#noProviders for further details.
+start_time=Thu Jun 25 23:10:43 CEST 2026
+pipeline_phases=5
+phase_1_project=checkout
+phase_1_build_system=gradle
+phase_1_java_version=17
+phase_1_compiles=true
+phase_1_compile_status=BUILD SUCCESS
+phase_1_build_attempted=true
+phase_1_build_exit_code=0
+phase_1_build_succeeded=true
+phase_1_build_timed_out=false
+phase_1_build_skipped=false
+phase_1_build_sandboxed=false
+phase_1_gradle_model=GradleModelReport[attempted=true, succeeded=true, timedOut=false, partial=false, resolvedProjects=10, diagnostics=[], failedConfigurations=[]]
+phase_1_build_execution_policy=ALLOW_UNSANDBOXED_BUILD
+phase_1_allow_preexisting_bytecode_after_build_failure=false
+phase_1_bytecode_available=true
+phase_1_bytecode_origin=generated_this_run
+phase_1_analysis_can_proceed=true
+phase_1_source_available=true
+phase_1_source_roots=8
+phase_1_test_source_roots=0
+phase_1_class_output_dirs=8
+phase_1_main_class_outputs=8
+phase_1_test_class_outputs=0
+phase_1_project_artifact_jars=0
+phase_1_project_bytecode_locations=8
+phase_1_dependency_locations=138
+phase_1_dependency_jars=138
+phase_1_explicit_class_outputs=0
+phase_1_explicit_test_class_outputs=0
+phase_1_explicit_project_jars=0
+phase_1_explicit_dependency_jars=0
+phase_1_explicit_classpath_files=0
+source_backend=spoon
+source_files_discovered=291
+source_files_parsed=291
+source_files_failed=0
+phase_2_scope_filter_before=1951
+phase_2_scope_filter_after=1951
+phase_2_source_set_filter=main
+phase_2_source_set_filter_before=1951
+phase_2_source_set_filter_after=1951
+phase_2_selection_filter_before=1951
+phase_2_selection_filter_after=1951
+phase_2_package_filter=all
+phase_2_class_filter=all
+phase_2_method_filter=all
+phase_2_visibility_filter=all
+phase_2_include_path_filter=all
+phase_2_exclude_path_filter=none
+phase_2_target_filter=all
+selection={scope=all, source_sets=[main], packages=[], classes=[], methods=[], visibilities=[], include_paths=[], exclude_paths=[], max_methods=null, max_source_files=null, kind=project, uri=project://checkout, project_name=checkout, selector=project}
+phase_2_strategy=ALL
+phase_2_analysis_universe_methods=1951
+phase_2_methods_identified=1951
+phase_3_call_graph_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/spring-projects__spring-authorization-server/cocomut_output/Output_CallGraph_RTA.txt
+phase_3_available=true
+phase_3_algorithm=RTA
+phase_3_effective_algorithm=RTA
+phase_3_call_graph_artifact_exists=true
+phase_3_call_graphs_generated=1894
+phase_3_focal_methods_matched_to_bytecode=1894
+phase_3_non_empty_call_graphs=1794
+phase_3_call_edges_generated=14052
+phase_3_warning=One or more selected methods did not receive a matched bytecode call graph result.
+phase_4_contexts_extracted=1951
+output_directory=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/spring-projects__spring-authorization-server/cocomut_output
+phase_5_jsonl_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/spring-projects__spring-authorization-server/cocomut_output/method_contexts__491d337cfd6ee809.jsonl
+phase_5_jsonl_rows=1951
+phase_5_files_generated=1951
+phase_5_call_edges_serialized=14052
+status=PARTIAL
+completed_phases=5
+duration_ms=55320
+end_time=Thu Jun 25 23:11:38 CEST 2026
+failure_codes=[CALL_GRAPH_UNAVAILABLE]
+provenance_hash_failures=[]
+extraction_manifest_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/spring-projects__spring-authorization-server/cocomut_output/extraction_manifest.json
+extraction_report_file=/home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/spring-projects__spring-authorization-server/cocomut_output/extraction_report.json

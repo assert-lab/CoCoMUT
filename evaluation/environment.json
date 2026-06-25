@@ -1,0 +1,34 @@
+{
+  "cocomut": {
+    "build_policy": "allow-build",
+    "call_graph": "rta",
+    "command": "./bin/cocomut",
+    "harness_commit": "mixed: base-run=0d6be48344f1ae10f0034a25d59dd419a7182cdc; single-repo-refresh=e63e0ba93ff10703b1bcb5e20145e07f5c50862c",
+    "harness_content_sha256": "62e35dc77d4ca8f2f4c61884299ca8448fe25fb9eb1d2a36b9ca13b67e178bb4",
+    "repo_commit": "0d6be48344f1ae10f0034a25d59dd419a7182cdc",
+    "result_set_note": "Final results combine the base worker run with one single-repository refresh for the selected cohort.",
+    "scope": "all",
+    "source_set": "main",
+    "tool_commit": "0d6be48344f1ae10f0034a25d59dd419a7182cdc"
+  },
+  "date": "2026-06-25T21:10:13.362717+00:00",
+  "java": {
+    "java_version": "Picked up JAVA_TOOL_OPTIONS: -Xmx4g\\nopenjdk version \"17.0.19\" 2026-04-21\\nOpenJDK Runtime Environment (build 17.0.19+10)\\nOpenJDK 64-Bit Server VM (build 17.0.19+10, mixed mode, sharing)",
+    "javac_version": "Picked up JAVA_TOOL_OPTIONS: -Xmx4g\\njavac 17.0.19"
+  },
+  "limits": {
+    "compile_timeout_seconds": 300,
+    "heap_gb": 4,
+    "repo_timeout_seconds": 1200
+  },
+  "machine": {
+    "cpu_count": 16,
+    "memory_gb": 15,
+    "os": "Linux-7.0.12-arch1-1-x86_64-with-glibc2.43"
+  },
+  "tools": {
+    "git": "git version 2.54.0",
+    "gradle": "Picked up JAVA_TOOL_OPTIONS: -Xmx4g\\n\\n------------------------------------------------------------\\nGradle 9.5.1",
+    "maven": "Picked up JAVA_TOOL_OPTIONS: -Xmx4g\\nApache Maven 3.9.16 (2bdd9fddda4b155ebf8000e807eb73fd829a51d5)\\nMaven home: /usr/share/java/maven\\nJava version: 17.0.19, vendor: Arch Linux, runtime: /usr/lib/jvm/java-17-openjdk"
+  }
+}

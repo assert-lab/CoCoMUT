@@ -1,0 +1,29 @@
+{
+  "cocomut": {
+    "call_graph": "rta",
+    "command": "./bin/cocomut",
+    "repo_commit": "1bff9f41292d90034715a1508cec3ad657279d2c",
+    "scope": "all",
+    "source_set": "main"
+  },
+  "date": "2026-06-25T08:13:57.091227+00:00",
+  "java": {
+    "java_version": "openjdk version \"17.0.19\" 2026-04-21\\nOpenJDK Runtime Environment (build 17.0.19+10)\\nOpenJDK 64-Bit Server VM (build 17.0.19+10, mixed mode, sharing)",
+    "javac_version": "javac 17.0.19"
+  },
+  "limits": {
+    "compile_timeout_seconds": 300,
+    "heap_gb": 4,
+    "repo_timeout_seconds": 1200
+  },
+  "machine": {
+    "cpu_count": 16,
+    "memory_gb": 15,
+    "os": "Linux-7.0.12-arch1-1-x86_64-with-glibc2.43"
+  },
+  "tools": {
+    "git": "git version 2.54.0",
+    "gradle": "------------------------------------------------------------\\nGradle 9.5.1\\n------------------------------------------------------------\\n",
+    "maven": "Apache Maven 3.9.16 (2bdd9fddda4b155ebf8000e807eb73fd829a51d5)\\nMaven home: /usr/share/java/maven\\nJava version: 17.0.19, vendor: Arch Linux, runtime: /usr/lib/jvm/java-17-openjdk\\nDefault locale: en_US, platform encoding: UTF-8"
+  }
+}

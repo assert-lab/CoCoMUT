@@ -1,0 +1,20 @@
+$ git -C /home/ale/agent-runs/cocomut-eval-success-fixes/repo/evaluation/outputs/java-diff-utils__java-diff-utils/checkout checkout 5e2e5b981533964aaeb19e2ba56d0f53dbd8b2dc
+
+Note: switching to '5e2e5b981533964aaeb19e2ba56d0f53dbd8b2dc'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+HEAD is now at 5e2e5b9 [maven-release-plugin] prepare for next development iteration

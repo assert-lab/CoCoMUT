@@ -335,24 +335,46 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
 
     private CtModel buildModel(List<Path> inputs, int complianceLevel, ProjectModel project) {
         try {
-            return launcher(inputs, complianceLevel, project).buildModel();
+            return launcher(inputs, complianceLevel, project, true).buildModel();
+        } catch (LinkageError classpathFailure) {
+            return buildModelWithoutClasspath(inputs, complianceLevel, project, classpathFailure);
         } catch (RuntimeException firstFailure) {
             if (complianceLevel == 17) {
                 throw firstFailure;
             }
-            return launcher(inputs, 17, project).buildModel();
+            try {
+                return launcher(inputs, 17, project, true).buildModel();
+            } catch (LinkageError classpathFailure) {
+                return buildModelWithoutClasspath(inputs, 17, project, classpathFailure);
+            }
         }
     }
 
-    private Launcher launcher(List<Path> inputs, int complianceLevel, ProjectModel project) {
+    private CtModel buildModelWithoutClasspath(List<Path> inputs, int complianceLevel, ProjectModel project,
+                                               LinkageError classpathFailure) {
+        try {
+            return launcher(inputs, complianceLevel, project, false).buildModel();
+        } catch (RuntimeException | LinkageError fallbackFailure) {
+            if (complianceLevel == 17) {
+                throw classpathFailure;
+            }
+            try {
+                return launcher(inputs, 17, project, false).buildModel();
+            } catch (RuntimeException | LinkageError ignored) {
+                throw classpathFailure;
+            }
+        }
+    }
+
+    private Launcher launcher(List<Path> inputs, int complianceLevel, ProjectModel project, boolean useClasspath) {
         Launcher launcher = new Launcher();
-        launcher.getEnvironment().setNoClasspath(false);
+        launcher.getEnvironment().setNoClasspath(!useClasspath);
         launcher.getEnvironment().setCommentEnabled(true);
         launcher.getEnvironment().setIgnoreDuplicateDeclarations(true);
         launcher.getEnvironment().setIgnoreSyntaxErrors(true);
         launcher.getEnvironment().setShouldCompile(false);
         launcher.getEnvironment().setComplianceLevel(complianceLevel);
-        List<String> classpath = classpathEntries(project);
+        List<String> classpath = useClasspath ? classpathEntries(project) : List.of();
         if (!classpath.isEmpty()) {
             launcher.getEnvironment().setSourceClasspath(classpath.toArray(String[]::new));
         }
@@ -1309,7 +1331,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
         try {
             return JavadocParser.forElement(element);
-        } catch (RuntimeException | StackOverflowError ignored) {
+        } catch (RuntimeException | AssertionError | StackOverflowError ignored) {
             return List.of();
         }
     }
