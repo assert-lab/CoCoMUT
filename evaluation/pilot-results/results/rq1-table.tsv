@@ -1,0 +1,4 @@
+build_system	repos_attempted	repos_success	repos_partial	repos_failed	build_success	bytecode_available	call_graph_available	methods_identified	contexts_extracted	jsonl_rows	call_edges_serialized	median_duration_ms
+maven	10	0	10	0	10	10	10	3075	3075	3075	9310	10023
+gradle	10	0	10	0	10	10	10	18722	18722	18722	107886	79066
+total	20	0	20	0	20	20	20	21797	21797	21797	117196	16317

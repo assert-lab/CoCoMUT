@@ -1,0 +1,3 @@
+$ git clone https://github.com/redis/jedis.git /home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/redis__jedis/checkout
+
+Cloning into '/home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/redis__jedis/checkout'...

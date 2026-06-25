@@ -1,0 +1,4 @@
+build_system	total_edges	edges_with_target_uri	target_uri_rate	edges_with_method_uri	source_join_rate	unresolved_edges	ambiguous_edges	candidate_edges	project_method_edges	unresolved_project_method_edges	jdk_method_edges	external_method_edges	synthetic_or_compiler_edges	invokedynamic_edges
+maven	9310	9310	1.000000	4772	0.512567	4538	0	0	4772	168	3512	593	130	135
+gradle	107886	107886	1.000000	48837	0.452672	59049	0	0	48837	4701	19750	30179	2488	1931
+total	117196	117196	1.000000	53609	0.457430	63587	0	0	53609	4869	23262	30772	2618	2066

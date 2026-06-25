@@ -1,0 +1,6 @@
+{"failure_code":"SOURCE_PARSE_FAILED","source_file":"mockito-core/src/main/java/module-info.java"}
+{"failure_code":"SOURCE_PARSE_FAILED","source_file":"mockito-extensions/mockito-errorprone/src/main/java/org/mockito/errorprone/bugpatterns/AbstractMockitoAnyForPrimitiveType.java"}
+{"failure_code":"SOURCE_PARSE_FAILED","source_file":"mockito-extensions/mockito-errorprone/src/main/java/org/mockito/errorprone/bugpatterns/MockitoAnyClassWithPrimitiveType.java"}
+{"failure_code":"SOURCE_PARSE_FAILED","source_file":"mockito-extensions/mockito-errorprone/src/main/java/org/mockito/errorprone/bugpatterns/MockitoAnyIncorrectPrimitiveType.java"}
+{"failure_code":"SOURCE_PARSE_FAILED","source_file":"mockito-extensions/mockito-errorprone/src/main/java/org/mockito/errorprone/bugpatterns/MockitoInternalUsage.java"}
+{"failure_code":"SOURCE_PARSE_FAILED","source_file":"mockito-extensions/mockito-junit-jupiter/src/main/java/module-info.java"}

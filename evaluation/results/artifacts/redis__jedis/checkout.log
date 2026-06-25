@@ -1,0 +1,20 @@
+$ git -C /home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/redis__jedis/checkout checkout 60b6eaa041aac701f5a5c52a410eafc4a9d81c3c
+
+Note: switching to '60b6eaa041aac701f5a5c52a410eafc4a9d81c3c'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+HEAD is now at 60b6eaa0 Tighten Connection.initializeFromClientConfig() visibility to package-private (#4548)

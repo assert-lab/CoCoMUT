@@ -1,4 +1,4 @@
-build_system	total_edges	edges_with_target_uri	target_uri_rate	edges_with_method_uri	source_join_rate	unresolved_edges	ambiguous_edges	candidate_edges	project_method_edges	unresolved_project_method_edges	jdk_method_edges	external_method_edges	synthetic_or_compiler_edges	invokedynamic_edges
-maven	9310	9310	1.000000	4772	0.512567	4538	0	0	4772	168	3512	593	130	135
-gradle	107886	107886	1.000000	48837	0.452672	59049	0	0	48837	4701	19750	30179	2488	1931
-total	117196	117196	1.000000	53609	0.457430	63587	0	0	53609	4869	23262	30772	2618	2066
+build_system	serialized_edges	unique_directed_relations	edges_with_target_uri	target_uri_rate	edges_with_method_uri	source_join_rate	edges_without_source_uri	project_target_edges	project_target_edges_with_method_uri	recognized_project_target_join_rate	ambiguous_edges	candidate_edges	project_method_edges	unresolved_project_method_edges	jdk_method_edges	external_method_edges	synthetic_or_compiler_edges	invokedynamic_edges	median_serialized_edges	iqr_serialized_edges	median_unique_directed_relations	iqr_unique_directed_relations	median_source_join_rate	iqr_source_join_rate	median_recognized_project_target_join_rate	iqr_recognized_project_target_join_rate
+maven	293645	293645	293645	1.000000	247234	0.841949	46411	251176	247234	0.984306	0	0	247234	3942	28938	7706	3656	2169	2091	45864.000000	2091	45864.000000	0.815277	0.235149	0.972715	0.029721
+gradle	27684	27684	27684	1.000000	15452	0.558156	12232	16384	15452	0.943115	0	0	15452	932	5042	5317	304	637	0	987.500000	0	987.500000	0.370586	0.295271	0.942599	0.097520
+total	321329	321329	321329	1.000000	262686	0.817499	58643	267560	262686	0.981784	0	0	262686	4874	33980	13023	3960	2806	0	12214.500000	0	12214.500000	0.661317	0.454770	0.970401	0.033415

@@ -1,12 +1,16 @@
 {
   "cocomut": {
+    "build_policy": "allow-build",
     "call_graph": "rta",
     "command": "./bin/cocomut",
-    "repo_commit": "1bff9f41292d90034715a1508cec3ad657279d2c",
+    "harness_content_sha256": "3f5a2a21d2e39c73b5b2421aecafd35234f756e14a2ab72294b725b91f1ae24d",
+    "harness_commit": "f369623123babea75d7614e652968cca1670a4b4",
+    "repo_commit": "f369623123babea75d7614e652968cca1670a4b4",
     "scope": "all",
-    "source_set": "main"
+    "source_set": "main",
+    "tool_commit": "f369623123babea75d7614e652968cca1670a4b4"
   },
-  "date": "2026-06-25T08:13:57.091227+00:00",
+  "date": "2026-06-25T10:10:11.520814+00:00",
   "java": {
     "java_version": "openjdk version \"17.0.19\" 2026-04-21\\nOpenJDK Runtime Environment (build 17.0.19+10)\\nOpenJDK 64-Bit Server VM (build 17.0.19+10, mixed mode, sharing)",
     "javac_version": "javac 17.0.19"

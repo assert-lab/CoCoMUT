@@ -1,21 +1,21 @@
 repo,build_system,commit_sha,size_bin,module_shape,notes
-allure-framework/allure2,gradle,ea1be8bbaf19af811afa6c44fdfc5d14a2770ae0,small,multi-module,Gradle report framework; replacement from prior sweep with compiled RTA call graph
-MultiPaper/MultiPaper,gradle,7af143b66299c68a50a7dce3997214ac5cb39c9a,medium,multi-module,Gradle Minecraft server fork; prior sweep compiled with RTA call graph
-json-path/JsonPath,gradle,62a4c9f0f65ba3f625aa0867d64c528ba72d09ec,medium,multi-module,Gradle JSONPath library; prior sweep compiled with RTA call graph
-wiztools/rest-client,gradle,e4e25f05f3b9d7468f8dc08620d535ededbda178,medium,single-module,Gradle REST client project; prior sweep compiled with RTA call graph
-dreamhead/moco,gradle,5ed23ff30d7128487c6ca6fdf595594e5436ef21,medium,multi-module,Gradle HTTP stub framework; replacement from prior sweep with compiled RTA call graph
-spring-projects/spring-authorization-server,gradle,b90fb09362aae9eb6ee64e536d0ad7d589af917f,medium,multi-module,Gradle Spring security server; replacement from prior sweep with compiled RTA call graph
-FXMisc/RichTextFX,gradle,99ef5c5a0dc31efc59959fd799ccb42b8ccdfe8d,medium,single-module,Gradle JavaFX library; prior sweep compiled with RTA call graph
-Netflix/eureka,gradle,8227a727534338909ef8c3b5ee3dca7641921f62,large,multi-module,Gradle service discovery project; prior sweep compiled with RTA call graph
-embulk/embulk,gradle,c1340f69320a60d57a9942d83bde063c6178393a,medium,multi-module,Gradle data loading framework; replacement from prior sweep with compiled RTA call graph
-controlsfx/controlsfx,gradle,cb982c86167cf007c894cfa0854e2e33e74a58fb,large,multi-module,Gradle JavaFX controls project; prior sweep compiled with RTA call graph
-apache/commons-weaver,maven,d6b1aa0b191452fbbe2182ada00a30902ee1c55d,small,multi-module,Apache Commons Maven project from OE25; prior sweep compiled with RTA call graph
-java-diff-utils/java-diff-utils,maven,5e2e5b981533964aaeb19e2ba56d0f53dbd8b2dc,small,multi-module,Maven diff utility; prior sweep compiled with RTA call graph
-eirslett/frontend-maven-plugin,maven,081731fd9cdba5bf05e5edaa8b27718e0d858d4a,small,single-module,Maven plugin project; prior sweep compiled with RTA call graph
-DerekYRC/mini-spring,maven,6d0230d72f82c146a93c68693d9c7d2ff285c028,small,multi-module,Maven educational framework with real multi-module build; prior sweep compiled with RTA call graph
-ulisesbocchio/jasypt-spring-boot,maven,2243cb8070943f480a278e216239f79ad957c98c,small,multi-module,Maven Spring Boot library; prior sweep compiled with RTA call graph
-monkeyWie/proxyee,maven,c2c5bb4ccac0ef260bd2b954379fc5dd1e0eaeb1,small,multi-module,Maven proxy library; prior sweep compiled with RTA call graph
-devnied/EMV-NFC-Paycard-Enrollment,maven,1176c15193f69ba9d9480a8e6358f410b168a2c3,small,single-module,Maven NFC card parser; prior sweep compiled with RTA call graph
-stleary/JSON-java,maven,4a23fd8d9b57d5f16d9ecf1d2b573fee7c073c4a,medium,single-module,OE25 JSON library; prior sweep compiled with RTA call graph
-apache/commons-dbutils,maven,a1034beb6ee791e3a7b2755af4d1d591162ec57f,medium,single-module,Apache Commons Maven project from OE25; prior sweep compiled with RTA call graph
-apache/commons-pool,maven,e897e175f321718f8fd3999ddc36372ee6c75c29,medium,single-module,Apache Commons Maven project from OE25; prior sweep compiled with RTA call graph
+AsamK/signal-cli,gradle,debb8a20e6218b6b4e7a2760bf5e90547535b67a,small,multi-module,"Frozen before rerun from popularity-ranked Java repository pool; not archived; Gradle build files present"
+spring-projects/spring-authorization-server,gradle,b90fb09362aae9eb6ee64e536d0ad7d589af917f,small,multi-module,"Frozen before rerun from popularity-ranked Java repository pool; not archived; Gradle build files present"
+selenide/selenide,gradle,98e0b84ad71c10788ebaedb0dca3d9c8fa9cdde1,medium,multi-module,"Frozen before rerun from popularity-ranked Java repository pool; not archived; Gradle build files present"
+GoogleContainerTools/jib,gradle,6a851b6fb83a7399009a8bee7dec6323822eeca4,medium,multi-module,"Frozen before rerun from popularity-ranked Java repository pool; not archived; Gradle build files present"
+testcontainers/testcontainers-java,gradle,905a445ad8b701e4c531aa652e42179072a88d01,medium,multi-module,"Frozen before rerun from popularity-ranked Java repository pool; not archived; Gradle build files present"
+conductor-oss/conductor,gradle,7f9adbf8bbecfe30cfa679b6c19595641740f7c0,medium,multi-module,"Frozen before rerun from popularity-ranked Java repository pool; not archived; Gradle build files present"
+junit-team/junit-framework,gradle,5bc7cb12f5bc4492011bdcf278fde44ac45166d5,medium,multi-module,"Frozen before rerun from popularity-ranked Java repository pool; not archived; Gradle build files present"
+mockito/mockito,gradle,9791e19830f967ec6ed0aa9f5aad7a946cc25b97,medium,multi-module,"Frozen before rerun from popularity-ranked Java repository pool; not archived; Gradle build files present"
+discord-jda/JDA,gradle,51116ebe6453c64642204eb8b07112596bfca07b,medium,single-module,"Frozen before rerun from popularity-ranked Java repository pool; not archived; Gradle build files present"
+ReactiveX/RxJava,gradle,c0acd8efa7f6d36b002ed2db2fbc9df3646fad15,large,single-module,"Frozen before rerun from popularity-ranked Java repository pool; not archived; Gradle build files present"
+jhy/jsoup,maven,a57f14febb20f7887227598193781a290585a39d,small,single-module,"Frozen before rerun from popularity-ranked Java repository pool; not archived; Maven build files present"
+sofastack/sofa-rpc,maven,0231f193833bcc6f2fb465a33683cb1a5b031fe5,small,multi-module,"Frozen before rerun from popularity-ranked Java repository pool; not archived; Maven build files present"
+redis/jedis,maven,60b6eaa041aac701f5a5c52a410eafc4a9d81c3c,medium,single-module,"Frozen before rerun from popularity-ranked Java repository pool; not archived; Maven build files present"
+spring-cloud/spring-cloud-gateway,maven,2f5c6eb4bd5152576749bddba31e6d985b21ca6a,medium,multi-module,"Frozen before rerun from popularity-ranked Java repository pool; not archived; Maven build files present"
+OpenFeign/feign,maven,46a38306e34e5709e5f7134f54864d77be1aaf94,medium,multi-module,"Frozen before rerun from popularity-ranked Java repository pool; not archived; Maven build files present"
+ClickHouse/clickhouse-java,maven,9e5367e8680af66e2164d8a6b38bac5548897503,medium,multi-module,"Frozen before rerun from popularity-ranked Java repository pool; not archived; Maven build files present"
+redis/lettuce,maven,7ca3e9cc00b29db2ea499103f33a2c67c002c137,medium,single-module,"Frozen before rerun from popularity-ranked Java repository pool; not archived; Maven build files present"
+jtablesaw/tablesaw,maven,e36c3ff3c9e21026f4a04590a5319edfc27f5c84,medium,multi-module,"Frozen before rerun from popularity-ranked Java repository pool; not archived; Maven build files present"
+graphhopper/graphhopper,maven,94b348e027610e68f17737b1e4a080f697b15930,large,multi-module,"Frozen before rerun from popularity-ranked Java repository pool; not archived; Maven build files present"
+alibaba/fastjson2,maven,3697c2d37cd659d2a94543093d0d08cb4baf4d73,large,multi-module,"Frozen before rerun from popularity-ranked Java repository pool; not archived; Maven build files present"

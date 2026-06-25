@@ -1,28 +1,27 @@
-# Reduced 20-Repository Evaluation Run Notes
+# Publication 20-Repository Evaluation Run Notes
 
 ## Execution
 
 - Worker: `ssh worker`
-- Worker run directory: `~/agent-runs/cocomut-reduced-20-evaluation/repo`
-- Local branch: `task/reduced-20-evaluation`
-- CoCoMUT command:
+- Worker run directory: `~/agent-runs/cocomut-publication-eval/repo`
+- Local branch: `task/evaluation-publication-sound`
+- Subject set: frozen before the publication rerun in `evaluation/subjects.csv`
+- Subject replacement after outcomes: none
+- Java: 17
+- Build policy: `allow-build`
 
-```bash
-./bin/cocomut \
-  --project <checkout> \
-  --scope all \
-  --source-set main \
-  --call-graph rta \
-  --externally-sandboxed-build \
-  --output-dir <output>
-```
+The run used `allow-build` because it executed directly on a shared SSH worker.
+It should not be described as externally sandboxed unless a separate VM,
+container, filesystem, network, and credential isolation boundary is added and
+documented.
 
-- Runner command:
+## Runner Command
 
 ```bash
 JAVA_HOME=/usr/lib/jvm/java-17-openjdk \
 PATH=/usr/lib/jvm/java-17-openjdk/bin:$PATH \
-COCOMUT_REPO_COMMIT=1bff9f41292d90034715a1508cec3ad657279d2c \
+COCOMUT_TOOL_COMMIT=f369623123babea75d7614e652968cca1670a4b4 \
+COCOMUT_HARNESS_COMMIT=f369623123babea75d7614e652968cca1670a4b4 \
 python3 evaluation/scripts/run_cocomut_eval.py \
   --subjects evaluation/subjects.csv \
   --output-root evaluation/outputs \
@@ -31,41 +30,38 @@ python3 evaluation/scripts/run_cocomut_eval.py \
   --compile-timeout 300 \
   --heap-gb 4 \
   --cocomut-command ./bin/cocomut \
-  --resume
+  --build-policy allow-build
 ```
 
-The run used Java 17 because the worker default Java 26 caused older Gradle
-subjects to fail before usable bytecode was produced.
+The worker copy did not provide a reliable final Git commit for the modified
+evaluation harness, so `environment.json` also records
+`harness_content_sha256` over the runner script, analyzer script, subject list,
+and subject-selection protocol.
 
-## Subject Replacement
+## Result Summary
 
-An initial Gradle pass showed that `Netflix/concurrency-limits`,
-`Netflix/ribbon`, `Netflix/zuul`, and `JFormDesigner/FlatLaf` did not satisfy
-the intended "builds successfully and emits method contexts" subject criterion
-on the worker. They were replaced with four Gradle projects from the prior
-successful sweep:
+- Status: 0 `SUCCESS`, 9 `PARTIAL`, 11 failed/error/timeout.
+- Build success: 12 / 20 repositories.
+- Bytecode available: 14 / 20 repositories.
+- Call graph available: 11 / 20 repositories.
+- Source parsing: 4,161 / 5,466 files = 76.13%.
+- Focal methods matched to bytecode: 38,635 / 47,551 = 81.25%.
+- Method-context JSONL rows: 42,021.
+- Malformed JSONL rows: 0.
+- Serialized call-edge adjacency entries: 321,329.
+- Unique directed call relations: 321,329.
+- All-edge source-join rate: 81.75%.
+- Recognized-project-target join rate: 98.18%.
 
-- `allure-framework/allure2`
-- `dreamhead/moco`
-- `spring-projects/spring-authorization-server`
-- `embulk/embulk`
+## Interpretation
 
-The final `subjects.csv` contains exactly 10 Gradle and 10 Maven repositories,
-all pinned to specific commit SHAs.
+This run is a stricter publication rerun, not the earlier successful-subject
+pilot. Failed repositories remain in the denominator. Maven/Gradle comparisons
+should be presented as descriptive observations over this frozen cohort, not as
+causal claims about build systems.
 
-## Interpretation Notes
-
-All 20 final subjects completed with build success, bytecode availability, call
-graph availability, parseable method-context JSONL, and zero malformed JSONL
-rows. CoCoMUT nevertheless reported `PARTIAL` for every subject because its
-strict failure-code policy marks a run partial when any selected method lacks a
-matched bytecode call-graph result or when any source file fails parsing.
-
-For the paper, report both facts separately:
-
-- build-backed construction completed for 20/20 repositories;
-- CoCoMUT's strict run status was 20 `PARTIAL`, 0 `SUCCESS`, 0 failed/error.
-
-Do not describe the RQ2 source-join rate as accuracy or recall; it is the
-frequency of deterministic source identity joins among serialized bytecode call
-edges with `target_uri`.
+RQ2 remains an automatic frequency study. `source_join_rate` is not accuracy,
+recall, or manual correctness; it is the fraction of bytecode targets to which
+CoCoMUT attached a deterministic source-backed `method_uri`. Edges without a
+source URI include intentional non-source targets such as JDK, external,
+synthetic/compiler, and invokedynamic targets.

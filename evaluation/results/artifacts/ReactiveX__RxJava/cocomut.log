@@ -1,0 +1,51 @@
+$ ./bin/cocomut --project /home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/ReactiveX__RxJava/checkout --scope all --source-set main --call-graph rta --allow-build --output-dir /home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/ReactiveX__RxJava/cocomut_output
+
+Picked up JAVA_TOOL_OPTIONS: -Xmx4g
+[AnalyzerFacade] Project: checkout | Adapter: GradleProjectAdapter | Scope: ALL
+[GradleProjectAdapter] resolved 3 classpath entries via Gradle
+SLF4J(W): No SLF4J providers were found.
+SLF4J(W): Defaulting to no-operation (NOP) logger implementation
+SLF4J(W): See https://www.slf4j.org/codes.html#noProviders for further details.
+Exception in thread "main" java.lang.UnsupportedClassVersionError: io/reactivex/rxjava4/schedulers/Schedulers has been compiled by a more recent version of the Java Runtime (class file version 70.0), this version of the Java Runtime only recognizes class file versions up to 61.0
+	at java.base/java.lang.ClassLoader.defineClass1(Native Method)
+	at java.base/java.lang.ClassLoader.defineClass(ClassLoader.java:1017)
+	at java.base/java.security.SecureClassLoader.defineClass(SecureClassLoader.java:150)
+	at java.base/java.net.URLClassLoader.defineClass(URLClassLoader.java:524)
+	at java.base/java.net.URLClassLoader$1.run(URLClassLoader.java:427)
+	at java.base/java.net.URLClassLoader$1.run(URLClassLoader.java:421)
+	at java.base/java.security.AccessController.doPrivileged(AccessController.java:712)
+	at java.base/java.net.URLClassLoader.findClass(URLClassLoader.java:420)
+	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:592)
+	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:525)
+	at spoon.support.compiler.jdt.JDTImportBuilder.loadClass(JDTImportBuilder.java:195)
+	at spoon.support.compiler.jdt.JDTImportBuilder.getOrLoadClass(JDTImportBuilder.java:175)
+	at spoon.support.compiler.jdt.JDTImportBuilder.build(JDTImportBuilder.java:77)
+	at spoon.support.compiler.jdt.JDTBasedSpoonCompiler.lambda$buildModel$1(JDTBasedSpoonCompiler.java:466)
+	at spoon.support.compiler.jdt.JDTBasedSpoonCompiler.forEachCompilationUnit(JDTBasedSpoonCompiler.java:489)
+	at spoon.support.compiler.jdt.JDTBasedSpoonCompiler.buildModel(JDTBasedSpoonCompiler.java:465)
+	at spoon.support.compiler.jdt.JDTBasedSpoonCompiler.buildUnitsAndModel(JDTBasedSpoonCompiler.java:389)
+	at spoon.support.compiler.jdt.JDTBasedSpoonCompiler.buildSources(JDTBasedSpoonCompiler.java:347)
+	at spoon.support.compiler.jdt.JDTBasedSpoonCompiler.build(JDTBasedSpoonCompiler.java:118)
+	at spoon.support.compiler.jdt.JDTBasedSpoonCompiler.build(JDTBasedSpoonCompiler.java:101)
+	at spoon.Launcher.buildModel(Launcher.java:781)
+	at org.assertlab.cocomut.source.SpoonSourceModelBackend.buildModel(SpoonSourceModelBackend.java:341)
+	at org.assertlab.cocomut.source.SpoonSourceModelBackend.parseJavaFilesIndividually(SpoonSourceModelBackend.java:305)
+	at org.assertlab.cocomut.source.SpoonSourceModelBackend.parseCtModels(SpoonSourceModelBackend.java:255)
+	at org.assertlab.cocomut.source.SpoonSourceModelBackend.parseModels(SpoonSourceModelBackend.java:234)
+	at org.assertlab.cocomut.source.SpoonSourceModelBackend.parse(SpoonSourceModelBackend.java:135)
+	at org.assertlab.cocomut.source.SpoonSourceModelBackend.open(SpoonSourceModelBackend.java:95)
+	at org.assertlab.cocomut.Orchestrator.openSourceSession(Orchestrator.java:513)
+	at org.assertlab.cocomut.Orchestrator.execute(Orchestrator.java:189)
+	at org.assertlab.cocomut.AnalyzerFacade.analyze(AnalyzerFacade.java:36)
+	at org.assertlab.cocomut.ContextExtractorService.extract(ContextExtractorService.java:19)
+	at org.assertlab.cocomut.cli.CoCoMUTCommand.call(CoCoMUTCommand.java:162)
+	at org.assertlab.cocomut.cli.CoCoMUTCommand.call(CoCoMUTCommand.java:16)
+	at picocli.CommandLine.executeUserObject(CommandLine.java:2045)
+	at picocli.CommandLine.access$1500(CommandLine.java:148)
+	at picocli.CommandLine$RunLast.executeUserObjectOfLastSubcommandWithSameParent(CommandLine.java:2465)
+	at picocli.CommandLine$RunLast.handle(CommandLine.java:2457)
+	at picocli.CommandLine$RunLast.handle(CommandLine.java:2419)
+	at picocli.CommandLine$AbstractParseResultHandler.execute(CommandLine.java:2277)
+	at picocli.CommandLine$RunLast.execute(CommandLine.java:2421)
+	at picocli.CommandLine.execute(CommandLine.java:2174)
+	at org.assertlab.cocomut.cli.CoCoMUTCommand.main(CoCoMUTCommand.java:23)

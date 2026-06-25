@@ -1,0 +1,20 @@
+$ git -C /home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/ClickHouse__clickhouse-java/checkout checkout 9e5367e8680af66e2164d8a6b38bac5548897503
+
+Note: switching to '9e5367e8680af66e2164d8a6b38bac5548897503'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+HEAD is now at 9e5367e8 Merge pull request #2869 from ClickHouse/06/09/26/verify_error_handling_issue

@@ -1,0 +1,20 @@
+$ git -C /home/ale/agent-runs/cocomut-publication-eval/repo/evaluation/outputs/alibaba__fastjson2/checkout checkout 3697c2d37cd659d2a94543093d0d08cb4baf4d73
+
+Note: switching to '3697c2d37cd659d2a94543093d0d08cb4baf4d73'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+HEAD is now at 3697c2d37 fix: JSONB ASM direct-write under-counted object frame bytes (#7616) (#7617)

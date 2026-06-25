@@ -21,7 +21,12 @@ RQ1_COLUMNS = [
     "build_success",
     "bytecode_available",
     "call_graph_available",
+    "source_files_discovered",
+    "source_files_parsed",
+    "source_parse_rate",
     "methods_identified",
+    "focal_methods_matched_to_bytecode",
+    "focal_bytecode_match_rate",
     "contexts_extracted",
     "jsonl_rows",
     "call_edges_serialized",
@@ -31,12 +36,16 @@ RQ1_COLUMNS = [
 
 RQ2_COLUMNS = [
     "build_system",
-    "total_edges",
+    "serialized_edges",
+    "unique_directed_relations",
     "edges_with_target_uri",
     "target_uri_rate",
     "edges_with_method_uri",
     "source_join_rate",
-    "unresolved_edges",
+    "edges_without_source_uri",
+    "project_target_edges",
+    "project_target_edges_with_method_uri",
+    "recognized_project_target_join_rate",
     "ambiguous_edges",
     "candidate_edges",
     "project_method_edges",
@@ -45,6 +54,14 @@ RQ2_COLUMNS = [
     "external_method_edges",
     "synthetic_or_compiler_edges",
     "invokedynamic_edges",
+    "median_serialized_edges",
+    "iqr_serialized_edges",
+    "median_unique_directed_relations",
+    "iqr_unique_directed_relations",
+    "median_source_join_rate",
+    "iqr_source_join_rate",
+    "median_recognized_project_target_join_rate",
+    "iqr_recognized_project_target_join_rate",
 ]
 
 
@@ -83,7 +100,8 @@ def read_tsv(path: Path) -> list[dict[str, str]]:
 def write_tsv(path: Path, columns: list[str], rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=columns, delimiter="\t", extrasaction="ignore")
+        writer = csv.DictWriter(handle, fieldnames=columns, delimiter="\t",
+                                extrasaction="ignore", lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 
@@ -103,7 +121,15 @@ def rq1_row(label: str, rows: list[dict[str, str]]) -> dict[str, Any]:
         "build_success": count_bool(rows, "phase_1_build_succeeded"),
         "bytecode_available": count_bool(rows, "phase_1_bytecode_available"),
         "call_graph_available": count_bool(rows, "phase_3_available"),
+        "source_files_discovered": sum_int(rows, "source_files_discovered"),
+        "source_files_parsed": sum_int(rows, "source_files_parsed"),
+        "source_parse_rate": rate(sum_int(rows, "source_files_parsed"), sum_int(rows, "source_files_discovered")),
         "methods_identified": sum_int(rows, "phase_2_methods_identified"),
+        "focal_methods_matched_to_bytecode": sum_int(rows, "phase_3_focal_methods_matched_to_bytecode"),
+        "focal_bytecode_match_rate": rate(
+            sum_int(rows, "phase_3_focal_methods_matched_to_bytecode"),
+            sum_int(rows, "phase_2_methods_identified"),
+        ),
         "contexts_extracted": sum_int(rows, "phase_4_contexts_extracted"),
         "jsonl_rows": sum_int(rows, "phase_5_jsonl_rows"),
         "call_edges_serialized": sum_int(rows, "phase_5_call_edges_serialized"),
@@ -112,17 +138,23 @@ def rq1_row(label: str, rows: list[dict[str, str]]) -> dict[str, Any]:
 
 
 def rq2_row(label: str, rows: list[dict[str, str]]) -> dict[str, Any]:
-    total = sum_int(rows, "total_edges")
+    total = sum_int(rows, "serialized_edges")
     with_target = sum_int(rows, "edges_with_target_uri")
     with_method = sum_int(rows, "edges_with_method_uri")
+    project_targets = sum_int(rows, "project_target_edges")
+    project_targets_with_method = sum_int(rows, "project_target_edges_with_method_uri")
     return {
         "build_system": label,
-        "total_edges": total,
+        "serialized_edges": total,
+        "unique_directed_relations": sum_int(rows, "unique_directed_relations"),
         "edges_with_target_uri": with_target,
         "target_uri_rate": rate(with_target, total),
         "edges_with_method_uri": with_method,
         "source_join_rate": rate(with_method, with_target),
-        "unresolved_edges": sum_int(rows, "unresolved_edges"),
+        "edges_without_source_uri": sum_int(rows, "edges_without_source_uri"),
+        "project_target_edges": project_targets,
+        "project_target_edges_with_method_uri": project_targets_with_method,
+        "recognized_project_target_join_rate": rate(project_targets_with_method, project_targets),
         "ambiguous_edges": sum_int(rows, "ambiguous_edges"),
         "candidate_edges": sum_int(rows, "candidate_edges"),
         "project_method_edges": sum_int(rows, "project_method_edges"),
@@ -131,6 +163,14 @@ def rq2_row(label: str, rows: list[dict[str, str]]) -> dict[str, Any]:
         "external_method_edges": sum_int(rows, "external_method_edges"),
         "synthetic_or_compiler_edges": sum_int(rows, "synthetic_or_compiler_edges"),
         "invokedynamic_edges": sum_int(rows, "invokedynamic_edges"),
+        "median_serialized_edges": median_int(rows, "serialized_edges"),
+        "iqr_serialized_edges": iqr_int(rows, "serialized_edges"),
+        "median_unique_directed_relations": median_int(rows, "unique_directed_relations"),
+        "iqr_unique_directed_relations": iqr_int(rows, "unique_directed_relations"),
+        "median_source_join_rate": median_float(rows, "source_join_rate"),
+        "iqr_source_join_rate": iqr_float(rows, "source_join_rate"),
+        "median_recognized_project_target_join_rate": median_float(rows, "recognized_project_target_join_rate"),
+        "iqr_recognized_project_target_join_rate": iqr_float(rows, "recognized_project_target_join_rate"),
     }
 
 
@@ -153,16 +193,20 @@ def write_summary(path: Path,
     lines.append(f"- Build success: {total['build_success']} / {total['repos_attempted']} repositories.")
     lines.append(f"- Bytecode available: {total['bytecode_available']} / {total['repos_attempted']} repositories.")
     lines.append(f"- Call graph available: {total['call_graph_available']} / {total['repos_attempted']} repositories.")
+    lines.append(f"- Source parsing: {total['source_files_parsed']} / {total['source_files_discovered']} files ({percent(total['source_parse_rate'])}).")
+    lines.append(f"- Focal methods matched to bytecode: {total['focal_methods_matched_to_bytecode']} / {total['methods_identified']} ({percent(total['focal_bytecode_match_rate'])}).")
     lines.append(f"- Methods identified: {total['methods_identified']}; contexts extracted: {total['contexts_extracted']}; JSONL rows: {total['jsonl_rows']}.")
     lines.append("")
     lines.extend(markdown_table(RQ1_COLUMNS, rq1))
     lines.append("")
     lines.append("## RQ2: Source-Bytecode Reconciliation and Abstention")
     total2 = rq2[-1]
-    lines.append(f"- Serialized call edges: {total2['total_edges']}.")
+    lines.append(f"- Serialized call-edge adjacency entries: {total2['serialized_edges']}.")
+    lines.append(f"- Unique directed relations: {total2['unique_directed_relations']}.")
     lines.append(f"- `target_uri` coverage: {percent(total2['target_uri_rate'])}.")
-    lines.append(f"- Source-join rate: {percent(total2['source_join_rate'])}.")
-    lines.append(f"- Unresolved edges: {total2['unresolved_edges']}; ambiguous edges: {total2['ambiguous_edges']}; candidate edges: {total2['candidate_edges']}.")
+    lines.append(f"- All-edge source-join rate: {percent(total2['source_join_rate'])}.")
+    lines.append(f"- Recognized-project-target join rate: {percent(total2['recognized_project_target_join_rate'])}.")
+    lines.append(f"- Edges without source URI: {total2['edges_without_source_uri']}; ambiguous edges: {total2['ambiguous_edges']}; candidate edges: {total2['candidate_edges']}.")
     lines.append("")
     lines.extend(markdown_table(RQ2_COLUMNS, rq2))
     lines.append("")
@@ -181,8 +225,10 @@ def write_summary(path: Path,
         lines.append("")
     lines.append("## Interpretation")
     lines.append("- RQ1 measures construction robustness, not semantic correctness.")
+    lines.append("- A repository can build and emit method-context JSONL while still being `PARTIAL` because source parsing or focal-method bytecode matching is incomplete.")
     lines.append("- RQ2 measures deterministic source-join behavior and abstention taxonomy, not manual accuracy.")
     lines.append("- `source_join_rate` is not recall or correctness; it is the fraction of bytecode targets with deterministic source-backed `method_uri` joins.")
+    lines.append("- `edges_without_source_uri` includes intentional non-source targets such as JDK, external-library, synthetic/compiler, and invokedynamic targets.")
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -224,11 +270,63 @@ def sum_int(rows: list[dict[str, str]], column: str) -> int:
     return sum(value for row in rows if (value := to_int(row.get(column))) is not None)
 
 
+def median_int(rows: list[dict[str, str]], column: str) -> str:
+    values = [value for row in rows if (value := to_int(row.get(column))) is not None]
+    return str(int(statistics.median(values))) if values else ""
+
+
+def iqr_int(rows: list[dict[str, str]], column: str) -> str:
+    values = [float(value) for row in rows if (value := to_int(row.get(column))) is not None]
+    return format_float(iqr(values))
+
+
+def median_float(rows: list[dict[str, str]], column: str) -> str:
+    values = [value for row in rows if (value := to_float(row.get(column))) is not None]
+    return format_float(statistics.median(values)) if values else ""
+
+
+def iqr_float(rows: list[dict[str, str]], column: str) -> str:
+    values = [value for row in rows if (value := to_float(row.get(column))) is not None]
+    return format_float(iqr(values))
+
+
+def iqr(values: list[float]) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    return percentile(ordered, 0.75) - percentile(ordered, 0.25)
+
+
+def percentile(values: list[float], quantile: float) -> float:
+    if len(values) == 1:
+        return values[0]
+    position = (len(values) - 1) * quantile
+    lower = int(position)
+    upper = min(lower + 1, len(values) - 1)
+    fraction = position - lower
+    return values[lower] + (values[upper] - values[lower]) * fraction
+
+
+def format_float(value: float | None) -> str:
+    if value is None:
+        return ""
+    return f"{value:.6f}"
+
+
 def to_int(value: str | None) -> int | None:
     if value in ("", None):
         return None
     try:
         return int(str(value))
+    except ValueError:
+        return None
+
+
+def to_float(value: str | None) -> float | None:
+    if value in ("", None):
+        return None
+    try:
+        return float(str(value))
     except ValueError:
         return None
 
