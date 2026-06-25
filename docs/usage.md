@@ -326,17 +326,18 @@ dependency-free research viewer:
 python3 scripts/method_contexts_viewer.py /path/to/method_contexts__<request-hash>.jsonl
 ```
 
-You can also pass an output directory; the viewer recursively finds `*.jsonl`
-files:
+You can also pass an output directory; the viewer recursively finds
+`method_contexts*.jsonl` files and skips diagnostic JSONL artifacts such as
+`failed_source_files.jsonl`:
 
 ```bash
 python3 scripts/method_contexts_viewer.py /path/to/cocomut_output
 ```
 
-The viewer indexes JSONL by byte offset, so large outputs can be browsed
-without loading the whole file into memory. It displays method source, Javadoc,
-selection provenance, source context, Javadoc references, call graph context,
-documentation metrics, and the raw record.
+The viewer indexes method-context rows by byte offset, so large outputs can be
+browsed without loading the whole file into memory. It displays method source,
+Javadoc, selection provenance, source context, Javadoc references, call-edge
+summary and taxonomy fields, documentation metrics, and the raw record.
 
 ## API
 
