@@ -54,7 +54,9 @@ import java.util.regex.Pattern;
  * Spoon-backed source model.
  *
  * <p>The product pipeline uses classpath-aware extraction against compiled
- * projects and does not use legacy fallback parsing.
+ * projects. It may recover individual source files after whole-model parse
+ * failures, but it does not turn source-only extraction into a successful
+ * product mode.
  */
 final class SpoonSourceModelBackend implements SourceModelBackend {
     private static final Pattern PARAM_TAG = Pattern.compile("(?m)^\\s*\\*?\\s*@param\\s+(\\S+)");

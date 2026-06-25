@@ -41,7 +41,6 @@ public final class ContextRequest {
     private final Set<SymbolTarget> targets;
     private final Path outputDirectory;
     private final BuildPolicy buildPolicy;
-    private final boolean allowPreexistingBytecodeAfterBuildFailure;
     private final List<Path> classOutputDirs;
     private final List<Path> testClassOutputDirs;
     private final List<Path> projectJars;
@@ -71,7 +70,6 @@ public final class ContextRequest {
                 ? builder.outputDirectory.toAbsolutePath().normalize()
                 : null;
         this.buildPolicy = Objects.requireNonNull(builder.buildPolicy, "buildPolicy cannot be null");
-        this.allowPreexistingBytecodeAfterBuildFailure = builder.allowPreexistingBytecodeAfterBuildFailure;
         this.classOutputDirs = normalizePaths(builder.classOutputDirs, this.projectRoot);
         this.testClassOutputDirs = normalizePaths(builder.testClassOutputDirs, this.projectRoot);
         this.projectJars = normalizePaths(builder.projectJars, this.projectRoot);
@@ -79,11 +77,6 @@ public final class ContextRequest {
         this.classpathFiles = normalizePaths(builder.classpathFiles, this.projectRoot);
         this.sourceRoots = normalizePaths(builder.sourceRoots, this.projectRoot);
         this.testSourceRoots = normalizePaths(builder.testSourceRoots, this.projectRoot);
-        if (this.allowPreexistingBytecodeAfterBuildFailure
-                && this.buildPolicy == BuildPolicy.DENY_BUILD) {
-            throw new IllegalArgumentException("allowPreexistingBytecodeAfterBuildFailure requires "
-                    + "ALLOW_UNSANDBOXED_BUILD or EXTERNALLY_SANDBOXED_BUILD");
-        }
     }
 
     public static Builder builder() {
@@ -158,10 +151,6 @@ public final class ContextRequest {
         return buildPolicy;
     }
 
-    public boolean allowPreexistingBytecodeAfterBuildFailure() {
-        return allowPreexistingBytecodeAfterBuildFailure;
-    }
-
     public List<Path> classOutputDirs() {
         return classOutputDirs;
     }
@@ -206,7 +195,6 @@ public final class ContextRequest {
         private Set<SymbolTarget> targets = new LinkedHashSet<>();
         private Path outputDirectory;
         private BuildPolicy buildPolicy = BuildPolicy.DENY_BUILD;
-        private boolean allowPreexistingBytecodeAfterBuildFailure;
         private List<Path> classOutputDirs = new java.util.ArrayList<>();
         private List<Path> testClassOutputDirs = new java.util.ArrayList<>();
         private List<Path> projectJars = new java.util.ArrayList<>();
@@ -393,21 +381,6 @@ public final class ContextRequest {
             return this;
         }
 
-        public Builder allowPreexistingBytecodeAfterBuildFailure() {
-            this.allowPreexistingBytecodeAfterBuildFailure = true;
-            return this;
-        }
-
-        /**
-         * @deprecated Classpath-like inputs are order-sensitive. Prefer
-         * {@link #classOutputDirs(List)}.
-         */
-        @Deprecated(since = "0.1.0", forRemoval = false)
-        public Builder classOutputDirs(Set<Path> classOutputDirs) {
-            this.classOutputDirs = classOutputDirs == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(classOutputDirs);
-            return this;
-        }
-
         public Builder classOutputDirs(List<Path> classOutputDirs) {
             this.classOutputDirs = classOutputDirs == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(classOutputDirs);
             return this;
@@ -415,16 +388,6 @@ public final class ContextRequest {
 
         public Builder classOutputDir(Path classOutputDir) {
             addPath(this.classOutputDirs, classOutputDir);
-            return this;
-        }
-
-        /**
-         * @deprecated Classpath-like inputs are order-sensitive. Prefer
-         * {@link #testClassOutputDirs(List)}.
-         */
-        @Deprecated(since = "0.1.0", forRemoval = false)
-        public Builder testClassOutputDirs(Set<Path> testClassOutputDirs) {
-            this.testClassOutputDirs = testClassOutputDirs == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(testClassOutputDirs);
             return this;
         }
 
@@ -438,16 +401,6 @@ public final class ContextRequest {
             return this;
         }
 
-        /**
-         * @deprecated Classpath-like inputs are order-sensitive. Prefer
-         * {@link #projectJars(List)}.
-         */
-        @Deprecated(since = "0.1.0", forRemoval = false)
-        public Builder projectJars(Set<Path> projectJars) {
-            this.projectJars = projectJars == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(projectJars);
-            return this;
-        }
-
         public Builder projectJars(List<Path> projectJars) {
             this.projectJars = projectJars == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(projectJars);
             return this;
@@ -458,16 +411,6 @@ public final class ContextRequest {
             return this;
         }
 
-        /**
-         * @deprecated Classpath-like inputs are order-sensitive. Prefer
-         * {@link #dependencyJars(List)}.
-         */
-        @Deprecated(since = "0.1.0", forRemoval = false)
-        public Builder dependencyJars(Set<Path> dependencyJars) {
-            this.dependencyJars = dependencyJars == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(dependencyJars);
-            return this;
-        }
-
         public Builder dependencyJars(List<Path> dependencyJars) {
             this.dependencyJars = dependencyJars == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(dependencyJars);
             return this;
@@ -475,16 +418,6 @@ public final class ContextRequest {
 
         public Builder dependencyJar(Path dependencyJar) {
             addPath(this.dependencyJars, dependencyJar);
-            return this;
-        }
-
-        /**
-         * @deprecated Classpath-like inputs are order-sensitive. Prefer
-         * {@link #classpathFiles(List)}.
-         */
-        @Deprecated(since = "0.1.0", forRemoval = false)
-        public Builder classpathFiles(Set<Path> classpathFiles) {
-            this.classpathFiles = classpathFiles == null ? new java.util.ArrayList<>() : new java.util.ArrayList<>(classpathFiles);
             return this;
         }
 

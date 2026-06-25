@@ -112,8 +112,6 @@ final class ExtractionManifest {
         build.put("sandboxed", metadata != null && metadata.isBuildSandboxed());
         build.put("status", metadata != null ? metadata.getCompileStatus() : "NOT_ANALYZED");
         build.put("policy", metadata != null ? metadata.getBuildPolicy().toString() : "UNKNOWN");
-        build.put("allow_preexisting_bytecode_after_build_failure",
-                metadata != null && metadata.isAllowPreexistingBytecodeAfterBuildFailure());
         build.put("bytecode_available", metadata != null && metadata.isBytecodeAvailable());
         build.put("bytecode_origin", metadata != null ? metadata.getBytecodeOrigin() : "none");
         build.put("analysis_can_proceed", metadata != null && metadata.isAnalysisCanProceed());

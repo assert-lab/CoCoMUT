@@ -144,11 +144,6 @@ Useful options:
                                 execution on the host
 --externally-sandboxed-build   Allow Maven/Gradle and record that the caller
                                 provided external sandboxing
---allow-preexisting-bytecode-after-build-failure
-                                With --allow-build or
-                                --externally-sandboxed-build, allow analysis
-                                to continue with pre-existing bytecode if the
-                                attempted build fails
 --class-output DIR             Project class-output directory, repeatable or
                                 comma-separated
 --test-class-output DIR        Project test class-output directory,
@@ -179,11 +174,10 @@ build tool, not by scanning arbitrary global dependency caches. Dependency JARs
 help resolve types and call targets but do not satisfy the project-bytecode
 requirement by themselves.
 
-If an attempted build fails, CoCoMUT fails the extraction by default even when
-stale bytecode is present. Continuing with pre-existing bytecode after a failed
-build is a deliberate, risky policy and requires
-`--allow-preexisting-bytecode-after-build-failure` together with `--allow-build`
-or `--externally-sandboxed-build`.
+If an attempted build fails, CoCoMUT fails the extraction even when stale
+bytecode is present. Pre-existing bytecode is accepted only when no build was
+attempted, for example denied-build analysis over already compiled project
+outputs or explicit `--class-output` / `--project-jar` inputs.
 
 Build execution runs the subject repository's Maven or Gradle build logic. For
 untrusted public repositories, keep the default denied-build policy and provide
@@ -443,7 +437,6 @@ pipeline through `ContextRequest` and `ContextExtractorService`.
 | Skip build execution | `--skip-build` | `.skipBuild(true)` |
 | Allow host build | `--allow-build` | `.allowUnsandboxedBuild()` |
 | Externally sandboxed build | `--externally-sandboxed-build` | `.externallySandboxedBuild()` |
-| Allow stale bytecode after failed build | `--allow-preexisting-bytecode-after-build-failure` | `.allowPreexistingBytecodeAfterBuildFailure()` |
 | Project class output | `--class-output target/classes` | `.classOutputDir(Path.of("target/classes"))` |
 | Project test class output | `--test-class-output target/test-classes` | `.testClassOutputDir(Path.of("target/test-classes"))` |
 | Main source root | `--source-root src/main/java` | `.sourceRoot(Path.of("src/main/java"))` |
