@@ -44,8 +44,8 @@ static, reproducible, bytecode-backed, and explicit about failure modes.
 ## Quickstart
 
 ```bash
-git clone https://github.com/assert-lab/Code-Context-Extractor.git
-cd Code-Context-Extractor
+git clone https://github.com/assert-lab/CoCoMUT.git
+cd CoCoMUT
 ./mvnw test
 ```
 
@@ -55,12 +55,13 @@ Run CoCoMUT on a Java project:
 ./bin/cocomut \
   --project /path/to/java/project \
   --scope entry-points \
-  --source-set main
+  --source-set main \
+  --allow-build
 ```
 
-The project must compile, or the checkout must already contain usable project
-class files, conventional build output directories, or project JARs for static
-bytecode analysis.
+Use `--allow-build` only for trusted checkouts. For untrusted repositories,
+compile elsewhere and pass explicit artifacts instead, for example
+`--skip-build --class-output target/classes`.
 
 The default output goes to:
 
@@ -130,7 +131,7 @@ is available.
   title        = {CoCoMUT: Context Constructor for MUT},
   author       = {{ASSERT Lab}},
   year         = {2026},
-  howpublished = {\url{https://github.com/assert-lab/Code-Context-Extractor}},
+  howpublished = {\url{https://github.com/assert-lab/CoCoMUT}},
   note         = {Version 0.1.0}
 }
 ```
@@ -138,7 +139,9 @@ is available.
 ## Status
 
 CoCoMUT currently targets Java 17+ and performs static analysis only. It does not
-execute application code or tests, but supported Maven and Gradle builds execute
-the subject repository's build scripts during phase 1. The analyzed project must
-compile, or provide usable project bytecode in a conventional build layout,
-before extraction can succeed.
+execute application code or tests. By default it also does not execute
+repository-controlled Maven or Gradle builds; use `--allow-build` only for
+trusted checkouts, or `--externally-sandboxed-build` when a container/VM policy
+is provided outside CoCoMUT. The analyzed project must provide usable project
+bytecode in a conventional build layout, or use explicit artifact inputs such as
+`--class-output` / `--project-jar` before extraction can succeed.

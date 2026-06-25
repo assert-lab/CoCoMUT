@@ -19,19 +19,19 @@ changes, generated outputs, and branch state. With worktrees:
 From `/home/ale/repos/repo_mining_trials`:
 
 ```bash
-git -C Code-Context-Extractor fetch origin
+git -C CoCoMUT fetch origin
 
-git -C Code-Context-Extractor worktree add \
+git -C CoCoMUT worktree add \
   ../cocomut-task-callgraph \
   -b task/callgraph-resolution \
   origin/main
 
-git -C Code-Context-Extractor worktree add \
+git -C CoCoMUT worktree add \
   ../cocomut-task-docs \
   -b task/docs-polish \
   origin/main
 
-git -C Code-Context-Extractor worktree add \
+git -C CoCoMUT worktree add \
   ../cocomut-task-viewer \
   -b task/viewer-ux \
   origin/main
@@ -130,20 +130,20 @@ Use `--force-with-lease`, not plain `--force`.
 List worktrees:
 
 ```bash
-git -C Code-Context-Extractor worktree list
+git -C CoCoMUT worktree list
 ```
 
 Remove a finished worktree after its branch is merged:
 
 ```bash
-git -C Code-Context-Extractor worktree remove ../cocomut-task-docs
-git -C Code-Context-Extractor branch -d task/docs-polish
+git -C CoCoMUT worktree remove ../cocomut-task-docs
+git -C CoCoMUT branch -d task/docs-polish
 ```
 
 If Git says a worktree is stale:
 
 ```bash
-git -C Code-Context-Extractor worktree prune
+git -C CoCoMUT worktree prune
 ```
 
 ## Scaling Beyond Three Agents

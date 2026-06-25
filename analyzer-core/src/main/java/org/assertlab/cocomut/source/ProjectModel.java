@@ -23,19 +23,25 @@ public final class ProjectModel {
     private final List<Path> sourceRoots;
     private final List<Path> testSourceRoots;
     private final List<Path> classOutputDirs;
+    private final List<Path> projectArtifactJars;
     private final List<Path> dependencyJars;
+    private final List<Path> dependencyClasspath;
     private final boolean sourceAvailable;
 
     private ProjectModel(ProjectMetadata metadata,
                          List<Path> sourceRoots,
                          List<Path> testSourceRoots,
                          List<Path> classOutputDirs,
-                         List<Path> dependencyJars) {
+                         List<Path> projectArtifactJars,
+                         List<Path> dependencyJars,
+                         List<Path> dependencyClasspath) {
         this.metadata = Objects.requireNonNull(metadata, "metadata cannot be null");
         this.sourceRoots = List.copyOf(sourceRoots);
         this.testSourceRoots = List.copyOf(testSourceRoots);
         this.classOutputDirs = List.copyOf(classOutputDirs);
+        this.projectArtifactJars = List.copyOf(projectArtifactJars);
         this.dependencyJars = List.copyOf(dependencyJars);
+        this.dependencyClasspath = List.copyOf(dependencyClasspath);
         this.sourceAvailable = java.util.stream.Stream.concat(this.sourceRoots.stream(), this.testSourceRoots.stream())
                 .anyMatch(ProjectModel::containsJavaFile);
     }
@@ -45,37 +51,35 @@ public final class ProjectModel {
         Set<Path> sourceRoots = new LinkedHashSet<>();
         Set<Path> testSourceRoots = new LinkedHashSet<>();
         Set<Path> classOutputDirs = new LinkedHashSet<>();
+        Set<Path> projectArtifactJars = new LinkedHashSet<>();
         Set<Path> dependencyJars = new LinkedHashSet<>();
+        Set<Path> dependencyClasspath = new LinkedHashSet<>();
 
-        addIfDirectory(sourceRoots, metadata.getSourceRoot());
-        addStandardRoots(projectRoot, sourceRoots, testSourceRoots, classOutputDirs);
+        metadata.getSourceRoots().forEach(path -> addIfDirectory(sourceRoots, path));
+        metadata.getTestSourceRoots().forEach(path -> addIfDirectory(testSourceRoots, path));
+        if (sourceRoots.isEmpty() && testSourceRoots.isEmpty()) {
+            addIfDirectory(sourceRoots, metadata.getSourceRoot());
+        }
+        if (sourceRoots.isEmpty() && testSourceRoots.isEmpty()) {
+            addStandardRoots(projectRoot, sourceRoots, testSourceRoots, classOutputDirs);
+        }
 
         metadata.getMainClassOutputs().forEach(path -> addIfClassDirectory(classOutputDirs, path));
         metadata.getTestClassOutputs().forEach(path -> addIfClassDirectory(classOutputDirs, path));
-        metadata.getProjectArtifactJars().stream()
-                .filter(path -> path.toString().endsWith(".jar") && Files.isRegularFile(path))
-                .map(ProjectModel::normalize)
-                .forEach(dependencyJars::add);
+        metadata.getProjectArtifactJars().forEach(path -> addIfJar(projectArtifactJars, path));
         metadata.getDependencyClasspath().stream()
                 .filter(path -> path.toString().endsWith(".jar") && Files.isRegularFile(path))
                 .map(ProjectModel::normalize)
                 .forEach(dependencyJars::add);
-
-        for (Path cp : metadata.getClasspath()) {
-            if (Files.isDirectory(cp)) {
-                if (containsClassFile(cp)) {
-                    classOutputDirs.add(normalize(cp));
-                }
-            } else if (cp.toString().endsWith(".jar") && Files.isRegularFile(cp)) {
-                dependencyJars.add(normalize(cp));
-            }
-        }
+        metadata.getDependencyClasspath().forEach(path -> addIfDependencyClasspath(dependencyClasspath, path));
 
         return new ProjectModel(metadata,
                 new ArrayList<>(sourceRoots),
                 new ArrayList<>(testSourceRoots),
                 new ArrayList<>(classOutputDirs),
-                new ArrayList<>(dependencyJars));
+                new ArrayList<>(projectArtifactJars),
+                new ArrayList<>(dependencyJars),
+                new ArrayList<>(dependencyClasspath));
     }
 
     public ProjectMetadata metadata() {
@@ -118,8 +122,16 @@ public final class ProjectModel {
         return classOutputDirs;
     }
 
+    public List<Path> projectArtifactJars() {
+        return projectArtifactJars;
+    }
+
     public List<Path> dependencyJars() {
         return dependencyJars;
+    }
+
+    public List<Path> dependencyClasspath() {
+        return dependencyClasspath;
     }
 
     private static void addStandardRoots(Path projectRoot,
@@ -164,6 +176,22 @@ public final class ProjectModel {
     private static void addIfClassDirectory(Set<Path> dirs, Path path) {
         if (path != null && Files.isDirectory(path) && containsClassFile(path)) {
             dirs.add(normalize(path));
+        }
+    }
+
+    private static void addIfJar(Set<Path> jars, Path path) {
+        if (path != null && Files.isRegularFile(path) && path.toString().endsWith(".jar")) {
+            jars.add(normalize(path));
+        }
+    }
+
+    private static void addIfDependencyClasspath(Set<Path> entries, Path path) {
+        if (path == null) {
+            return;
+        }
+        if ((Files.isRegularFile(path) && path.toString().endsWith(".jar"))
+                || (Files.isDirectory(path) && containsClassFile(path))) {
+            entries.add(normalize(path));
         }
     }
 

@@ -33,6 +33,7 @@ final class Orchestrator {
 
     private final Path projectPath;
     private final Map<String, Object> executionReport;
+    private ContextRequest request;
     private ContextRequest.Scope scope = ContextRequest.Scope.ALL;
     private CallGraphGenerator.Algorithm callGraphAlgorithm = CallGraphGenerator.Algorithm.RTA;
     private Integer maxMethods;
@@ -46,6 +47,17 @@ final class Orchestrator {
     private Set<String> excludePathGlobs = Set.of();
     private Set<SymbolTarget> targetFilters = Set.of();
     private Path outputDirectory;
+    private ProjectMetadata providedProjectMetadata;
+    private ContextRequest.BuildPolicy buildPolicy = ContextRequest.BuildPolicy.DENY_BUILD;
+    private boolean allowPreexistingBytecodeAfterBuildFailure = false;
+    private List<Path> explicitClassOutputDirs = List.of();
+    private List<Path> explicitTestClassOutputDirs = List.of();
+    private List<Path> explicitProjectJars = List.of();
+    private List<Path> explicitDependencyJars = List.of();
+    private List<Path> explicitClasspathFiles = List.of();
+    private List<Path> explicitSourceRoots = List.of();
+    private List<Path> explicitTestSourceRoots = List.of();
+    private RunSnapshot runSnapshot;
 
     // Pipeline state passed between phases
     private ProjectMetadata projectMetadata;
@@ -58,6 +70,7 @@ final class Orchestrator {
     private Map<String, MethodContext> methodContexts;
     private Map<String, String> contextExtractionFailures = new LinkedHashMap<>();
     private final Set<FailureCode> failureCodes = new LinkedHashSet<>();
+    private ExtractionManifest.GitInfo gitAtStart;
 
     Orchestrator(Path projectPath) {
         this.projectPath = Objects.requireNonNull(projectPath, "projectPath cannot be null");
@@ -66,6 +79,7 @@ final class Orchestrator {
 
     Orchestrator(ContextRequest request) {
         this(request.projectRoot());
+        this.request = request;
         this.scope = request.scope();
         this.callGraphAlgorithm = request.callGraphAlgorithm();
         this.maxMethods = request.maxMethods();
@@ -79,6 +93,25 @@ final class Orchestrator {
         this.excludePathGlobs = request.excludePathGlobs();
         this.targetFilters = request.targets();
         this.outputDirectory = request.outputDirectory();
+        this.buildPolicy = request.buildPolicy();
+        this.allowPreexistingBytecodeAfterBuildFailure = request.allowPreexistingBytecodeAfterBuildFailure();
+        this.explicitClassOutputDirs = request.classOutputDirs();
+        this.explicitTestClassOutputDirs = request.testClassOutputDirs();
+        this.explicitProjectJars = request.projectJars();
+        this.explicitDependencyJars = request.dependencyJars();
+        this.explicitClasspathFiles = request.classpathFiles();
+        this.explicitSourceRoots = request.sourceRoots();
+        this.explicitTestSourceRoots = request.testSourceRoots();
+    }
+
+    Orchestrator(ContextRequest request, ProjectMetadata metadata) {
+        this(request);
+        this.providedProjectMetadata = Objects.requireNonNull(metadata, "metadata cannot be null");
+    }
+
+    Orchestrator(ContextRequest request, ProjectMetadata metadata, RunSnapshot runSnapshot) {
+        this(request, metadata);
+        this.runSnapshot = runSnapshot;
     }
 
     Orchestrator setCallGraphAlgorithm(CallGraphGenerator.Algorithm algorithm) {
@@ -142,9 +175,12 @@ final class Orchestrator {
     }
 
     public boolean execute() {
-        long startTime = System.currentTimeMillis();
-        executionReport.put("start_time", new java.util.Date());
+        long startTime = runSnapshot != null ? runSnapshot.startMillis() : System.currentTimeMillis();
+        executionReport.put("start_time", new java.util.Date(startTime));
         executionReport.put("pipeline_phases", 5);
+        gitAtStart = runSnapshot != null
+                ? runSnapshot.projectGitAtStart()
+                : ExtractionManifest.captureGitInfo(projectPath);
 
         boolean success = false;
         try {
@@ -177,6 +213,10 @@ final class Orchestrator {
             executionReport.put("failure_codes", failureCodes.isEmpty()
                     ? List.of(FailureCode.NONE.toString())
                     : failureCodes.stream().map(Enum::toString).toList());
+            writeManifestIfPossible();
+            executionReport.put("failure_codes", failureCodes.isEmpty()
+                    ? List.of(FailureCode.NONE.toString())
+                    : failureCodes.stream().map(Enum::toString).toList());
             writeExecutionReportIfPossible();
             closeSourceSession();
             restoreSourceFileLimit();
@@ -185,14 +225,45 @@ final class Orchestrator {
 
     private boolean executePhase1() {
         try {
-            ProjectAnalyzer analyzer = new ProjectAnalyzer(projectPath, true, "auto", includeTestBytecode());
-            projectMetadata = analyzer.analyze();
+            if (providedProjectMetadata != null) {
+                projectMetadata = providedProjectMetadata;
+            } else {
+                ProjectAnalyzer analyzer = new ProjectAnalyzer(projectPath, true, "auto", includeTestBytecode(),
+                        buildPolicy,
+                        allowPreexistingBytecodeAfterBuildFailure,
+                        explicitClassOutputDirs,
+                        explicitTestClassOutputDirs,
+                        explicitProjectJars,
+                        explicitDependencyJars,
+                        explicitClasspathFiles,
+                        explicitSourceRoots,
+                        explicitTestSourceRoots);
+                projectMetadata = analyzer.analyze();
+            }
 
             executionReport.put("phase_1_project", projectMetadata.getProjectName());
             executionReport.put("phase_1_build_system", projectMetadata.getBuildSystem());
             executionReport.put("phase_1_java_version", projectMetadata.getJavaVersion());
             executionReport.put("phase_1_compiles", projectMetadata.isCompiles());
             executionReport.put("phase_1_compile_status", projectMetadata.getCompileStatus());
+            executionReport.put("phase_1_build_attempted", projectMetadata.isBuildAttempted());
+            executionReport.put("phase_1_build_exit_code", projectMetadata.getBuildExitCode());
+            executionReport.put("phase_1_build_succeeded", projectMetadata.isBuildSucceeded());
+            executionReport.put("phase_1_build_timed_out", projectMetadata.isBuildTimedOut());
+            executionReport.put("phase_1_build_skipped", projectMetadata.isBuildSkipped());
+            executionReport.put("phase_1_build_sandboxed", projectMetadata.isBuildSandboxed());
+            executionReport.put("phase_1_gradle_model", projectMetadata.getGradleModelReport());
+            if (projectMetadata.getGradleModelReport().partial()
+                    || (projectMetadata.getGradleModelReport().attempted()
+                    && !projectMetadata.getGradleModelReport().succeeded())) {
+                failureCodes.add(FailureCode.MODEL_RESOLUTION_PARTIAL);
+            }
+            executionReport.put("phase_1_build_execution_policy", projectMetadata.getBuildPolicy().toString());
+            executionReport.put("phase_1_allow_preexisting_bytecode_after_build_failure",
+                    projectMetadata.isAllowPreexistingBytecodeAfterBuildFailure());
+            executionReport.put("phase_1_bytecode_available", projectMetadata.isBytecodeAvailable());
+            executionReport.put("phase_1_bytecode_origin", projectMetadata.getBytecodeOrigin());
+            executionReport.put("phase_1_analysis_can_proceed", projectMetadata.isAnalysisCanProceed());
             projectModel = ProjectModel.from(projectMetadata);
             executionReport.put("phase_1_source_available", projectModel.sourceAvailable());
             executionReport.put("phase_1_source_roots", projectModel.sourceRoots().size());
@@ -204,11 +275,16 @@ final class Orchestrator {
             executionReport.put("phase_1_project_bytecode_locations", projectBytecodeLocations().size());
             executionReport.put("phase_1_dependency_locations", projectMetadata.getDependencyClasspath().size());
             executionReport.put("phase_1_dependency_jars", projectModel.dependencyJars().size());
+            executionReport.put("phase_1_explicit_class_outputs", projectMetadata.getExplicitClassOutputDirs().size());
+            executionReport.put("phase_1_explicit_test_class_outputs",
+                    projectMetadata.getExplicitTestClassOutputDirs().size());
+            executionReport.put("phase_1_explicit_project_jars", projectMetadata.getExplicitProjectJars().size());
+            executionReport.put("phase_1_explicit_dependency_jars", projectMetadata.getExplicitDependencyJars().size());
+            executionReport.put("phase_1_explicit_classpath_files", projectMetadata.getExplicitClasspathFiles().size());
 
-            if (!projectMetadata.isCompiles()) {
+            if (!projectMetadata.isAnalysisCanProceed()) {
                 failureCodes.add(FailureCode.BUILD_FAILED);
-                executionReport.put("phase_1_error",
-                        "CoCoMUT requires compiled project bytecode. Build the project or provide compiled class files.");
+                executionReport.put("phase_1_error", projectMetadata.getCompileStatus());
                 return false;
             }
             if (projectBytecodeLocations().isEmpty()) {
@@ -236,6 +312,7 @@ final class Orchestrator {
         }
         List<Path> locations = new ArrayList<>();
         locations.addAll(projectMetadata.getMainClassOutputs());
+        locations.addAll(projectMetadata.getTestClassOutputs());
         locations.addAll(projectMetadata.getProjectArtifactJars());
         return locations;
     }
@@ -626,6 +703,37 @@ final class Orchestrator {
         }
     }
 
+    private void writeManifestIfPossible() {
+        try {
+            Path root = outputRoot();
+            Files.createDirectories(root);
+            Path jsonlPath = null;
+            Object jsonl = executionReport.get("phase_5_jsonl_file");
+            if (jsonl != null && !String.valueOf(jsonl).isBlank()) {
+                jsonlPath = Path.of(String.valueOf(jsonl));
+            }
+            Path manifestPath = runSnapshot != null
+                    ? ExtractionManifest.write(root, projectMetadata, projectModel,
+                            selectionProvenance(), requestHash(), jsonlPath, executionReport, runSnapshot)
+                    : ExtractionManifest.write(root, projectMetadata, projectModel,
+                            selectionProvenance(), requestHash(), jsonlPath, executionReport, gitAtStart);
+            executionReport.put("extraction_manifest_file", manifestPath.toString());
+            Object hashFailures = executionReport.get("provenance_hash_failures");
+            if (hashFailures instanceof Collection<?> failures && !failures.isEmpty()) {
+                failureCodes.add(FailureCode.PROVENANCE_FAILED);
+                if ("SUCCESS".equals(executionReport.get("status"))) {
+                    executionReport.put("status", "PARTIAL");
+                }
+            }
+        } catch (Exception e) {
+            executionReport.put("extraction_manifest_error", e.getMessage());
+            failureCodes.add(FailureCode.PROVENANCE_FAILED);
+            if ("SUCCESS".equals(executionReport.get("status"))) {
+                executionReport.put("status", "PARTIAL");
+            }
+        }
+    }
+
     private static boolean hasJavaSources(Path sourceRoot) {
         if (sourceRoot == null || !Files.isDirectory(sourceRoot)) {
             return false;
@@ -776,7 +884,7 @@ final class Orchestrator {
         }
         return Path.of(System.getProperty("user.dir"))
                 .resolve("cocomut_output")
-                .resolve(sanitize(projectName()) + "-" + shortProjectHash())
+                .resolve(sanitize(projectName()) + "-" + requestHashPrefix())
                 .toAbsolutePath()
                 .normalize();
     }
@@ -794,7 +902,7 @@ final class Orchestrator {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(normalized.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest, 0, 4);
+            return HexFormat.of().formatHex(digest, 0, 8);
         } catch (Exception e) {
             return Integer.toHexString(normalized.hashCode());
         }
@@ -803,7 +911,7 @@ final class Orchestrator {
     private String outputJsonlFilename() {
         String selection = selectionLabel();
         String base = selection.isBlank() ? "method_contexts" : sanitize(selection);
-        return base + "__" + requestHash() + ".jsonl";
+        return base + "__" + requestHashPrefix() + ".jsonl";
     }
 
     private String selectionLabel() {
@@ -825,7 +933,16 @@ final class Orchestrator {
     }
 
     private String requestHash() {
+        if (runSnapshot != null) {
+            return runSnapshot.requestHash();
+        }
+        if (request != null) {
+            return RequestFingerprint.hash(request);
+        }
         Map<String, Object> request = new LinkedHashMap<>();
+        request.put("schema", "cocomut-request-v2");
+        request.put("project_selector", "project-root");
+        request.put("project_name", projectName());
         request.put("scope", scope.toString());
         request.put("source_sets", sourceSets.stream().sorted().toList());
         request.put("packages", packageFilters.stream().sorted().toList());
@@ -838,13 +955,99 @@ final class Orchestrator {
         request.put("max_methods", maxMethods);
         request.put("max_source_files", maxSourceFiles);
         request.put("call_graph", callGraphAlgorithm.toString());
+        request.put("build_policy", buildPolicy.toString());
+        request.put("allow_preexisting_bytecode_after_build_failure", allowPreexistingBytecodeAfterBuildFailure);
+        request.put("class_outputs", artifactIdentities(explicitClassOutputDirs));
+        request.put("test_class_outputs", artifactIdentities(explicitTestClassOutputDirs));
+        request.put("project_jars", artifactIdentities(explicitProjectJars));
+        request.put("dependency_jars", artifactIdentities(explicitDependencyJars));
+        request.put("classpath_files", artifactIdentities(explicitClasspathFiles));
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
                     .digest(OBJECT_MAPPER.writeValueAsBytes(request));
-            return HexFormat.of().formatHex(digest, 0, 4);
+            return HexFormat.of().formatHex(digest);
         } catch (Exception e) {
-            return Integer.toHexString(request.hashCode());
+            return sha256Hex("cocomut-request-fallback|" + request);
         }
+    }
+
+    private static String sha256Hex(String value) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception impossible) {
+            return "0".repeat(64);
+        }
+    }
+
+    private List<String> artifactIdentities(List<Path> paths) {
+        return (paths == null ? List.<Path>of() : paths).stream()
+                .filter(Objects::nonNull)
+                .map(path -> artifactIdentity(path.toAbsolutePath().normalize()))
+                .toList();
+    }
+
+    private String artifactIdentity(Path path) {
+        String rolePath = stableRequestPath(path);
+        String content = contentDigest(path);
+        return rolePath + ":" + content;
+    }
+
+    private String stableRequestPath(Path path) {
+        Path root = projectPath.toAbsolutePath().normalize();
+        try {
+            if (path.startsWith(root)) {
+                return "project:" + root.relativize(path).toString().replace('\\', '/');
+            }
+        } catch (Exception ignored) {
+            // Fall through to location-independent external identity.
+        }
+        Path name = path.getFileName();
+        return "external:" + (name == null ? "artifact" : name.toString());
+    }
+
+    private static String contentDigest(Path path) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            if (Files.isRegularFile(path)) {
+                try (var input = Files.newInputStream(path)) {
+                    byte[] buffer = new byte[8192];
+                    int read;
+                    while ((read = input.read(buffer)) >= 0) {
+                        digest.update(buffer, 0, read);
+                    }
+                }
+                return HexFormat.of().formatHex(digest.digest());
+            }
+            if (Files.isDirectory(path)) {
+                try (var walk = Files.walk(path)) {
+                    for (Path file : walk.filter(Files::isRegularFile)
+                            .sorted(Comparator.comparing(p -> path.relativize(p).toString()))
+                            .toList()) {
+                        digest.update(path.relativize(file).toString().replace('\\', '/')
+                                .getBytes(StandardCharsets.UTF_8));
+                        digest.update((byte) 0);
+                        try (var input = Files.newInputStream(file)) {
+                            byte[] buffer = new byte[8192];
+                            int read;
+                            while ((read = input.read(buffer)) >= 0) {
+                                digest.update(buffer, 0, read);
+                            }
+                        }
+                        digest.update((byte) 0);
+                    }
+                }
+                return HexFormat.of().formatHex(digest.digest());
+            }
+            return "missing";
+        } catch (Exception e) {
+            return "error:" + e.getClass().getSimpleName();
+        }
+    }
+
+    private String requestHashPrefix() {
+        String hash = requestHash();
+        return hash.length() > 16 ? hash.substring(0, 16) : hash;
     }
 
     private static String sanitize(String value) {

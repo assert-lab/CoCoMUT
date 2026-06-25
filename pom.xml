@@ -11,7 +11,7 @@
     <packaging>pom</packaging>
     <name>CoCoMUT — Parent</name>
     <description>Static Java method-context extraction for documentation research and documentation-generation systems.</description>
-    <url>https://github.com/assert-lab/Code-Context-Extractor</url>
+    <url>https://github.com/assert-lab/CoCoMUT</url>
 
     <licenses>
         <license>
@@ -30,15 +30,15 @@
     </developers>
 
     <scm>
-        <connection>scm:git:https://github.com/assert-lab/Code-Context-Extractor.git</connection>
-        <developerConnection>scm:git:https://github.com/assert-lab/Code-Context-Extractor.git</developerConnection>
-        <url>https://github.com/assert-lab/Code-Context-Extractor</url>
+        <connection>scm:git:https://github.com/assert-lab/CoCoMUT.git</connection>
+        <developerConnection>scm:git:https://github.com/assert-lab/CoCoMUT.git</developerConnection>
+        <url>https://github.com/assert-lab/CoCoMUT</url>
         <tag>HEAD</tag>
     </scm>
 
     <issueManagement>
         <system>GitHub Issues</system>
-        <url>https://github.com/assert-lab/Code-Context-Extractor/issues</url>
+        <url>https://github.com/assert-lab/CoCoMUT/issues</url>
     </issueManagement>
 
     <modules>
@@ -55,6 +55,7 @@
         <sootup.version>2.0.0</sootup.version>
         <spoon.version>11.2.0</spoon.version>
         <picocli.version>4.7.6</picocli.version>
+        <json-schema-validator.version>1.5.6</json-schema-validator.version>
     </properties>
 
     <!-- Centralise all dependency versions; children declare without repeating them -->
@@ -104,6 +105,11 @@
                 <groupId>info.picocli</groupId>
                 <artifactId>picocli</artifactId>
                 <version>${picocli.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.networknt</groupId>
+                <artifactId>json-schema-validator</artifactId>
+                <version>${json-schema-validator.version}</version>
             </dependency>
             <!-- Internal: analyzer-tests depends on analyzer-core -->
             <dependency>

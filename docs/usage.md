@@ -67,6 +67,7 @@ ContextRequest request = ContextRequest.builder()
         .projectRoot(Path.of("/path/to/java/project"))
         .entryPoints()
         .sourceSet("main")
+        .allowUnsandboxedBuild() // only for trusted checkouts
         .build();
 
 ExtractionReport report = ContextExtractorService.createDefault().extract(request);
@@ -137,30 +138,84 @@ Useful options:
                                 Include methods with matching visibility
 --include-path GLOB            Include source path glob relative to project root
 --exclude-path GLOB            Exclude source path glob relative to project root
+--skip-build                   Do not execute Maven/Gradle; use existing or
+                                explicitly supplied bytecode artifacts
+--allow-build                  Explicitly allow unsandboxed Maven/Gradle
+                                execution on the host
+--externally-sandboxed-build   Allow Maven/Gradle and record that the caller
+                                provided external sandboxing
+--allow-preexisting-bytecode-after-build-failure
+                                With --allow-build or
+                                --externally-sandboxed-build, allow analysis
+                                to continue with pre-existing bytecode if the
+                                attempted build fails
+--class-output DIR             Project class-output directory, repeatable or
+                                comma-separated
+--test-class-output DIR        Project test class-output directory,
+                                repeatable or comma-separated
+--source-root DIR              Exact main source root to parse, repeatable or
+                                comma-separated
+--test-source-root DIR         Exact test source root to parse, repeatable or
+                                comma-separated
+--project-jar JAR              Project artifact JAR, repeatable or comma-separated
+--dependency-jar JAR           Dependency JAR, repeatable or comma-separated
+--classpath-file FILE          File containing classpath entries, one per line
+                                or path-separated
 ```
 
-CoCoMUT performs static bytecode analysis. The analyzed checkout must compile,
-or it must already contain usable project class directories, project build
-outputs, or project JARs in a conventional build layout. Maven and Gradle
-projects are compiled during phase 1 when their build files are present; plain
-Java projects must provide project class files under conventional directories
-such as `target/classes`, `build/classes/java/main`, `bin`, `classes`, or
-project JARs under conventional artifact directories such as `target/` or
-`build/libs/`.
+CoCoMUT performs static bytecode analysis. The analyzed checkout must provide
+usable project bytecode through project class directories or project JARs. By
+default CoCoMUT does not execute Maven or Gradle; this avoids running
+repository-controlled build logic on the host. To build during extraction, pass
+`--allow-build` or `--externally-sandboxed-build`.
 
-For Maven and Gradle projects, phase 1 performs a clean compile without running
+For Maven and Gradle projects, an allowed phase-1 build compiles without running
 tests. A main-only request uses main compilation (`mvn compile` or Gradle
 `classes`). Requests that include test source sets use test compilation
-(`mvn test-compile` or Gradle `testClasses`). Project class output directories
-and dependency JARs are collected after that build from the project build tool,
-not by scanning arbitrary global dependency caches. Dependency JARs help resolve
-types and call targets but do not satisfy the project-bytecode requirement by
-themselves.
+(`mvn test-compile` or Gradle `testClasses`). CoCoMUT does not invoke `clean`:
+prepared artifacts are not deleted before analysis. Project class output
+directories and dependency JARs are collected after that build from the project
+build tool, not by scanning arbitrary global dependency caches. Dependency JARs
+help resolve types and call targets but do not satisfy the project-bytecode
+requirement by themselves.
 
-Compilation runs the subject repository's Maven or Gradle build logic. For
-untrusted public repositories, run CoCoMUT in a disposable container or VM with
-an unprivileged user, scrubbed environment, isolated writable build/cache
-directories, and CPU, memory, process, wall-clock, and network limits.
+If an attempted build fails, CoCoMUT fails the extraction by default even when
+stale bytecode is present. Continuing with pre-existing bytecode after a failed
+build is a deliberate, risky policy and requires
+`--allow-preexisting-bytecode-after-build-failure` together with `--allow-build`
+or `--externally-sandboxed-build`.
+
+Build execution runs the subject repository's Maven or Gradle build logic. For
+untrusted public repositories, keep the default denied-build policy and provide
+prebuilt artifacts, or run CoCoMUT in a disposable container or VM with an
+unprivileged user, scrubbed environment, isolated writable build/cache
+directories, and CPU, memory, process, wall-clock, and network limits. Use
+`--externally-sandboxed-build` only when that external protection is actually in
+place; CoCoMUT records the policy but does not provide a container itself.
+
+If the project was already compiled elsewhere, or if build execution is not
+acceptable, use the explicit artifact path:
+
+```bash
+./bin/cocomut \
+  --project /path/to/java/project \
+  --skip-build \
+  --source-root /path/to/java/project/src/main/java \
+  --class-output /path/to/java/project/target/classes \
+  --dependency-jar ~/.m2/repository/org/example/lib/1.0/lib-1.0.jar \
+  --source-set main
+```
+
+`--class-output` and `--project-jar` are project bytecode inputs. They can
+satisfy CoCoMUT's project-bytecode requirement. `--dependency-jar` and entries
+from `--classpath-file` help type/call-target resolution, but dependency
+directories/JARs alone do not count as analyzed project bytecode. When
+`--skip-build` is used with explicit project artifacts, CoCoMUT treats those
+artifacts as exact project bytecode inputs and does not merge stale conventional
+outputs such as `target/classes`. For Gradle projects in denied-build mode,
+prefer `--source-root` / `--test-source-root` as well; otherwise CoCoMUT can only
+use safe conventional source-root discovery because it deliberately avoids
+executing Gradle metadata logic.
 
 `--call-graph rta` is the default. Use `--call-graph cha` when the study design
 needs class-hierarchy analysis instead of rapid type analysis.
@@ -174,11 +229,21 @@ For documentation datasets, prefer a precise source-set and scope:
   --source-set main
 ```
 
-`--source-set main` excludes public methods found under test, generated,
-example, integration-test, or unknown source roots. Use `--source-set all` or
-omit the flag to preserve the default behavior.
+`--source-set main` excludes public methods found under source roots that
+CoCoMUT classifies as test, generated, example, integration-test, or unknown.
+Use `--source-set all` or omit the flag to preserve the default behavior.
 `--source-set test` uses standard test source roots such as `src/test/java` and
 the matching test bytecode when the build produces it.
+
+Maven source roots are derived from declared modules plus conventional roots.
+Gradle source roots are authoritative only when Gradle model resolution is
+allowed and succeeds. Custom Gradle source sets are preserved in manifest
+module/source-set metadata, but output filtering is still normalized through
+CoCoMUT's public source-set labels (`main`, `test`, `integration_test`,
+`generated`, `example`, `unknown`).
+Gradle native metadata currently distinguishes `main` and `test` source sets;
+custom Gradle source sets such as `functionalTest` are retained as a known
+limitation until role-preserving Gradle source-set modeling is completed.
 
 ## Layered Selection
 
@@ -196,11 +261,12 @@ Layered selection is available when you do not want the whole repository:
 ```
 
 Repository-wide extraction writes a request-hashed JSONL file such as
-`method_contexts__4987c243.jsonl`. Package, class, or method-filtered extraction
+`method_contexts__4987c2439a31f002.jsonl`. Package, class, or method-filtered extraction
 writes a distinguishable JSONL filename based on the selected target plus the
-same request hash, for example `package__org.example.api__4987c243.jsonl`,
-`class__org.example.PublicApi__4987c243.jsonl`, or
-`method__parse__4987c243.jsonl`.
+same 16-character request-hash prefix, for example
+`package__org.example.api__4987c2439a31f002.jsonl`,
+`class__org.example.PublicApi__4987c2439a31f002.jsonl`, or
+`method__parse__4987c2439a31f002.jsonl`.
 
 CoCoMUT supports both filter-based package/class/method selection and exact URI
 targets through `--target-uri`, `--method-uri`, `--type-uri` / `--class-uri`,
@@ -229,6 +295,7 @@ share the same final directory name:
 ./cocomut_output/<project-name>-<path-hash>/
   method_contexts__<request-hash>.jsonl
   extraction_report.json
+  extraction_manifest.json
   Output_CallGraph_CHA.txt     when CHA is effectively used
   Output_CallGraph_RTA.txt     when RTA is effectively used
   failed_source_files.jsonl    only when some Java files fail source parsing
@@ -247,7 +314,14 @@ A tiny fixture-generated example is checked in at:
 ```text
 examples/sample-output/minimal-method-context.jsonl
 examples/sample-output/minimal-extraction-report.json
+examples/sample-output/minimal-extraction-manifest.json
 ```
+
+`extraction_manifest.json` records run-level provenance: repository revision
+when available, dirty checkout state, build execution policy, source/classpath
+locations, project bytecode hash, dependency classpath hash, request hash, and
+the selected target. This metadata is kept out of individual JSONL rows so row
+content remains method-focused.
 
 ## JSONL Viewer
 
@@ -366,10 +440,21 @@ pipeline through `ContextRequest` and `ContextExtractorService`.
 | Visibility filter | `--visibility public` | `.visibility("public")` or `.visibilities(Set.of(...))` |
 | Include path glob | `--include-path GLOB` | `.includePathGlob("GLOB")` or `.includePathGlobs(Set.of(...))` |
 | Exclude path glob | `--exclude-path GLOB` | `.excludePathGlob("GLOB")` or `.excludePathGlobs(Set.of(...))` |
+| Skip build execution | `--skip-build` | `.skipBuild(true)` |
+| Allow host build | `--allow-build` | `.allowUnsandboxedBuild()` |
+| Externally sandboxed build | `--externally-sandboxed-build` | `.externallySandboxedBuild()` |
+| Allow stale bytecode after failed build | `--allow-preexisting-bytecode-after-build-failure` | `.allowPreexistingBytecodeAfterBuildFailure()` |
+| Project class output | `--class-output target/classes` | `.classOutputDir(Path.of("target/classes"))` |
+| Project test class output | `--test-class-output target/test-classes` | `.testClassOutputDir(Path.of("target/test-classes"))` |
+| Main source root | `--source-root src/main/java` | `.sourceRoot(Path.of("src/main/java"))` |
+| Test source root | `--test-source-root src/test/java` | `.testSourceRoot(Path.of("src/test/java"))` |
+| Project JAR | `--project-jar target/app.jar` | `.projectJar(Path.of("target/app.jar"))` |
+| Dependency JAR | `--dependency-jar lib.jar` | `.dependencyJar(Path.of("lib.jar"))` |
+| Classpath file | `--classpath-file cp.txt` | `.classpathFile(Path.of("cp.txt"))` |
 
-Default behavior is aligned as well: both CLI/JAR and API default to all
-methods, classpath-aware source extraction, static bytecode analysis, build
-attempts for supported build systems, and the same output directory policy.
+Default behavior is aligned as well: CLI/JAR and API default to all methods,
+classpath-aware source extraction, static bytecode analysis, denied build
+execution, and the same output directory policy.
 
 ## Static Analysis Boundaries
 
@@ -383,9 +468,16 @@ Current static-analysis boundaries:
 - call context comes from static bytecode analysis over compiled class
   directories and project artifacts, with dependency JARs loaded as libraries
   for target resolution rather than as application entry points;
-- build-tool compilation is part of phase 1 for supported Maven/Gradle projects;
-  otherwise CoCoMUT requires pre-existing project class files or project JARs in
-  a conventional build layout;
+- build-tool compilation is available only when `--allow-build` or
+  `--externally-sandboxed-build` is passed; otherwise CoCoMUT requires
+  pre-existing project class files or project JARs in a conventional build
+  layout or through explicit `--class-output` / `--project-jar` inputs;
+- exact denied-build analyses should also provide `--source-root` /
+  `--test-source-root` when conventional source-root discovery would include
+  nested examples, vendored projects, or generated checkouts that are not part
+  of the intended analysis target;
+- the default denied-build policy is the preferred policy for untrusted
+  repositories unless the build runs in an external sandbox;
 - reflection, proxies, generated code, Lombok, service loaders, and dependency
   injection can reduce precision, but common dynamic-feature hints are labeled
   in JSON;

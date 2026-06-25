@@ -1,0 +1,126 @@
+{
+  "schema_version": "0.3.0",
+  "generated_at": "2026-06-24T23:30:05Z",
+  "tool": "CoCoMUT",
+  "tool_version": "0.1.0",
+  "tool_git": {
+    "available": true,
+    "root": "<cocomut-checkout>",
+    "relative_project_path": "",
+    "remote_url": "https://github.com/assert-lab/CoCoMUT.git",
+    "commit": "<cocomut-tool-commit>",
+    "dirty": false,
+    "error": ""
+  },
+  "request_hash": "1400aba781f16f4a9288c4ef38aa675602d99d3cd7c144e0cd050da6d89e2efc",
+  "jsonl_file": "method_contexts__1400aba781f16f4a.jsonl",
+  "selection": {
+    "kind": "project",
+    "selector": "project",
+    "scope": "entry_points",
+    "source_sets": ["main"]
+  },
+  "project": {
+    "name": "minimal-maven-project",
+    "path": "<cocomut-checkout>/analyzer-tests/src/test/resources/fixtures/minimal-maven-project",
+    "build_system": "maven",
+    "java_version": "17",
+    "git": {
+      "available": true,
+      "root": "<cocomut-checkout>",
+      "relative_project_path": "analyzer-tests/src/test/resources/fixtures/minimal-maven-project",
+      "remote_url": "https://github.com/assert-lab/CoCoMUT.git",
+      "commit": "<analyzed-project-commit>",
+      "dirty": false,
+      "error": ""
+    }
+  },
+  "build": {
+    "attempted": false,
+    "exit_code": -1,
+    "succeeded": false,
+    "timed_out": false,
+    "skipped": true,
+    "sandboxed": false,
+    "status": "BUILD DENIED; PROJECT BYTECODE AVAILABLE",
+    "policy": "DENY_BUILD",
+    "allow_preexisting_bytecode_after_build_failure": false,
+    "bytecode_available": true,
+    "bytecode_origin": "explicit",
+    "analysis_can_proceed": true,
+    "gradle_model": {
+      "attempted": false,
+      "succeeded": false,
+      "timed_out": false,
+      "partial": false,
+      "resolved_projects": 0,
+      "diagnostics": ["not a Gradle project"],
+      "failed_configurations": []
+    }
+  },
+  "artifacts": {
+    "source_roots": ["src/main/java"],
+    "test_source_roots": [],
+    "main_class_outputs": ["target/classes"],
+    "test_class_outputs": [],
+    "project_jars": [],
+    "dependency_classpath": [],
+    "explicit_class_output_dirs": ["target/classes"],
+    "explicit_test_class_output_dirs": [],
+    "explicit_project_jars": [],
+    "explicit_dependency_jars": [],
+    "explicit_classpath_files": [],
+    "explicit_source_roots": ["src/main/java"],
+    "explicit_test_source_roots": [],
+    "origins": {
+      "target/classes": "explicit"
+    },
+    "module_source_sets": []
+  },
+  "hashes": {
+    "algorithm": "sha-256",
+    "format": "cocomut-artifact-v1",
+    "main_bytecode": {
+      "role": "main_bytecode",
+      "sha256": "eacdcf9c98ef1fc0a220310935ebe8f0600a329f2af754e6d38d826533caa0ab",
+      "status": "ok",
+      "errors": []
+    },
+    "test_bytecode": {
+      "role": "test_bytecode",
+      "sha256": null,
+      "status": "empty",
+      "errors": []
+    },
+    "combined_project_bytecode": {
+      "role": "combined_project_bytecode",
+      "sha256": "b95e1cfd560e6b0b6c17bede422ca594cf3ffc14571d8b6840d3e9681dd47418",
+      "status": "ok",
+      "errors": []
+    },
+    "dependency_classpath": {
+      "role": "dependency_classpath_ordered",
+      "sha256": null,
+      "status": "empty",
+      "errors": []
+    },
+    "dependency_classpath_content_set": {
+      "role": "dependency_classpath_content_set",
+      "sha256": null,
+      "status": "empty",
+      "errors": []
+    },
+    "emitted_jsonl": {
+      "role": "emitted_jsonl",
+      "sha256": "625fe4e6593800e732105433d86fd54f9ec80ac8498f12b75e882bf459bfcd7e",
+      "status": "ok",
+      "errors": []
+    }
+  },
+  "execution": {
+    "status": "SUCCESS",
+    "duration_ms": 642,
+    "failure_codes": ["NONE"],
+    "provenance_hash_failures": []
+  }
+}

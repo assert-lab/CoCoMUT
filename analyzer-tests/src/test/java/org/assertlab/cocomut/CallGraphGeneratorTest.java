@@ -65,6 +65,45 @@ public class CallGraphGeneratorTest {
     }
 
     @Test
+    public void initializationUsesOnlyMetadataBytecodeLocations() throws Exception {
+        java.nio.file.Path project = java.nio.file.Files.createTempDirectory("cocomut-callgraph-hidden-bytecode-");
+        try {
+            java.nio.file.Path staleClasses = project.resolve("target/classes");
+            compile(project, staleClasses, "stale.Stale",
+                    "package stale; public class Stale { public void hidden() {} }");
+            ProjectMetadata metadata = new ProjectMetadata.Builder()
+                    .projectName("explicit-only")
+                    .projectPath(project)
+                    .buildSystem("none")
+                    .javaVersion("17")
+                    .sourceRoot(project)
+                    .sourceRoots(List.of(project))
+                    .testSourceRoots(List.of())
+                    .classpath(List.of(CORE_MODULE.resolve("target/classes")))
+                    .mainClassOutputs(List.of(CORE_MODULE.resolve("target/classes")))
+                    .testClassOutputs(List.of())
+                    .projectArtifactJars(List.of())
+                    .dependencyClasspath(List.of())
+                    .compileStatus("BUILD DENIED; PROJECT BYTECODE AVAILABLE")
+                    .bytecodeAvailable(true)
+                    .bytecodeOrigin("explicit")
+                    .analysisCanProceed(true)
+                    .build();
+            CallGraphGenerator explicitOnly = new CallGraphGenerator(metadata);
+
+            assertTrue(explicitOnly.initialize());
+
+            Field methodsByClass = CallGraphGenerator.class.getDeclaredField("methodsByClass");
+            methodsByClass.setAccessible(true);
+            Map<?, ?> classes = (Map<?, ?>) methodsByClass.get(explicitOnly);
+            assertFalse("CallGraphGenerator must not discover stale target/classes outside ProjectMetadata",
+                    classes.containsKey("stale.Stale"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void testAlgorithmSelection() {
         assertEquals("Default generator algorithm should be CHA",
                 CallGraphGenerator.Algorithm.CHA, generator.getAlgorithm());
@@ -578,5 +617,28 @@ public class CallGraphGeneratorTest {
         edgeFor.setAccessible(true);
         MethodSignature signature = JavaIdentifierFactory.getInstance().parseMethodSignature(rawSignature);
         return (CallGraphEdge) edgeFor.invoke(localGenerator, signature);
+    }
+
+    private static void compile(java.nio.file.Path project, java.nio.file.Path output, String binaryName, String source)
+            throws Exception {
+        java.nio.file.Path sourceFile = project.resolve(binaryName.replace('.', '/') + ".java");
+        java.nio.file.Files.createDirectories(sourceFile.getParent());
+        java.nio.file.Files.createDirectories(output);
+        java.nio.file.Files.writeString(sourceFile, source);
+        javax.tools.JavaCompiler compiler = javax.tools.ToolProvider.getSystemJavaCompiler();
+        assertNotNull("Tests require a JDK compiler", compiler);
+        int exit = compiler.run(null, null, null, "-d", output.toString(), sourceFile.toString());
+        assertEquals("javac should compile fixture", 0, exit);
+    }
+
+    private static void deleteRecursively(java.nio.file.Path root) throws java.io.IOException {
+        if (root == null || !java.nio.file.Files.exists(root)) {
+            return;
+        }
+        try (var walk = java.nio.file.Files.walk(root)) {
+            for (java.nio.file.Path path : walk.sorted((a, b) -> b.compareTo(a)).toList()) {
+                java.nio.file.Files.deleteIfExists(path);
+            }
+        }
     }
 }

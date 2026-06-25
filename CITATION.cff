@@ -3,8 +3,8 @@ message: "If you use CoCoMUT in academic work, please cite it. Publication metad
 title: "CoCoMUT: Context Constructor for MUT"
 version: "0.1.0"
 date-released: "2026-06-20"
-repository-code: "https://github.com/assert-lab/Code-Context-Extractor"
-url: "https://github.com/assert-lab/Code-Context-Extractor"
+repository-code: "https://github.com/assert-lab/CoCoMUT"
+url: "https://github.com/assert-lab/CoCoMUT"
 abstract: "Static Java method-context extraction for documentation-related research."
 authors:
   - name: "ASSERT Lab"
@@ -15,4 +15,4 @@ preferred-citation:
   authors:
     - name: "ASSERT Lab"
   year: 2026
-  url: "https://github.com/assert-lab/Code-Context-Extractor"
+  url: "https://github.com/assert-lab/CoCoMUT"

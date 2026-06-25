@@ -83,11 +83,55 @@ public final class CoCoMUTCommand implements Callable<Integer> {
     @Option(names = "--exclude-path", split = ",", description = "Exclude source path glob relative to project root.")
     private Set<String> excludePaths;
 
+    @Option(names = "--skip-build",
+            description = "Do not execute Maven/Gradle. Use existing or explicitly supplied class/JAR artifacts.")
+    private boolean skipBuild;
+
+    @Option(names = "--allow-build",
+            description = "Explicitly allow unsandboxed Maven/Gradle execution on the host.")
+    private boolean allowBuild;
+
+    @Option(names = "--externally-sandboxed-build",
+            description = "Allow Maven/Gradle execution and record that the caller provided external sandboxing.")
+    private boolean externallySandboxedBuild;
+
+    @Option(names = "--allow-preexisting-bytecode-after-build-failure",
+            description = "Allow analysis to continue with pre-existing project bytecode if an attempted build fails.")
+    private boolean allowPreexistingBytecodeAfterBuildFailure;
+
+    @Option(names = "--class-output", split = ",",
+            description = "Project class-output directory to analyze. May be repeated or comma-separated.")
+    private java.util.List<Path> classOutputs;
+
+    @Option(names = "--test-class-output", split = ",",
+            description = "Project test class-output directory to analyze. May be repeated or comma-separated.")
+    private java.util.List<Path> testClassOutputs;
+
+    @Option(names = "--project-jar", split = ",",
+            description = "Project artifact JAR to analyze. May be repeated or comma-separated.")
+    private java.util.List<Path> projectJars;
+
+    @Option(names = "--dependency-jar", split = ",",
+            description = "Dependency JAR for source/type resolution. May be repeated or comma-separated.")
+    private java.util.List<Path> dependencyJars;
+
+    @Option(names = "--classpath-file", split = ",",
+            description = "File containing classpath entries, one per line or path-separated.")
+    private java.util.List<Path> classpathFiles;
+
+    @Option(names = "--source-root", split = ",",
+            description = "Exact main source root to parse. Useful with --skip-build and explicit bytecode.")
+    private java.util.List<Path> sourceRoots;
+
+    @Option(names = "--test-source-root", split = ",",
+            description = "Exact test source root to parse. Useful with --skip-build and explicit test bytecode.")
+    private java.util.List<Path> testSourceRoots;
+
     @Override
     public Integer call() throws Exception {
         ContextRequest.Scope selectedScope = toScope(entryPoints ? "entry-points" : scope);
 
-        ContextRequest request = ContextRequest.builder()
+        ContextRequest.Builder builder = ContextRequest.builder()
                 .projectRoot(project)
                 .scope(selectedScope)
                 .callGraphAlgorithm(toCallGraphAlgorithm(callGraph))
@@ -101,12 +145,47 @@ public final class CoCoMUTCommand implements Callable<Integer> {
                 .visibilities(emptyIfNull(visibilities))
                 .includePathGlobs(emptyIfNull(includePaths))
                 .excludePathGlobs(emptyIfNull(excludePaths))
-                .outputDirectory(outputDir)
-                .build();
+                .buildPolicy(buildPolicy())
+                .classOutputDirs(emptyPathListIfNull(classOutputs))
+                .testClassOutputDirs(emptyPathListIfNull(testClassOutputs))
+                .projectJars(emptyPathListIfNull(projectJars))
+                .dependencyJars(emptyPathListIfNull(dependencyJars))
+                .classpathFiles(emptyPathListIfNull(classpathFiles))
+                .sourceRoots(emptyPathListIfNull(sourceRoots))
+                .testSourceRoots(emptyPathListIfNull(testSourceRoots))
+                .outputDirectory(outputDir);
+        if (allowPreexistingBytecodeAfterBuildFailure) {
+            builder.allowPreexistingBytecodeAfterBuildFailure();
+        }
+        ContextRequest request = builder.build();
 
         ExtractionReport report = ContextExtractorService.createDefault().extract(request);
         report.asMap().forEach((key, value) -> System.out.printf("%s=%s%n", key, value));
         return report.successful() ? 0 : 1;
+    }
+
+    private ContextRequest.BuildPolicy buildPolicy() {
+        int selected = (skipBuild ? 1 : 0)
+                + (allowBuild ? 1 : 0)
+                + (externallySandboxedBuild ? 1 : 0);
+        if (selected > 1) {
+            throw new IllegalArgumentException("Choose only one build execution policy flag: --skip-build, "
+                    + "--allow-build, or --externally-sandboxed-build");
+        }
+        if (allowPreexistingBytecodeAfterBuildFailure && !allowBuild && !externallySandboxedBuild) {
+            throw new IllegalArgumentException("--allow-preexisting-bytecode-after-build-failure requires "
+                    + "--allow-build or --externally-sandboxed-build");
+        }
+        if (skipBuild) {
+            return ContextRequest.BuildPolicy.DENY_BUILD;
+        }
+        if (externallySandboxedBuild) {
+            return ContextRequest.BuildPolicy.EXTERNALLY_SANDBOXED_BUILD;
+        }
+        if (allowBuild) {
+            return ContextRequest.BuildPolicy.ALLOW_UNSANDBOXED_BUILD;
+        }
+        return ContextRequest.BuildPolicy.DENY_BUILD;
     }
 
     private static ContextRequest.Scope toScope(String value) {
@@ -137,6 +216,10 @@ public final class CoCoMUTCommand implements Callable<Integer> {
 
     private static Set<String> emptyIfNull(Set<String> values) {
         return values == null ? Set.of() : values;
+    }
+
+    private static java.util.List<Path> emptyPathListIfNull(java.util.List<Path> values) {
+        return values == null ? java.util.List.of() : values;
     }
 
     private static Set<SymbolTarget> toTargets(Set<String> targetUris, Set<String> methodUris,

@@ -1,5 +1,6 @@
 package org.assertlab.cocomut.adapter;
 
+import org.assertlab.cocomut.ContextRequest;
 import org.assertlab.cocomut.ProjectMetadata;
 
 import java.io.IOException;
@@ -24,7 +25,7 @@ import java.util.List;
  * <h2>Auto-detection order</h2>
  * <pre>
  *   pom.xml present          → MavenProjectAdapter
- *   build.gradle present     → GradleProjectAdapter
+ *   Gradle build/settings    → GradleProjectAdapter
  *   fallback                 → GenericJavaAdapter
  * </pre>
  */
@@ -33,10 +34,14 @@ public interface ProjectAdapter {
     /**
      * Analyse the project and return a fully-populated {@link ProjectMetadata}.
      *
-     * @return metadata used by phases 1–6 of the pipeline
+     * @return metadata used by the five extraction phases
      * @throws IOException if source roots or classpath cannot be resolved
      */
-    ProjectMetadata toMetadata() throws IOException;
+    ProjectMetadata toMetadata(ContextRequest request) throws IOException;
+
+    default ProjectMetadata toMetadata() throws IOException {
+        throw new UnsupportedOperationException("ProjectAdapter requires a ContextRequest");
+    }
 
     /**
      * Return {@code true} if this adapter can handle the given project path.

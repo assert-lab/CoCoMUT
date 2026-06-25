@@ -65,6 +65,14 @@ public class ProjectAdapterTest {
     }
 
     @Test
+    public void gradleSettingsOnlyRootSelectsGradleAdapter() throws IOException {
+        Files.writeString(tempDir.resolve("settings.gradle"), "include 'lib'");
+        ProjectAdapter adapter = ProjectAdapter.of(tempDir);
+        assertTrue("settings.gradle-only root should pick GradleProjectAdapter",
+                adapter instanceof GradleProjectAdapter);
+    }
+
+    @Test
     public void plainDirectoryFallsBackToGenericAdapter() {
         // tempDir has no build descriptor → fallback
         ProjectAdapter adapter = ProjectAdapter.of(tempDir);

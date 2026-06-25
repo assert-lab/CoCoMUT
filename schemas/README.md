@@ -139,6 +139,63 @@ CoCoMUT does not fetch JDK/dependency source jars or generated Javadoc pages for
 external `@see` / `{@link ...}` targets, because that behavior depends heavily
 on local build artifacts and would make dataset provenance noisier.
 
+## Extraction Manifest
+
+Every extraction also writes `extraction_manifest.json` beside the JSONL file.
+This is run-level metadata, not method-level context. The manifest records:
+
+```text
+schema_version                  Manifest schema version, currently 0.3.0
+generated_at                    Timestamp for the extraction run
+tool / tool_version             CoCoMUT release identity
+tool_git                        Git identity of the CoCoMUT checkout/build
+request_hash                    Cached hash of selection, build policy, and
+                                explicit request artifacts
+selection                       Same selection provenance stored in JSONL rows
+project.name/path/build_system  Analyzed project identity
+project.git.remote_url          Git remote when the checkout exposes one
+project.git.commit              Git commit when available
+project.git.dirty               Boolean when known, null when git state is unknown
+build.attempted                 Whether CoCoMUT executed Maven/Gradle
+build.exit_code                 Build-process exit code, or -1 when not attempted
+build.succeeded                 Whether the attempted build command succeeded
+build.timed_out                 Whether the attempted build timed out
+build.skipped                   Whether build execution was denied
+build.sandboxed                 Whether caller claims external sandboxing
+build.policy                    DENY_BUILD, ALLOW_UNSANDBOXED_BUILD,
+                                EXTERNALLY_SANDBOXED_BUILD, or UNKNOWN
+build.allow_preexisting_bytecode_after_build_failure
+                                Whether stale-bytecode fallback after a failed
+                                attempted build was explicitly allowed
+build.bytecode_available        Whether project bytecode was found
+build.bytecode_origin           generated_this_run, preexisting, explicit, or none
+build.analysis_can_proceed      Whether extraction has project bytecode to analyze
+build.gradle_model              Gradle model status, diagnostics, and partiality
+artifacts.*                     Source roots, class outputs, jars, explicit inputs
+artifacts.origins               Per-artifact origin labels such as explicit,
+                                preexisting, generated_this_run, dependency
+artifacts.module_source_sets    Gradle module/source-set provenance when available
+hashes.algorithm/format         Hash algorithm and deterministic digest format
+hashes.main_bytecode            Hash over main outputs and project JARs
+hashes.test_bytecode            Hash over test outputs
+hashes.combined_project_bytecode
+                                Hash over main, test, and project JAR bytecode
+hashes.dependency_classpath     Ordered hash over dependency JARs/directories
+hashes.dependency_classpath_content_set
+                                Order-insensitive hash over the same entries
+hashes.emitted_jsonl            Hash over generated JSONL when present
+```
+
+The manifest is intentionally separate from the JSONL rows. Dataset rows remain
+method-centric, while repository revision, build policy, and artifact hashes are
+auditable at extraction-run granularity.
+
+Each hash entry has `{role, sha256, status, errors}`. `sha256` is a 64-character
+hex digest when `status` is `ok`; it is `null` for `empty`, `missing`, or
+`error`. Artifact hashes do not include host-specific absolute paths. The
+ordered dependency hash preserves classpath order because order can affect
+resolution when multiple entries contain the same class.
+
 When a target omits parameters, for example `@see #parse`, CoCoMUT resolves it
 only if there is a single project method named `parse` in the target class. If
 multiple overloads exist, it reports `overload_ambiguous` and emits candidate

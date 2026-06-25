@@ -53,6 +53,48 @@ public class ContextRequestTest {
                 .build();
 
         assertEquals(CallGraphGenerator.Algorithm.RTA, request.callGraphAlgorithm());
+        assertEquals(ContextRequest.BuildPolicy.DENY_BUILD, request.buildPolicy());
+    }
+
+    @Test
+    public void buildPolicyRequiresExplicitBuildPermission() {
+        ContextRequest request = ContextRequest.builder()
+                .projectRoot(Path.of("."))
+                .allowUnsandboxedBuild()
+                .build();
+
+        assertEquals(ContextRequest.BuildPolicy.ALLOW_UNSANDBOXED_BUILD, request.buildPolicy());
+        assertTrue(!request.skipBuild());
+    }
+
+    @Test
+    public void skipBuildFalseDoesNotEnableHostBuilds() {
+        ContextRequest request = ContextRequest.builder()
+                .projectRoot(Path.of("."))
+                .skipBuild(false)
+                .build();
+
+        assertEquals(ContextRequest.BuildPolicy.DENY_BUILD, request.buildPolicy());
+    }
+
+    @Test
+    public void failedBuildFallbackIsSeparateFromBuildExecutionPolicy() {
+        ContextRequest request = ContextRequest.builder()
+                .projectRoot(Path.of("."))
+                .allowUnsandboxedBuild()
+                .allowPreexistingBytecodeAfterBuildFailure()
+                .build();
+
+        assertEquals(ContextRequest.BuildPolicy.ALLOW_UNSANDBOXED_BUILD, request.buildPolicy());
+        assertTrue(request.allowPreexistingBytecodeAfterBuildFailure());
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void failedBuildFallbackRequiresBuildExecutionPolicyInApi() {
+        ContextRequest.builder()
+                .projectRoot(Path.of("."))
+                .allowPreexistingBytecodeAfterBuildFailure()
+                .build();
     }
 
     @Test
@@ -63,5 +105,27 @@ public class ContextRequestTest {
                 .build();
 
         assertEquals(CallGraphGenerator.Algorithm.CHA, request.callGraphAlgorithm());
+    }
+
+    @Test
+    public void builderAcceptsExplicitArtifactInputs() {
+        ContextRequest request = ContextRequest.builder()
+                .projectRoot(Path.of("."))
+                .skipBuild(true)
+                .classOutputDir(Path.of("target/classes"))
+                .projectJar(Path.of("target/example.jar"))
+                .dependencyJar(Path.of("lib/dependency.jar"))
+                .classpathFile(Path.of("classpath.txt"))
+                .sourceRoot(Path.of("src/main/java"))
+                .testSourceRoot(Path.of("src/test/java"))
+                .build();
+
+        assertTrue(request.skipBuild());
+        assertTrue(request.classOutputDirs().contains(Path.of("target/classes").toAbsolutePath().normalize()));
+        assertTrue(request.projectJars().contains(Path.of("target/example.jar").toAbsolutePath().normalize()));
+        assertTrue(request.dependencyJars().contains(Path.of("lib/dependency.jar").toAbsolutePath().normalize()));
+        assertTrue(request.classpathFiles().contains(Path.of("classpath.txt").toAbsolutePath().normalize()));
+        assertTrue(request.sourceRoots().contains(Path.of("src/main/java").toAbsolutePath().normalize()));
+        assertTrue(request.testSourceRoots().contains(Path.of("src/test/java").toAbsolutePath().normalize()));
     }
 }
