@@ -102,6 +102,12 @@ They use conservative project-root containment checks and include
 `parser=cocomut-file-regex`, `parse_confidence=low`, and a `source_form` marker
 describing the recognized textual form.
 
+`{@inheritDoc}` is represented as an inheritance candidate relation. CoCoMUT
+reports whether an inherited candidate exists and includes bounded inherited
+Javadoc snippets, but it does not silently expand inherited `@param`, `@return`,
+or `@throws` text into the child method's `structured_tags`. Rows that use
+inheritDoc therefore carry `inheritdoc_policy=candidate_only`.
+
 ## Resolution Policy
 
 CoCoMUT resolves project-local references in this order:

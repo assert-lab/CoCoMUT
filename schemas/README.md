@@ -63,13 +63,14 @@ selection. See
 Important `javadoc_metadata` fields:
 
 ```text
-see                       Spoon-derived @see targets, with fallback raw targets when parsing fails
-inline_links              Inline {@link ...}/{@linkplain ...} targets
+see                       Targets from final merged javadoc_references entries tagged @see
+inline_links              Targets from final merged javadoc_references entries tagged link/linkplain
 javadoc_references        Resolved reference objects for @see/link/linkplain targets
 file_references           Referenced doc-files/images/html/text/sample-source paths when present
                           plus parser, parse_confidence, and source_form
 structured_tags           Parsed param/return/throws/since/apiNote/implSpec/implNote/deprecated text
                           plus parser and parse_confidence
+inheritdoc_policy         not_applicable|candidate_only
 inheritdoc_resolution     not_used|resolved_candidate|unresolved
 inherited_javadoc_candidates
                           Candidate inherited Javadoc snippets for {@inheritDoc}
@@ -87,6 +88,7 @@ parser                    spoon-javadoc|spoon-javadoc-text-fallback|cocomut-fall
 parse_confidence          high|medium|low
 spoon_reference           typed Spoon reference rendering when available
 raw_pairing_confidence    low/none when raw spelling was not trusted for typed resolution
+fallback_reason           why a low-confidence fallback reference was emitted
 kind                      type_reference|member_reference|field_reference|external_url|text_reference
 resolution                resolved_type|resolved_method|resolved_field|
                           resolved_inherited_method|resolved_inherited_field|
@@ -126,6 +128,11 @@ Javadoc reference and structured-tag parsing uses Spoon's official
 `spoon-javadoc` parser first. CoCoMUT keeps a text fallback for raw references
 that Spoon cannot represent; fallback-derived objects are marked with
 `parser=cocomut-fallback`, `parse_confidence=low`, and a fallback reason.
+
+`{@inheritDoc}` is reported as a candidate relation rather than silently
+expanded into child structured tags. When present, `inheritdoc_policy` is
+`candidate_only`, and inherited source Javadocs are exposed through
+`inherited_javadoc_candidates` for downstream inspection.
 
 External references are intentionally symbol-level only in the current schema.
 CoCoMUT does not fetch JDK/dependency source jars or generated Javadoc pages for

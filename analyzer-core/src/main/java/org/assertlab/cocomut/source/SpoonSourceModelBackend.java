@@ -799,19 +799,20 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                                                        String javadoc, String rawJavadoc) {
         Map<String, Object> metadata = new LinkedHashMap<>();
         String normalized = javadoc == null ? "" : javadoc.strip();
+        List<Map<String, Object>> references = javadocReferences(parsed, owner, elements, normalized);
+        boolean usesInheritDoc = !elements.isEmpty()
+                ? usesInheritDoc(elements)
+                : normalized.contains("{@inheritDoc}") || normalized.contains("@inheritDoc");
         metadata.put("since", !elements.isEmpty()
                 ? blockTagTexts(elements, StandardJavadocTagType.SINCE)
                 : matches(SINCE_TAG, normalized, 1));
-        metadata.put("see", !elements.isEmpty()
-                ? blockTagReferenceTargets(elements, StandardJavadocTagType.SEE)
-                : matches(SEE_TAG, normalized, 1));
-        metadata.put("inline_links", inlineLinkTargets(elements, normalized));
-        metadata.put("javadoc_references", javadocReferences(parsed, owner, elements, normalized));
+        metadata.put("see", referenceTargetsByTag(references, "see"));
+        metadata.put("inline_links", inlineReferenceTargets(references));
+        metadata.put("javadoc_references", references);
         metadata.put("file_references", fileReferences(parsed.projectRoot(), method, rawJavadoc));
         metadata.put("structured_tags", structuredTags(elements, normalized));
-        metadata.put("uses_inheritdoc", !elements.isEmpty()
-                ? usesInheritDoc(elements)
-                : normalized.contains("{@inheritDoc}") || normalized.contains("@inheritDoc"));
+        metadata.put("uses_inheritdoc", usesInheritDoc);
+        metadata.put("inheritdoc_policy", usesInheritDoc ? "candidate_only" : "not_applicable");
         metadata.put("deprecated", isDeprecated(executable, normalized));
         metadata.put("deprecation_text", deprecationText(normalized));
         metadata.put("inheritdoc_resolution", inheritdocResolution(executable, normalized));
@@ -1073,25 +1074,6 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 .toList();
     }
 
-    private static List<String> blockTagReferenceTargets(List<JavadocElement> elements, StandardJavadocTagType tagType) {
-        List<String> targets = new ArrayList<>();
-        for (JavadocBlockTag block : blockTags(elements)) {
-            if (!tagType.equals(block.getTagType())) {
-                continue;
-            }
-            Optional<String> typedTarget = firstReferenceTarget(block.getElements());
-            if (typedTarget.isPresent()) {
-                targets.add(typedTarget.get());
-            } else {
-                String text = elementsText(block.getElements());
-                if (!text.isBlank()) {
-                    targets.add(splitReferenceTargetAndLabel(text)[0]);
-                }
-            }
-        }
-        return targets;
-    }
-
     private static Map<String, String> namedBlockTag(List<JavadocElement> elements, String key) {
         if (elements == null || elements.isEmpty()) {
             return Map.of(key, "", "text", "");
@@ -1234,14 +1216,66 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return stringValue(reference.get("tag")) + "\u0000" + stringValue(reference.get("target"));
     }
 
-    private static List<String> inlineLinkTargets(List<JavadocElement> elements, String javadoc) {
-        List<String> spoonTargets = elements.stream()
-                .filter(JavadocInlineTag.class::isInstance)
-                .map(JavadocInlineTag.class::cast)
-                .filter(tag -> isInlineReferenceTag(tag))
-                .map(SpoonSourceModelBackend::firstReferenceTarget)
-                .flatMap(Optional::stream)
+    private static List<String> referenceTargetsByTag(List<Map<String, Object>> references, String tag) {
+        List<Map<String, Object>> primary = references.stream()
+                .filter(reference -> tag.equals(reference.get("tag")))
+                .filter(reference -> !"cocomut-fallback".equals(reference.get("parser")))
                 .toList();
+        List<Map<String, Object>> source = primary.isEmpty()
+                ? references.stream().filter(reference -> tag.equals(reference.get("tag"))).toList()
+                : primary;
+        return source.stream()
+                .map(reference -> stringValue(reference.get("target")))
+                .filter(target -> !target.isBlank())
+                .filter(SpoonSourceModelBackend::completeReferenceTarget)
+                .distinct()
+                .toList();
+    }
+
+    private static List<String> inlineReferenceTargets(List<Map<String, Object>> references) {
+        List<Map<String, Object>> primary = references.stream()
+                .filter(reference -> "link".equals(reference.get("tag"))
+                        || "linkplain".equals(reference.get("tag")))
+                .filter(reference -> !"cocomut-fallback".equals(reference.get("parser")))
+                .toList();
+        List<Map<String, Object>> source = primary.isEmpty()
+                ? references.stream()
+                .filter(reference -> "link".equals(reference.get("tag"))
+                        || "linkplain".equals(reference.get("tag")))
+                .toList()
+                : primary;
+        return source.stream()
+                .map(reference -> stringValue(reference.get("target")))
+                .filter(target -> !target.isBlank())
+                .filter(SpoonSourceModelBackend::completeReferenceTarget)
+                .distinct()
+                .toList();
+    }
+
+    private static boolean completeReferenceTarget(String target) {
+        int parenDepth = 0;
+        int angleDepth = 0;
+        for (int i = 0; i < target.length(); i++) {
+            char c = target.charAt(i);
+            if (c == '(') {
+                parenDepth++;
+            } else if (c == ')') {
+                parenDepth--;
+            } else if (c == '<') {
+                angleDepth++;
+            } else if (c == '>') {
+                angleDepth--;
+            }
+            if (parenDepth < 0 || angleDepth < 0) {
+                return false;
+            }
+        }
+        return parenDepth == 0 && angleDepth == 0;
+    }
+
+    private static List<String> inlineLinkTargets(List<JavadocElement> elements, String javadoc) {
+        List<String> spoonTargets = new ArrayList<>();
+        collectInlineLinkTargets(elements, spoonTargets);
         if (!spoonTargets.isEmpty()) {
             List<String> rawTargets = inlineLinkReferences(javadoc).stream()
                     .map(InlineJavadocReference::target)
@@ -1251,6 +1285,19 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return inlineLinkReferences(javadoc).stream()
                 .map(InlineJavadocReference::target)
                 .toList();
+    }
+
+    private static void collectInlineLinkTargets(List<JavadocElement> elements, List<String> targets) {
+        for (JavadocElement element : elements == null ? List.<JavadocElement>of() : elements) {
+            if (element instanceof JavadocInlineTag inline) {
+                if (isInlineReferenceTag(inline)) {
+                    firstReferenceTarget(inline).ifPresent(targets::add);
+                }
+                collectInlineLinkTargets(inline.getElements(), targets);
+            } else if (element instanceof JavadocBlockTag block) {
+                collectInlineLinkTargets(block.getElements(), targets);
+            }
+        }
     }
 
     private static List<JavadocElement> spoonJavadocElements(CtElement element) {

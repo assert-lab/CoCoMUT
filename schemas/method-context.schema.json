@@ -129,6 +129,10 @@
           "description": "Parser-backed param/return/throws/since/apiNote/implSpec/implNote/deprecated tags. Includes parser and parse_confidence."
         },
         "uses_inheritdoc": {"type": "boolean"},
+        "inheritdoc_policy": {
+          "type": "string",
+          "description": "not_applicable when inheritDoc is absent; candidate_only when inherited documentation candidates are reported without silently expanding child structured tags."
+        },
         "inheritdoc_resolution": {"type": "string"},
         "inherited_javadoc_candidates": {"type": "array"}
       },
@@ -215,6 +219,10 @@
         "raw_pairing_confidence": {
           "type": "string",
           "description": "Confidence for pairing legacy raw target spelling with Spoon's typed reference; low/none pairings do not drive semantic resolution."
+        },
+        "fallback_reason": {
+          "type": "string",
+          "description": "Reason a low-confidence fallback reference was emitted, for example spoon_no_references or not_represented_by_spoon."
         },
         "kind": {"type": "string"},
         "resolution": {"type": "string"},

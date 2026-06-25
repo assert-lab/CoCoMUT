@@ -349,6 +349,7 @@ public class SourceModelEdgeCaseTest {
                          * @see Long#MIN_VALUE
                          * @see Pattern#DOTALL
                          * @since 2.0
+                         * @deprecated Use {@link Helper} instead.
                          * @see "Reference text without a generated link"
                          */
                         public void focal() {
@@ -386,10 +387,12 @@ public class SourceModelEdgeCaseTest {
             @SuppressWarnings("unchecked")
             List<String> seeTargets = (List<String>) context.javadocMetadata().get("see");
             assertTrue("Legacy see metadata should be Spoon-derived and include complete multiline signatures",
-                    seeTargets.toString().contains("sameName(java.lang.String,int)"));
+                    seeTargets.toString().contains("#sameName(String, int)"));
             assertFalse("Legacy see metadata should not keep line-truncated target fragments",
-                    seeTargets.toString().contains("#sameName(String,"));
+                    seeTargets.contains("#sameName(String,"));
             assertTrue(context.javadocMetadata().get("since").toString().contains("2.0"));
+            assertTrue("Nested inline links inside block tags should appear in inline_links",
+                    context.javadocMetadata().get("inline_links").toString().contains("Helper"));
 
             Map<String, Object> ambiguous = referenceByTarget(refs, "#sameName");
             assertEquals("overload_ambiguous", ambiguous.get("resolution"));
@@ -529,6 +532,67 @@ public class SourceModelEdgeCaseTest {
             assertEquals("text", textReference.get("reference_domain"));
             assertEquals("text", textReference.get("reference_scope"));
             assertEquals("Reference text without a generated link", textReference.get("text"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void inheritDocKeepsCandidatePolicyForStructuredTags() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-policy");
+        try {
+            write(project.resolve("src/main/java/demo/ParentDocs.java"), """
+                    package demo;
+
+                    public interface ParentDocs {
+                        /**
+                         * Parses input.
+                         * @param text input text
+                         * @return parsed value
+                         */
+                        String parse(String text);
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/ChildDocs.java"), """
+                    package demo;
+
+                    public class ChildDocs implements ParentDocs {
+                        /**
+                         * {@inheritDoc}
+                         * @param text {@inheritDoc}
+                         */
+                        @Override
+                        public String parse(String text) {
+                            return text;
+                        }
+                    }
+                    """);
+
+            compileProject(project);
+            ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
+            SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
+                    .filter(method -> method.className().equals("demo.ChildDocs"))
+                    .filter(method -> method.methodName().equals("parse"))
+                    .findFirst()
+                    .orElseThrow();
+
+            SourceContext context = SourceBackends.spoon()
+                    .extractContext(model, focal.methodUri())
+                    .orElseThrow();
+
+            assertEquals(true, context.javadocMetadata().get("uses_inheritdoc"));
+            assertEquals("candidate_only", context.javadocMetadata().get("inheritdoc_policy"));
+            assertEquals("resolved_candidate", context.javadocMetadata().get("inheritdoc_resolution"));
+            assertTrue(context.javadocMetadata().get("inherited_javadoc_candidates").toString()
+                    .contains("input text"));
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> structuredTags = (Map<String, Object>) context.javadocMetadata()
+                    .get("structured_tags");
+            assertTrue("Child structured tags preserve local inheritDoc markers; inherited docs are candidates",
+                    structuredTags.get("params").toString().contains("{@inheritDoc}"));
+            assertFalse("Candidate-only policy must not silently expand inherited param text into child tags",
+                    structuredTags.get("params").toString().contains("input text"));
         } finally {
             deleteRecursively(project);
         }
