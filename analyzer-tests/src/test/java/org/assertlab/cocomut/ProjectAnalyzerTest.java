@@ -454,14 +454,6 @@ public class ProjectAnalyzerTest {
             assertEquals("preexisting", metadata.getBytecodeOrigin());
             assertFalse("Failed attempted builds must not proceed with stale bytecode by default",
                     metadata.isAnalysisCanProceed());
-
-            ProjectMetadata explicitRisk = new ProjectAnalyzer(ContextRequest.builder()
-                    .projectRoot(project)
-                    .allowUnsandboxedBuild()
-                    .allowPreexistingBytecodeAfterBuildFailure()
-                    .build()).analyze();
-            assertTrue("The risky stale-bytecode path requires an explicit policy",
-                    explicitRisk.isAnalysisCanProceed());
         } finally {
             deleteRecursively(project);
         }

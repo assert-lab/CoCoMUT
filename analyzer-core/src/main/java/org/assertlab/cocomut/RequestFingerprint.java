@@ -45,8 +45,6 @@ final class RequestFingerprint {
         }
         node.put("call_graph", request.callGraphAlgorithm().toString());
         node.put("build_policy", request.buildPolicy().toString());
-        node.put("allow_preexisting_bytecode_after_build_failure",
-                request.allowPreexistingBytecodeAfterBuildFailure());
         node.set("class_outputs", MAPPER.valueToTree(artifactIdentities(request.projectRoot(), request.classOutputDirs())));
         node.set("test_class_outputs", MAPPER.valueToTree(artifactIdentities(request.projectRoot(), request.testClassOutputDirs())));
         node.set("project_jars", MAPPER.valueToTree(artifactIdentities(request.projectRoot(), request.projectJars())));

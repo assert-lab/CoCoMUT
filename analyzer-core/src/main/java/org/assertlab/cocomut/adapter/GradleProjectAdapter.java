@@ -167,7 +167,7 @@ public class GradleProjectAdapter implements ProjectAdapter {
         if (base.isBuildSucceeded()) {
             return true;
         }
-        return base.isAllowPreexistingBytecodeAfterBuildFailure();
+        return false;
     }
 
     private static String compileStatus(ProjectMetadata base, boolean bytecodeAvailable) {

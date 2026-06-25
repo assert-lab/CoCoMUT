@@ -13,7 +13,6 @@
   "phase_1_build_skipped" : true,
   "phase_1_build_sandboxed" : false,
   "phase_1_build_execution_policy" : "DENY_BUILD",
-  "phase_1_allow_preexisting_bytecode_after_build_failure" : false,
   "phase_1_bytecode_available" : true,
   "phase_1_bytecode_origin" : "explicit",
   "phase_1_analysis_can_proceed" : true,

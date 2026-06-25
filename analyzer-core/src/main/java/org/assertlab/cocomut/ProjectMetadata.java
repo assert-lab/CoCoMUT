@@ -32,7 +32,6 @@ public class ProjectMetadata {
     private final boolean buildSkipped;
     private final boolean buildSandboxed;
     private final ContextRequest.BuildPolicy buildPolicy;
-    private final boolean allowPreexistingBytecodeAfterBuildFailure;
     private final boolean bytecodeAvailable;
     private final String bytecodeOrigin;
     private final boolean analysisCanProceed;
@@ -69,7 +68,6 @@ public class ProjectMetadata {
         this.buildSkipped = builder.buildSkipped;
         this.buildSandboxed = builder.buildSandboxed;
         this.buildPolicy = builder.buildPolicy;
-        this.allowPreexistingBytecodeAfterBuildFailure = builder.allowPreexistingBytecodeAfterBuildFailure;
         this.bytecodeAvailable = builder.bytecodeAvailable;
         this.bytecodeOrigin = builder.bytecodeOrigin;
         this.analysisCanProceed = builder.analysisCanProceed;
@@ -180,10 +178,6 @@ public class ProjectMetadata {
         return buildPolicy;
     }
 
-    public boolean isAllowPreexistingBytecodeAfterBuildFailure() {
-        return allowPreexistingBytecodeAfterBuildFailure;
-    }
-
     public boolean isBytecodeAvailable() {
         return bytecodeAvailable;
     }
@@ -287,7 +281,6 @@ public class ProjectMetadata {
         private boolean buildSkipped = false;
         private boolean buildSandboxed = false;
         private ContextRequest.BuildPolicy buildPolicy = ContextRequest.BuildPolicy.DENY_BUILD;
-        private boolean allowPreexistingBytecodeAfterBuildFailure = false;
         private boolean bytecodeAvailable = false;
         private String bytecodeOrigin = "none";
         private boolean analysisCanProceed = false;
@@ -330,7 +323,6 @@ public class ProjectMetadata {
                     .buildSkipped(src.buildSkipped)
                     .buildSandboxed(src.buildSandboxed)
                     .buildPolicy(src.buildPolicy)
-                    .allowPreexistingBytecodeAfterBuildFailure(src.allowPreexistingBytecodeAfterBuildFailure)
                     .bytecodeAvailable(src.bytecodeAvailable)
                     .bytecodeOrigin(src.bytecodeOrigin)
                     .analysisCanProceed(src.analysisCanProceed)
@@ -448,11 +440,6 @@ public class ProjectMetadata {
 
         public Builder buildPolicy(ContextRequest.BuildPolicy buildPolicy) {
             this.buildPolicy = buildPolicy == null ? ContextRequest.BuildPolicy.DENY_BUILD : buildPolicy;
-            return this;
-        }
-
-        public Builder allowPreexistingBytecodeAfterBuildFailure(boolean allowPreexistingBytecodeAfterBuildFailure) {
-            this.allowPreexistingBytecodeAfterBuildFailure = allowPreexistingBytecodeAfterBuildFailure;
             return this;
         }
 
