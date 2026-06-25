@@ -21,7 +21,7 @@ import java.util.regex.Pattern;
  * - Javadoc documentation (method-level and class-level)
  * - Class hierarchy (via Spoon source model, with SootUp when available)
  * - Related class methods
- * - Metrics (LOC, cyclomatic complexity)
+ * - Lexical metrics (LOC and branch-keyword complexity estimates)
  * - Combines with call graph from Phase 3
  *
  * Input: ProjectMetadata from Phase 1, MethodInfo from Phase 2, CallGraphGenerator from Phase 3
@@ -154,7 +154,9 @@ public class ContextExtractor {
             return 1;
         }
 
-        // McCabe complexity: 1 + one decision point per branch keyword.
+        // Lexical branch-keyword estimate: 1 + one decision point per matched token.
+        // This is intentionally exposed as a coarse estimate, not an AST-level
+        // McCabe/control-flow graph measurement.
         // \bif\b already matches the `if` inside `else if`, so do NOT add a
         // separate \belse\s+if\b term — that would count each else-if twice.
         int complexity = 1;

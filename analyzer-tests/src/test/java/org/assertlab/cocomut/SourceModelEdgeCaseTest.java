@@ -29,9 +29,10 @@ public class SourceModelEdgeCaseTest {
                     import java.io.IOException;
                     public interface Parent<T> {
                         /** Converts the input value.
-                         * @param input input value
+                         * @param input input value, may be {@code null}
                          * @return converted value
-                         * @throws IOException if conversion fails
+                         * @throws IOException
+                         *         if conversion fails
                          */
                         T transform(T input) throws IOException;
                     }
@@ -45,6 +46,10 @@ public class SourceModelEdgeCaseTest {
                         private String last;
 
                         /** {@inheritDoc}
+                         * @param input input value, may be {@code null}
+                         * @return converted value
+                         * @throws IOException
+                         *         if conversion fails
                          * @see #transform(String, int)
                          */
                         @Deprecated
@@ -113,9 +118,22 @@ public class SourceModelEdgeCaseTest {
             assertTrue(context.fieldWrites().contains("last"));
             assertTrue(context.dynamicFeatures().contains("reflection"));
             assertEquals(2, context.overloadGroup().size());
+            assertEquals("spoon-javadoc", context.documentationMetrics().get("parser"));
+            assertEquals("high", context.documentationMetrics().get("parse_confidence"));
+            assertTrue((Boolean) context.documentationMetrics().get("has_param_tags"));
+            assertTrue((Boolean) context.documentationMetrics().get("has_return_tag"));
+            assertTrue((Boolean) context.documentationMetrics().get("has_throws_tag"));
             assertTrue((Boolean) context.documentationMetrics().get("uses_inheritdoc"));
             assertEquals("resolved_candidate", context.javadocMetadata().get("inheritdoc_resolution"));
             assertTrue(context.javadocMetadata().containsKey("inherited_javadoc_candidates"));
+            @SuppressWarnings("unchecked")
+            Map<String, Object> structuredTags = (Map<String, Object>) context.javadocMetadata().get("structured_tags");
+            assertEquals("spoon-javadoc", structuredTags.get("parser"));
+            assertEquals("high", structuredTags.get("parse_confidence"));
+            assertTrue(structuredTags.get("params").toString().contains("input value, may be null"));
+            assertTrue(structuredTags.get("return").toString().contains("converted value"));
+            assertTrue(structuredTags.get("throws").toString().contains("type=java.io.IOException"));
+            assertTrue(structuredTags.get("throws").toString().contains("if conversion fails"));
             assertTrue("Javadoc @see should resolve to a project method URI",
                     context.javadocMetadata().get("javadoc_references").toString()
                             .contains("#demo.EdgeCase.transform(java.lang.String,int):java.lang.String"));
@@ -289,9 +307,23 @@ public class SourceModelEdgeCaseTest {
                     public class OtherHelper {
                     }
                     """);
+            write(project.resolve("src/main/java/demo/nested/Outer.java"), """
+                    package demo.nested;
+
+                    /** Outer docs. */
+                    public class Outer {
+                        /** Inner docs. */
+                        public static class Inner {
+                            /** Run docs. */
+                            public void run() {
+                            }
+                        }
+                    }
+                    """);
             write(project.resolve("src/main/java/demo/Child.java"), """
                     package demo;
 
+                    import demo.nested.Outer.Inner;
                     import java.util.Arrays;
                     import java.util.Map;
                     import java.util.regex.*;
@@ -304,15 +336,20 @@ public class SourceModelEdgeCaseTest {
                          * Invalid external member: {@link java.util.List#add(Integer) invalid add}.
                          * @see #sameName
                          * @see #sameName(String)
+                         * @see #sameName(String,
+                         *     int) multi-line overload
                          * @see #TOKEN
                          * @see Helper
                          * @see demo.other.OtherHelper
+                         * @see Inner#run()
                          * @see #inherited(CharSequence)
                          * @see java.util.List#add(Object)
                          * @see java.base/java.util.List#remove(Object)
                          * @see Arrays#sort(byte[])
                          * @see Long#MIN_VALUE
                          * @see Pattern#DOTALL
+                         * @since 2.0
+                         * @deprecated Use {@link Helper} instead.
                          * @see "Reference text without a generated link"
                          */
                         public void focal() {
@@ -324,6 +361,10 @@ public class SourceModelEdgeCaseTest {
 
                         /** String overload. */
                         public void sameName(String value) {
+                        }
+
+                        /** String and mode overload. */
+                        public void sameName(String value, int mode) {
                         }
                     }
                     """);
@@ -343,15 +384,29 @@ public class SourceModelEdgeCaseTest {
             List<Map<String, Object>> refs = (List<Map<String, Object>>) context.javadocMetadata()
                     .get("javadoc_references");
 
+            @SuppressWarnings("unchecked")
+            List<String> seeTargets = (List<String>) context.javadocMetadata().get("see");
+            assertTrue("Legacy see metadata should be Spoon-derived and include complete multiline signatures",
+                    seeTargets.toString().contains("#sameName(String, int)"));
+            assertFalse("Legacy see metadata should not keep line-truncated target fragments",
+                    seeTargets.contains("#sameName(String,"));
+            assertTrue(context.javadocMetadata().get("since").toString().contains("2.0"));
+            assertTrue("Nested inline links inside block tags should appear in inline_links",
+                    context.javadocMetadata().get("inline_links").toString().contains("Helper"));
+
             Map<String, Object> ambiguous = referenceByTarget(refs, "#sameName");
             assertEquals("overload_ambiguous", ambiguous.get("resolution"));
             assertEquals("target_omits_parameter_types", ambiguous.get("ambiguity_reason"));
             assertTrue(ambiguous.get("candidate_method_uris").toString().contains("sameName():void"));
             assertTrue(ambiguous.get("candidate_method_uris").toString()
                     .contains("sameName(java.lang.String):void"));
+            assertTrue(ambiguous.get("candidate_method_uris").toString()
+                    .contains("sameName(java.lang.String,int):void"));
 
             Map<String, Object> exactOverload = referenceByTarget(refs, "#sameName(String)");
             assertEquals("resolved_method", exactOverload.get("resolution"));
+            assertEquals("spoon-javadoc", exactOverload.get("parser"));
+            assertEquals("high", exactOverload.get("parse_confidence"));
             assertEquals("method", exactOverload.get("reference_target_kind"));
             assertEquals("project", exactOverload.get("reference_domain"));
             assertEquals("same_type", exactOverload.get("reference_scope"));
@@ -361,6 +416,14 @@ public class SourceModelEdgeCaseTest {
             Map<String, Object> exactOverloadContext = (Map<String, Object>) exactOverload.get("referenced_method");
             assertTrue(exactOverloadContext.get("code").toString().contains("public void sameName(String value)"));
             assertTrue(exactOverloadContext.get("javadoc").toString().contains("String overload."));
+
+            Map<String, Object> multilineOverload = referenceByTarget(refs, "#sameName(String, int)");
+            assertEquals("resolved_method", multilineOverload.get("resolution"));
+            assertEquals("multi-line overload", multilineOverload.get("label"));
+            assertEquals("spoon-javadoc", multilineOverload.get("parser"));
+            assertEquals("high", multilineOverload.get("parse_confidence"));
+            assertTrue(multilineOverload.get("method_uri").toString()
+                    .contains("sameName(java.lang.String,int):void"));
 
             Map<String, Object> inheritedField = referenceByTarget(refs, "#TOKEN");
             assertEquals("field_reference", inheritedField.get("kind"));
@@ -387,6 +450,14 @@ public class SourceModelEdgeCaseTest {
             assertEquals("project", otherPackageType.get("reference_domain"));
             assertEquals("same_module", otherPackageType.get("reference_scope"));
 
+            Map<String, Object> importedNestedMethod = referenceByTarget(refs, "Inner#run()");
+            assertEquals("resolved_method", importedNestedMethod.get("resolution"));
+            assertEquals("spoon-javadoc", importedNestedMethod.get("parser"));
+            assertEquals("high", importedNestedMethod.get("parse_confidence"));
+            assertTrue(importedNestedMethod.get("canonical_target").toString().contains("demo.nested.Outer"));
+            assertTrue(importedNestedMethod.get("method_uri").toString()
+                    .contains("Outer$Inner.run():void"));
+
             Map<String, Object> inheritedMethod = referenceByTarget(refs, "#inherited(CharSequence)");
             assertEquals("resolved_inherited_method", inheritedMethod.get("resolution"));
             assertEquals("demo.Base", inheritedMethod.get("inherited_from"));
@@ -406,7 +477,7 @@ public class SourceModelEdgeCaseTest {
             assertEquals("external_jdk", external.get("reference_domain"));
             assertEquals("external", external.get("reference_scope"));
             assertEquals("java.util.List", external.get("external_class"));
-            assertEquals("add(Object)", external.get("external_member"));
+            assertEquals("add(java.lang.Object)", external.get("external_member"));
             assertEquals("method", external.get("external_member_kind"));
 
             Map<String, Object> invalidExternal = referenceByTarget(refs, "java.util.List#add(Integer)");
@@ -422,6 +493,8 @@ public class SourceModelEdgeCaseTest {
             Map<String, Object> spacedInline = referenceByTarget(refs, "Map#put(Object, Object)");
             assertEquals("linkplain", spacedInline.get("tag"));
             assertEquals("map put", spacedInline.get("label"));
+            assertEquals("spoon-javadoc", spacedInline.get("parser"));
+            assertEquals("high", spacedInline.get("parse_confidence"));
             assertEquals("external_symbol", spacedInline.get("resolution"));
             assertEquals("java.util.Map", spacedInline.get("external_class"));
             assertEquals("method", spacedInline.get("external_member_kind"));
@@ -429,20 +502,20 @@ public class SourceModelEdgeCaseTest {
             Map<String, Object> modulePrefixed = referenceByTarget(refs, "java.base/java.util.List#remove(Object)");
             assertEquals("external_symbol", modulePrefixed.get("resolution"));
             assertEquals("java.util.List", modulePrefixed.get("external_class"));
-            assertEquals("remove(Object)", modulePrefixed.get("external_member"));
+            assertEquals("remove(java.lang.Object)", modulePrefixed.get("external_member"));
             assertEquals("method", modulePrefixed.get("external_member_kind"));
 
             Map<String, Object> imported = referenceByTarget(refs, "Arrays#sort(byte[])");
             assertEquals("external_symbol", imported.get("resolution"));
             assertEquals("java.util.Arrays", imported.get("external_class"));
-            assertEquals("explicit_import", imported.get("external_resolution"));
+            assertEquals("qualified_symbol", imported.get("external_resolution"));
             assertEquals("method", imported.get("external_member_kind"));
 
             Map<String, Object> javaLangField = referenceByTarget(refs, "Long#MIN_VALUE");
             assertEquals("field_reference", javaLangField.get("kind"));
             assertEquals("external_symbol", javaLangField.get("resolution"));
             assertEquals("java.lang.Long", javaLangField.get("external_class"));
-            assertEquals("implicit_java_lang", javaLangField.get("external_resolution"));
+            assertEquals("qualified_symbol", javaLangField.get("external_resolution"));
             assertEquals("field", javaLangField.get("external_member_kind"));
 
             Map<String, Object> wildcardField = referenceByTarget(refs, "Pattern#DOTALL");
@@ -460,6 +533,154 @@ public class SourceModelEdgeCaseTest {
             assertEquals("text", textReference.get("reference_scope"));
             assertEquals("Reference text without a generated link", textReference.get("text"));
         } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void inheritDocKeepsCandidatePolicyForStructuredTags() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-policy");
+        try {
+            write(project.resolve("src/main/java/demo/ParentDocs.java"), """
+                    package demo;
+
+                    public interface ParentDocs {
+                        /**
+                         * Parses input.
+                         * @param text input text
+                         * @return parsed value
+                         */
+                        String parse(String text);
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/ChildDocs.java"), """
+                    package demo;
+
+                    public class ChildDocs implements ParentDocs {
+                        /**
+                         * {@inheritDoc}
+                         * @param text {@inheritDoc}
+                         */
+                        @Override
+                        public String parse(String text) {
+                            return text;
+                        }
+                    }
+                    """);
+
+            compileProject(project);
+            ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
+            SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
+                    .filter(method -> method.className().equals("demo.ChildDocs"))
+                    .filter(method -> method.methodName().equals("parse"))
+                    .findFirst()
+                    .orElseThrow();
+
+            SourceContext context = SourceBackends.spoon()
+                    .extractContext(model, focal.methodUri())
+                    .orElseThrow();
+
+            assertEquals(true, context.javadocMetadata().get("uses_inheritdoc"));
+            assertEquals("candidate_only", context.javadocMetadata().get("inheritdoc_policy"));
+            assertEquals("resolved_candidate", context.javadocMetadata().get("inheritdoc_resolution"));
+            assertTrue(context.javadocMetadata().get("inherited_javadoc_candidates").toString()
+                    .contains("input text"));
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> structuredTags = (Map<String, Object>) context.javadocMetadata()
+                    .get("structured_tags");
+            assertTrue("Child structured tags preserve local inheritDoc markers; inherited docs are candidates",
+                    structuredTags.get("params").toString().contains("{@inheritDoc}"));
+            assertFalse("Candidate-only policy must not silently expand inherited param text into child tags",
+                    structuredTags.get("params").toString().contains("input text"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void javadocFileReferencesCarryParserProvenanceAndStayInsideProject() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-javadoc-file-references");
+        Path outsideSecret = project.getParent().resolve(project.getFileName() + "-secret.txt");
+        try {
+            write(project.resolve("src/main/java/demo/doc-files/protocol.html"), "<html>protocol</html>");
+            write(project.resolve("src/main/java/demo/doc-files/diagram.svg"), "<svg></svg>");
+            write(project.resolve("src/main/java/demo/examples/Usage.java"), """
+                    package demo.examples;
+                    public class Usage {}
+                    """);
+            write(project.resolve("src/main/java/demo/examples/Sample.java"), """
+                    package demo.examples;
+                    public class Sample {}
+                    """);
+            write(project.resolve("src/main/java/demo/examples/ParseExample.java"), """
+                    package demo.examples;
+                    public class ParseExample {}
+                    """);
+            Files.writeString(outsideSecret, "outside", StandardCharsets.UTF_8);
+            write(project.resolve("src/main/java/demo/FileDocs.java"), """
+                    package demo;
+
+                    public class FileDocs {
+                        /**
+                         * See {@docRoot}/doc-files/protocol.html.
+                         * See doc-files/diagram.svg.
+                         * See examples/Usage.java.
+                         * @filename examples/Sample.java
+                         * {@snippet file="examples/ParseExample.java" region="main"}
+                         * Do not resolve ../../../../../%s.
+                         */
+                        public void files() {
+                        }
+                    }
+                    """.formatted(outsideSecret.getFileName()));
+
+            compileProject(project);
+            ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
+            SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
+                    .filter(method -> method.className().equals("demo.FileDocs"))
+                    .filter(method -> method.methodName().equals("files"))
+                    .findFirst()
+                    .orElseThrow();
+
+            SourceContext context = SourceBackends.spoon()
+                    .extractContext(model, focal.methodUri())
+                    .orElseThrow();
+
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> files = (List<Map<String, Object>>) context.javadocMetadata()
+                    .get("file_references");
+
+            Map<String, Object> protocol = fileReferenceByPath(files, "doc-files/protocol.html");
+            assertEquals("html", protocol.get("kind"));
+            assertEquals("cocomut-file-regex", protocol.get("parser"));
+            assertEquals("low", protocol.get("parse_confidence"));
+            assertEquals("doc_root", protocol.get("source_form"));
+            assertEquals(true, protocol.get("exists"));
+
+            Map<String, Object> diagram = fileReferenceByPath(files, "doc-files/diagram.svg");
+            assertEquals("image", diagram.get("kind"));
+            assertEquals("doc_files", diagram.get("source_form"));
+            assertEquals(true, diagram.get("exists"));
+
+            Map<String, Object> usage = fileReferenceByPath(files, "examples/Usage.java");
+            assertEquals("sample_source", usage.get("kind"));
+            assertEquals("regex_text", usage.get("source_form"));
+            assertEquals(true, usage.get("exists"));
+
+            Map<String, Object> filename = fileReferenceByPath(files, "examples/Sample.java");
+            assertEquals("filename_tag", filename.get("source_form"));
+            assertEquals(true, filename.get("exists"));
+
+            Map<String, Object> snippet = fileReferenceByPath(files, "examples/ParseExample.java");
+            assertEquals("snippet_file_attribute", snippet.get("source_form"));
+            assertEquals(true, snippet.get("exists"));
+
+            Map<String, Object> traversal = fileReferenceByPath(files, "../../../../../" + outsideSecret.getFileName());
+            assertEquals(false, traversal.get("exists"));
+            assertEquals("", traversal.get("resolved_path"));
+        } finally {
+            Files.deleteIfExists(outsideSecret);
             deleteRecursively(project);
         }
     }
@@ -540,6 +761,13 @@ public class SourceModelEdgeCaseTest {
         return references.stream()
                 .filter(reference -> target.equals(reference.get("target")))
                 .filter(reference -> tag.equals(reference.get("tag")))
+                .findFirst()
+                .orElseThrow();
+    }
+
+    private static Map<String, Object> fileReferenceByPath(List<Map<String, Object>> references, String path) {
+        return references.stream()
+                .filter(reference -> path.equals(reference.get("path")))
                 .findFirst()
                 .orElseThrow();
     }

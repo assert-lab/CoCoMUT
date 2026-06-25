@@ -26,7 +26,7 @@ callers                   Optional caller context from SootUp call graph
 callees                   Optional callee context from SootUp call graph
 metadata                  Schema, backend, method identity, and call graph metadata
 provenance                Extraction source and confidence information
-documentation_metrics     Computed Javadoc quality flags
+documentation_metrics     Parser-backed Javadoc quality flags and parser provenance
 javadoc_metadata          Parsed @see, @since, inline links, deprecation, inheritDoc hints
 dynamic_features          Static hints for reflection, proxies, service loaders, DI, native code
 selection                 Project/method/type/package target provenance
@@ -63,11 +63,14 @@ selection. See
 Important `javadoc_metadata` fields:
 
 ```text
-see                       Raw @see targets
-inline_links              Raw inline {@link ...}/{@linkplain ...} targets
+see                       Targets from final merged javadoc_references entries tagged @see
+inline_links              Targets from final merged javadoc_references entries tagged link/linkplain
 javadoc_references        Resolved reference objects for @see/link/linkplain targets
 file_references           Referenced doc-files/images/html/text/sample-source paths when present
+                          plus parser, parse_confidence, and source_form
 structured_tags           Parsed param/return/throws/since/apiNote/implSpec/implNote/deprecated text
+                          plus parser and parse_confidence
+inheritdoc_policy         not_applicable|candidate_only
 inheritdoc_resolution     not_used|resolved_candidate|unresolved
 inherited_javadoc_candidates
                           Candidate inherited Javadoc snippets for {@inheritDoc}
@@ -79,7 +82,13 @@ inherited_javadoc_candidates
 tag                       see|link|linkplain
 raw                       Raw Javadoc reference text
 target                    Parsed reference target
+canonical_target          Spoon-normalized target when it differs from target
 label                     Optional rendered-label text
+parser                    spoon-javadoc|spoon-javadoc-text-fallback|cocomut-fallback
+parse_confidence          high|medium|low
+spoon_reference           typed Spoon reference rendering when available
+raw_pairing_confidence    low/none when raw spelling was not trusted for typed resolution
+fallback_reason           why a low-confidence fallback reference was emitted
 kind                      type_reference|member_reference|field_reference|external_url|text_reference
 resolution                resolved_type|resolved_method|resolved_field|
                           resolved_inherited_method|resolved_inherited_field|
@@ -114,6 +123,16 @@ CoCoMUT recognizes the standard doclet `@see` forms: quoted text entries,
 HTML anchor links, and program-element references such as
 `module/package.Type#member label`. Module prefixes are normalized before
 symbol lookup.
+
+Javadoc reference and structured-tag parsing uses Spoon's official
+`spoon-javadoc` parser first. CoCoMUT keeps a text fallback for raw references
+that Spoon cannot represent; fallback-derived objects are marked with
+`parser=cocomut-fallback`, `parse_confidence=low`, and a fallback reason.
+
+`{@inheritDoc}` is reported as a candidate relation rather than silently
+expanded into child structured tags. When present, `inheritdoc_policy` is
+`candidate_only`, and inherited source Javadocs are exposed through
+`inherited_javadoc_candidates` for downstream inspection.
 
 External references are intentionally symbol-level only in the current schema.
 CoCoMUT does not fetch JDK/dependency source jars or generated Javadoc pages for
