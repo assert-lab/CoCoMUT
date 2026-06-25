@@ -6,7 +6,7 @@ CoCoMUT tool paper study:
 - 20 real-world Java repositories;
 - 10 Maven and 10 Gradle projects;
 - pinned commit SHA for every subject;
-- subject set frozen before the publication rerun;
+- compile-qualified subject set for the publication rerun;
 - strict bytecode-backed CoCoMUT extraction;
 - two RQs: build-ecosystem robustness and source-bytecode reconciliation.
 
@@ -29,16 +29,17 @@ with which CoCoMUT attaches a deterministic source `method_uri` to a bytecode
 
 ## Inputs
 
-`subjects.csv` contains the frozen evaluation subject set. It must contain
-exactly 10 Maven and 10 Gradle repositories. Required columns:
+`subjects.csv` contains the compile-qualified evaluation subject set. It must
+contain exactly 10 Maven and 10 Gradle repositories. Required columns:
 
 ```text
 repo,build_system,commit_sha,size_bin,module_shape,notes
 ```
 
-The selection protocol is documented in `subject-selection.md`. Do not replace
-subjects after observing CoCoMUT failures; failed subjects remain in the
-denominator.
+The selection protocol is documented in `subject-selection.md`. Repositories
+that fail before usable project bytecode exists are excluded from this reduced
+study. General CoCoMUT failures after successful build should be fixed in the
+tool rather than avoided through subject replacement.
 
 ## Running
 
@@ -129,6 +130,8 @@ copied back for paper writing.
 Allowed claims:
 
 - CoCoMUT completed extraction on X/20 projects.
+- All 20 final subjects produced usable project bytecode under the evaluation
+  command.
 - CoCoMUT produced X method-context rows.
 - CoCoMUT parsed X/Y discovered Java source files.
 - CoCoMUT matched X/Y focal methods to bytecode call-graph entries.
@@ -147,4 +150,5 @@ Avoid claims:
 - unresolved edges are bugs;
 - edges without source URI are necessarily unresolved project failures;
 - CoCoMUT supports source-only extraction as success;
+- arbitrary Maven/Gradle repositories compile at the observed rate;
 - Javadoc handling or downstream LLM quality was evaluated here.
