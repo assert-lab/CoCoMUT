@@ -55,10 +55,10 @@ This is not a selectable source URI. It is bytecode provenance for a caller or
 callee edge.
 
 When CoCoMUT can join that bytecode target to one unique project source method,
-the edge also contains a source-backed `method_uri`:
+the edge also contains a source-level `method_uri`:
 
 ```text
-method_uri exists  => source-backed CoCoMUT method identity
+method_uri exists  => source-level CoCoMUT method identity
 target_uri exists  => bytecode-level SootUp target identity
 ```
 

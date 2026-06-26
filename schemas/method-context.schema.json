@@ -126,7 +126,7 @@
         },
         "structured_tags": {
           "type": "object",
-          "description": "Parser-backed param/return/throws/since/apiNote/implSpec/implNote/deprecated tags. Includes parser and parse_confidence."
+          "description": "Parser-derived param/return/throws/since/apiNote/implSpec/implNote/deprecated tags. Includes parser and parse_confidence."
         },
         "uses_inheritdoc": {"type": "boolean"},
         "inheritdoc_policy": {

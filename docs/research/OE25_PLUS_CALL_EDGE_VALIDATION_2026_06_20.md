@@ -1,7 +1,7 @@
 # OE25 Plus Representative Call-Edge Validation
 
 > Historical note: this validation run used the older evaluation runner that
-> could retry without bytecode-backed call context. The aggregate measurements
+> could retry without bytecode call context. The aggregate measurements
 > remain useful as historical evidence, but current CoCoMUT runs require
 > compilation or supplied bytecode artifacts.
 

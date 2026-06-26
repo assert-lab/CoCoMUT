@@ -7,27 +7,51 @@ CoCoMUT tool paper study:
 - 10 Maven and 10 Gradle projects;
 - pinned commit SHA for every subject;
 - selected subject set for the publication rerun;
-- strict bytecode-backed CoCoMUT extraction;
-- two RQs: build-ecosystem robustness and source-bytecode reconciliation.
+- CoCoMUT extraction with project bytecode and RTA call graphs;
+- three RQs: build-ecosystem robustness, source-bytecode reconciliation, and
+  manual output-quality audit.
 
-The evaluation focuses on build-backed method-context extraction and
-source-bytecode reconciliation; downstream LLM generation, manual annotation,
-source-only success claims, and Javadoc-specific RQs are not part of this
-reduced study.
+The evaluation focuses on whether CoCoMUT produces usable method-context JSONL,
+how it attaches source identities to bytecode call targets, and whether sampled
+records pass manual output-quality checks. Downstream LLM generation and
+source-only success claims are not part of this reduced study.
 
 ## Research Questions
 
-**RQ1: Build-Ecosystem Robustness.** How robustly does CoCoMUT preserve its
-method-context extraction contract across Java projects with different build
-ecosystems?
+**RQ1: Build-Ecosystem Robustness.** Can CoCoMUT produce method-context records
+across Maven and Gradle projects consistently?
+
+Methodology: run CoCoMUT once per pinned repository with the shared evaluation
+command, then read `extraction_report.json` and the emitted method-context
+JSONL. Outputs: build status, bytecode availability, call-graph availability,
+method-context row counts, serialized call-edge counts, JSONL parseability, and
+end-to-end extraction time. Aggregate outputs are written to
+`results/repository-results.tsv` and `results/rq1-table.tsv`.
 
 **RQ2: Source-Bytecode Reconciliation and Abstention.** How often does CoCoMUT
-deterministically reconcile bytecode call targets with source-backed method
-identities, and how does it classify cases where it abstains?
+deterministically reconcile bytecode call targets with source-level project
+method identities, and how does it classify cases where it abstains?
 
-RQ2 does not measure manual accuracy. The source-join rate is the frequency
-with which CoCoMUT attaches a deterministic source `method_uri` to a bytecode
-`target_uri`, not recall or semantic correctness.
+Methodology: parse every serialized caller/callee edge in the generated JSONL.
+Every edge is counted by its bytecode `target_uri`. Edges with a deterministic
+source `method_uri` are project joins; project targets without a safe source
+join are project abstentions; JDK, dependency, and compiler-generated targets
+are counted separately as non-source targets. Outputs are written to
+`results/call-edge-results.tsv` and `results/rq2-table.tsv`.
+
+RQ2 does not measure manual accuracy. The source-join rate is the frequency with
+which CoCoMUT attaches a deterministic source `method_uri` to a bytecode
+`target_uri`, not recall or manually verified semantic correctness.
+
+**RQ3: Output Quality.** In a manually audited sample of emitted method-context
+records, how often are the applicable output components correct?
+
+Methodology: sample 200 method-context rows from 10 repositories using
+proportional allocation and a fixed random seed. Two annotators inspect the
+same rows for method identity, Javadoc references, caller/callee links, and
+inherited-documentation metadata. The scoring script computes agreement,
+Cohen's kappa, disagreement cases, and final adjudicated pass rates. Inputs and
+outputs live under `manual-audit/`.
 
 ## Inputs
 
@@ -40,7 +64,7 @@ repo,build_system,commit_sha,size_bin,module_shape,notes
 
 The selection protocol is documented in `subject-selection.md`. The final
 subjects are real-world Java projects with pinned commits and build systems that
-support the strict bytecode-backed evaluation command.
+support the evaluation command with project bytecode and an RTA call graph.
 
 ## Running
 

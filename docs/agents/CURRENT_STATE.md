@@ -19,7 +19,7 @@ Current cleanup goals:
 
 - remove deprecated public API surfaces;
 - remove stale release documentation;
-- keep the bytecode-backed extraction contract explicit;
+- keep the project-bytecode extraction requirements explicit;
 - verify CLI/API/schema/sample consistency before pushing.
 
 ## Verification Target

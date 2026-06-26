@@ -75,7 +75,7 @@ The expanded sweep selected Java repositories that are:
 
 Android repositories are included. This historical sweep intentionally measured
 mixed Java, Android, Gradle, Maven, and plain-source layouts under the old
-optional-bytecode policy. It is not the current CoCoMUT extraction contract.
+optional-bytecode policy. It is not the current CoCoMUT extraction requirement.
 
 ## Auto Sweep Summary
 
@@ -261,7 +261,7 @@ scripts/field_test_public_repos.py \
 
 It completed 541/541 repositories under the old fallback-capable policy with
 2686556 generated JSONL rows. This is retained only as historical evidence; the
-current CoCoMUT pipeline requires bytecode-backed static analysis.
+current CoCoMUT pipeline requires static analysis over project bytecode.
 
 ## Remaining Follow-Up
 
@@ -269,4 +269,4 @@ current CoCoMUT pipeline requires bytecode-backed static analysis.
 - Continue auditing per-method `source_set` distributions from generated JSONL records.
 - Investigate whether the four smoke-fallback repositories can be handled with a better preflight size model.
 - Inspect `javadoc_tag_cases.csv` for `@see` target quality and `{@inheritDoc}` candidate correctness.
-- Continue adding small regression fixtures for `@see`, `{@inheritDoc}`, source-set filtering, classpath-backed extraction, and capped extraction.
+- Continue adding small regression fixtures for `@see`, `{@inheritDoc}`, source-set filtering, classpath-aware extraction, and capped extraction.

@@ -63,7 +63,7 @@ matched bytecode call-graph result or when any source file fails parsing.
 
 For the paper, report both facts separately:
 
-- build-backed construction completed for 20/20 repositories;
+- build-enabled construction completed for 20/20 repositories;
 - CoCoMUT's strict run status was 20 `PARTIAL`, 0 `SUCCESS`, 0 failed/error.
 
 Do not describe the RQ2 source-join rate as accuracy or recall; it is the

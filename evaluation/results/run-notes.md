@@ -35,7 +35,7 @@ source identities.
 
 The final subject set contains 20 real-world Java repositories with pinned
 commits, balanced across Maven and Gradle. The selected subjects produced usable
-project bytecode and bytecode-backed RTA call graphs under the evaluation
+project bytecode and RTA call graphs under the evaluation
 command on the worker.
 
 Two subjects exercised robustness fixes before the publication rerun:
@@ -93,7 +93,7 @@ set combines the full base run with one single-repository refresh.
 
 This run supports the selected 20-subject evaluation: every final subject
 produced usable bytecode and method-context JSONL under the strict
-bytecode-backed configuration.
+configuration that uses project bytecode.
 
 All repositories are `PARTIAL`, not `SUCCESS`, because CoCoMUT conservatively
 records partiality when source parsing, call-graph matching, or source-bytecode
@@ -102,6 +102,6 @@ build success and JSONL row counts.
 
 RQ2 remains an automatic frequency study. `source_join_rate` is not accuracy,
 recall, or manual correctness; it is the fraction of bytecode targets to which
-CoCoMUT attached a deterministic source-backed `method_uri`. Edges without a
+CoCoMUT attached a deterministic source-level `method_uri`. Edges without a
 source URI include intentional non-source targets such as JDK, external,
 synthetic/compiler, and invokedynamic targets.

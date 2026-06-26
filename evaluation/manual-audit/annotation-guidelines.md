@@ -58,7 +58,7 @@ Use `NA` if the method/class Javadoc has no `@see`, `{@link ...}`, or
 
 ## `call_context`
 
-Mark `PASS` if emitted source-backed caller/callee links are correct.
+Mark `PASS` if emitted source-level caller/callee links are correct.
 
 Check:
 
