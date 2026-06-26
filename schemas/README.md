@@ -22,8 +22,8 @@ Stable top-level sections:
 
 ```text
 MUT                       Focal method/source method
-callers                   Optional caller context from SootUp call graph
-callees                   Optional callee context from SootUp call graph
+callers                   Caller context from SootUp call graph
+callees                   Callee context from SootUp call graph
 metadata                  Schema, backend, method identity, and call graph metadata
 provenance                Extraction source and confidence information
 documentation_metrics     Parser-derived Javadoc quality flags and parser provenance
