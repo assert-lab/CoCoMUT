@@ -25,7 +25,7 @@ writes one JSONL record with source code, Javadoc, type context, documentation
 metadata, provenance, and static bytecode call context.
 
 It is designed for documentation related research:
-static, reproducible, bytecode-backed, and explicit about failure modes.
+static, reproducible, project-bytecode aware, and explicit about failure modes.
 
 ## Why CoCoMUT?
 

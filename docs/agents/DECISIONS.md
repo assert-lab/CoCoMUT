@@ -25,8 +25,8 @@ pollutes downstream labels.
 
 Decision:
 
-- `method_uri` is the canonical source-backed method identity.
-- `target_uri` is the canonical bytecode-backed call graph target identity.
+- `method_uri` is the canonical source-level method identity.
+- `target_uri` is the canonical bytecode-level call graph target identity.
 - all SootUp call graph edges should have `target_uri`.
 - only uniquely joined project-source edges should have `method_uri`.
 
@@ -98,4 +98,3 @@ Rationale:
 
 Downstream users depend on JSONL field names and semantics. Schema drift without
 docs makes the tool hard to use as a research artifact.
-

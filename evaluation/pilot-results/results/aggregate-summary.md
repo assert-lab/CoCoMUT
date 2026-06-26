@@ -119,4 +119,4 @@ Unresolved-reason distribution:
 ## Interpretation
 - RQ1 measures construction robustness, not semantic correctness.
 - RQ2 measures deterministic source-join behavior and abstention taxonomy, not manual accuracy.
-- `source_join_rate` is not recall or correctness; it is the fraction of bytecode targets with deterministic source-backed `method_uri` joins.
+- `source_join_rate` is not recall or correctness; it is the fraction of bytecode targets with deterministic source-level `method_uri` joins.

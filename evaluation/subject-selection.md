@@ -4,9 +4,9 @@ This file documents the publication cohort in `evaluation/subjects.csv`.
 
 ## Selection Rule
 
-The cohort is selected for the reduced bytecode-backed evaluation: every final
+The cohort is selected for the reduced evaluation: every final
 subject is a real-world Java repository with a pinned commit, a clear Maven or
-Gradle build, usable project bytecode, and a bytecode-backed RTA call graph under
+Gradle build, usable project bytecode, and an RTA call graph under
 the evaluation command on the worker.
 
 Subjects were selected from the pre-existing
@@ -27,8 +27,8 @@ repository pool plus prior worker compile evidence:
 - both cohorts contain small, medium, and large repositories and both
   single-module and multi-module subjects where available.
 
-This cohort supports claims about extraction behavior after build-backed project
-preparation and call-graph construction for the selected subjects.
+This cohort supports claims about extraction behavior after project build
+execution and call-graph construction for the selected subjects.
 
 ## Cohort Shape
 

@@ -1,6 +1,6 @@
 # Schemas
 
-This directory contains the machine-readable contracts for CoCoMUT outputs.
+This directory contains the machine-readable schemas for CoCoMUT outputs.
 Schemas are repository files, not a separate CLI command.
 
 ## Files
@@ -26,7 +26,7 @@ callers                   Optional caller context from SootUp call graph
 callees                   Optional callee context from SootUp call graph
 metadata                  Schema, backend, method identity, and call graph metadata
 provenance                Extraction source and confidence information
-documentation_metrics     Parser-backed Javadoc quality flags and parser provenance
+documentation_metrics     Parser-derived Javadoc quality flags and parser provenance
 javadoc_metadata          Parsed @see, @since, inline links, deprecation, inheritDoc hints
 dynamic_features          Static hints for reflection, proxies, service loaders, DI, native code
 selection                 Project/method/type/package target provenance
@@ -201,7 +201,7 @@ method URIs instead of guessing. When a target includes parameters, for example
 and erased parameter types.
 
 Call graph arrays are normalized edge objects, not raw strings. CoCoMUT keeps
-source-backed method identity separate from bytecode-level edge identity:
+source-level method identity separate from bytecode-level edge identity:
 
 ```text
 kind                      project_method|ambiguous_project_method|
@@ -234,7 +234,7 @@ context                   Optional method node when method_uri resolves to an ex
 `target_uri` lets downstream tools identify every SootUp edge. `method_uri`
 remains stricter: it is populated only when the bytecode edge maps to one unique
 source method in the CoCoMUT/Spoon model. This avoids treating JDK, dependency,
-synthetic, ambiguous, or bytecode-only targets as source-backed methods.
+synthetic, ambiguous, or bytecode-only targets as source methods.
 
 The source join universe is the full project source model. Focal-method filters
 such as `--scope`, `--source-set`, `--package`, `--class`, `--method`,
