@@ -2,9 +2,9 @@
 
 ## Execution
 
-- Worker: `ssh worker`
-- Worker run directory: `~/agent-runs/cocomut-reduced-20-evaluation/repo`
-- Local branch: `task/reduced-20-evaluation`
+- Execution environment: Linux x86-64 machine with JDK 17
+- Run directory: task-specific checkout outside the repository artifact
+- Evaluation branch: `task/reduced-20-evaluation`
 - CoCoMUT command:
 
 ```bash
@@ -34,16 +34,16 @@ python3 evaluation/scripts/run_cocomut_eval.py \
   --resume
 ```
 
-The run used Java 17 because the worker default Java 26 caused older Gradle
-subjects to fail before usable bytecode was produced.
+The run used Java 17 because newer Java runtimes caused older Gradle subjects
+to fail before usable bytecode was produced.
 
 ## Subject Replacement
 
 An initial Gradle pass showed that `Netflix/concurrency-limits`,
 `Netflix/ribbon`, `Netflix/zuul`, and `JFormDesigner/FlatLaf` did not satisfy
 the intended "builds successfully and emits method contexts" subject criterion
-on the worker. They were replaced with four Gradle projects from the prior
-successful sweep:
+in the evaluation environment. They were replaced with four Gradle projects
+from the prior successful sweep:
 
 - `allure-framework/allure2`
 - `dreamhead/moco`

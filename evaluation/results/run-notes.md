@@ -2,9 +2,9 @@
 
 ## Execution
 
-- Worker: `ssh worker`
-- Worker run directory: `~/agent-runs/cocomut-eval-success-fixes/repo`
-- Local branch: `task/eval-success-cohort-fixes`
+- Execution environment: Linux x86-64 machine with JDK 17
+- Run directory: task-specific checkout outside the repository artifact
+- Evaluation branch: `task/eval-success-cohort-fixes`
 - Tool commit: `0d6be48344f1ae10f0034a25d59dd419a7182cdc`
 - Base-run harness commit: `0d6be48344f1ae10f0034a25d59dd419a7182cdc`
 - Single-repository refresh harness commit:
@@ -13,10 +13,9 @@
 - Java: 17
 - Build policy: `allow-build`
 
-The run used `allow-build` because it executed directly on a shared SSH worker.
-It should not be described as externally sandboxed unless a separate VM,
-container, filesystem, network, and credential isolation boundary is added and
-documented.
+The run used `allow-build`, which permits Maven and Gradle build execution.
+Analyses of untrusted repositories should be run in an externally isolated
+environment.
 
 ## Tool Fixes Before Rerun
 
@@ -36,7 +35,7 @@ source identities.
 The final subject set contains 20 real-world Java repositories with pinned
 commits, balanced across Maven and Gradle. The selected subjects produced usable
 project bytecode and RTA call graphs under the evaluation
-command on the worker.
+command.
 
 Two subjects exercised robustness fixes before the publication rerun:
 
@@ -45,9 +44,9 @@ Two subjects exercised robustness fixes before the publication rerun:
 
 Both complete as `PARTIAL` after the general fixes above.
 
-A final Gradle subject was refreshed with a single-repository worker run to keep
-the committed results aligned with the 20-subject cohort. The other 19
-repository rows were retained from the base run.
+A final Gradle subject was refreshed with a single-repository rerun to keep the
+committed results aligned with the 20-subject cohort. The other 19 repository
+rows were retained from the base run.
 
 ## Runner Command
 

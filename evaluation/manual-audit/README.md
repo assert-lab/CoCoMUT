@@ -8,8 +8,9 @@ CoCoMUT method-context records.
 ```text
 sample_200.csv              Master sample assigned to both annotators
 sample_200.jsonl            The 200 sampled JSONL records, in sample_id order
-annotator_1.csv             Blank annotation sheet for annotator 1
-annotator_2.csv             Blank annotation sheet for annotator 2
+annotator_1.csv             Annotator 1 labels
+annotator_2.csv             Annotator 2 labels
+adjudicated.csv             Final adjudicated labels
 sample-allocation.tsv       Proportional per-repository allocation
 sample-manifest.json        Sampling configuration and selected repositories
 audit-repos.txt             Default 10 repositories used for RQ3 sampling
@@ -63,7 +64,7 @@ It then adjusts by one sample at a time until the total is exactly 200.
 2. Give both annotators the same `sample_200.csv` and the instructions in
    `annotation-guidelines.md`.
 3. Annotator 1 fills `annotator_1.csv`; annotator 2 fills `annotator_2.csv`.
-4. The senior developer computes agreement:
+4. Compute agreement:
 
    ```bash
    python3 evaluation/manual-audit/scripts/score_annotations.py \
@@ -72,17 +73,15 @@ It then adjusts by one sample at a time until the total is exactly 200.
      --out-dir evaluation/manual-audit/results
    ```
 
-The script writes agreement summaries, disagreement cases, and an adjudication
-template.
+The script writes agreement summaries and disagreement cases.
 
-5. The senior developer fills `evaluation/manual-audit/results/adjudication_template.csv`
-   for disagreement rows and reruns scoring with:
+5. Rerun scoring with the adjudicated labels:
 
    ```bash
    python3 evaluation/manual-audit/scripts/score_annotations.py \
      --annotator-1 evaluation/manual-audit/annotator_1.csv \
      --annotator-2 evaluation/manual-audit/annotator_2.csv \
-     --adjudicated evaluation/manual-audit/results/adjudication_template.csv \
+     --adjudicated evaluation/manual-audit/adjudicated.csv \
      --out-dir evaluation/manual-audit/results
    ```
 

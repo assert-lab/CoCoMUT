@@ -7,11 +7,11 @@ This file documents the publication cohort in `evaluation/subjects.csv`.
 The cohort is selected for the reduced evaluation: every final
 subject is a real-world Java repository with a pinned commit, a clear Maven or
 Gradle build, usable project bytecode, and an RTA call graph under
-the evaluation command on the worker.
+the evaluation command.
 
 Subjects were selected from the pre-existing
 `experiments/expanded-public-repos-auto-main/repos.tsv` popularity-ranked Java
-repository pool plus prior worker compile evidence:
+repository pool plus prior compile evidence:
 
 - primary language is Java;
 - repository is not archived according to GitHub metadata;

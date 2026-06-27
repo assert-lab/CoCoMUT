@@ -1,72 +1,43 @@
 # 20-Repository Evaluation
 
-This directory contains the reproducible evaluation harness for the reduced
-CoCoMUT tool paper study:
+This directory contains the evaluation harness and compact outputs for the
+CoCoMUT tool paper study.
 
-- 20 real-world Java repositories;
+The study uses:
+
+- 20 pinned real-world Java repositories;
 - 10 Maven and 10 Gradle projects;
-- pinned commit SHA for every subject;
-- selected subject set for the publication rerun;
-- CoCoMUT extraction with project bytecode and RTA call graphs;
-- three RQs: build-ecosystem robustness, source-bytecode reconciliation, and
-  manual output-quality audit.
+- main-source, all-method extraction;
+- RTA call graphs over compiled project bytecode;
+- manual output-quality auditing for 200 sampled records.
 
-The evaluation focuses on whether CoCoMUT produces usable method-context JSONL,
-how it attaches source identities to bytecode call targets, and whether sampled
-records pass manual output-quality checks. Downstream LLM generation and
-source-only success claims are not part of this reduced study.
+## Layout
+
+```text
+subjects.csv                 Evaluation subject list
+subject-selection.md          Subject-selection notes
+environment.json              Recorded run environment
+scripts/                      Evaluation runner and analyzer
+results/                      Publication run summaries and compact artifacts
+manual-audit/                 RQ3 sampling, annotations, and adjudication
+pilot-results/                Earlier pilot outputs retained for audit only
+```
+
+The active publication results are in `evaluation/results/`. The older
+`evaluation/pilot-results/` directory is not used for the paper tables.
 
 ## Research Questions
 
-**RQ1: Build-Ecosystem Robustness.** Can CoCoMUT produce method-context records
-across Maven and Gradle projects consistently?
+- **RQ1: Build-ecosystem robustness.** Can CoCoMUT produce method-context
+  records across Maven and Gradle projects?
+- **RQ2: Source-bytecode reconciliation.** How often can CoCoMUT attach a
+  deterministic source `method_uri` to bytecode call targets, and when does it
+  abstain?
+- **RQ3: Output quality.** Do sampled records contain the intended method
+  identity, documentation references, caller/callee context, and
+  inherited-documentation metadata?
 
-Methodology: run CoCoMUT once per pinned repository with the shared evaluation
-command, then read `extraction_report.json` and the emitted method-context
-JSONL. Outputs: build status, bytecode availability, call-graph availability,
-method-context row counts, serialized call-edge counts, JSONL parseability, and
-end-to-end extraction time. Aggregate outputs are written to
-`results/repository-results.tsv` and `results/rq1-table.tsv`.
-
-**RQ2: Source-Bytecode Reconciliation and Abstention.** How often does CoCoMUT
-deterministically reconcile bytecode call targets with source-level project
-method identities, and how does it classify cases where it abstains?
-
-Methodology: parse every serialized caller/callee edge in the generated JSONL.
-Every edge is counted by its bytecode `target_uri`. Edges with a deterministic
-source `method_uri` are project joins; project targets without a safe source
-join are project abstentions; JDK, dependency, and compiler-generated targets
-are counted separately as non-source targets. Outputs are written to
-`results/call-edge-results.tsv` and `results/rq2-table.tsv`.
-
-RQ2 does not measure manual accuracy. The source-join rate is the frequency with
-which CoCoMUT attaches a deterministic source `method_uri` to a bytecode
-`target_uri`, not recall or manually verified semantic correctness.
-
-**RQ3: Output Quality.** In a manually audited sample of emitted method-context
-records, how often are the applicable output components correct?
-
-Methodology: sample 200 method-context rows from 10 repositories using
-proportional allocation and a fixed random seed. Two annotators inspect the
-same rows for method identity, Javadoc references, caller/callee links, and
-inherited-documentation metadata. The scoring script computes agreement,
-Cohen's kappa, disagreement cases, and final adjudicated pass rates. Inputs and
-outputs live under `manual-audit/`.
-
-## Inputs
-
-`subjects.csv` contains the evaluation subject set. It must contain exactly 10
-Maven and 10 Gradle repositories. Required columns:
-
-```text
-repo,build_system,commit_sha,size_bin,module_shape,notes
-```
-
-The selection protocol is documented in `subject-selection.md`. The final
-subjects are real-world Java projects with pinned commits and build systems that
-support the evaluation command with project bytecode and an RTA call graph.
-
-## Running
+## Run The Evaluation
 
 From the repository root:
 
@@ -85,35 +56,7 @@ python3 evaluation/scripts/analyze_cocomut_eval.py \
   --results-dir evaluation/results
 ```
 
-The runner creates:
-
-```text
-evaluation/environment.json
-evaluation/outputs/<repo-safe-name>/checkout/
-evaluation/outputs/<repo-safe-name>/cocomut_output/
-evaluation/outputs/<repo-safe-name>/logs/
-evaluation/results/repository-results.tsv
-evaluation/results/call-edge-results.tsv
-evaluation/results/failures.tsv
-evaluation/results/artifacts/<repo-safe-name>/
-```
-
-The `artifacts/` subdirectory stores compact per-repository diagnostics:
-CoCoMUT reports, manifests, failed-source lists when present, and logs. Bulky
-checkouts and full method-context JSONL files remain under `evaluation/outputs/`
-and are not committed by default.
-
-The analyzer creates:
-
-```text
-evaluation/results/rq1-table.tsv
-evaluation/results/rq2-table.tsv
-evaluation/results/aggregate-summary.md
-```
-
-## CoCoMUT Command
-
-Each repository is run once with:
+Each subject is analyzed with:
 
 ```bash
 ./bin/cocomut \
@@ -125,54 +68,45 @@ Each repository is run once with:
   --output-dir <output>
 ```
 
-Use `--build-policy externally-sandboxed-build` only when the command is run
-inside a documented external sandbox or VM/container isolation boundary. A
-plain shared SSH worker run should use `--build-policy allow-build`.
+## Outputs
 
-The evaluation does not use:
+The runner writes:
 
 ```text
---max-methods
---max-source-files
---allow-preexisting-bytecode-after-build-failure
+evaluation/environment.json
+evaluation/outputs/<repo-safe-name>/
+evaluation/results/repository-results.tsv
+evaluation/results/call-edge-results.tsv
+evaluation/results/failures.tsv
+evaluation/results/artifacts/<repo-safe-name>/
 ```
 
-## Worker Execution
-
-The intended long run is performed on the SSH worker under a task-specific
-directory:
+The analyzer writes:
 
 ```text
-~/agent-runs/cocomut-eval-success-fixes/
+evaluation/results/rq1-table.tsv
+evaluation/results/rq2-table.tsv
+evaluation/results/aggregate-summary.md
 ```
 
-The local repository branch is synced to the worker before execution, and the
-compact `evaluation/results/` and `evaluation/environment.json` outputs are
-copied back for paper writing.
+`results/artifacts/` keeps compact per-repository diagnostics such as
+`extraction_report.json`, `extraction_manifest.json`, failed-source lists when
+present, and run logs. Full checkouts and bulky generated JSONL outputs are
+kept under `evaluation/outputs/` during a run and are not committed by default.
 
-## Paper Interpretation
+## Manual Audit
 
-Allowed claims:
+RQ3 materials live in `evaluation/manual-audit/`.
 
-- CoCoMUT completed extraction on X/20 projects.
-- All 20 final subjects produced usable project bytecode under the evaluation
-  command.
-- CoCoMUT produced X method-context rows.
-- CoCoMUT parsed X/Y discovered Java source files.
-- CoCoMUT matched X/Y focal methods to bytecode call-graph entries.
-- Maven and Gradle differed in build success, call-graph availability, runtime,
-  parse coverage, method-bytecode matching, or emitted context volume over this
-  descriptive cohort.
-- X% of serialized call edges preserved bytecode `target_uri`.
-- X% of bytecode targets were deterministically joined to source `method_uri`.
-- X unique directed `(source_uri, target_uri)` call relations were observed.
-- Abstentions are classified by `target_kind`, `resolution`, and
-  `unresolved_reason`.
+Important files:
 
-Avoid claims:
+```text
+sample_200.csv          Sample manifest for the audited records
+sample_200.jsonl        The 200 sampled method-context records
+annotator_1.csv         Annotator 1 labels
+annotator_2.csv         Annotator 2 labels
+adjudicated.csv         Final adjudicated labels
+annotation-guidelines.md
+```
 
-- source-join rate is accuracy or recall;
-- unresolved edges are bugs;
-- edges without source URI are necessarily unresolved project failures;
-- CoCoMUT supports source-only extraction as success;
-- Javadoc handling or downstream LLM quality was evaluated here.
+See `evaluation/manual-audit/README.md` for the sampling and scoring workflow.
