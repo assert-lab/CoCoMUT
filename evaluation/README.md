@@ -1,4 +1,4 @@
-# Reduced 20-Repository Evaluation
+# 20-Repository Evaluation
 
 This directory contains the reproducible evaluation harness for the reduced
 CoCoMUT tool paper study:
