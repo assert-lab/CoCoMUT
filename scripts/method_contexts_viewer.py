@@ -623,6 +623,9 @@ let filteredRecords = 0;
 let currentIndex = 0;
 let currentPosition = 0;
 let currentRecord = null;
+const JSON_HIGHLIGHT_MAX_CHARS = 120000;
+const JSON_PREVIEW_MAX_CHARS = 1000000;
+const lazyJsonPanels = new Map();
 
 const $ = (id) => document.getElementById(id);
 
@@ -675,8 +678,7 @@ function highlightJava(code) {
   return out;
 }
 
-function highlightJson(value) {
-  const text = typeof value === "string" ? value : pretty(value);
+function highlightJsonText(text) {
   return escapeHtml(text).replace(
     /(&quot;(?:\\.|[^&])*?&quot;)(\s*:)?|\b(true|false|null)\b|-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/g,
     (match, stringValue, colon, boolValue) => {
@@ -688,6 +690,14 @@ function highlightJson(value) {
   );
 }
 
+function jsonText(value) {
+  return typeof value === "string" ? value : pretty(value);
+}
+
+function highlightJson(value) {
+  return highlightJsonText(jsonText(value));
+}
+
 function setHtml(id, html) {
   $(id).innerHTML = html;
 }
@@ -697,7 +707,50 @@ function setText(id, value) {
 }
 
 function setJson(id, value) {
-  setHtml(id, highlightJson(value));
+  const target = $(id);
+  const text = jsonText(value);
+  target.removeAttribute("title");
+  if (text.length > JSON_PREVIEW_MAX_CHARS) {
+    setLargeJsonPreview(target, text);
+  } else if (text.length > JSON_HIGHLIGHT_MAX_CHARS) {
+    target.textContent = text;
+    target.title = "Large JSON rendered as plain text to keep the viewer responsive.";
+  } else {
+    target.innerHTML = highlightJsonText(text);
+  }
+}
+
+function setLargeJsonPreview(target, text) {
+  const omitted = text.length - JSON_PREVIEW_MAX_CHARS;
+  const preview = text.slice(0, JSON_PREVIEW_MAX_CHARS);
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = `Render full panel (${text.length.toLocaleString()} chars)`;
+  button.title = "Rendering very large panels can make the browser slow.";
+  button.addEventListener("click", () => {
+    target.textContent = text;
+    target.title = "Large JSON rendered as plain text.";
+  });
+  target.replaceChildren(
+    document.createTextNode(preview),
+    document.createTextNode(`\n\n... Preview truncated. ${omitted.toLocaleString()} characters omitted. `),
+    button
+  );
+  target.title = "Very large JSON preview. Use the button to render the full panel.";
+}
+
+function setJsonLazy(id, value) {
+  lazyJsonPanels.set(id, value);
+  const target = $(id);
+  target.textContent = "Open this tab to render JSON.";
+  target.removeAttribute("title");
+}
+
+function renderLazyJsonPanel(id) {
+  if (!lazyJsonPanels.has(id)) return;
+  const value = lazyJsonPanels.get(id);
+  lazyJsonPanels.delete(id);
+  setJson(id, value);
 }
 
 function fillDl(id, rows) {
@@ -906,6 +959,7 @@ function activeFilterLabel() {
 }
 
 function renderRecord(record) {
+  lazyJsonPanels.clear();
   const mut = record.MUT || {};
   const metadata = record.metadata || {};
   const provenance = record.provenance || {};
@@ -970,12 +1024,14 @@ function renderRecord(record) {
   });
   setJson("structuredTags", javadocMeta.structured_tags || {});
   setJson("edgeSummary", edgeStats);
-  setJson("callers", record.callers || []);
-  setJson("callees", record.callees || []);
+  setJsonLazy("callers", record.callers || []);
+  setJsonLazy("callees", record.callees || []);
   setJson("metrics", metrics);
-  setJson("docmeta", javadocMeta);
+  setJsonLazy("docmeta", javadocMeta);
   setJson("dynamic", record.dynamic_features || []);
-  setJson("raw", record);
+  setJsonLazy("raw", record);
+  const activeTab = document.querySelector(".tab.active");
+  renderLazyJsonPanel(activeTab ? activeTab.dataset.tab : "edgeSummary");
 
   $("recordInfo").textContent = `Record ${currentPosition + 1} / ${filteredRecords}`;
   $("jumpTo").value = currentPosition + 1;
@@ -991,6 +1047,7 @@ function activateTab(name) {
   for (const pane of document.querySelectorAll(".tab-pane")) {
     pane.classList.toggle("hidden", pane.id !== "pane-" + name);
   }
+  renderLazyJsonPanel(name);
 }
 
 $("datasetSelect").addEventListener("change", (event) => loadDataset(event.target.value).catch((e) => showStatus(e.message)));
