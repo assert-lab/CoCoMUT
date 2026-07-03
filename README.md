@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href=""><img alt="Paper" src="https://img.shields.io/badge/📃-Arxiv-b31b1b?style=for-the-badge"></a>
+  <a href="https://arxiv.org/abs/2606.31971"><img alt="Paper" src="https://img.shields.io/badge/📃-Arxiv-b31b1b?style=for-the-badge"></a>
   <a href="https://youtu.be/RCUzkCQjG30"><img alt="Demo" src="https://img.shields.io/badge/Demo-red?style=for-the-badge&logo=youtube&logoColor=white"></a>
   <a href="https://www.apache.org/licenses/LICENSE-2.0.txt"><img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-blue?style=for-the-badge"></a>
   <img alt="Java" src="https://img.shields.io/badge/Java-17%2B-orange?style=for-the-badge">
@@ -117,16 +117,18 @@ scripts/         release, viewer, and field-test helpers
 
 ## Citation
 
-Publication metadata is still a placeholder and will be updated when the paper
-is available.
+If you use CoCoMUT in academic work, please cite the paper:
 
 ```bibtex
-@misc{cocomut2026,
-  title        = {CoCoMUT: Context Constructor for MUT},
-  author       = {{ASSERT Lab}},
+@misc{botta2026cocomut,
+  title        = {CoCoMUT: A Tool for Code-Context Mining and Automated Dataset Generation},
+  author       = {Botta, Alessandro and Garisa, Shiven and Akurathi, Jaya Vardhini and Sabit, Ahsanul Ameen and Woodlief, Trey and Hossain, Soneya Binta},
   year         = {2026},
-  howpublished = {\url{https://github.com/assert-lab/CoCoMUT}},
-  note         = {Version 0.1.0}
+  eprint       = {2606.31971},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.SE},
+  doi          = {10.48550/arXiv.2606.31971},
+  url          = {https://arxiv.org/abs/2606.31971}
 }
 ```
 
