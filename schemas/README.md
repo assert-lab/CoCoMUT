@@ -236,6 +236,11 @@ remains stricter: it is populated only when the bytecode edge maps to one unique
 source method in the CoCoMUT/Spoon model. This avoids treating JDK, dependency,
 synthetic, ambiguous, or bytecode-only targets as source methods.
 
+Run-level call-graph availability is separate from per-method bytecode matching.
+If SootUp generates the call graph but a subset of selected focal methods cannot
+be matched to bytecode graph projections, CoCoMUT records a warning in the
+extraction report and still emits the available caller/callee edges.
+
 The source join universe is the full project source model. Focal-method filters
 such as `--scope`, `--source-set`, `--package`, `--class`, `--method`,
 `--visibility`, path filters, and `--max-methods` control which methods receive

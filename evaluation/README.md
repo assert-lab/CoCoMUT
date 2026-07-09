@@ -11,6 +11,11 @@ The study uses:
 - RTA call graphs over compiled project bytecode;
 - manual output-quality auditing for 200 sampled records.
 
+The extraction report distinguishes call-graph availability from per-method
+bytecode matching. A generated call graph with some unmatched focal methods is
+reported as a warning; the available caller/callee entries remain valid and are
+included in the JSONL output.
+
 ## Layout
 
 ```text

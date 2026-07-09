@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Comparator;
+import javax.tools.ToolProvider;
 
 import static org.junit.Assert.*;
 
@@ -239,6 +240,55 @@ public class OrchestratorTest {
         assertEquals("FAILED", report.get("status"));
         assertEquals(2, report.get("failed_at_phase"));
         assertTrue(String.valueOf(report.get("failure_codes")).contains("EMPTY_SELECTION"));
+    }
+
+    @Test
+    public void partialFocalBytecodeMatchingIsAWarningNotFailure() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-partial-bytecode-");
+        try {
+            Path sourceDir = project.resolve("src/main/java/demo");
+            Path classOutput = project.resolve("target/classes");
+            Path compiledSource = sourceDir.resolve("CompiledOnly.java");
+            write(compiledSource, """
+                    package demo;
+                    public class CompiledOnly {
+                        public static void main(String[] args) { new CompiledOnly().publicMethod(); }
+                        public String publicMethod() { return helper(); }
+                        private String helper() { return "compiled"; }
+                    }
+                    """);
+            write(sourceDir.resolve("SourceOnly.java"), """
+                    package demo;
+                    public class SourceOnly {
+                        public String missingBytecode() { return "source"; }
+                    }
+                    """);
+            Files.createDirectories(classOutput);
+            var compiler = ToolProvider.getSystemJavaCompiler();
+            assertNotNull("Tests require a JDK compiler", compiler);
+            int compileExit = compiler.run(null, null, null,
+                    "-d", classOutput.toString(), compiledSource.toString());
+            assertEquals("Fixture source should compile", 0, compileExit);
+
+            Orchestrator partial = new Orchestrator(ContextRequest.builder()
+                    .projectRoot(project)
+                    .sourceRoot(sourceDir.getParent())
+                    .classOutputDir(classOutput)
+                    .build());
+
+            assertTrue(String.valueOf(partial.getExecutionReport()), partial.execute());
+            Map<String, Object> report = partial.getExecutionReport();
+            assertEquals("SUCCESS", report.get("status"));
+            assertEquals(java.util.List.of("NONE"), report.get("failure_codes"));
+            assertEquals(Boolean.TRUE, report.get("phase_3_call_graph_artifact_exists"));
+            assertTrue("Fixture should include unmatched source methods",
+                    ((Number) report.get("phase_3_focal_methods_matched_to_bytecode")).longValue()
+                            < ((Number) report.get("phase_2_methods_identified")).longValue());
+            assertTrue(String.valueOf(report.get("phase_3_warning"))
+                    .contains("did not receive matched bytecode call graph results"));
+        } finally {
+            deleteRecursively(project);
+        }
     }
 
     private static void deleteRecursively(Path root) throws Exception {

@@ -214,6 +214,11 @@ executing Gradle metadata logic.
 `--call-graph rta` is the default. Use `--call-graph cha` when the study design
 needs class-hierarchy analysis instead of rapid type analysis.
 
+When a call graph is generated but some selected source methods cannot be
+matched to bytecode call-graph projections, CoCoMUT reports a phase-3 warning
+and keeps the available caller/callee edges. This is not a call-graph failure:
+it means per-method bytecode matching is incomplete for the selected focal set.
+
 For documentation datasets, prefer a precise source-set and scope:
 
 ```bash
@@ -462,6 +467,8 @@ Current static-analysis boundaries:
 - call context comes from static bytecode analysis over compiled class
   directories and project artifacts, with dependency JARs loaded as libraries
   for target resolution rather than as application entry points;
+- unmatched focal methods in an otherwise generated call graph are reported as
+  warnings; available caller/callee edges remain valid and are serialized;
 - build-tool compilation is available only when `--allow-build` or
   `--externally-sandboxed-build` is passed; otherwise CoCoMUT requires
   pre-existing project class files or project JARs in a conventional build

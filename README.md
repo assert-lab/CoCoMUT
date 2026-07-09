@@ -87,7 +87,12 @@ Each JSONL row contains:
 - callers/callees from static bytecode analysis, with project source joins when
   the bytecode target maps to one unique source method;
 - provenance fields describing backend mode, resolution confidence, failures,
-  and selected target.
+  warnings, and selected target.
+
+If the SootUp call graph is generated but some selected source methods do not
+receive matched bytecode call-graph projections, CoCoMUT records that as a
+run warning. The call graph remains available, and resolved caller/callee edges
+are still emitted.
 
 See [schemas/README.md](schemas/README.md) for the full schema.
 

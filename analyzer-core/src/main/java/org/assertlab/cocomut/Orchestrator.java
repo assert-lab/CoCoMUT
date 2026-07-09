@@ -393,9 +393,10 @@ final class Orchestrator {
             executionReport.put("phase_3_non_empty_call_graphs", nonEmptyCallGraphResults);
             executionReport.put("phase_3_call_edges_generated", callGraphEdgeCount);
             if (callGraphResults.size() != methodInfos.size() || matchedToBytecode != methodInfos.size()) {
-                failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
+                long unmatchedFocalMethods = Math.max(0L, methodInfos.size() - matchedToBytecode);
                 executionReport.put("phase_3_warning",
-                        "One or more selected methods did not receive a matched bytecode call graph result.");
+                        "Call graph generated; " + unmatchedFocalMethods
+                                + " selected method(s) did not receive matched bytecode call graph results.");
             }
             return true;
         } catch (Exception e) {
