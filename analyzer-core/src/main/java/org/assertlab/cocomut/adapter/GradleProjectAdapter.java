@@ -205,6 +205,7 @@ public class GradleProjectAdapter implements ProjectAdapter {
             initScript = writeInitScript(includeTests);
             List<String> cmd = new ArrayList<>();
             cmd.add(gradleExecutable());
+            cmd.add("--no-daemon");
             cmd.add("--init-script");
             cmd.add(initScript.toString());
             cmd.add("analyzerPrintClasspath");
