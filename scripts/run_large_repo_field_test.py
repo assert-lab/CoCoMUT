@@ -319,11 +319,11 @@ def result_row(repo: str,
     row["cocomut_exit_code"] = "TIMEOUT" if timed_out else exit_code
     row["timed_out"] = str(timed_out).lower()
     row["wall_duration_ms"] = wall_duration_ms
-    row["status"] = report.get("status") or ("TIMEOUT" if timed_out else (f"EXIT_{exit_code}" if exit_code not in ("", 0) else "NO_REPORT"))
+    row["status"] = report.get("status") or fallback_status(clone_status, exit_code, timed_out)
     for key in REPO_COLUMNS:
         if key in report:
             row[key] = format_value(report[key])
-    row["failure_codes"] = format_value(report.get("failure_codes", ""))
+    row["failure_codes"] = format_value(report.get("failure_codes") or fallback_failure_codes(row["status"]))
     row.update(jsonl_metrics)
     expected = as_int(row.get("phase_5_jsonl_rows"))
     contexts = as_int(row.get("phase_4_contexts_extracted"))
@@ -338,6 +338,32 @@ def result_row(repo: str,
     )
     row["artifact_dir"] = str(artifact_dir)
     return row
+
+
+def fallback_status(clone_status: str, exit_code: int | str, timed_out: bool) -> str:
+    if clone_status == "TIMEOUT":
+        return "CLONE_TIMEOUT"
+    if clone_status != "OK":
+        return "CLONE_FAILED"
+    if timed_out:
+        return "TIMEOUT"
+    if exit_code not in ("", 0):
+        return f"EXIT_{exit_code}"
+    return "NO_REPORT"
+
+
+def fallback_failure_codes(status: str) -> list[str]:
+    if status == "CLONE_TIMEOUT":
+        return ["CLONE_TIMEOUT"]
+    if status == "CLONE_FAILED":
+        return ["CLONE_FAILED"]
+    if status == "TIMEOUT":
+        return ["TIMEOUT"]
+    if status.startswith("EXIT_"):
+        return ["PROCESS_EXIT"]
+    if status == "NO_REPORT":
+        return ["NO_REPORT"]
+    return []
 
 
 def detect_anomalies(row: dict[str, Any],
