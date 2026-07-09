@@ -328,15 +328,14 @@ public class ProjectAnalyzer {
             return "gradle";
         }
 
-        // Auto-detect: check for pom.xml first, then build.gradle
-        if (Files.exists(projectPath.resolve("pom.xml"))) {
-            return "maven";
-        }
         if (Files.exists(projectPath.resolve("build.gradle")) ||
             Files.exists(projectPath.resolve("build.gradle.kts")) ||
             Files.exists(projectPath.resolve("settings.gradle")) ||
             Files.exists(projectPath.resolve("settings.gradle.kts"))) {
             return "gradle";
+        }
+        if (Files.exists(projectPath.resolve("pom.xml"))) {
+            return "maven";
         }
 
         // No recognized build descriptor: a plain Java directory or pre-compiled

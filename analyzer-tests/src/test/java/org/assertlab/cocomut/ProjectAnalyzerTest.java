@@ -59,6 +59,23 @@ public class ProjectAnalyzerTest {
     }
 
     @Test
+    public void gradleRootDescriptorsTakePrecedenceOverPublishedPom() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-gradle-with-pom-");
+        try {
+            Files.writeString(project.resolve("pom.xml"), "<project/>");
+            Files.writeString(project.resolve("settings.gradle"), "include 'library'\n");
+            Files.writeString(project.resolve("build.gradle"), "plugins { id 'java' }\n");
+
+            ProjectMetadata metadata = new ProjectAnalyzer(project).analyze();
+
+            assertEquals("Gradle descriptors should win over a root pom.xml in auto mode",
+                    "gradle", metadata.getBuildSystem());
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void testJavaVersionDetection() throws IOException {
         ProjectMetadata metadata = analyzer.analyze();
         assertNotNull("Java version should be detected", metadata.getJavaVersion());

@@ -83,11 +83,23 @@ public class ProjectAdapterTest {
     @Test
     public void mavenTakesPrecedenceOverGenericFallback() throws IOException {
         // Both a pom.xml and the (always-matching) generic fallback could apply;
-        // Maven must win because it is registered first.
+        // Maven must win when no Gradle descriptor is present.
         Files.writeString(tempDir.resolve("pom.xml"), "<project/>");
         ProjectAdapter adapter = ProjectAdapter.of(tempDir);
         assertTrue("Maven must take precedence over generic fallback",
                 adapter instanceof MavenProjectAdapter);
+    }
+
+    @Test
+    public void gradleDescriptorsTakePrecedenceOverPom() throws IOException {
+        Files.writeString(tempDir.resolve("pom.xml"), "<project/>");
+        Files.writeString(tempDir.resolve("settings.gradle"), "include 'lib'");
+        Files.writeString(tempDir.resolve("build.gradle"), "plugins { id 'java' }\n");
+
+        ProjectAdapter adapter = ProjectAdapter.of(tempDir);
+
+        assertTrue("Gradle root descriptors should take precedence over a root pom.xml",
+                adapter instanceof GradleProjectAdapter);
     }
 
     @Test

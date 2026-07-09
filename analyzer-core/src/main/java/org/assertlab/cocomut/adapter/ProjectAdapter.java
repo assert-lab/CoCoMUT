@@ -24,8 +24,8 @@ import java.util.List;
  *
  * <h2>Auto-detection order</h2>
  * <pre>
- *   pom.xml present          → MavenProjectAdapter
  *   Gradle build/settings    → GradleProjectAdapter
+ *   pom.xml present          → MavenProjectAdapter
  *   fallback                 → GenericJavaAdapter
  * </pre>
  */
@@ -60,8 +60,8 @@ public interface ProjectAdapter {
      */
     static ProjectAdapter of(Path projectPath) {
         List<ProjectAdapter> candidates = List.of(
-                new MavenProjectAdapter(projectPath),
                 new GradleProjectAdapter(projectPath),
+                new MavenProjectAdapter(projectPath),
                 new GenericJavaAdapter(projectPath)   // always matches — keep last
         );
         return candidates.stream()
