@@ -34,24 +34,32 @@ REPO_COLUMNS = [
     "wall_duration_ms",
     "status",
     "failure_codes",
+    "failed_at_phase",
+    "error_type",
+    "error_message",
     "phase_1_build_system",
     "phase_1_compiles",
     "phase_1_compile_status",
+    "phase_1_error",
     "phase_1_build_attempted",
     "phase_1_build_succeeded",
     "phase_1_build_timed_out",
     "phase_1_bytecode_available",
     "phase_1_analysis_can_proceed",
+    "phase_2_error",
     "source_files_discovered",
     "source_files_parsed",
     "source_files_failed",
     "phase_2_methods_identified",
+    "phase_3_error",
     "phase_3_available",
     "phase_3_call_graph_artifact_exists",
     "phase_3_focal_methods_matched_to_bytecode",
     "phase_3_call_edges_generated",
     "phase_3_warning",
+    "phase_4_error",
     "phase_4_contexts_extracted",
+    "phase_5_error",
     "phase_5_jsonl_rows",
     "phase_5_call_edges_serialized",
     "jsonl_files",
@@ -347,6 +355,8 @@ def detect_anomalies(row: dict[str, Any],
         add("high", "success_nonzero_exit", f"status SUCCESS but exit code is {exit_code}")
     if status == "SUCCESS" and failure_codes not in {"", "[NONE]", "NONE", "[]", "[\"NONE\"]"}:
         add("high", "success_failure_codes", f"status SUCCESS has failure_codes={failure_codes}")
+    if status in {"FAILED", "ERROR"} and failure_codes in {"", "[NONE]", "NONE", "[]", "[\"NONE\"]"}:
+        add("high", "unclassified_failure", f"status {status} has no specific failure code")
     if row.get("row_count_matches_contexts") == "false":
         add("high", "row_count_mismatch", "JSONL rows do not match report/context counts")
     if int(row.get("jsonl_malformed_rows") or 0) > 0:

@@ -13,6 +13,8 @@ import java.nio.file.FileSystems;
 import java.nio.file.PathMatcher;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.*;
 
 /**
@@ -181,13 +183,19 @@ final class Orchestrator {
                 : ExtractionManifest.captureGitInfo(projectPath);
 
         boolean success = false;
+        int currentPhase = 0;
         try {
+            currentPhase = 1;
             if (!executePhase1()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 1); return false; }
             configureSourceFileLimit();
+            currentPhase = 2;
             openSourceSession();
             if (!executePhase2()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 2); return false; }
+            currentPhase = 3;
             if (!executePhase3()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 3); return false; }
+            currentPhase = 4;
             if (!executePhase4()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 4); return false; }
+            currentPhase = 5;
             if (!executePhase5()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 5); return false; }
 
             if (failureCodes.isEmpty()) {
@@ -199,9 +207,8 @@ final class Orchestrator {
             executionReport.put("completed_phases", 5);
             return success;
 
-        } catch (Exception e) {
-            executionReport.put("status", "ERROR");
-            executionReport.put("error_message", e.getMessage());
+        } catch (Throwable t) {
+            recordUnhandledFailure(currentPhase, t);
             return false;
         } finally {
             long endTime = System.currentTimeMillis();
@@ -219,6 +226,49 @@ final class Orchestrator {
             closeSourceSession();
             restoreSourceFileLimit();
         }
+    }
+
+    private void recordUnhandledFailure(int phase, Throwable failure) {
+        executionReport.put("status", "ERROR");
+        if (phase > 0) {
+            executionReport.put("failed_at_phase", phase);
+            executionReport.put("phase_" + phase + "_error", throwableSummary(failure));
+        }
+        executionReport.put("error_type", failure.getClass().getName());
+        executionReport.put("error_message", throwableSummary(failure));
+        executionReport.put("error_stacktrace", stackTracePrefix(failure, 80));
+        failureCodes.add(failureCodeForUnhandledFailure(phase));
+    }
+
+    static FailureCode failureCodeForUnhandledFailureForTest(int phase) {
+        return failureCodeForUnhandledFailure(phase);
+    }
+
+    private static FailureCode failureCodeForUnhandledFailure(int phase) {
+        return switch (phase) {
+            case 1 -> FailureCode.METADATA_RESOLUTION_FAILED;
+            case 2 -> FailureCode.SOURCE_ANALYSIS_FAILED;
+            case 3 -> FailureCode.CALL_GRAPH_UNAVAILABLE;
+            case 4 -> FailureCode.CONTEXT_EXTRACTION_FAILED;
+            case 5 -> FailureCode.JSON_GENERATION_FAILED;
+            default -> FailureCode.ERROR;
+        };
+    }
+
+    private static String throwableSummary(Throwable failure) {
+        String message = failure.getMessage();
+        if (message == null || message.isBlank()) {
+            return failure.getClass().getName();
+        }
+        return failure.getClass().getName() + ": " + message;
+    }
+
+    private static String stackTracePrefix(Throwable failure, int maxLines) {
+        StringWriter out = new StringWriter();
+        failure.printStackTrace(new PrintWriter(out));
+        String[] lines = out.toString().split("\\R", -1);
+        int limit = Math.min(maxLines, lines.length);
+        return String.join(System.lineSeparator(), Arrays.copyOf(lines, limit));
     }
 
     private boolean executePhase1() {

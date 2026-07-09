@@ -243,6 +243,22 @@ public class OrchestratorTest {
     }
 
     @Test
+    public void unhandledPhaseFailureCodesAreSpecific() {
+        assertEquals(FailureCode.METADATA_RESOLUTION_FAILED,
+                Orchestrator.failureCodeForUnhandledFailureForTest(1));
+        assertEquals(FailureCode.SOURCE_ANALYSIS_FAILED,
+                Orchestrator.failureCodeForUnhandledFailureForTest(2));
+        assertEquals(FailureCode.CALL_GRAPH_UNAVAILABLE,
+                Orchestrator.failureCodeForUnhandledFailureForTest(3));
+        assertEquals(FailureCode.CONTEXT_EXTRACTION_FAILED,
+                Orchestrator.failureCodeForUnhandledFailureForTest(4));
+        assertEquals(FailureCode.JSON_GENERATION_FAILED,
+                Orchestrator.failureCodeForUnhandledFailureForTest(5));
+        assertEquals(FailureCode.ERROR,
+                Orchestrator.failureCodeForUnhandledFailureForTest(0));
+    }
+
+    @Test
     public void partialFocalBytecodeMatchingIsAWarningNotFailure() throws Exception {
         Path project = Files.createTempDirectory("cocomut-partial-bytecode-");
         try {
