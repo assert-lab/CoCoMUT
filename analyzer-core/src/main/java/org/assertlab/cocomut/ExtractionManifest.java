@@ -108,6 +108,7 @@ final class ExtractionManifest {
         build.put("exit_code", metadata != null ? metadata.getBuildExitCode() : -1);
         build.put("succeeded", metadata != null && metadata.isBuildSucceeded());
         build.put("timed_out", metadata != null && metadata.isBuildTimedOut());
+        build.put("output_tail", metadata != null ? metadata.getBuildOutputTail() : "");
         build.put("skipped", metadata != null && metadata.isBuildSkipped());
         build.put("sandboxed", metadata != null && metadata.isBuildSandboxed());
         build.put("status", metadata != null ? metadata.getCompileStatus() : "NOT_ANALYZED");
@@ -178,7 +179,9 @@ final class ExtractionManifest {
                 metadata != null ? metadata.getDependencyClasspath() : List.of(), false);
         hashResults.add(dependencySetHash);
         hashes.set("dependency_classpath_content_set", hashNode(dependencySetHash));
-        HashResult jsonlHash = hashSingleFile("emitted_jsonl", jsonlPath);
+        HashResult jsonlHash = emittedJsonlExpected(report, jsonlPath)
+                ? hashSingleFile("emitted_jsonl", jsonlPath)
+                : HashResult.empty("emitted_jsonl");
         hashResults.add(jsonlHash);
         hashes.set("emitted_jsonl", hashNode(jsonlHash));
 
@@ -226,6 +229,21 @@ final class ExtractionManifest {
         }
         codes.add(FailureCode.PROVENANCE_FAILED.toString());
         report.put("failure_codes", new java.util.ArrayList<>(codes));
+    }
+
+    private static boolean emittedJsonlExpected(Map<String, Object> report, Path jsonlPath) {
+        if (jsonlPath != null) {
+            return true;
+        }
+        if (report == null) {
+            return false;
+        }
+        Object status = report.get("status");
+        if ("SUCCESS".equals(status) || "PARTIAL".equals(status)) {
+            return true;
+        }
+        Object phase5Jsonl = report.get("phase_5_jsonl_file");
+        return phase5Jsonl != null && !String.valueOf(phase5Jsonl).isBlank();
     }
 
     private static String toolVersion() {
@@ -549,6 +567,10 @@ final class ExtractionManifest {
     }
 
     private record HashResult(String role, String sha256, String status, List<String> errors) {
+        static HashResult empty(String role) {
+            return new HashResult(role, null, "empty", List.of());
+        }
+
         static HashResult missing(String role) {
             String message = "emitted_jsonl".equals(role)
                     ? "JSONL was not emitted"

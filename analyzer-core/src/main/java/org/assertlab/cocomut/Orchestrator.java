@@ -247,6 +247,7 @@ final class Orchestrator {
             executionReport.put("phase_1_build_exit_code", projectMetadata.getBuildExitCode());
             executionReport.put("phase_1_build_succeeded", projectMetadata.isBuildSucceeded());
             executionReport.put("phase_1_build_timed_out", projectMetadata.isBuildTimedOut());
+            executionReport.put("phase_1_build_output_tail", projectMetadata.getBuildOutputTail());
             executionReport.put("phase_1_build_skipped", projectMetadata.isBuildSkipped());
             executionReport.put("phase_1_build_sandboxed", projectMetadata.isBuildSandboxed());
             executionReport.put("phase_1_gradle_model", projectMetadata.getGradleModelReport());

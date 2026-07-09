@@ -29,6 +29,7 @@ public class ProjectMetadata {
     private final int buildExitCode;
     private final boolean buildSucceeded;
     private final boolean buildTimedOut;
+    private final String buildOutputTail;
     private final boolean buildSkipped;
     private final boolean buildSandboxed;
     private final ContextRequest.BuildPolicy buildPolicy;
@@ -65,6 +66,7 @@ public class ProjectMetadata {
         this.buildExitCode = builder.buildExitCode;
         this.buildSucceeded = builder.buildSucceeded;
         this.buildTimedOut = builder.buildTimedOut;
+        this.buildOutputTail = builder.buildOutputTail == null ? "" : builder.buildOutputTail;
         this.buildSkipped = builder.buildSkipped;
         this.buildSandboxed = builder.buildSandboxed;
         this.buildPolicy = builder.buildPolicy;
@@ -166,6 +168,10 @@ public class ProjectMetadata {
         return buildTimedOut;
     }
 
+    public String getBuildOutputTail() {
+        return buildOutputTail;
+    }
+
     public boolean isBuildSkipped() {
         return buildSkipped;
     }
@@ -249,6 +255,7 @@ public class ProjectMetadata {
                 ", compileStatus='" + compileStatus + '\'' +
                 ", buildAttempted=" + buildAttempted +
                 ", buildSkipped=" + buildSkipped +
+                ", buildOutputTailChars=" + buildOutputTail.length() +
                 ", explicitClassOutputDirs=" + explicitClassOutputDirs.size() +
                 ", explicitTestClassOutputDirs=" + explicitTestClassOutputDirs.size() +
                 ", explicitProjectJars=" + explicitProjectJars.size() +
@@ -278,6 +285,7 @@ public class ProjectMetadata {
         private int buildExitCode = -1;
         private boolean buildSucceeded = false;
         private boolean buildTimedOut = false;
+        private String buildOutputTail = "";
         private boolean buildSkipped = false;
         private boolean buildSandboxed = false;
         private ContextRequest.BuildPolicy buildPolicy = ContextRequest.BuildPolicy.DENY_BUILD;
@@ -320,6 +328,7 @@ public class ProjectMetadata {
                     .buildExitCode(src.buildExitCode)
                     .buildSucceeded(src.buildSucceeded)
                     .buildTimedOut(src.buildTimedOut)
+                    .buildOutputTail(src.buildOutputTail)
                     .buildSkipped(src.buildSkipped)
                     .buildSandboxed(src.buildSandboxed)
                     .buildPolicy(src.buildPolicy)
@@ -425,6 +434,11 @@ public class ProjectMetadata {
 
         public Builder buildTimedOut(boolean buildTimedOut) {
             this.buildTimedOut = buildTimedOut;
+            return this;
+        }
+
+        public Builder buildOutputTail(String buildOutputTail) {
+            this.buildOutputTail = buildOutputTail == null ? "" : buildOutputTail;
             return this;
         }
 

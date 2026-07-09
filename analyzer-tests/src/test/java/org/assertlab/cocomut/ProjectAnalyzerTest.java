@@ -454,6 +454,8 @@ public class ProjectAnalyzerTest {
             assertEquals("preexisting", metadata.getBytecodeOrigin());
             assertFalse("Failed attempted builds must not proceed with stale bytecode by default",
                     metadata.isAnalysisCanProceed());
+            assertTrue("Failed builds should retain a diagnostic output tail",
+                    metadata.getBuildOutputTail().contains("Broken.java"));
         } finally {
             deleteRecursively(project);
         }
@@ -508,23 +510,23 @@ public class ProjectAnalyzerTest {
     }
 
     @Test
-    public void failedManifestHasMissingJsonlDiagnosticsAndCurrentSchemaVersion() throws Exception {
+    public void failedManifestWithoutJsonlDoesNotAddProvenanceFailure() throws Exception {
         Path project = Files.createTempDirectory("cocomut-failed-manifest-");
         Path output = Files.createTempDirectory("cocomut-failed-manifest-out-");
         try {
             java.util.Map<String, Object> report = new java.util.LinkedHashMap<>();
-            report.put("status", "ERROR");
+            report.put("status", "FAILED");
+            report.put("failure_codes", List.of("BUILD_FAILED"));
             Path manifest = ExtractionManifest.write(output, manifestMetadata(project, project),
                     null, java.util.Map.of(), "3".repeat(64), null, report);
 
             JsonNode root = new ObjectMapper().readTree(manifest.toFile());
             assertEquals("0.3.0", root.path("schema_version").asText());
             JsonNode emitted = root.path("hashes").path("emitted_jsonl");
-            assertEquals("missing", emitted.path("status").asText());
-            assertTrue("Missing JSONL hash entries must include an explanatory error",
-                    emitted.path("errors").size() > 0);
-            assertTrue("Manifest hash failures must be reflected into the execution report",
-                    root.path("execution").path("provenance_hash_failures").size() > 0);
+            assertEquals("empty", emitted.path("status").asText());
+            assertEquals(0, emitted.path("errors").size());
+            assertEquals(0, root.path("execution").path("provenance_hash_failures").size());
+            assertFalse(root.path("execution").path("failure_codes").toString().contains("PROVENANCE_FAILED"));
             assertValidExtractionManifest(manifest);
         } finally {
             deleteRecursively(project);

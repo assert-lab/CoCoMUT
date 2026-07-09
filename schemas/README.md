@@ -160,6 +160,7 @@ build.attempted                 Whether CoCoMUT executed Maven/Gradle
 build.exit_code                 Build-process exit code, or -1 when not attempted
 build.succeeded                 Whether the attempted build command succeeded
 build.timed_out                 Whether the attempted build timed out
+build.output_tail               Bounded tail of Maven/Gradle output for diagnostics
 build.skipped                   Whether build execution was denied
 build.sandboxed                 Whether caller claims external sandboxing
 build.policy                    DENY_BUILD, ALLOW_UNSANDBOXED_BUILD,
@@ -180,7 +181,8 @@ hashes.combined_project_bytecode
 hashes.dependency_classpath     Ordered hash over dependency JARs/directories
 hashes.dependency_classpath_content_set
                                 Order-insensitive hash over the same entries
-hashes.emitted_jsonl            Hash over generated JSONL when present
+hashes.emitted_jsonl            Hash over generated JSONL, or empty when the
+                                run failed before JSONL was expected
 ```
 
 The manifest is intentionally separate from the JSONL rows. Dataset rows remain

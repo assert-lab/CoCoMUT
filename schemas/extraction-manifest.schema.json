@@ -83,6 +83,7 @@
         "exit_code": { "type": "integer" },
         "succeeded": { "type": "boolean" },
         "timed_out": { "type": "boolean" },
+        "output_tail": { "type": "string" },
         "skipped": { "type": "boolean" },
         "sandboxed": { "type": "boolean" },
         "status": { "type": "string" },

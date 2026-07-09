@@ -28,6 +28,8 @@ import java.util.regex.Pattern;
  */
 public class ProjectAnalyzer {
     private static final long DEFAULT_COMPILE_TIMEOUT_SECONDS = 120;
+    private static final int BUILD_OUTPUT_TAIL_CHARS = 12_000;
+    private static final Pattern ANSI_ESCAPE = Pattern.compile("\\u001B\\[[;\\d]*[ -/]*[@-~]");
     private final Path projectPath;
     private final boolean autoDetectJavaVersion;
     private final String buildSystem;
@@ -195,6 +197,7 @@ public class ProjectAnalyzer {
                 .buildExitCode(buildResult.exitCode())
                 .buildSucceeded(buildResult.succeeded())
                 .buildTimedOut(buildResult.timedOut())
+                .buildOutputTail(buildResult.outputTail())
                 .buildSkipped(buildPolicy == ContextRequest.BuildPolicy.DENY_BUILD)
                 .buildSandboxed(buildPolicy == ContextRequest.BuildPolicy.EXTERNALLY_SANDBOXED_BUILD)
                 .buildPolicy(buildPolicy)
@@ -701,12 +704,30 @@ public class ProjectAnalyzer {
 
             CommandResult result = runCommand(command);
             lastBuildResult = new BuildResult(true, result.exitCode(), result.exitCode() == 0,
-                    result.timedOut(), result.timedOut() ? "BUILD TIMED OUT" : (result.exitCode() == 0 ? "BUILD SUCCESS" : "BUILD FAILED"));
+                    result.timedOut(), result.timedOut() ? "BUILD TIMED OUT" : (result.exitCode() == 0 ? "BUILD SUCCESS" : "BUILD FAILED"),
+                    diagnosticTail(result.output()));
             return lastBuildResult;
         } catch (Exception e) {
-            lastBuildResult = new BuildResult(true, -1, false, false, "BUILD FAILED: " + e.getClass().getSimpleName());
+            lastBuildResult = new BuildResult(true, -1, false, false,
+                    "BUILD FAILED: " + e.getClass().getSimpleName(), e.getMessage() == null ? "" : e.getMessage());
             return lastBuildResult;
         }
+    }
+
+    private static String diagnosticTail(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "";
+        }
+        String normalized = ANSI_ESCAPE.matcher(raw)
+                .replaceAll("")
+                .replace("\r\n", "\n")
+                .replace('\r', '\n')
+                .stripTrailing();
+        if (normalized.length() <= BUILD_OUTPUT_TAIL_CHARS) {
+            return normalized;
+        }
+        return "[CoCoMUT kept the last " + BUILD_OUTPUT_TAIL_CHARS + " characters of build output]\n"
+                + normalized.substring(normalized.length() - BUILD_OUTPUT_TAIL_CHARS);
     }
 
     private String executableWithWrapper(String tool, boolean isWindows) {
@@ -777,9 +798,10 @@ public class ProjectAnalyzer {
 
     private record CommandResult(int exitCode, String output, boolean timedOut) {}
 
-    private record BuildResult(boolean attempted, int exitCode, boolean succeeded, boolean timedOut, String status) {
+    private record BuildResult(boolean attempted, int exitCode, boolean succeeded, boolean timedOut,
+                               String status, String outputTail) {
         static BuildResult notAttempted(String status) {
-            return new BuildResult(false, -1, false, false, status);
+            return new BuildResult(false, -1, false, false, status, "");
         }
     }
 
