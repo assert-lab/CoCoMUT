@@ -411,8 +411,11 @@ final class ExtractionManifest {
             List<Path> normalized = preserveOrder
                     ? stream.distinct().toList()
                     : stream.distinct()
-                            .sorted(Comparator.comparing(ExtractionManifest::artifactContentKey)
-                                    .thenComparing(path -> stableArtifactLabel(stableRoot, path)))
+                            .map(path -> new ArtifactSortKey(path, artifactContentKey(path),
+                                    stableArtifactLabel(stableRoot, path)))
+                            .sorted(Comparator.comparing(ArtifactSortKey::contentKey)
+                                    .thenComparing(ArtifactSortKey::stableLabel))
+                            .map(ArtifactSortKey::path)
                             .toList();
             if (normalized.isEmpty()) {
                 return new HashResult(role, null, "empty", List.of());
@@ -428,7 +431,7 @@ final class ExtractionManifest {
                 updateDigest(digest, role, stableRoot, i, normalized.get(i));
             }
             return new HashResult(role, HexFormat.of().formatHex(digest.digest()), "ok", List.of());
-        } catch (Exception e) {
+        } catch (Throwable e) {
             return new HashResult(role, null, "error", List.of(e.getClass().getSimpleName()));
         }
     }
@@ -521,7 +524,7 @@ final class ExtractionManifest {
                 return "missing:" + path;
             }
             return HexFormat.of().formatHex(digest.digest());
-        } catch (Exception e) {
+        } catch (Throwable e) {
             return "error:" + e.getClass().getSimpleName() + ":" + path.getFileName();
         }
     }
@@ -553,6 +556,8 @@ final class ExtractionManifest {
     }
 
     private record GitCommand(boolean ok, String output, String error) {}
+
+    private record ArtifactSortKey(Path path, String contentKey, String stableLabel) {}
 
     record GitInfo(boolean available,
                    String root,

@@ -772,8 +772,9 @@ final class Orchestrator {
                     executionReport.put("status", "PARTIAL");
                 }
             }
-        } catch (Exception e) {
-            executionReport.put("extraction_manifest_error", e.getMessage());
+        } catch (Throwable e) {
+            executionReport.put("extraction_manifest_error_type", e.getClass().getName());
+            executionReport.put("extraction_manifest_error", throwableSummary(e));
             failureCodes.add(FailureCode.PROVENANCE_FAILED);
             if ("SUCCESS".equals(executionReport.get("status"))) {
                 executionReport.put("status", "PARTIAL");
