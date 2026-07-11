@@ -835,7 +835,7 @@ public class ProjectAnalyzer {
             lastBuildResult = new BuildResult(true, result.exitCode(), result.exitCode() == 0,
                     result.timedOut(), result.timedOut() ? "BUILD TIMED OUT" : (result.exitCode() == 0 ? "BUILD SUCCESS" : "BUILD FAILED"),
                     diagnosticTail(result.output()),
-                    BuildFailureReason.classify(result.output(), result.timedOut(), result.exitCode() == 0));
+                    classifiedBuildFailure(result));
             return lastBuildResult;
         } catch (Exception e) {
             lastBuildResult = new BuildResult(true, -1, false, false,
@@ -859,6 +859,16 @@ public class ProjectAnalyzer {
         }
         return "[CoCoMUT kept the last " + BUILD_OUTPUT_TAIL_CHARS + " characters of build output]\n"
                 + normalized.substring(normalized.length() - BUILD_OUTPUT_TAIL_CHARS);
+    }
+
+    private BuildFailureReason classifiedBuildFailure(CommandResult result) {
+        BuildFailureReason reason = BuildFailureReason.classify(
+                result.output(), result.timedOut(), result.exitCode() == 0);
+        if (reason == BuildFailureReason.BUILD_FAILED_REACTOR_ARTIFACT_MISSING
+                && !missingSameReactorArtifacts(result.output())) {
+            return BuildFailureReason.BUILD_FAILED_DEPENDENCY_UNAVAILABLE;
+        }
+        return reason;
     }
 
     static int requiredJavaVersion(String output) {
