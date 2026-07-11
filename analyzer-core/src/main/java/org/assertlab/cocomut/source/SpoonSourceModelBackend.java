@@ -107,7 +107,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         CtType<?> owner = executable.getParent(CtType.class);
         String methodBody = sourceSlice(executable);
         String javadoc = docComment(executable);
-        String rawJavadoc = rawDocComment(executable).orElse(javadoc);
+        String rawJavadoc = rawDocComment(parsed, executable).orElse(javadoc);
         List<JavadocElement> javadocElements = spoonJavadocElements(executable);
         String classJavadoc = owner != null ? docComment(owner) : "";
         String classHierarchy = owner != null ? classHierarchy(owner) : "";
@@ -223,6 +223,8 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return new ParsedProject(project.projectPath(), methods, methodsByUri, executablesByUri,
                 typesByQualifiedName, methodsByClassName, fieldsByClassName,
                 importsByFile, new java.util.concurrent.ConcurrentHashMap<>(),
+                new java.util.concurrent.ConcurrentHashMap<>(),
+                new java.util.concurrent.ConcurrentHashMap<>(),
                 projectClassLoader(project), parsedModels.mode(), parsedModels.stats());
     }
 
@@ -635,13 +637,18 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
     }
 
-    private static Optional<String> rawDocComment(CtElement element) {
+    private static Optional<String> rawDocComment(ParsedProject parsed, CtElement element) {
         try {
             SourcePosition position = element.getPosition();
             if (position == null || !position.isValidPosition() || position.getFile() == null) {
                 return Optional.empty();
             }
-            String source = Files.readString(position.getFile().toPath(), StandardCharsets.UTF_8);
+            Path sourceFile = position.getFile().toPath().toAbsolutePath().normalize();
+            String source = parsed.sourceTextByFile().get(sourceFile);
+            if (source == null) {
+                source = Files.readString(sourceFile, StandardCharsets.UTF_8);
+                parsed.sourceTextByFile().put(sourceFile, source);
+            }
             int start = Math.max(0, Math.min(position.getSourceStart(), source.length()));
             int open = source.lastIndexOf("/**", start);
             if (open < 0) {
@@ -715,7 +722,8 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     private static ClassContext classContext(ParsedProject parsed, CtType<?> type, String methodName) {
         String key = type.getQualifiedName() + "#" + methodName;
         return parsed.classContextsByTypeAndMethod().computeIfAbsent(key, ignored -> {
-            Map<String, String> classMethods = classMethods(type);
+            Map<String, String> classMethods = parsed.classMethodsByType().computeIfAbsent(
+                    type.getQualifiedName(), ignoredType -> classMethods(type));
             List<String> siblingMethods = classMethods.keySet().stream().sorted().toList();
             List<String> overloadGroup = siblingMethods.stream()
                     .filter(sig -> sig.startsWith(methodName + "("))
@@ -2937,6 +2945,8 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             Map<String, List<SourceField>> fieldsByClassName,
             Map<Path, ImportContext> importsByFile,
             Map<String, ClassContext> classContextsByTypeAndMethod,
+            Map<Path, String> sourceTextByFile,
+            Map<String, Map<String, String>> classMethodsByType,
             ClassLoader projectClassLoader,
             String mode,
             SourceParseStats parseStats) {

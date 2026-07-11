@@ -125,13 +125,27 @@ public class ContextExtractor {
 
     public Map<String, MethodContext> extractContextForMethods(List<MethodInfo> methods) {
         Map<String, MethodContext> result = new java.util.LinkedHashMap<>();
-        for (MethodInfo method : methods) {
+        int total = methods.size();
+        int progressInterval = Math.max(100, (int) Math.ceil(total / 10.0));
+        long startedAt = System.nanoTime();
+        if (total >= 100) {
+            System.err.println("[ContextExtractor] Extracting context for " + total + " methods");
+        }
+        for (int index = 0; index < total; index++) {
+            MethodInfo method = methods.get(index);
             MethodContext ctx = extractContext(method);
             if (ctx != null) {
                 result.put(ctx.getMethodUri(), ctx);
             } else {
                 System.err.println("[ContextExtractor] Dropped method_uri=" + method.getMethodUri()
                         + " (" + method.getMethodName() + ") — could not extract context");
+            }
+            int completed = index + 1;
+            if (total >= 100 && (completed % progressInterval == 0 || completed == total)) {
+                long elapsedSeconds = java.util.concurrent.TimeUnit.NANOSECONDS.toSeconds(
+                        System.nanoTime() - startedAt);
+                System.err.println("[ContextExtractor] Progress " + completed + "/" + total
+                        + " methods; extracted=" + result.size() + "; elapsed=" + elapsedSeconds + "s");
             }
         }
         return result;
