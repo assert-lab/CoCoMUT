@@ -777,6 +777,7 @@ public class ProjectAnalyzer {
         }
         for (Pattern pattern : List.of(
                 Pattern.compile("(?:release version|invalid target release:)\\s*(\\d+)\\s*(?:not supported)?", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("not in the allowed range\\s*\\[(\\d+)\\s*,", Pattern.CASE_INSENSITIVE),
                 Pattern.compile("(?:source|target) option\\s+(\\d+)\\s+is no longer supported", Pattern.CASE_INSENSITIVE))) {
             Matcher matcher = pattern.matcher(output);
             if (matcher.find()) {

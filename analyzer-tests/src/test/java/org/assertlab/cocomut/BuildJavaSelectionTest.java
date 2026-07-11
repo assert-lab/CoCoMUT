@@ -40,6 +40,8 @@ public class BuildJavaSelectionTest {
     public void detectsCompilerRequestedRetryVersions() {
         assertEquals(25, ProjectAnalyzer.requiredJavaVersion("error: release version 25 not supported"));
         assertEquals(25, ProjectAnalyzer.requiredJavaVersion("error: invalid target release: 25"));
+        assertEquals(20, ProjectAnalyzer.requiredJavaVersion(
+                "Detected JDK version 11.0.31 is not in the allowed range [20,)."));
         assertEquals(6, ProjectAnalyzer.requiredJavaVersion("Source option 6 is no longer supported"));
         assertEquals(-1, ProjectAnalyzer.requiredJavaVersion("ordinary compilation failure"));
     }
