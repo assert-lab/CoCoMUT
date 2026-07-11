@@ -392,6 +392,20 @@ def detect_anomalies(row: dict[str, Any],
             "CALL_GRAPH_UNAVAILABLE reported even though call-graph artifact exists")
     if str(row.get("phase_3_available")).lower() == "true" and int(row.get("phase_5_call_edges_serialized") or 0) == 0:
         add("medium", "available_call_graph_without_edges", "phase_3_available=true but no serialized edges")
+    discovered_sources = as_int(row.get("source_files_discovered"))
+    parsed_sources = as_int(row.get("source_files_parsed"))
+    if discovered_sources is not None and parsed_sources is not None and discovered_sources >= 20:
+        parse_rate = parsed_sources / discovered_sources
+        if parse_rate < 0.5:
+            add("medium", "low_source_parse_rate",
+                f"parsed {parsed_sources}/{discovered_sources} source files ({parse_rate:.1%})")
+    identified_methods = as_int(row.get("phase_2_methods_identified"))
+    matched_methods = as_int(row.get("phase_3_focal_methods_matched_to_bytecode"))
+    if identified_methods is not None and matched_methods is not None and identified_methods >= 20:
+        match_rate = matched_methods / identified_methods
+        if match_rate < 0.5:
+            add("medium", "low_focal_bytecode_match_rate",
+                f"matched {matched_methods}/{identified_methods} focal methods ({match_rate:.1%})")
     if report.get("phase_3_warning") and "Call graph generated" not in str(report.get("phase_3_warning")):
         add("low", "phase_3_warning_wording", str(report.get("phase_3_warning")))
     if row.get("clone_status") == "OK" and status == "NO_REPORT":
