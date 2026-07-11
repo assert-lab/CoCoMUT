@@ -730,16 +730,7 @@ public class ProjectAnalyzer {
     }
 
     private String executableWithWrapper(String tool, boolean isWindows) {
-        String wrapperName = switch (tool) {
-            case "mvn" -> isWindows ? "mvnw.cmd" : "mvnw";
-            case "gradle" -> isWindows ? "gradlew.bat" : "gradlew";
-            default -> tool;
-        };
-        Path wrapper = projectPath.resolve(wrapperName);
-        if (Files.isRegularFile(wrapper) && Files.isExecutable(wrapper)) {
-            return wrapper.toAbsolutePath().toString();
-        }
-        return isWindows ? tool + ".cmd" : tool;
+        return BuildToolExecutable.resolve(projectPath, tool, isWindows);
     }
 
     private CommandResult runCommand(List<String> command) throws IOException, InterruptedException {

@@ -76,6 +76,47 @@ public class ProjectAnalyzerTest {
     }
 
     @Test
+    public void incompleteMavenWrapperFallsBackToSystemMaven() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-incomplete-maven-wrapper-");
+        try {
+            Path wrapper = project.resolve("mvnw");
+            Files.writeString(wrapper, "#!/bin/sh\nexit 1\n");
+            wrapper.toFile().setExecutable(true);
+
+            assertEquals("mvn", BuildToolExecutable.resolve(project, "mvn", false));
+
+            Files.createDirectories(project.resolve(".mvn/wrapper"));
+            Files.writeString(project.resolve(".mvn/wrapper/maven-wrapper.properties"),
+                    "distributionUrl=https://example.invalid/apache-maven.zip\n");
+            assertEquals(wrapper.toAbsolutePath().toString(),
+                    BuildToolExecutable.resolve(project, "mvn", false));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void incompleteGradleWrapperFallsBackToSystemGradle() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-incomplete-gradle-wrapper-");
+        try {
+            Path wrapper = project.resolve("gradlew");
+            Files.writeString(wrapper, "#!/bin/sh\nexit 1\n");
+            wrapper.toFile().setExecutable(true);
+            Files.createDirectories(project.resolve("gradle/wrapper"));
+            Files.writeString(project.resolve("gradle/wrapper/gradle-wrapper.properties"),
+                    "distributionUrl=https://example.invalid/gradle.zip\n");
+
+            assertEquals("gradle", BuildToolExecutable.resolve(project, "gradle", false));
+
+            Files.write(project.resolve("gradle/wrapper/gradle-wrapper.jar"), new byte[] {0});
+            assertEquals(wrapper.toAbsolutePath().toString(),
+                    BuildToolExecutable.resolve(project, "gradle", false));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void testJavaVersionDetection() throws IOException {
         ProjectMetadata metadata = analyzer.analyze();
         assertNotNull("Java version should be detected", metadata.getJavaVersion());

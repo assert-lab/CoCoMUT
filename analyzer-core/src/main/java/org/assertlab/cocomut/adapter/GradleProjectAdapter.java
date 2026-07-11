@@ -1,5 +1,6 @@
 package org.assertlab.cocomut.adapter;
 
+import org.assertlab.cocomut.BuildToolExecutable;
 import org.assertlab.cocomut.ContextRequest;
 import org.assertlab.cocomut.GradleModelReport;
 import org.assertlab.cocomut.ModuleSourceSet;
@@ -343,11 +344,7 @@ public class GradleProjectAdapter implements ProjectAdapter {
      */
     private String gradleExecutable() {
         boolean win = System.getProperty("os.name", "").toLowerCase().contains("win");
-        Path wrapper = projectPath.resolve(win ? "gradlew.bat" : "gradlew");
-        if (Files.exists(wrapper)) {
-            return wrapper.toAbsolutePath().toString();
-        }
-        return win ? "gradle.bat" : "gradle";
+        return BuildToolExecutable.resolve(projectPath, "gradle", win);
     }
 
     /**
