@@ -7,7 +7,8 @@ import java.util.Map;
 
 /** Selects a project build JDK independently from the JDK running CoCoMUT. */
 public record BuildJavaSelection(Path javaHome, String version, String evidence) {
-    private static final List<Integer> SUPPORTED_VERSIONS = List.of(8, 11, 17, 21, 25, 26);
+    private static final List<Integer> SUPPORTED_VERSIONS = java.util.stream.IntStream.rangeClosed(8, 26)
+            .boxed().toList();
 
     public BuildJavaSelection {
         version = version == null || version.isBlank() ? "inherited" : version;
@@ -101,22 +102,20 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
     }
 
     private static Path resolveHome(int version, Map<String, String> env) {
-        int availableVersion = compatibleInstalledVersion(version);
-        if (!SUPPORTED_VERSIONS.contains(availableVersion)) {
-            return null;
-        }
-        String configured = env.getOrDefault("COCOMUT_JAVA_HOME_" + availableVersion, "").trim();
-        if (!configured.isEmpty()) {
-            Path path = Path.of(configured).toAbsolutePath().normalize();
-            if (Files.isDirectory(path.resolve("bin"))) {
-                return path;
+        int compatibleVersion = compatibleInstalledVersion(version);
+        List<Integer> candidates = version >= 8 && version <= 26 && version != compatibleVersion
+                ? List.of(version, compatibleVersion) : List.of(compatibleVersion);
+        for (int availableVersion : candidates) {
+            if (!SUPPORTED_VERSIONS.contains(availableVersion)) continue;
+            String configured = env.getOrDefault("COCOMUT_JAVA_HOME_" + availableVersion, "").trim();
+            if (!configured.isEmpty()) {
+                Path path = Path.of(configured).toAbsolutePath().normalize();
+                if (Files.isDirectory(path.resolve("bin"))) return path;
             }
-        }
-        for (Path candidate : List.of(
-                Path.of("/usr/lib/jvm/java-" + availableVersion + "-openjdk"),
-                Path.of("/usr/lib/jvm/java-" + availableVersion + "-openjdk-amd64"))) {
-            if (Files.isDirectory(candidate.resolve("bin"))) {
-                return candidate;
+            for (Path candidate : List.of(
+                    Path.of("/usr/lib/jvm/java-" + availableVersion + "-openjdk"),
+                    Path.of("/usr/lib/jvm/java-" + availableVersion + "-openjdk-amd64"))) {
+                if (Files.isDirectory(candidate.resolve("bin"))) return candidate;
             }
         }
         return null;

@@ -42,6 +42,9 @@ public class BuildJavaSelectionTest {
         assertEquals(25, ProjectAnalyzer.requiredJavaVersion("error: invalid target release: 25"));
         assertEquals(20, ProjectAnalyzer.requiredJavaVersion(
                 "Detected JDK version 11.0.31 is not in the allowed range [20,)."));
+        assertEquals(11, ProjectAnalyzer.requiredJavaVersion("Fatal error compiling: invalid flag: --release"));
+        assertEquals(22, ProjectAnalyzer.requiredJavaVersion(
+                "Cannot find a Java installation matching: {languageVersion=22, vendor=any vendor}"));
         assertEquals(6, ProjectAnalyzer.requiredJavaVersion("Source option 6 is no longer supported"));
         assertEquals(-1, ProjectAnalyzer.requiredJavaVersion("ordinary compilation failure"));
     }

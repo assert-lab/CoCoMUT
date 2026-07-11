@@ -152,9 +152,10 @@ bytecode in a conventional build layout, or use explicit artifact inputs such as
 CoCoMUT itself requires JDK 17+, but repository builds may use a different JDK.
 For build subprocesses, CoCoMUT checks `COCOMUT_BUILD_JAVA_HOME`, then project
 declarations such as `.java-version`, `.sdkmanrc`, and the Gradle wrapper. Known
-JDK homes can be supplied as `COCOMUT_JAVA_HOME_8`, `COCOMUT_JAVA_HOME_11`,
-`COCOMUT_JAVA_HOME_17`, `COCOMUT_JAVA_HOME_21`, `COCOMUT_JAVA_HOME_25`, and
-`COCOMUT_JAVA_HOME_26`. If a compiler or Maven Enforcer rule explicitly
+JDK homes can be supplied as `COCOMUT_JAVA_HOME_<major>` for Java 8 through
+26. Exact installed versions are preferred for Maven and Gradle toolchains;
+otherwise, a compatible newer compiler may be used for release-target builds.
+If a compiler, build-tool toolchain, or Maven Enforcer rule explicitly
 requests a newer Java release, CoCoMUT performs bounded, monotonic retries with
 compatible installed JDKs. This supports multi-module builds whose later
 modules require newer Java versions. The extraction report and manifest record the selected
