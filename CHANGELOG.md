@@ -6,6 +6,8 @@
 - Added Spoon-backed source extraction and method URI identity.
 - Added JSONL output, source-set labels, Javadoc metadata, documentation metrics, and provenance fields.
 - Added SootUp call graph modes: `cha` and `rta`.
+- Updated the bytecode parser used by SootUp so Java 25 and 26 project classes
+  remain available to call-graph analysis.
 - Added typed Java API objects and a standalone Picocli CLI distribution.
 - Added a versioned JSONL schema for method-context records. The schema is
   intentionally extensible through `additionalProperties` while the top-level

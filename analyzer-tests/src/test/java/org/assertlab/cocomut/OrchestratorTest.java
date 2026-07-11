@@ -259,7 +259,7 @@ public class OrchestratorTest {
     }
 
     @Test
-    public void zeroFocalBytecodeMatchingIsPartialWithoutFailureCode() throws Exception {
+    public void partialFocalBytecodeMatchingIsAWarningNotFailure() throws Exception {
         Path project = Files.createTempDirectory("cocomut-partial-bytecode-");
         try {
             Path sourceDir = project.resolve("src/main/java/demo");
@@ -292,15 +292,17 @@ public class OrchestratorTest {
                     .classOutputDir(classOutput)
                     .build());
 
-            assertFalse(partial.execute());
+            assertTrue(partial.execute());
             Map<String, Object> report = partial.getExecutionReport();
-            assertEquals("PARTIAL", report.get("status"));
+            assertEquals("SUCCESS", report.get("status"));
             assertEquals(java.util.List.of("NONE"), report.get("failure_codes"));
             assertEquals(Boolean.TRUE, report.get("phase_3_call_graph_artifact_exists"));
-            assertEquals(0L,
-                    ((Number) report.get("phase_3_focal_methods_matched_to_bytecode")).longValue());
+            long matched = ((Number) report.get("phase_3_focal_methods_matched_to_bytecode")).longValue();
+            long selected = ((Number) report.get("phase_2_methods_identified")).longValue();
+            assertTrue("Fixture should contain both matched and unmatched source methods",
+                    matched > 0 && matched < selected);
             assertTrue(String.valueOf(report.get("phase_3_warning"))
-                    .contains("no selected source method matched project bytecode"));
+                    .contains("did not receive matched bytecode call graph results"));
         } finally {
             deleteRecursively(project);
         }
