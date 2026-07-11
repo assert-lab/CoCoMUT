@@ -334,36 +334,39 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     }
 
     private CtModel buildModel(List<Path> inputs, int complianceLevel, ProjectModel project) {
+        Throwable initialFailure;
         try {
             return launcher(inputs, complianceLevel, project, true).buildModel();
-        } catch (LinkageError classpathFailure) {
-            return buildModelWithoutClasspath(inputs, complianceLevel, project, classpathFailure);
-        } catch (RuntimeException firstFailure) {
-            if (complianceLevel == 17) {
-                throw firstFailure;
-            }
+        } catch (RuntimeException | LinkageError failure) {
+            initialFailure = failure;
+        }
+
+        if (complianceLevel != 17) {
             try {
                 return launcher(inputs, 17, project, true).buildModel();
-            } catch (LinkageError classpathFailure) {
-                return buildModelWithoutClasspath(inputs, 17, project, classpathFailure);
+            } catch (RuntimeException | LinkageError ignored) {
+                // Retry without classpath below.
             }
         }
-    }
 
-    private CtModel buildModelWithoutClasspath(List<Path> inputs, int complianceLevel, ProjectModel project,
-                                               LinkageError classpathFailure) {
         try {
             return launcher(inputs, complianceLevel, project, false).buildModel();
-        } catch (RuntimeException | LinkageError fallbackFailure) {
-            if (complianceLevel == 17) {
-                throw classpathFailure;
-            }
+        } catch (RuntimeException | LinkageError ignored) {
+            // Retry Java 17 no-classpath mode below when the project declares another level.
+        }
+
+        if (complianceLevel != 17) {
             try {
                 return launcher(inputs, 17, project, false).buildModel();
             } catch (RuntimeException | LinkageError ignored) {
-                throw classpathFailure;
+                // Preserve the first failure, which best describes the requested analysis mode.
             }
         }
+
+        if (initialFailure instanceof RuntimeException runtimeFailure) {
+            throw runtimeFailure;
+        }
+        throw (LinkageError) initialFailure;
     }
 
     private Launcher launcher(List<Path> inputs, int complianceLevel, ProjectModel project, boolean useClasspath) {

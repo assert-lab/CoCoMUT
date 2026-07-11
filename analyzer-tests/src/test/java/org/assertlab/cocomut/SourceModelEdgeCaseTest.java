@@ -1,6 +1,7 @@
 package org.assertlab.cocomut;
 
 import org.assertlab.cocomut.source.ProjectModel;
+import org.assertlab.cocomut.source.SourceAnalysisSession;
 import org.assertlab.cocomut.source.SourceBackends;
 import org.assertlab.cocomut.source.SourceContext;
 import org.assertlab.cocomut.source.SourceMethod;
@@ -19,6 +20,39 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class SourceModelEdgeCaseTest {
+
+    @Test
+    public void spoonBackendFallsBackToNoClasspathAfterRuntimeFailure() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-no-classpath-fallback");
+        try {
+            Path sourceRoot = project.resolve("src/main/java");
+            write(sourceRoot.resolve("demo/Fallback.java"), """
+                    package demo;
+                    public class Fallback {
+                        public String value() { return "ok"; }
+                    }
+                    """);
+            Path malformedJar = project.resolve("malformed.jar");
+            Files.writeString(malformedJar, "not a jar");
+            ProjectMetadata metadata = new ProjectMetadata.Builder()
+                    .projectName("no-classpath-fallback")
+                    .projectPath(project)
+                    .buildSystem("none")
+                    .javaVersion("17")
+                    .sourceRoot(sourceRoot)
+                    .sourceRoots(List.of(sourceRoot))
+                    .dependencyClasspath(List.of(malformedJar))
+                    .build();
+
+            try (SourceAnalysisSession session = SourceBackends.spoon().open(ProjectModel.from(metadata))) {
+                assertEquals(1, session.parseStats().discovered());
+                assertEquals(1, session.parseStats().parsed());
+                assertTrue(session.methods().stream().anyMatch(method -> method.methodName().equals("value")));
+            }
+        } finally {
+            deleteRecursively(project);
+        }
+    }
 
     @Test
     public void spoonBackendExtractsModernJavaSourceContext() throws Exception {
