@@ -715,22 +715,34 @@ public class ProjectAnalyzer {
             }
 
             CommandResult result = runCommand(command);
-            if (result.exitCode() != 0 && !result.timedOut()
-                    && !"COCOMUT_BUILD_JAVA_HOME".equals(buildJavaSelection.evidence())) {
-                int requiredVersion = requiredJavaVersion(result.output());
-                BuildJavaSelection retrySelection = BuildJavaSelection.forRequiredVersion(
-                        requiredVersion, "compiler requested Java " + requiredVersion + " after initial build failure");
-                if (retrySelection != null && !retrySelection.javaHome().equals(buildJavaSelection.javaHome())) {
-                    BuildJavaSelection initialSelection = buildJavaSelection;
+            if (!"COCOMUT_BUILD_JAVA_HOME".equals(buildJavaSelection.evidence())) {
+                StringBuilder attempts = new StringBuilder(result.output());
+                for (int retryCount = 0;
+                        retryCount < 4 && result.exitCode() != 0 && !result.timedOut();
+                        retryCount++) {
+                    int requiredVersion = requiredJavaVersion(result.output());
+                    BuildJavaSelection retrySelection = BuildJavaSelection.forRequiredVersion(
+                            requiredVersion,
+                            "compiler requested Java " + requiredVersion + " after build failure");
+                    if (retrySelection == null
+                            || retrySelection.javaHome().equals(buildJavaSelection.javaHome())
+                            || (buildJavaSelection.majorVersion() > 0
+                                    && retrySelection.majorVersion() <= buildJavaSelection.majorVersion())) {
+                        break;
+                    }
+                    BuildJavaSelection previousSelection = buildJavaSelection;
                     buildJavaSelection = retrySelection;
                     System.err.println("[ProjectAnalyzer] Retrying build with JDK " + retrySelection.version()
                             + " because the compiler requested Java " + requiredVersion);
-                    CommandResult retry = runCommand(command);
-                    result = new CommandResult(retry.exitCode(),
-                            result.output() + "\n[CoCoMUT retried after " + initialSelection.evidence()
-                                    + " using " + retrySelection.javaHome() + "]\n" + retry.output(),
-                            retry.timedOut());
+                    result = runCommand(command);
+                    attempts.append("\n[CoCoMUT retried after ")
+                            .append(previousSelection.evidence())
+                            .append(" using ")
+                            .append(retrySelection.javaHome())
+                            .append("]\n")
+                            .append(result.output());
                 }
+                result = new CommandResult(result.exitCode(), attempts.toString(), result.timedOut());
             }
             lastBuildResult = new BuildResult(true, result.exitCode(), result.exitCode() == 0,
                     result.timedOut(), result.timedOut() ? "BUILD TIMED OUT" : (result.exitCode() == 0 ? "BUILD SUCCESS" : "BUILD FAILED"),

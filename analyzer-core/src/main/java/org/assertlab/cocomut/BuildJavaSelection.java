@@ -46,6 +46,14 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
         env.put("PATH", javaHome.resolve("bin") + java.io.File.pathSeparator + currentPath);
     }
 
+    int majorVersion() {
+        try {
+            return Integer.parseInt(version);
+        } catch (NumberFormatException ignored) {
+            return -1;
+        }
+    }
+
     public static BuildJavaSelection forRequiredVersion(int version, String evidence) {
         Path home = resolveHome(version, System.getenv());
         return home == null ? null : new BuildJavaSelection(home, versionFromHome(home), evidence);
