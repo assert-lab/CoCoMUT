@@ -372,7 +372,10 @@ public class ProjectAnalyzerTest {
                       <artifactId>root</artifactId>
                       <version>1.0-SNAPSHOT</version>
                       <packaging>pom</packaging>
-                      <modules><module>core</module></modules>
+                      <modules>
+                        <module>core</module>
+                        <!-- <module>inactive</module> -->
+                      </modules>
                     </project>
                     """);
             Files.createDirectories(project.resolve("core/src/main/java/core"));
@@ -384,6 +387,9 @@ public class ProjectAnalyzerTest {
                       <artifactId>core</artifactId>
                     </project>
                     """);
+            Files.createDirectories(project.resolve("inactive/src/main/java/inactive"));
+            Files.writeString(project.resolve("inactive/src/main/java/inactive/Inactive.java"),
+                    "package inactive; class Inactive {}\n");
             Files.createDirectories(project.resolve("vendor/demo/src/main/java/vendor"));
             Files.writeString(project.resolve("vendor/demo/src/main/java/vendor/Vendor.java"),
                     "package vendor; class Vendor {}\n");
@@ -398,6 +404,8 @@ public class ProjectAnalyzerTest {
                     roots.contains(project.resolve("core/src/main/java").toAbsolutePath().normalize()));
             assertFalse("Unrelated nested Maven-looking projects must not be scanned when declared roots exist",
                     roots.contains(project.resolve("vendor/demo/src/main/java").toAbsolutePath().normalize()));
+            assertFalse("Commented Maven modules must not enter the source universe",
+                    roots.contains(project.resolve("inactive/src/main/java").toAbsolutePath().normalize()));
         } finally {
             deleteRecursively(project);
         }

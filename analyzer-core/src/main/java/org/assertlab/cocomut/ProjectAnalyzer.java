@@ -13,6 +13,11 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import javax.xml.parsers.DocumentBuilderFactory;
+
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+
 /**
  * Phase 1 of the method context extraction pipeline.
  * 
@@ -1069,21 +1074,13 @@ public class ProjectAnalyzer {
         java.util.ArrayDeque<Path> queue = new java.util.ArrayDeque<>();
         java.util.Set<Path> seen = new java.util.HashSet<>();
         queue.add(root);
-        Pattern modulePattern = Pattern.compile("<module>\\s*([^<]+?)\\s*</module>");
         while (!queue.isEmpty()) {
             Path dir = queue.poll().toAbsolutePath().normalize();
             if (!seen.add(dir)) continue;
             Path pom = dir.resolve("pom.xml");
             if (!Files.isRegularFile(pom)) continue;
-            String content;
-            try {
-                content = Files.readString(pom, StandardCharsets.UTF_8);
-            } catch (IOException e) {
-                continue;
-            }
-            Matcher m = modulePattern.matcher(content);
-            while (m.find()) {
-                Path child = dir.resolve(m.group(1)).normalize();
+            for (String module : directMavenModules(pom)) {
+                Path child = dir.resolve(module).normalize();
                 if (Files.isDirectory(child)) {
                     modules.add(child);
                     queue.add(child);
@@ -1091,6 +1088,39 @@ public class ProjectAnalyzer {
             }
         }
         return modules;
+    }
+
+    private static List<String> directMavenModules(Path pom) {
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+            factory.setXIncludeAware(false);
+            factory.setExpandEntityReferences(false);
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            Element project = factory.newDocumentBuilder().parse(pom.toFile()).getDocumentElement();
+            for (Node child = project.getFirstChild(); child != null; child = child.getNextSibling()) {
+                if (!(child instanceof Element element) || !"modules".equals(elementName(element))) {
+                    continue;
+                }
+                List<String> modules = new ArrayList<>();
+                for (Node module = element.getFirstChild(); module != null; module = module.getNextSibling()) {
+                    if (module instanceof Element moduleElement && "module".equals(elementName(moduleElement))) {
+                        String value = moduleElement.getTextContent().trim();
+                        if (!value.isBlank()) {
+                            modules.add(value);
+                        }
+                    }
+                }
+                return modules;
+            }
+        } catch (Exception ignored) {
+            // Malformed or unsupported POMs are handled as projects without declared modules.
+        }
+        return List.of();
+    }
+
+    private static String elementName(Element element) {
+        return element.getLocalName() != null ? element.getLocalName() : element.getTagName();
     }
 
     /**
