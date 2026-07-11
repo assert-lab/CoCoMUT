@@ -51,6 +51,7 @@ public class ProjectAnalyzer {
     private final List<Path> explicitSourceRoots;
     private final List<Path> explicitTestSourceRoots;
     private BuildResult lastBuildResult = BuildResult.notAttempted("BUILD DENIED");
+    private BuildJavaSelection buildJavaSelection = new BuildJavaSelection(null, "inherited", "inherited_environment");
 
     /**
      * Create a ProjectAnalyzer for the given project path
@@ -141,6 +142,7 @@ public class ProjectAnalyzer {
     public ProjectMetadata analyze() throws IOException {
         String detectedBuildSystem = detectBuildSystem();
         String javaVersion = detectJavaVersion(detectedBuildSystem);
+        buildJavaSelection = BuildJavaSelection.select(projectPath, detectedBuildSystem, javaVersion);
         List<Path> sourceRoots = !explicitSourceRoots.isEmpty()
                 ? existingDirs(explicitSourceRoots)
                 : findSourceRoots();
@@ -206,6 +208,9 @@ public class ProjectAnalyzer {
                 .buildSucceeded(buildResult.succeeded())
                 .buildTimedOut(buildResult.timedOut())
                 .buildOutputTail(buildResult.outputTail())
+                .buildJavaHome(buildJavaSelection.javaHome() == null ? "" : buildJavaSelection.javaHome().toString())
+                .buildJavaVersion(buildJavaSelection.version())
+                .buildJavaEvidence(buildJavaSelection.evidence())
                 .buildSkipped(buildPolicy == ContextRequest.BuildPolicy.DENY_BUILD)
                 .buildSandboxed(buildPolicy == ContextRequest.BuildPolicy.EXTERNALLY_SANDBOXED_BUILD)
                 .buildPolicy(buildPolicy)
@@ -710,6 +715,23 @@ public class ProjectAnalyzer {
             }
 
             CommandResult result = runCommand(command);
+            if (result.exitCode() != 0 && !result.timedOut()
+                    && !"COCOMUT_BUILD_JAVA_HOME".equals(buildJavaSelection.evidence())) {
+                int requiredVersion = requiredJavaVersion(result.output());
+                BuildJavaSelection retrySelection = BuildJavaSelection.forRequiredVersion(
+                        requiredVersion, "compiler requested Java " + requiredVersion + " after initial build failure");
+                if (retrySelection != null && !retrySelection.javaHome().equals(buildJavaSelection.javaHome())) {
+                    BuildJavaSelection initialSelection = buildJavaSelection;
+                    buildJavaSelection = retrySelection;
+                    System.err.println("[ProjectAnalyzer] Retrying build with JDK " + retrySelection.version()
+                            + " because the compiler requested Java " + requiredVersion);
+                    CommandResult retry = runCommand(command);
+                    result = new CommandResult(retry.exitCode(),
+                            result.output() + "\n[CoCoMUT retried after " + initialSelection.evidence()
+                                    + " using " + retrySelection.javaHome() + "]\n" + retry.output(),
+                            retry.timedOut());
+                }
+            }
             lastBuildResult = new BuildResult(true, result.exitCode(), result.exitCode() == 0,
                     result.timedOut(), result.timedOut() ? "BUILD TIMED OUT" : (result.exitCode() == 0 ? "BUILD SUCCESS" : "BUILD FAILED"),
                     diagnosticTail(result.output()));
@@ -737,6 +759,21 @@ public class ProjectAnalyzer {
                 + normalized.substring(normalized.length() - BUILD_OUTPUT_TAIL_CHARS);
     }
 
+    static int requiredJavaVersion(String output) {
+        if (output == null || output.isBlank()) {
+            return -1;
+        }
+        for (Pattern pattern : List.of(
+                Pattern.compile("(?:release version|invalid target release:)\\s*(\\d+)\\s*(?:not supported)?", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("(?:source|target) option\\s+(\\d+)\\s+is no longer supported", Pattern.CASE_INSENSITIVE))) {
+            Matcher matcher = pattern.matcher(output);
+            if (matcher.find()) {
+                return Integer.parseInt(matcher.group(1));
+            }
+        }
+        return -1;
+    }
+
     private String executableWithWrapper(String tool, boolean isWindows) {
         return BuildToolExecutable.resolve(projectPath, tool, isWindows);
     }
@@ -745,6 +782,7 @@ public class ProjectAnalyzer {
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.directory(projectPath.toFile());
         pb.redirectErrorStream(true);
+        buildJavaSelection.apply(pb);
         Process process = pb.start();
         StringBuilder output = new StringBuilder();
         Thread drainer = new Thread(() -> {

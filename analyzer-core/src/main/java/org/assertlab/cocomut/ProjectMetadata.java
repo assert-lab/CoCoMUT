@@ -30,6 +30,9 @@ public class ProjectMetadata {
     private final boolean buildSucceeded;
     private final boolean buildTimedOut;
     private final String buildOutputTail;
+    private final String buildJavaHome;
+    private final String buildJavaVersion;
+    private final String buildJavaEvidence;
     private final boolean buildSkipped;
     private final boolean buildSandboxed;
     private final ContextRequest.BuildPolicy buildPolicy;
@@ -67,6 +70,9 @@ public class ProjectMetadata {
         this.buildSucceeded = builder.buildSucceeded;
         this.buildTimedOut = builder.buildTimedOut;
         this.buildOutputTail = builder.buildOutputTail == null ? "" : builder.buildOutputTail;
+        this.buildJavaHome = builder.buildJavaHome == null ? "" : builder.buildJavaHome;
+        this.buildJavaVersion = builder.buildJavaVersion == null ? "inherited" : builder.buildJavaVersion;
+        this.buildJavaEvidence = builder.buildJavaEvidence == null ? "inherited_environment" : builder.buildJavaEvidence;
         this.buildSkipped = builder.buildSkipped;
         this.buildSandboxed = builder.buildSandboxed;
         this.buildPolicy = builder.buildPolicy;
@@ -170,6 +176,18 @@ public class ProjectMetadata {
 
     public String getBuildOutputTail() {
         return buildOutputTail;
+    }
+
+    public String getBuildJavaHome() {
+        return buildJavaHome;
+    }
+
+    public String getBuildJavaVersion() {
+        return buildJavaVersion;
+    }
+
+    public String getBuildJavaEvidence() {
+        return buildJavaEvidence;
     }
 
     public boolean isBuildSkipped() {
@@ -286,6 +304,9 @@ public class ProjectMetadata {
         private boolean buildSucceeded = false;
         private boolean buildTimedOut = false;
         private String buildOutputTail = "";
+        private String buildJavaHome = "";
+        private String buildJavaVersion = "inherited";
+        private String buildJavaEvidence = "inherited_environment";
         private boolean buildSkipped = false;
         private boolean buildSandboxed = false;
         private ContextRequest.BuildPolicy buildPolicy = ContextRequest.BuildPolicy.DENY_BUILD;
@@ -329,6 +350,9 @@ public class ProjectMetadata {
                     .buildSucceeded(src.buildSucceeded)
                     .buildTimedOut(src.buildTimedOut)
                     .buildOutputTail(src.buildOutputTail)
+                    .buildJavaHome(src.buildJavaHome)
+                    .buildJavaVersion(src.buildJavaVersion)
+                    .buildJavaEvidence(src.buildJavaEvidence)
                     .buildSkipped(src.buildSkipped)
                     .buildSandboxed(src.buildSandboxed)
                     .buildPolicy(src.buildPolicy)
@@ -439,6 +463,21 @@ public class ProjectMetadata {
 
         public Builder buildOutputTail(String buildOutputTail) {
             this.buildOutputTail = buildOutputTail == null ? "" : buildOutputTail;
+            return this;
+        }
+
+        public Builder buildJavaHome(String buildJavaHome) {
+            this.buildJavaHome = buildJavaHome == null ? "" : buildJavaHome;
+            return this;
+        }
+
+        public Builder buildJavaVersion(String buildJavaVersion) {
+            this.buildJavaVersion = buildJavaVersion == null ? "inherited" : buildJavaVersion;
+            return this;
+        }
+
+        public Builder buildJavaEvidence(String buildJavaEvidence) {
+            this.buildJavaEvidence = buildJavaEvidence == null ? "inherited_environment" : buildJavaEvidence;
             return this;
         }
 

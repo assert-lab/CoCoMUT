@@ -146,3 +146,14 @@ trusted checkouts, or `--externally-sandboxed-build` when a container/VM policy
 is provided outside CoCoMUT. The analyzed project must provide usable project
 bytecode in a conventional build layout, or use explicit artifact inputs such as
 `--class-output` / `--project-jar` before extraction can succeed.
+
+CoCoMUT itself requires JDK 17+, but repository builds may use a different JDK.
+For build subprocesses, CoCoMUT checks `COCOMUT_BUILD_JAVA_HOME`, then project
+declarations such as `.java-version`, `.sdkmanrc`, and the Gradle wrapper. Known
+JDK homes can be supplied as `COCOMUT_JAVA_HOME_8`, `COCOMUT_JAVA_HOME_11`,
+`COCOMUT_JAVA_HOME_17`, `COCOMUT_JAVA_HOME_21`, `COCOMUT_JAVA_HOME_25`, and
+`COCOMUT_JAVA_HOME_26`. If a compiler explicitly
+rejects a requested release, CoCoMUT performs one retry with that JDK when it is
+available. The extraction report and manifest record the selected
+build JDK and the evidence used. If the requested JDK is unavailable, CoCoMUT
+uses the inherited build environment and reports that fallback explicitly.

@@ -5,6 +5,7 @@ import org.assertlab.cocomut.ContextRequest;
 import org.assertlab.cocomut.GradleModelReport;
 import org.assertlab.cocomut.ModuleSourceSet;
 import org.assertlab.cocomut.ProjectAnalyzer;
+import org.assertlab.cocomut.BuildJavaSelection;
 import org.assertlab.cocomut.ProjectMetadata;
 
 import java.io.IOException;
@@ -82,7 +83,10 @@ public class GradleProjectAdapter implements ProjectAdapter {
         }
 
         boolean includeTests = includeTests(request);
-        GradleModel nativeModel = resolveGradleModel(includeTests);
+        BuildJavaSelection buildJava = new BuildJavaSelection(
+                base.getBuildJavaHome().isBlank() ? null : Path.of(base.getBuildJavaHome()),
+                base.getBuildJavaVersion(), base.getBuildJavaEvidence());
+        GradleModel nativeModel = resolveGradleModel(includeTests, buildJava);
         if (!nativeModel.report().succeeded()) {
             System.out.println("[GradleProjectAdapter] native classpath resolution "
                     + "unavailable — using base metadata");
@@ -200,7 +204,7 @@ public class GradleProjectAdapter implements ProjectAdapter {
      * Run Gradle with an init script to print the compile classpath.
      * Returns an empty list on any failure (Gradle missing, offline, timeout, etc.).
      */
-    private GradleModel resolveGradleModel(boolean includeTests) {
+    private GradleModel resolveGradleModel(boolean includeTests, BuildJavaSelection buildJava) {
         Path initScript = null;
         try {
             initScript = writeInitScript(includeTests);
@@ -216,6 +220,7 @@ public class GradleProjectAdapter implements ProjectAdapter {
             ProcessBuilder pb = new ProcessBuilder(cmd);
             pb.directory(projectPath.toFile());
             pb.redirectErrorStream(true);
+            buildJava.apply(pb);
             Process p = pb.start();
 
             StringBuilder output = new StringBuilder();
