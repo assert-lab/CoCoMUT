@@ -117,6 +117,26 @@ public class ProjectAnalyzerTest {
     }
 
     @Test
+    public void missingRootBuildDescriptorHasActionableStatus() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-no-root-build-");
+        try {
+            Files.createDirectories(project.resolve("src/main/java/demo"));
+            Files.writeString(project.resolve("src/main/java/demo/App.java"),
+                    "package demo; class App {}\n");
+
+            ProjectMetadata metadata = new ProjectAnalyzer(ContextRequest.builder()
+                    .projectRoot(project)
+                    .allowUnsandboxedBuild()
+                    .build()).analyze();
+
+            assertTrue(metadata.getCompileStatus().startsWith(
+                    "NO MAVEN OR GRADLE BUILD DESCRIPTOR AT PROJECT ROOT"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void testJavaVersionDetection() throws IOException {
         ProjectMetadata metadata = analyzer.analyze();
         assertNotNull("Java version should be detected", metadata.getJavaVersion());

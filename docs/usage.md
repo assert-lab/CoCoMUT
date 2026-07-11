@@ -158,6 +158,11 @@ Useful options:
                                 or path-separated
 ```
 
+For Maven and Gradle projects, `--project` must identify the intended build
+root: the directory containing the root `pom.xml`, `build.gradle`,
+`build.gradle.kts`, or settings file. CoCoMUT does not guess between multiple
+nested builds in a monorepo.
+
 CoCoMUT performs static bytecode analysis. The analyzed checkout must provide
 usable project bytecode through project class directories or project JARs. By
 default CoCoMUT does not execute Maven or Gradle; this avoids running

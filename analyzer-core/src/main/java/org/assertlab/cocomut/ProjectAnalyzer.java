@@ -27,6 +27,9 @@ import java.util.regex.Pattern;
  * downstream components (MethodIdentifier, CallGraphGenerator, etc.)
  */
 public class ProjectAnalyzer {
+
+    private static final String NO_ROOT_BUILD_DESCRIPTOR =
+            "NO MAVEN OR GRADLE BUILD DESCRIPTOR AT PROJECT ROOT";
     private static final long DEFAULT_COMPILE_TIMEOUT_SECONDS = 120;
     private static final int BUILD_OUTPUT_TAIL_CHARS = 12_000;
     private static final Pattern ANSI_ESCAPE = Pattern.compile("\\u001B\\[[;\\d]*[ -/]*[@-~]");
@@ -679,7 +682,7 @@ public class ProjectAnalyzer {
         }
 
         if (!"maven".equals(buildSystem) && !"gradle".equals(buildSystem)) {
-            lastBuildResult = BuildResult.notAttempted("NO BUILD TOOL");
+            lastBuildResult = BuildResult.notAttempted(NO_ROOT_BUILD_DESCRIPTOR);
             return lastBuildResult;
         }
 
@@ -697,7 +700,7 @@ public class ProjectAnalyzer {
                 command = List.of(gradle, "--no-daemon", includeTests ? "testClasses" : "classes",
                         "-x", "test", "--build-cache", "-q");
             } else {
-                lastBuildResult = BuildResult.notAttempted("NO BUILD TOOL");
+                lastBuildResult = BuildResult.notAttempted(NO_ROOT_BUILD_DESCRIPTOR);
                 return lastBuildResult;
             }
 

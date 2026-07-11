@@ -24,7 +24,8 @@ public final class CoCoMUTCommand implements Callable<Integer> {
         System.exit(exitCode);
     }
 
-    @Option(names = "--project", required = true, description = "Project root to analyze.")
+    @Option(names = "--project", required = true,
+            description = "Project root to analyze. For Maven/Gradle, use the directory containing the root build descriptor.")
     private Path project;
 
     @Option(names = "--scope", defaultValue = "all", description = "Method scope: all or entry-points.")
