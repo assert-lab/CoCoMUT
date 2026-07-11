@@ -154,8 +154,9 @@ For build subprocesses, CoCoMUT checks `COCOMUT_BUILD_JAVA_HOME`, then project
 declarations such as `.java-version`, `.sdkmanrc`, and the Gradle wrapper. Known
 JDK homes can be supplied as `COCOMUT_JAVA_HOME_8`, `COCOMUT_JAVA_HOME_11`,
 `COCOMUT_JAVA_HOME_17`, `COCOMUT_JAVA_HOME_21`, `COCOMUT_JAVA_HOME_25`, and
-`COCOMUT_JAVA_HOME_26`. If a compiler explicitly
-rejects a requested release, CoCoMUT performs one retry with that JDK when it is
-available. The extraction report and manifest record the selected
+`COCOMUT_JAVA_HOME_26`. If a compiler or Maven Enforcer rule explicitly
+requests a newer Java release, CoCoMUT performs bounded, monotonic retries with
+compatible installed JDKs. This supports multi-module builds whose later
+modules require newer Java versions. The extraction report and manifest record the selected
 build JDK and the evidence used. If the requested JDK is unavailable, CoCoMUT
 uses the inherited build environment and reports that fallback explicitly.
