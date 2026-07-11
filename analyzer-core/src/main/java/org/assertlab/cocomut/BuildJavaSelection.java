@@ -59,6 +59,15 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
         return home == null ? null : new BuildJavaSelection(home, versionFromHome(home), evidence);
     }
 
+    static Map<Integer, Path> installedJdkHomes() {
+        Map<Integer, Path> homes = new java.util.LinkedHashMap<>();
+        for (int version : SUPPORTED_VERSIONS) {
+            Path home = resolveHome(version, System.getenv());
+            if (home != null) homes.put(version, home);
+        }
+        return homes;
+    }
+
     private static VersionEvidence detectProjectVersion(Path root, String buildSystem, String declaredJavaVersion) {
         String javaVersion = firstLine(root.resolve(".java-version"));
         if (!javaVersion.isBlank()) {

@@ -6,8 +6,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -39,6 +41,7 @@ public class ProjectAnalyzer {
     private static final int BUILD_OUTPUT_TAIL_CHARS = 12_000;
     private static final Pattern ANSI_ESCAPE = Pattern.compile("\\u001B\\[[;\\d]*[ -/]*[@-~]");
     private final Path projectPath;
+    private Path effectiveBuildRoot;
     private final boolean autoDetectJavaVersion;
     private final String buildSystem;
     private final boolean includeTests;
@@ -128,6 +131,7 @@ public class ProjectAnalyzer {
         this.explicitClasspathFiles = explicitClasspathFiles == null ? List.of() : List.copyOf(explicitClasspathFiles);
         this.explicitSourceRoots = explicitSourceRoots == null ? List.of() : List.copyOf(explicitSourceRoots);
         this.explicitTestSourceRoots = explicitTestSourceRoots == null ? List.of() : List.copyOf(explicitTestSourceRoots);
+        this.effectiveBuildRoot = this.projectPath;
 
         if (!Files.isDirectory(projectPath)) {
             throw new IllegalArgumentException("Project path must be a directory: " + projectPath);
@@ -155,6 +159,11 @@ public class ProjectAnalyzer {
                 || !explicitTestClassOutputDirs.isEmpty()
                 || !explicitProjectJars.isEmpty();
         BuildResult buildResult = runBuildIfAllowed(detectedBuildSystem);
+        if (buildResult.succeeded()) {
+            sourceRoots = mergePaths(sourceRoots, findGeneratedSourceRoots(false));
+            if (includeTests) testSourceRoots = mergePaths(testSourceRoots, findGeneratedSourceRoots(true));
+            sourceRoot = !sourceRoots.isEmpty() ? sourceRoots.get(0) : sourceRoot;
+        }
         List<Path> discoveredMainOutputs = explicitMode(explicitProjectBytecode)
                 ? List.of()
                 : existingMainClassOutputDirs(detectedBuildSystem);
@@ -191,6 +200,7 @@ public class ProjectAnalyzer {
         return new ProjectMetadata.Builder()
                 .projectName(projectName)
                 .projectPath(projectPath)
+                .buildRoot(effectiveBuildRoot)
                 .buildSystem(detectedBuildSystem)
                 .javaVersion(javaVersion)
                 .sourceRoot(sourceRoot)
@@ -208,6 +218,7 @@ public class ProjectAnalyzer {
                 .buildSucceeded(buildResult.succeeded())
                 .buildTimedOut(buildResult.timedOut())
                 .buildOutputTail(buildResult.outputTail())
+                .buildFailureReason(buildResult.failureReason())
                 .buildJavaHome(buildJavaSelection.javaHome() == null ? "" : buildJavaSelection.javaHome().toString())
                 .buildJavaVersion(buildJavaSelection.version())
                 .buildJavaEvidence(buildJavaSelection.evidence())
@@ -351,10 +362,37 @@ public class ProjectAnalyzer {
             return "maven";
         }
 
+        List<Path> nestedRoots = nestedBuildRoots();
+        if (nestedRoots.size() == 1) {
+            effectiveBuildRoot = nestedRoots.get(0);
+            return Files.isRegularFile(effectiveBuildRoot.resolve("pom.xml")) ? "maven" : "gradle";
+        }
+
         // No recognized build descriptor: a plain Java directory or pre-compiled
         // project. Return "none" so conventional source and bytecode layouts can
         // still be analyzed.
         return "none";
+    }
+
+    private List<Path> nestedBuildRoots() {
+        Set<Path> roots = new LinkedHashSet<>();
+        try (var walk = Files.walk(projectPath, 3)) {
+            for (Path file : walk.filter(Files::isRegularFile).toList()) {
+                String name = file.getFileName().toString();
+                if (name.equals("pom.xml") || name.equals("settings.gradle") || name.equals("settings.gradle.kts")
+                        || name.equals("build.gradle") || name.equals("build.gradle.kts")) {
+                    Path parent = file.getParent();
+                    String relative = projectPath.relativize(parent).toString().replace('\\', '/');
+                    if (!relative.contains("build/") && !relative.contains("target/")
+                            && !relative.contains("examples/") && !relative.contains("benchmark")) roots.add(parent);
+                }
+            }
+        } catch (IOException ignored) {
+            return List.of();
+        }
+        return roots.stream()
+                .filter(root -> roots.stream().noneMatch(other -> !other.equals(root) && root.startsWith(other)))
+                .toList();
     }
 
     /**
@@ -381,7 +419,7 @@ public class ProjectAnalyzer {
      * Looks for common compiler properties and direct compiler-plugin settings.
      */
     private String detectJavaVersionFromMaven() throws IOException {
-        Path pomPath = projectPath.resolve("pom.xml");
+        Path pomPath = effectiveBuildRoot.resolve("pom.xml");
         if (!Files.exists(pomPath)) {
             return "unknown";
         }
@@ -435,9 +473,9 @@ public class ProjectAnalyzer {
      * Extract Java version from Gradle build.gradle or build.gradle.kts
      */
     private String detectJavaVersionFromGradle() throws IOException {
-        Path buildGradle = projectPath.resolve("build.gradle");
+        Path buildGradle = effectiveBuildRoot.resolve("build.gradle");
         if (!Files.exists(buildGradle)) {
-            buildGradle = projectPath.resolve("build.gradle.kts");
+            buildGradle = effectiveBuildRoot.resolve("build.gradle.kts");
         }
 
         if (!Files.exists(buildGradle)) {
@@ -485,7 +523,7 @@ public class ProjectAnalyzer {
         }
 
         // Check for multi-module Maven structure
-        Path pomXml = projectPath.resolve("pom.xml");
+        Path pomXml = effectiveBuildRoot.resolve("pom.xml");
         if (Files.exists(pomXml)) {
             // Look for modules with src/main/java directories
             try (var stream = Files.list(projectPath)) {
@@ -519,7 +557,7 @@ public class ProjectAnalyzer {
     private List<Path> findSourceRoots() throws IOException {
         LinkedHashSet<Path> roots = new LinkedHashSet<>();
         addIfDirectory(roots, projectPath.resolve("src/main/java"));
-        for (Path module : collectMavenModuleDirs(projectPath)) {
+        for (Path module : collectMavenModuleDirs(effectiveBuildRoot)) {
             addIfDirectory(roots, module.resolve("src/main/java"));
         }
         if (roots.isEmpty()) {
@@ -534,13 +572,40 @@ public class ProjectAnalyzer {
     private List<Path> findTestSourceRoots() throws IOException {
         LinkedHashSet<Path> roots = new LinkedHashSet<>();
         addIfDirectory(roots, projectPath.resolve("src/test/java"));
-        for (Path module : collectMavenModuleDirs(projectPath)) {
+        for (Path module : collectMavenModuleDirs(effectiveBuildRoot)) {
             addIfDirectory(roots, module.resolve("src/test/java"));
         }
         if (roots.isEmpty()) {
             addConventionSourceRoots(roots, "src/test/java");
         }
         return new ArrayList<>(roots);
+    }
+
+    private List<Path> findGeneratedSourceRoots(boolean tests) {
+        Set<Path> roots = new LinkedHashSet<>();
+        try (var walk = Files.walk(projectPath, 10)) {
+            for (Path dir : walk.filter(Files::isDirectory).toList()) {
+                String normalized = projectPath.relativize(dir).toString().replace('\\', '/');
+                boolean generated = normalized.contains("/target/generated-")
+                        || normalized.contains("/build/generated/sources/")
+                        || normalized.startsWith("target/generated-")
+                        || normalized.startsWith("build/generated/sources/");
+                boolean testRoot = normalized.contains("generated-test-sources")
+                        || normalized.contains("/test/") || normalized.endsWith("/test");
+                if (generated && testRoot == tests && containsJavaFiles(dir)) roots.add(dir);
+            }
+        } catch (IOException ignored) {
+            // Generated sources are optional enrichment.
+        }
+        return new ArrayList<>(roots);
+    }
+
+    private static boolean containsJavaFiles(Path dir) {
+        try (var files = Files.walk(dir, 5)) {
+            return files.anyMatch(path -> Files.isRegularFile(path) && path.toString().endsWith(".java"));
+        } catch (IOException ignored) {
+            return false;
+        }
     }
 
     private void addConventionSourceRoots(Set<Path> roots, String suffix) {
@@ -576,7 +641,7 @@ public class ProjectAnalyzer {
         // projects (e.g. when running pipeline tests from a workspace that contains
         // multiple sibling projects on disk).
         if ("maven".equals(buildSystem)) {
-            for (Path module : collectMavenModuleDirs(projectPath)) {
+            for (Path module : collectMavenModuleDirs(effectiveBuildRoot)) {
                 Path moduleClasses = module.resolve("target/classes");
                 if (Files.exists(moduleClasses)) {
                     classpath.add(moduleClasses);
@@ -701,10 +766,19 @@ public class ProjectAnalyzer {
                     .toLowerCase()
                     .contains("win");
             List<String> command;
+            AndroidSdkSupport.Preparation androidPreparation = "gradle".equals(buildSystem)
+                    ? AndroidSdkSupport.prepare(effectiveBuildRoot) : AndroidSdkSupport.Preparation.notAndroid();
 
             if ("maven".equals(buildSystem)) {
                 String mvn = executableWithWrapper("mvn", isWindows);
-                command = List.of(mvn, "-q", "-DskipTests", includeTests ? "test-compile" : "compile");
+                List<String> mavenCommand = new ArrayList<>(List.of(mvn, "-q", "-DskipTests"));
+                Path toolchains = isolatedMavenToolchainsFile();
+                if (toolchains != null) {
+                    mavenCommand.add("-t");
+                    mavenCommand.add(toolchains.toString());
+                }
+                mavenCommand.add(includeTests ? "test-compile" : "compile");
+                command = mavenCommand;
             } else if ("gradle".equals(buildSystem)) {
                 String gradle = executableWithWrapper("gradle", isWindows);
                 command = List.of(gradle, "--no-daemon", includeTests ? "testClasses" : "classes",
@@ -714,7 +788,12 @@ public class ProjectAnalyzer {
                 return lastBuildResult;
             }
 
-            CommandResult result = runCommand(command);
+            CommandResult result = runWithTransientRetries(command);
+            if (androidPreparation.androidProject() && !androidPreparation.diagnostic().isBlank()) {
+                result = new CommandResult(result.exitCode(),
+                        "[CoCoMUT Android SDK preparation]\n" + androidPreparation.diagnostic() + "\n"
+                                + result.output(), result.timedOut());
+            }
             if (!"COCOMUT_BUILD_JAVA_HOME".equals(buildJavaSelection.evidence())) {
                 StringBuilder attempts = new StringBuilder(result.output());
                 for (int retryCount = 0;
@@ -734,7 +813,7 @@ public class ProjectAnalyzer {
                     buildJavaSelection = retrySelection;
                     System.err.println("[ProjectAnalyzer] Retrying build with JDK " + retrySelection.version()
                             + " because the compiler requested Java " + requiredVersion);
-                    result = runCommand(command);
+                    result = runWithTransientRetries(command);
                     attempts.append("\n[CoCoMUT retried after ")
                             .append(previousSelection.evidence())
                             .append(" using ")
@@ -744,13 +823,24 @@ public class ProjectAnalyzer {
                 }
                 result = new CommandResult(result.exitCode(), attempts.toString(), result.timedOut());
             }
+            if ("maven".equals(buildSystem) && result.exitCode() != 0 && !result.timedOut()
+                    && missingSameReactorArtifacts(result.output())) {
+                List<String> packageCommand = new ArrayList<>(command);
+                packageCommand.set(packageCommand.size() - 1, "package");
+                CommandResult packaged = runWithTransientRetries(packageCommand);
+                result = new CommandResult(packaged.exitCode(),
+                        result.output() + "\n[CoCoMUT retried Maven package because only declared reactor artifacts were missing]\n"
+                                + packaged.output(), packaged.timedOut());
+            }
             lastBuildResult = new BuildResult(true, result.exitCode(), result.exitCode() == 0,
                     result.timedOut(), result.timedOut() ? "BUILD TIMED OUT" : (result.exitCode() == 0 ? "BUILD SUCCESS" : "BUILD FAILED"),
-                    diagnosticTail(result.output()));
+                    diagnosticTail(result.output()),
+                    BuildFailureReason.classify(result.output(), result.timedOut(), result.exitCode() == 0));
             return lastBuildResult;
         } catch (Exception e) {
             lastBuildResult = new BuildResult(true, -1, false, false,
-                    "BUILD FAILED: " + e.getClass().getSimpleName(), e.getMessage() == null ? "" : e.getMessage());
+                    "BUILD FAILED: " + e.getClass().getSimpleName(), e.getMessage() == null ? "" : e.getMessage(),
+                    BuildFailureReason.BUILD_FAILED_UNKNOWN_ERROR);
             return lastBuildResult;
         }
     }
@@ -787,13 +877,77 @@ public class ProjectAnalyzer {
         return -1;
     }
 
+    private CommandResult runWithTransientRetries(List<String> command) throws IOException, InterruptedException {
+        CommandResult result = runCommand(command);
+        StringBuilder attempts = new StringBuilder(result.output());
+        for (int retry = 1; retry <= 2 && result.exitCode() != 0 && !result.timedOut()
+                && BuildFailureReason.isTransientNetworkFailure(result.output()); retry++) {
+            Thread.sleep(500L * retry);
+            result = runCommand(command);
+            attempts.append("\n[CoCoMUT transient network retry ").append(retry).append("/2]\n")
+                    .append(result.output());
+        }
+        return new CommandResult(result.exitCode(), attempts.toString(), result.timedOut());
+    }
+
+    boolean missingSameReactorArtifacts(String output) {
+        if (output == null || !output.contains("Could not find artifact")) return false;
+        Set<String> reactorArtifacts = new HashSet<>();
+        for (Path dir : mergePaths(List.of(effectiveBuildRoot), collectMavenModuleDirs(effectiveBuildRoot))) {
+            String pom = readQuietly(dir.resolve("pom.xml"));
+            Matcher artifact = Pattern.compile("<artifactId>\\s*([^<]+)\\s*</artifactId>").matcher(pom);
+            if (artifact.find()) reactorArtifacts.add(artifact.group(1).trim());
+        }
+        Matcher missing = Pattern.compile("Could not find artifact\\s+[^:\\s]+:([^:\\s]+):", Pattern.CASE_INSENSITIVE)
+                .matcher(output);
+        boolean found = false;
+        while (missing.find()) {
+            found = true;
+            if (!reactorArtifacts.contains(missing.group(1))) return false;
+        }
+        return found;
+    }
+
+    private static String readQuietly(Path path) {
+        try {
+            return Files.isRegularFile(path) ? Files.readString(path) : "";
+        } catch (IOException ignored) {
+            return "";
+        }
+    }
+
     private String executableWithWrapper(String tool, boolean isWindows) {
-        return BuildToolExecutable.resolve(projectPath, tool, isWindows);
+        return BuildToolExecutable.resolve(effectiveBuildRoot, tool, isWindows);
+    }
+
+    private Path isolatedMavenToolchainsFile() throws IOException {
+        String poms = readQuietly(effectiveBuildRoot.resolve("pom.xml"));
+        if (!poms.contains("maven-toolchains-plugin") && !poms.contains("jdkToolchain")
+                && !Files.isRegularFile(effectiveBuildRoot.resolve(".mvn/toolchains.xml"))) return null;
+        Map<Integer, Path> homes = BuildJavaSelection.installedJdkHomes();
+        if (homes.isEmpty()) return null;
+        StringBuilder xml = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<toolchains>\n");
+        for (Map.Entry<Integer, Path> entry : homes.entrySet()) {
+            xml.append("  <toolchain><type>jdk</type><provides><version>")
+                    .append(entry.getKey()).append("</version></provides><configuration><jdkHome>")
+                    .append(escapeXml(entry.getValue().toString()))
+                    .append("</jdkHome></configuration></toolchain>\n");
+        }
+        xml.append("</toolchains>\n");
+        Path file = Files.createTempFile("cocomut-maven-toolchains-", ".xml");
+        Files.writeString(file, xml.toString());
+        file.toFile().deleteOnExit();
+        return file;
+    }
+
+    private static String escapeXml(String value) {
+        return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                .replace("\"", "&quot;").replace("'", "&apos;");
     }
 
     private CommandResult runCommand(List<String> command) throws IOException, InterruptedException {
         ProcessBuilder pb = new ProcessBuilder(command);
-        pb.directory(projectPath.toFile());
+        pb.directory(effectiveBuildRoot.toFile());
         pb.redirectErrorStream(true);
         buildJavaSelection.apply(pb);
         Process process = pb.start();
@@ -848,9 +1002,9 @@ public class ProjectAnalyzer {
     private record CommandResult(int exitCode, String output, boolean timedOut) {}
 
     private record BuildResult(boolean attempted, int exitCode, boolean succeeded, boolean timedOut,
-                               String status, String outputTail) {
+                               String status, String outputTail, BuildFailureReason failureReason) {
         static BuildResult notAttempted(String status) {
-            return new BuildResult(false, -1, false, false, status, "");
+            return new BuildResult(false, -1, false, false, status, "", BuildFailureReason.NONE);
         }
     }
 
@@ -902,7 +1056,7 @@ public class ProjectAnalyzer {
         List<Path> dirs = new ArrayList<>();
         if ("maven".equals(buildSystem)) {
             addClassDir(dirs, projectPath.resolve("target/classes"));
-            for (Path module : collectMavenModuleDirs(projectPath)) {
+            for (Path module : collectMavenModuleDirs(effectiveBuildRoot)) {
                 addClassDir(dirs, module.resolve("target/classes"));
             }
             return new ArrayList<>(new LinkedHashSet<>(dirs));
@@ -930,7 +1084,7 @@ public class ProjectAnalyzer {
         List<Path> dirs = new ArrayList<>();
         if ("maven".equals(buildSystem)) {
             addClassDir(dirs, projectPath.resolve("target/test-classes"));
-            for (Path module : collectMavenModuleDirs(projectPath)) {
+            for (Path module : collectMavenModuleDirs(effectiveBuildRoot)) {
                 addClassDir(dirs, module.resolve("target/test-classes"));
             }
         } else if ("gradle".equals(buildSystem)) {
@@ -948,7 +1102,7 @@ public class ProjectAnalyzer {
         List<Path> jars = new ArrayList<>();
         if ("maven".equals(buildSystem)) {
             addJarsFromDirectory(jars, projectPath.resolve("target"));
-            for (Path module : collectMavenModuleDirs(projectPath)) {
+            for (Path module : collectMavenModuleDirs(effectiveBuildRoot)) {
                 addJarsFromDirectory(jars, module.resolve("target"));
             }
         } else if ("gradle".equals(buildSystem)) {

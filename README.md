@@ -160,3 +160,19 @@ compatible installed JDKs. This supports multi-module builds whose later
 modules require newer Java versions. The extraction report and manifest record the selected
 build JDK and the evidence used. If the requested JDK is unavailable, CoCoMUT
 uses the inherited build environment and reports that fallback explicitly.
+
+Build recovery is bounded and evidence-driven. CoCoMUT retries transient network
+failures at most twice, provisions only explicitly declared Android SDK
+components when `sdkmanager` is already available, and retries Maven `package`
+only when every missing artifact belongs to the declared reactor. It does not
+edit subject repositories or guess credentials, dependency versions, SDK
+levels, or custom setup commands. Reports retain `BUILD_FAILED` as the primary
+code and add a stable `phase_1_build_failure_reason`, such as
+`BUILD_FAILED_JDK_UNAVAILABLE`, `BUILD_FAILED_DEPENDENCY_UNAVAILABLE`, or
+`BUILD_FAILED_UNKNOWN_ERROR`.
+
+When no build descriptor exists at the requested root, CoCoMUT uses one unique
+nested Maven or Gradle root. Multiple independent nested builds remain
+ambiguous and require an explicit project root per invocation. Generated Maven
+and Gradle source directories are added after a successful build; generated
+test sources are included only when the requested source sets include tests.

@@ -13,6 +13,7 @@ import java.util.Objects;
 public class ProjectMetadata {
     private final String projectName;
     private final Path projectPath;
+    private final Path buildRoot;
     private final String buildSystem;  // "maven" or "gradle"
     private final String javaVersion;
     private final Path sourceRoot;
@@ -30,6 +31,7 @@ public class ProjectMetadata {
     private final boolean buildSucceeded;
     private final boolean buildTimedOut;
     private final String buildOutputTail;
+    private final BuildFailureReason buildFailureReason;
     private final String buildJavaHome;
     private final String buildJavaVersion;
     private final String buildJavaEvidence;
@@ -53,6 +55,7 @@ public class ProjectMetadata {
     private ProjectMetadata(Builder builder) {
         this.projectName = Objects.requireNonNull(builder.projectName, "projectName cannot be null");
         this.projectPath = Objects.requireNonNull(builder.projectPath, "projectPath cannot be null");
+        this.buildRoot = builder.buildRoot == null ? this.projectPath : builder.buildRoot;
         this.buildSystem = Objects.requireNonNull(builder.buildSystem, "buildSystem cannot be null");
         this.javaVersion = Objects.requireNonNull(builder.javaVersion, "javaVersion cannot be null");
         this.sourceRoot = Objects.requireNonNull(builder.sourceRoot, "sourceRoot cannot be null");
@@ -70,6 +73,8 @@ public class ProjectMetadata {
         this.buildSucceeded = builder.buildSucceeded;
         this.buildTimedOut = builder.buildTimedOut;
         this.buildOutputTail = builder.buildOutputTail == null ? "" : builder.buildOutputTail;
+        this.buildFailureReason = builder.buildFailureReason == null
+                ? BuildFailureReason.BUILD_FAILED_UNKNOWN_ERROR : builder.buildFailureReason;
         this.buildJavaHome = builder.buildJavaHome == null ? "" : builder.buildJavaHome;
         this.buildJavaVersion = builder.buildJavaVersion == null ? "inherited" : builder.buildJavaVersion;
         this.buildJavaEvidence = builder.buildJavaEvidence == null ? "inherited_environment" : builder.buildJavaEvidence;
@@ -108,6 +113,10 @@ public class ProjectMetadata {
 
     public Path getProjectPath() {
         return projectPath;
+    }
+
+    public Path getBuildRoot() {
+        return buildRoot;
     }
 
     public String getBuildSystem() {
@@ -176,6 +185,10 @@ public class ProjectMetadata {
 
     public String getBuildOutputTail() {
         return buildOutputTail;
+    }
+
+    public BuildFailureReason getBuildFailureReason() {
+        return buildFailureReason;
     }
 
     public String getBuildJavaHome() {
@@ -287,6 +300,7 @@ public class ProjectMetadata {
     public static class Builder {
         private String projectName;
         private Path projectPath;
+        private Path buildRoot;
         private String buildSystem;
         private String javaVersion;
         private Path sourceRoot;
@@ -304,6 +318,7 @@ public class ProjectMetadata {
         private boolean buildSucceeded = false;
         private boolean buildTimedOut = false;
         private String buildOutputTail = "";
+        private BuildFailureReason buildFailureReason = BuildFailureReason.NONE;
         private String buildJavaHome = "";
         private String buildJavaVersion = "inherited";
         private String buildJavaEvidence = "inherited_environment";
@@ -333,6 +348,7 @@ public class ProjectMetadata {
             return new Builder()
                     .projectName(src.projectName)
                     .projectPath(src.projectPath)
+                    .buildRoot(src.buildRoot)
                     .buildSystem(src.buildSystem)
                     .javaVersion(src.javaVersion)
                     .sourceRoot(src.sourceRoot)
@@ -350,6 +366,7 @@ public class ProjectMetadata {
                     .buildSucceeded(src.buildSucceeded)
                     .buildTimedOut(src.buildTimedOut)
                     .buildOutputTail(src.buildOutputTail)
+                    .buildFailureReason(src.buildFailureReason)
                     .buildJavaHome(src.buildJavaHome)
                     .buildJavaVersion(src.buildJavaVersion)
                     .buildJavaEvidence(src.buildJavaEvidence)
@@ -378,6 +395,11 @@ public class ProjectMetadata {
 
         public Builder projectPath(Path projectPath) {
             this.projectPath = projectPath;
+            return this;
+        }
+
+        public Builder buildRoot(Path buildRoot) {
+            this.buildRoot = buildRoot;
             return this;
         }
 
@@ -463,6 +485,12 @@ public class ProjectMetadata {
 
         public Builder buildOutputTail(String buildOutputTail) {
             this.buildOutputTail = buildOutputTail == null ? "" : buildOutputTail;
+            return this;
+        }
+
+        public Builder buildFailureReason(BuildFailureReason buildFailureReason) {
+            this.buildFailureReason = buildFailureReason == null
+                    ? BuildFailureReason.BUILD_FAILED_UNKNOWN_ERROR : buildFailureReason;
             return this;
         }
 

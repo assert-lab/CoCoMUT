@@ -290,6 +290,7 @@ final class Orchestrator {
             }
 
             executionReport.put("phase_1_project", projectMetadata.getProjectName());
+            executionReport.put("phase_1_build_root", projectMetadata.getBuildRoot().toString());
             executionReport.put("phase_1_build_system", projectMetadata.getBuildSystem());
             executionReport.put("phase_1_java_version", projectMetadata.getJavaVersion());
             executionReport.put("phase_1_compiles", projectMetadata.isCompiles());
@@ -299,6 +300,7 @@ final class Orchestrator {
             executionReport.put("phase_1_build_succeeded", projectMetadata.isBuildSucceeded());
             executionReport.put("phase_1_build_timed_out", projectMetadata.isBuildTimedOut());
             executionReport.put("phase_1_build_output_tail", projectMetadata.getBuildOutputTail());
+            executionReport.put("phase_1_build_failure_reason", projectMetadata.getBuildFailureReason().toString());
             executionReport.put("phase_1_build_java_home", projectMetadata.getBuildJavaHome());
             executionReport.put("phase_1_build_java_version", projectMetadata.getBuildJavaVersion());
             executionReport.put("phase_1_build_java_evidence", projectMetadata.getBuildJavaEvidence());
@@ -323,6 +325,16 @@ final class Orchestrator {
             executionReport.put("phase_1_test_class_outputs", projectMetadata.getTestClassOutputs().size());
             executionReport.put("phase_1_project_artifact_jars", projectMetadata.getProjectArtifactJars().size());
             executionReport.put("phase_1_project_bytecode_locations", projectBytecodeLocations().size());
+            int maximumClassfileMajor = BytecodeVersionInspector.maximumMajor(projectBytecodeLocations());
+            executionReport.put("phase_1_max_classfile_major", maximumClassfileMajor);
+            executionReport.put("phase_1_max_supported_classfile_major", BytecodeVersionInspector.MAX_SUPPORTED_MAJOR);
+            executionReport.put("phase_1_bytecode_version_supported",
+                    maximumClassfileMajor < 0 || maximumClassfileMajor <= BytecodeVersionInspector.MAX_SUPPORTED_MAJOR);
+            if (maximumClassfileMajor > BytecodeVersionInspector.MAX_SUPPORTED_MAJOR) {
+                partialWithoutFailure = true;
+                executionReport.put("phase_1_bytecode_warning", "Project class-file major " + maximumClassfileMajor
+                        + " exceeds parser support through " + BytecodeVersionInspector.MAX_SUPPORTED_MAJOR + ".");
+            }
             executionReport.put("phase_1_dependency_locations", projectMetadata.getDependencyClasspath().size());
             executionReport.put("phase_1_dependency_jars", projectModel.dependencyJars().size());
             executionReport.put("phase_1_explicit_class_outputs", projectMetadata.getExplicitClassOutputDirs().size());
