@@ -84,7 +84,7 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
     }
 
     private static Path resolveHome(int version, Map<String, String> env) {
-        int availableVersion = version >= 6 && version <= 8 ? 8 : version;
+        int availableVersion = compatibleInstalledVersion(version);
         if (!SUPPORTED_VERSIONS.contains(availableVersion)) {
             return null;
         }
@@ -105,11 +105,30 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
         return null;
     }
 
+    static int compatibleInstalledVersion(int requestedVersion) {
+        if (requestedVersion >= 6 && requestedVersion <= 8) {
+            return 8;
+        }
+        if (requestedVersion >= 9 && requestedVersion <= 11) {
+            return 11;
+        }
+        if (requestedVersion >= 12 && requestedVersion <= 17) {
+            return 17;
+        }
+        if (requestedVersion >= 18 && requestedVersion <= 21) {
+            return 21;
+        }
+        if (requestedVersion >= 22 && requestedVersion <= 25) {
+            return 25;
+        }
+        return requestedVersion;
+    }
+
     private static int normalize(String raw) {
         if (raw == null || raw.isBlank()) {
             return -1;
         }
-        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(?:^|[^0-9])(1\\.)?(6|7|8|11|17|21|25|26)(?:[^0-9]|$)")
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(?:^|[^0-9])(1\\.)?([6-9]|1[0-9]|2[0-6])(?:[^0-9]|$)")
                 .matcher(raw.trim());
         return matcher.find() ? Integer.parseInt(matcher.group(2)) : -1;
     }

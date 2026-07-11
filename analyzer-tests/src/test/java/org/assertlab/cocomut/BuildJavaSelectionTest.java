@@ -43,4 +43,13 @@ public class BuildJavaSelectionTest {
         assertEquals(6, ProjectAnalyzer.requiredJavaVersion("Source option 6 is no longer supported"));
         assertEquals(-1, ProjectAnalyzer.requiredJavaVersion("ordinary compilation failure"));
     }
+
+    @Test
+    public void mapsReleaseTargetsToCompatibleInstalledJdks() {
+        assertEquals(8, BuildJavaSelection.compatibleInstalledVersion(6));
+        assertEquals(17, BuildJavaSelection.compatibleInstalledVersion(14));
+        assertEquals(21, BuildJavaSelection.compatibleInstalledVersion(20));
+        assertEquals(25, BuildJavaSelection.compatibleInstalledVersion(23));
+        assertEquals(26, BuildJavaSelection.compatibleInstalledVersion(26));
+    }
 }

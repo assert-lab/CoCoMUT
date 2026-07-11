@@ -71,6 +71,7 @@ final class Orchestrator {
     private Map<String, MethodContext> methodContexts;
     private Map<String, String> contextExtractionFailures = new LinkedHashMap<>();
     private final Set<FailureCode> failureCodes = new LinkedHashSet<>();
+    private boolean partialWithoutFailure;
     private ExtractionManifest.GitInfo gitAtStart;
 
     Orchestrator(Path projectPath) {
@@ -198,7 +199,7 @@ final class Orchestrator {
             currentPhase = 5;
             if (!executePhase5()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 5); return false; }
 
-            if (failureCodes.isEmpty()) {
+            if (failureCodes.isEmpty() && !partialWithoutFailure) {
                 executionReport.put("status", "SUCCESS");
                 success = true;
             } else {
@@ -446,11 +447,20 @@ final class Orchestrator {
             executionReport.put("phase_3_focal_methods_matched_to_bytecode", matchedToBytecode);
             executionReport.put("phase_3_non_empty_call_graphs", nonEmptyCallGraphResults);
             executionReport.put("phase_3_call_edges_generated", callGraphEdgeCount);
+            if (requiresPartialForBytecodeMatching(matchedToBytecode, methodInfos.size())) {
+                partialWithoutFailure = true;
+                executionReport.put("phase_3_warning",
+                        "Call graph initialized, but no selected source method matched project bytecode. "
+                                + "The emitted records do not contain usable method-level call context; "
+                                + "verify the selected bytecode version and project artifacts.");
+            }
             if (callGraphResults.size() != methodInfos.size() || matchedToBytecode != methodInfos.size()) {
                 long unmatchedFocalMethods = Math.max(0L, methodInfos.size() - matchedToBytecode);
-                executionReport.put("phase_3_warning",
-                        "Call graph generated; " + unmatchedFocalMethods
-                                + " selected method(s) did not receive matched bytecode call graph results.");
+                if (matchedToBytecode > 0) {
+                    executionReport.put("phase_3_warning",
+                            "Call graph generated; " + unmatchedFocalMethods
+                                    + " selected method(s) did not receive matched bytecode call graph results.");
+                }
             }
             return true;
         } catch (Exception e) {
@@ -458,6 +468,10 @@ final class Orchestrator {
             failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
             return false;
         }
+    }
+
+    static boolean requiresPartialForBytecodeMatching(long matchedMethods, long selectedMethods) {
+        return selectedMethods > 0 && matchedMethods == 0;
     }
 
     /**

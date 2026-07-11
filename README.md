@@ -92,7 +92,9 @@ Each JSONL row contains:
 If the SootUp call graph is generated but some selected source methods do not
 receive matched bytecode call-graph projections, CoCoMUT records that as a
 run warning. The call graph remains available, and resolved caller/callee edges
-are still emitted.
+are still emitted. If none of the selected methods match project bytecode, the
+run is `PARTIAL`: source records are retained, but they do not contain usable
+method-level call context.
 
 See [schemas/README.md](schemas/README.md) for the full schema.
 

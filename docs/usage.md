@@ -223,6 +223,8 @@ When a call graph is generated but some selected source methods cannot be
 matched to bytecode call-graph projections, CoCoMUT reports a phase-3 warning
 and keeps the available caller/callee edges. This is not a call-graph failure:
 it means per-method bytecode matching is incomplete for the selected focal set.
+If zero selected methods match project bytecode, CoCoMUT reports `PARTIAL`
+instead: the source records remain usable, but method-level call context is not.
 
 For documentation datasets, prefer a precise source-set and scope:
 

@@ -259,7 +259,7 @@ public class OrchestratorTest {
     }
 
     @Test
-    public void partialFocalBytecodeMatchingIsAWarningNotFailure() throws Exception {
+    public void zeroFocalBytecodeMatchingIsPartialWithoutFailureCode() throws Exception {
         Path project = Files.createTempDirectory("cocomut-partial-bytecode-");
         try {
             Path sourceDir = project.resolve("src/main/java/demo");
@@ -292,19 +292,25 @@ public class OrchestratorTest {
                     .classOutputDir(classOutput)
                     .build());
 
-            assertTrue(String.valueOf(partial.getExecutionReport()), partial.execute());
+            assertFalse(partial.execute());
             Map<String, Object> report = partial.getExecutionReport();
-            assertEquals("SUCCESS", report.get("status"));
+            assertEquals("PARTIAL", report.get("status"));
             assertEquals(java.util.List.of("NONE"), report.get("failure_codes"));
             assertEquals(Boolean.TRUE, report.get("phase_3_call_graph_artifact_exists"));
-            assertTrue("Fixture should include unmatched source methods",
-                    ((Number) report.get("phase_3_focal_methods_matched_to_bytecode")).longValue()
-                            < ((Number) report.get("phase_2_methods_identified")).longValue());
+            assertEquals(0L,
+                    ((Number) report.get("phase_3_focal_methods_matched_to_bytecode")).longValue());
             assertTrue(String.valueOf(report.get("phase_3_warning"))
-                    .contains("did not receive matched bytecode call graph results"));
+                    .contains("no selected source method matched project bytecode"));
         } finally {
             deleteRecursively(project);
         }
+    }
+
+    @Test
+    public void zeroFocalBytecodeMatchesRequirePartialStatus() {
+        assertTrue(Orchestrator.requiresPartialForBytecodeMatching(0, 5));
+        assertFalse(Orchestrator.requiresPartialForBytecodeMatching(1, 5));
+        assertFalse(Orchestrator.requiresPartialForBytecodeMatching(0, 0));
     }
 
     private static void deleteRecursively(Path root) throws Exception {
