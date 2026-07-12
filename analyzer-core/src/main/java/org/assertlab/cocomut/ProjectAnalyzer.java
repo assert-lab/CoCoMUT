@@ -904,10 +904,11 @@ public class ProjectAnalyzer {
                     Path retryHome = retrySelection == null || retrySelection.javaHome() == null
                             ? null : retrySelection.javaHome().toAbsolutePath().normalize();
                     boolean exactRequirement = exactJavaVersionRequired(result.output());
+                    boolean downgradeRequired = obsoleteJavaSourceLevel(result.output());
                     if (retrySelection == null
                             || retrySelection.javaHome().equals(buildJavaSelection.javaHome())
                             || attemptedJavaHomes.contains(retryHome)
-                            || (!exactRequirement && buildJavaSelection.majorVersion() > 0
+                            || (!exactRequirement && !downgradeRequired && buildJavaSelection.majorVersion() > 0
                                     && retrySelection.majorVersion() <= buildJavaSelection.majorVersion())) {
                         break;
                     }
@@ -1042,6 +1043,12 @@ public class ProjectAnalyzer {
         return Pattern.compile("java\\s+(?:1\\.)?\\d+\\s+is required", Pattern.CASE_INSENSITIVE)
                 .matcher(output)
                 .find();
+    }
+
+    static boolean obsoleteJavaSourceLevel(String output) {
+        if (output == null || output.isBlank()) return false;
+        return Pattern.compile("(?:source|target) option\\s+\\d+\\s+is no longer supported",
+                Pattern.CASE_INSENSITIVE).matcher(output).find();
     }
 
     private CommandResult runWithTransientRetries(List<String> command) throws IOException, InterruptedException {

@@ -82,6 +82,10 @@ public class BuildJavaSelectionTest {
                 "NullAway only builds on JDK 21 or higher now"));
         assertEquals(17, ProjectAnalyzer.requiredJavaVersion("Gradle requires JVM 17 or later to run"));
         assertEquals(6, ProjectAnalyzer.requiredJavaVersion("Source option 6 is no longer supported"));
+        assertTrue(ProjectAnalyzer.obsoleteJavaSourceLevel(
+                "Source option 6 is no longer supported. Use 7 or later."));
+        assertTrue(ProjectAnalyzer.obsoleteJavaSourceLevel(
+                "Target option 6 is no longer supported. Use 7 or later."));
         assertEquals(-1, ProjectAnalyzer.requiredJavaVersion("ordinary compilation failure"));
     }
 
