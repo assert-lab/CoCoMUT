@@ -63,6 +63,10 @@ public enum BuildFailureReason {
         if (containsAny(text, "could not resolve dependencies", "could not resolve all dependencies",
                 "could not determine the dependencies", "could not find artifact", "could not resolve all files"))
             return BUILD_FAILED_DEPENDENCY_UNAVAILABLE;
+        if (text.contains("could not find ")
+                && text.contains("searched in the following locations:")
+                && text.contains("required by:"))
+            return BUILD_FAILED_DEPENDENCY_UNAVAILABLE;
         if (containsAny(text, "maven-default-http-blocker", "blocked mirror for repositories"))
             return BUILD_FAILED_DEPENDENCY_UNAVAILABLE;
         if (text.contains("cannot run program")

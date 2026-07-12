@@ -66,6 +66,10 @@ public class BuildCompatibilityTest {
                 BuildFailureReason.classify("Blocked mirror for repositories: maven-default-http-blocker", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_DEPENDENCY_UNAVAILABLE,
                 BuildFailureReason.classify("Could not resolve all dependencies for configuration compileClasspath", false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_DEPENDENCY_UNAVAILABLE,
+                BuildFailureReason.classify(
+                        "Could not find me.ele:lancet-plugin:1.0.6. Searched in the following locations: repo Required by: project :",
+                        false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_REACTOR_ARTIFACT_MISSING,
                 BuildFailureReason.classify("No plugin descriptor found at META-INF/maven/plugin.xml", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_REACTOR_ARTIFACT_MISSING,
