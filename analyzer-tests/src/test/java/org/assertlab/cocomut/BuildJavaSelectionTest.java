@@ -64,6 +64,10 @@ public class BuildJavaSelectionTest {
         assertEquals(25, ProjectAnalyzer.requiredJavaVersion("error: invalid source release: 25"));
         assertEquals(21, ProjectAnalyzer.requiredJavaVersion(
                 "Dependency requires at least JVM runtime version 21. This build uses a Java 17 JVM."));
+        assertEquals(25, ProjectAnalyzer.requiredJavaVersion(
+                "Project :app is only compatible with JVM runtime version 25 or newer."));
+        assertEquals(21, ProjectAnalyzer.requiredJavaVersion(
+                "This build requires Java 21 or 25, but is running on Java 17."));
         assertEquals(21, ProjectAnalyzer.requiredJavaVersion("JDK 21+ is required to build Apache Camel."));
         assertEquals(11, ProjectAnalyzer.requiredJavaVersion(
                 "AuditListener has been compiled by a more recent version of the Java Runtime "
