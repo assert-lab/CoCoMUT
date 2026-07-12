@@ -45,6 +45,19 @@ public class BuildCompatibilityTest {
     }
 
     @Test
+    public void androidProvisioningSkipsInstalledComponents() throws Exception {
+        Path sdk = Files.createTempDirectory("cocomut-android-sdk");
+        try {
+            Files.createDirectories(sdk.resolve("platforms/android-35"));
+            Set<String> declared = Set.of("platforms;android-35", "build-tools;35.0.0");
+            assertEquals(Set.of("build-tools;35.0.0"),
+                    AndroidSdkSupport.missingComponents(sdk, declared));
+        } finally {
+            delete(sdk);
+        }
+    }
+
+    @Test
     public void selectsOnlyAnUnambiguousNestedBuildRoot() throws Exception {
         Path project = Files.createTempDirectory("cocomut-nested-root");
         try {
