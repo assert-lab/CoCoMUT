@@ -27,6 +27,11 @@ public enum BuildFailureReason {
         if (containsAny(text, "401 unauthorized", "403 forbidden", "authentication failed", "not authorized",
                 "host key verification failed", "could not read from remote repository"))
             return BUILD_FAILED_AUTHENTICATION_REQUIRED;
+        if (text.contains("credentials")
+                && java.util.regex.Pattern.compile(
+                        "unknown property ['\"][^'\"]*(?:user(?:name)?|password|token|secret|key)[^'\"]*['\"]")
+                        .matcher(text).find())
+            return BUILD_FAILED_AUTHENTICATION_REQUIRED;
         if (isTransientNetworkFailure(output)) return BUILD_FAILED_NETWORK_FAILURE;
         if (containsAny(text, "android sdk", "sdk location not found", "failed to find target with hash string 'android-",
                 "compile sdk version is not specified")) return BUILD_FAILED_ANDROID_SDK_UNAVAILABLE;

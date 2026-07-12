@@ -53,6 +53,12 @@ public class BuildCompatibilityTest {
                         false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_AUTHENTICATION_REQUIRED,
                 BuildFailureReason.classify("Host key verification failed", false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_AUTHENTICATION_REQUIRED,
+                BuildFailureReason.classify(
+                        "Could not get unknown property 'ossrhUsername' for Credentials [username: null]",
+                        false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_UNKNOWN_ERROR,
+                BuildFailureReason.classify("Could not get unknown property 'releaseMode' for root project", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_DEPENDENCY_UNAVAILABLE,
                 BuildFailureReason.classify("Blocked mirror for repositories: maven-default-http-blocker", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_DEPENDENCY_UNAVAILABLE,
