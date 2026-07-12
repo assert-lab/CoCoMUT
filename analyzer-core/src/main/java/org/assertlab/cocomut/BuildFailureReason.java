@@ -57,6 +57,9 @@ public enum BuildFailureReason {
             return BUILD_FAILED_JDK_UNAVAILABLE;
         if (containsAny(text, "could not find artifact") && text.contains("snapshot"))
             return BUILD_FAILED_REACTOR_ARTIFACT_MISSING;
+        if (text.contains("artifact has not been packaged yet")
+                && text.contains("when used on reactor artifact"))
+            return BUILD_FAILED_REACTOR_ARTIFACT_MISSING;
         if (containsAny(text, "could not resolve dependencies", "could not resolve all dependencies",
                 "could not determine the dependencies", "could not find artifact", "could not resolve all files"))
             return BUILD_FAILED_DEPENDENCY_UNAVAILABLE;

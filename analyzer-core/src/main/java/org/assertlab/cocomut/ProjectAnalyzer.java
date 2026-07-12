@@ -1001,7 +1001,11 @@ public class ProjectAnalyzer {
     }
 
     boolean missingSameReactorArtifacts(String output) {
-        if (output == null || !output.contains("Could not find artifact")) return false;
+        if (output == null) return false;
+        String lower = output.toLowerCase(Locale.ROOT);
+        if (lower.contains("artifact has not been packaged yet")
+                && lower.contains("when used on reactor artifact")) return true;
+        if (!output.contains("Could not find artifact")) return false;
         Set<String> reactorArtifacts = new HashSet<>();
         for (Path dir : mergePaths(List.of(effectiveBuildRoot), collectMavenModuleDirs(effectiveBuildRoot))) {
             String pom = readQuietly(dir.resolve("pom.xml"));

@@ -68,6 +68,10 @@ public class BuildCompatibilityTest {
                 BuildFailureReason.classify("Could not resolve all dependencies for configuration compileClasspath", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_REACTOR_ARTIFACT_MISSING,
                 BuildFailureReason.classify("No plugin descriptor found at META-INF/maven/plugin.xml", false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_REACTOR_ARTIFACT_MISSING,
+                BuildFailureReason.classify(
+                        "Artifact has not been packaged yet. When used on reactor artifact, copy should be executed after packaging",
+                        false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_PLUGIN_INCOMPATIBLE,
                 BuildFailureReason.classify("Failed to create enforcer rules with name: customRule", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_PLUGIN_INCOMPATIBLE,
@@ -242,6 +246,8 @@ public class BuildCompatibilityTest {
                     "Could not find artifact demo:api:jar:1-SNAPSHOT"));
             assertFalse(analyzer.missingSameReactorArtifacts(
                     "Could not find artifact external:missing:jar:1-SNAPSHOT"));
+            assertTrue(analyzer.missingSameReactorArtifacts(
+                    "Artifact has not been packaged yet. When used on reactor artifact, copy should be executed after packaging"));
         } finally {
             delete(project);
         }
