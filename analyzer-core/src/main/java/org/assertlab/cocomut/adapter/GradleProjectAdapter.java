@@ -111,7 +111,9 @@ public class GradleProjectAdapter implements ProjectAdapter {
         Set<Path> sourceRoots = new LinkedHashSet<>(nativeModel.sourceRoots());
         Set<Path> testSourceRoots = new LinkedHashSet<>(nativeModel.testSourceRoots());
         Set<Path> mainOutputs = new LinkedHashSet<>(nativeModel.mainOutputs());
+        mainOutputs.addAll(base.getMainClassOutputs());
         Set<Path> testOutputs = new LinkedHashSet<>(nativeModel.testOutputs());
+        testOutputs.addAll(base.getTestClassOutputs());
         Set<Path> dependencies = new LinkedHashSet<>(base.getDependencyClasspath());
         Set<Path> projectOutputs = new LinkedHashSet<>();
         projectOutputs.addAll(mainOutputs);

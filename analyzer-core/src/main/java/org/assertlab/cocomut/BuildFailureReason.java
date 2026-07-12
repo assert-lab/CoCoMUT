@@ -49,6 +49,8 @@ public enum BuildFailureReason {
             return BUILD_FAILED_REQUIRED_TOOL_UNAVAILABLE;
         if (text.contains("no plugin descriptor found at meta-inf/maven/plugin.xml"))
             return BUILD_FAILED_REACTOR_ARTIFACT_MISSING;
+        if (text.contains("failed to create enforcer rules"))
+            return BUILD_FAILED_PLUGIN_INCOMPATIBLE;
         if (containsAny(text, "pluginresolutionexception", "could not find goal", "failed to apply plugin",
                 "plugin with id") || (text.contains("plugin") && text.contains("incompatible")))
             return BUILD_FAILED_PLUGIN_INCOMPATIBLE;
