@@ -57,4 +57,13 @@ public class BuildJavaSelectionTest {
         assertEquals(25, BuildJavaSelection.compatibleInstalledVersion(23));
         assertEquals(26, BuildJavaSelection.compatibleInstalledVersion(26));
     }
+
+    @Test
+    public void respectsGradleRuntimeCompatibilityBoundary() {
+        assertEquals(8, BuildJavaSelection.gradleRuntimeVersion(4, 10));
+        assertEquals(11, BuildJavaSelection.gradleRuntimeVersion(6, 9));
+        assertEquals(11, BuildJavaSelection.gradleRuntimeVersion(7, 2));
+        assertEquals(17, BuildJavaSelection.gradleRuntimeVersion(7, 3));
+        assertEquals(17, BuildJavaSelection.gradleRuntimeVersion(9, 0));
+    }
 }

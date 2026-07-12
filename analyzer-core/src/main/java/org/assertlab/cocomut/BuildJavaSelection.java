@@ -88,7 +88,8 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
                     .matcher(wrapper);
             if (gradle.find()) {
                 int major = Integer.parseInt(gradle.group(1));
-                int selected = major <= 4 ? 8 : major <= 6 ? 11 : 17;
+                int minor = gradle.group(2) == null ? 0 : Integer.parseInt(gradle.group(2));
+                int selected = gradleRuntimeVersion(major, minor);
                 return new VersionEvidence(selected, "Gradle wrapper " + gradle.group(1)
                         + (gradle.group(2) == null ? "" : "." + gradle.group(2)));
             }
@@ -138,6 +139,12 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
             return 25;
         }
         return requestedVersion;
+    }
+
+    static int gradleRuntimeVersion(int major, int minor) {
+        if (major <= 4) return 8;
+        if (major <= 6 || (major == 7 && minor < 3)) return 11;
+        return 17;
     }
 
     private static int normalize(String raw) {
