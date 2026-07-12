@@ -33,6 +33,8 @@ public class BuildCompatibilityTest {
                 BuildFailureReason.classify("Task 'classes' not found in root project", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_REQUIRED_TOOL_UNAVAILABLE,
                 BuildFailureReason.classify("Cannot run program npm: error=2, No such file or directory", false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_REQUIRED_TOOL_UNAVAILABLE,
+                BuildFailureReason.classify("mvnw: line 278: shasum: command not found", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_AUTHENTICATION_REQUIRED,
                 BuildFailureReason.classify("Host key verification failed", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_DEPENDENCY_UNAVAILABLE,

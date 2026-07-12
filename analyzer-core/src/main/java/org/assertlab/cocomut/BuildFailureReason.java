@@ -45,6 +45,8 @@ public enum BuildFailureReason {
         if (text.contains("cannot run program")
                 && containsAny(text, "no such file or directory", "error=2"))
             return BUILD_FAILED_REQUIRED_TOOL_UNAVAILABLE;
+        if (text.contains(": command not found"))
+            return BUILD_FAILED_REQUIRED_TOOL_UNAVAILABLE;
         if (text.contains("no plugin descriptor found at meta-inf/maven/plugin.xml"))
             return BUILD_FAILED_REACTOR_ARTIFACT_MISSING;
         if (containsAny(text, "pluginresolutionexception", "could not find goal", "failed to apply plugin",
