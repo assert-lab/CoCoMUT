@@ -184,6 +184,12 @@ bytecode is present. Pre-existing bytecode is accepted only when no build was
 attempted, for example denied-build analysis over already compiled project
 outputs or explicit `--class-output` / `--project-jar` inputs.
 
+The extraction report records `phase_1_build_command`,
+`phase_1_build_attempts`, the selected build JDK and its evidence, a concise
+build-output tail, and `phase_1_build_failure_reason`. Each attempt includes its
+command, JDK, exit code, timeout state, and classified reason so retries can be
+audited without reconstructing them from console output.
+
 Build execution runs the subject repository's Maven or Gradle build logic. For
 untrusted public repositories, keep the default denied-build policy and provide
 prebuilt artifacts, or run CoCoMUT in a disposable container or VM with an

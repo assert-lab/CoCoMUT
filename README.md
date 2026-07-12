@@ -159,7 +159,10 @@ If a compiler, build-tool toolchain, or Maven Enforcer rule explicitly
 requests a newer Java release, CoCoMUT performs bounded, monotonic retries with
 compatible installed JDKs. This supports multi-module builds whose later
 modules require newer Java versions. The extraction report and manifest record the selected
-build JDK and the evidence used. If the requested JDK is unavailable, CoCoMUT
+build JDK and the evidence used. The extraction report also records the final
+`phase_1_build_command` and a structured `phase_1_build_attempts` list containing
+the command, selected JDK, exit code, timeout state, and reason for every bounded
+invocation. If the requested JDK is unavailable, CoCoMUT
 uses the inherited build environment and reports that fallback explicitly.
 
 Build recovery is bounded and evidence-driven. CoCoMUT retries transient network

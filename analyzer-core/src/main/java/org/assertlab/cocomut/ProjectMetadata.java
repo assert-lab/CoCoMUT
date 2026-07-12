@@ -35,6 +35,7 @@ public class ProjectMetadata {
     private final String buildJavaHome;
     private final String buildJavaVersion;
     private final String buildJavaEvidence;
+    private final List<BuildAttempt> buildAttempts;
     private final boolean buildSkipped;
     private final boolean buildSandboxed;
     private final ContextRequest.BuildPolicy buildPolicy;
@@ -78,6 +79,9 @@ public class ProjectMetadata {
         this.buildJavaHome = builder.buildJavaHome == null ? "" : builder.buildJavaHome;
         this.buildJavaVersion = builder.buildJavaVersion == null ? "inherited" : builder.buildJavaVersion;
         this.buildJavaEvidence = builder.buildJavaEvidence == null ? "inherited_environment" : builder.buildJavaEvidence;
+        this.buildAttempts = Collections.unmodifiableList(builder.buildAttempts == null
+                ? List.of()
+                : List.copyOf(builder.buildAttempts));
         this.buildSkipped = builder.buildSkipped;
         this.buildSandboxed = builder.buildSandboxed;
         this.buildPolicy = builder.buildPolicy;
@@ -203,6 +207,10 @@ public class ProjectMetadata {
         return buildJavaEvidence;
     }
 
+    public List<BuildAttempt> getBuildAttempts() {
+        return buildAttempts;
+    }
+
     public boolean isBuildSkipped() {
         return buildSkipped;
     }
@@ -322,6 +330,7 @@ public class ProjectMetadata {
         private String buildJavaHome = "";
         private String buildJavaVersion = "inherited";
         private String buildJavaEvidence = "inherited_environment";
+        private List<BuildAttempt> buildAttempts = Collections.emptyList();
         private boolean buildSkipped = false;
         private boolean buildSandboxed = false;
         private ContextRequest.BuildPolicy buildPolicy = ContextRequest.BuildPolicy.DENY_BUILD;
@@ -370,6 +379,7 @@ public class ProjectMetadata {
                     .buildJavaHome(src.buildJavaHome)
                     .buildJavaVersion(src.buildJavaVersion)
                     .buildJavaEvidence(src.buildJavaEvidence)
+                    .buildAttempts(src.buildAttempts)
                     .buildSkipped(src.buildSkipped)
                     .buildSandboxed(src.buildSandboxed)
                     .buildPolicy(src.buildPolicy)
@@ -506,6 +516,11 @@ public class ProjectMetadata {
 
         public Builder buildJavaEvidence(String buildJavaEvidence) {
             this.buildJavaEvidence = buildJavaEvidence == null ? "inherited_environment" : buildJavaEvidence;
+            return this;
+        }
+
+        public Builder buildAttempts(List<BuildAttempt> buildAttempts) {
+            this.buildAttempts = buildAttempts == null ? Collections.emptyList() : List.copyOf(buildAttempts);
             return this;
         }
 

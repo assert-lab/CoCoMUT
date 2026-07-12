@@ -55,6 +55,7 @@ public class ProjectAnalyzer {
     private final List<Path> explicitTestSourceRoots;
     private BuildResult lastBuildResult = BuildResult.notAttempted("BUILD DENIED");
     private BuildJavaSelection buildJavaSelection = new BuildJavaSelection(null, "inherited", "inherited_environment");
+    private final List<BuildAttempt> buildAttempts = new ArrayList<>();
 
     /**
      * Create a ProjectAnalyzer for the given project path
@@ -222,6 +223,7 @@ public class ProjectAnalyzer {
                 .buildJavaHome(buildJavaSelection.javaHome() == null ? "" : buildJavaSelection.javaHome().toString())
                 .buildJavaVersion(buildJavaSelection.version())
                 .buildJavaEvidence(buildJavaSelection.evidence())
+                .buildAttempts(buildAttempts)
                 .buildSkipped(buildPolicy == ContextRequest.BuildPolicy.DENY_BUILD)
                 .buildSandboxed(buildPolicy == ContextRequest.BuildPolicy.EXTERNALLY_SANDBOXED_BUILD)
                 .buildPolicy(buildPolicy)
@@ -991,10 +993,25 @@ public class ProjectAnalyzer {
         if (!completed) {
             process.destroyForcibly();
             drainer.join(1000);
-            return new CommandResult(-1, output.toString(), true);
+            CommandResult result = new CommandResult(-1, output.toString(), true);
+            recordBuildAttempt(command, result);
+            return result;
         }
         drainer.join(1000);
-        return new CommandResult(process.exitValue(), output.toString(), false);
+        CommandResult result = new CommandResult(process.exitValue(), output.toString(), false);
+        recordBuildAttempt(command, result);
+        return result;
+    }
+
+    private void recordBuildAttempt(List<String> command, CommandResult result) {
+        buildAttempts.add(new BuildAttempt(
+                command,
+                buildJavaSelection.javaHome() == null ? "" : buildJavaSelection.javaHome().toString(),
+                buildJavaSelection.version(),
+                buildJavaSelection.evidence(),
+                result.exitCode(),
+                result.timedOut(),
+                BuildFailureReason.classify(result.output(), result.timedOut(), result.exitCode() == 0)));
     }
 
     private static List<Path> parsePathList(String raw) {

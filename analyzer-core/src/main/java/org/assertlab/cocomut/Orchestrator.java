@@ -304,6 +304,11 @@ final class Orchestrator {
             executionReport.put("phase_1_build_java_home", projectMetadata.getBuildJavaHome());
             executionReport.put("phase_1_build_java_version", projectMetadata.getBuildJavaVersion());
             executionReport.put("phase_1_build_java_evidence", projectMetadata.getBuildJavaEvidence());
+            executionReport.put("phase_1_build_attempts", projectMetadata.getBuildAttempts());
+            if (!projectMetadata.getBuildAttempts().isEmpty()) {
+                executionReport.put("phase_1_build_command",
+                        projectMetadata.getBuildAttempts().get(projectMetadata.getBuildAttempts().size() - 1).command());
+            }
             executionReport.put("phase_1_build_skipped", projectMetadata.isBuildSkipped());
             executionReport.put("phase_1_build_sandboxed", projectMetadata.isBuildSandboxed());
             executionReport.put("phase_1_gradle_model", projectMetadata.getGradleModelReport());

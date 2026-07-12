@@ -27,6 +27,7 @@ from typing import Any
 REPO_COLUMNS = [
     "repo",
     "index",
+    "repo_commit",
     "clone_status",
     "detected_build_files",
     "cocomut_exit_code",
@@ -44,9 +45,17 @@ REPO_COLUMNS = [
     "phase_1_build_attempted",
     "phase_1_build_succeeded",
     "phase_1_build_timed_out",
+    "phase_1_build_root",
+    "phase_1_build_command",
+    "phase_1_build_attempts",
+    "phase_1_build_output_tail",
+    "phase_1_build_failure_reason",
     "phase_1_build_java_home",
     "phase_1_build_java_version",
     "phase_1_build_java_evidence",
+    "phase_1_max_classfile_major",
+    "phase_1_max_supported_classfile_major",
+    "phase_1_bytecode_version_supported",
     "phase_1_bytecode_available",
     "phase_1_analysis_can_proceed",
     "phase_2_error",
@@ -160,6 +169,7 @@ def run_repo(args: argparse.Namespace, repo: str, index: int) -> tuple[dict[str,
     log_dir.mkdir(parents=True, exist_ok=True)
 
     clone_status = clone_repo(repo, checkout, log_dir)
+    repo_commit = git_commit(checkout) if clone_status == "OK" else ""
     detected_build_files = detect_build_files(checkout) if clone_status == "OK" else []
     report: dict[str, Any] = {}
     exit_code: int | str = ""
@@ -191,6 +201,7 @@ def run_repo(args: argparse.Namespace, repo: str, index: int) -> tuple[dict[str,
     result = result_row(
         repo=repo,
         index=index,
+        repo_commit=repo_commit,
         clone_status=clone_status,
         detected_build_files=detected_build_files,
         exit_code=exit_code,
@@ -236,6 +247,20 @@ def detect_build_files(checkout: Path) -> list[str]:
                 if (path / name).exists():
                     nested.append(str(path.name + "/" + name))
     return nested[:20]
+
+
+def git_commit(checkout: Path) -> str:
+    try:
+        return subprocess.run(
+            ["git", "-C", str(checkout), "rev-parse", "HEAD"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=30,
+            check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
 
 
 def run_logged(command: list[str], log_path: Path, timeout: int, args: argparse.Namespace | None) -> tuple[int, bool]:
@@ -306,6 +331,7 @@ def copy_small_artifacts(output_dir: Path, artifact_dir: Path) -> None:
 
 def result_row(repo: str,
                index: int,
+               repo_commit: str,
                clone_status: str,
                detected_build_files: list[str],
                exit_code: int | str,
@@ -317,6 +343,7 @@ def result_row(repo: str,
     row: dict[str, Any] = {column: "" for column in REPO_COLUMNS}
     row["repo"] = repo
     row["index"] = index
+    row["repo_commit"] = repo_commit
     row["clone_status"] = clone_status
     row["detected_build_files"] = json.dumps(detected_build_files)
     row["cocomut_exit_code"] = "TIMEOUT" if timed_out else exit_code
@@ -455,6 +482,11 @@ def write_summary(output_root: Path) -> None:
         return
     rows = list(csv.DictReader(path.open(newline="", encoding="utf-8"), delimiter="\t"))
     statuses = Counter(row.get("status") or "" for row in rows)
+    failure_reasons = Counter(
+        row.get("phase_1_build_failure_reason") or "UNREPORTED"
+        for row in rows
+        if row.get("status") in {"FAILED", "ERROR", "TIMEOUT"}
+    )
     build_systems = Counter(row.get("phase_1_build_system") or "unknown" for row in rows)
     by_build_status: dict[str, Counter[str]] = {}
     durations_by_build: dict[str, list[int | None]] = {}
@@ -466,6 +498,7 @@ def write_summary(output_root: Path) -> None:
     lines = ["# CoCoMUT Large Field Test", ""]
     lines.append(f"- Repositories attempted: {len(rows)}")
     lines.append(f"- Statuses: {dict(statuses)}")
+    lines.append(f"- Build failure reasons: {dict(failure_reasons)}")
     lines.append(f"- Reported build systems: {dict(build_systems)}")
     lines.append("- Status by build system:")
     for build, counter in sorted(by_build_status.items()):
