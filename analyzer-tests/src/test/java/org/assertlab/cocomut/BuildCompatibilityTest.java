@@ -55,6 +55,9 @@ public class BuildCompatibilityTest {
                 BuildFailureReason.classify("No plugin descriptor found at META-INF/maven/plugin.xml", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_PLUGIN_INCOMPATIBLE,
                 BuildFailureReason.classify("Failed to create enforcer rules with name: customRule", false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_PLUGIN_INCOMPATIBLE,
+                BuildFailureReason.classify(
+                        "org.gradle.api.provider.Provider.forUseAtConfigurationTime()", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_UNKNOWN_ERROR,
                 BuildFailureReason.classify("unrecognized failure", false, false));
     }

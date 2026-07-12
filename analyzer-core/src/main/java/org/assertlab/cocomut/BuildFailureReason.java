@@ -68,6 +68,8 @@ public enum BuildFailureReason {
             return BUILD_FAILED_BUILD_TASK_UNAVAILABLE;
         if (text.contains("spotless") && text.contains("limits you to google-java-format"))
             return BUILD_FAILED_PLUGIN_INCOMPATIBLE;
+        if (text.contains("provider.foruseatconfigurationtime()"))
+            return BUILD_FAILED_PLUGIN_INCOMPATIBLE;
         if (containsAny(text, "compilation failure", "compilation error", "cannot find symbol", "does not exist",
                 "should be declared in a file named")) return BUILD_FAILED_PROJECT_COMPILATION_ERROR;
         return BUILD_FAILED_UNKNOWN_ERROR;
