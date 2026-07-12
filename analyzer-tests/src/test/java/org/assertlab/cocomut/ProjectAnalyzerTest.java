@@ -412,6 +412,49 @@ public class ProjectAnalyzerTest {
     }
 
     @Test
+    public void mavenInheritedCustomSourceDirectoriesAreDiscovered() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-maven-custom-roots-");
+        try {
+            Files.writeString(project.resolve("pom.xml"), """
+                    <project xmlns="http://maven.apache.org/POM/4.0.0">
+                      <modelVersion>4.0.0</modelVersion>
+                      <groupId>demo</groupId><artifactId>root</artifactId><version>1</version>
+                      <packaging>pom</packaging>
+                      <modules><module>core</module></modules>
+                      <build>
+                        <sourceDirectory>${project.basedir}/src</sourceDirectory>
+                        <testSourceDirectory>${project.basedir}/test</testSourceDirectory>
+                      </build>
+                    </project>
+                    """);
+            Files.createDirectories(project.resolve("core/src/demo"));
+            Files.writeString(project.resolve("core/src/demo/App.java"), "package demo; class App {}\n");
+            Files.createDirectories(project.resolve("core/test/demo"));
+            Files.writeString(project.resolve("core/test/demo/AppTest.java"), "package demo; class AppTest {}\n");
+            Files.writeString(project.resolve("core/pom.xml"), """
+                    <project xmlns="http://maven.apache.org/POM/4.0.0">
+                      <modelVersion>4.0.0</modelVersion>
+                      <parent><groupId>demo</groupId><artifactId>root</artifactId><version>1</version></parent>
+                      <artifactId>core</artifactId>
+                    </project>
+                    """);
+
+            ProjectMetadata metadata = new ProjectAnalyzer(ContextRequest.builder()
+                    .projectRoot(project)
+                    .sourceSet("all")
+                    .skipBuild(true)
+                    .build()).analyze();
+
+            assertTrue(metadata.getSourceRoots().contains(
+                    project.resolve("core/src").toAbsolutePath().normalize()));
+            assertTrue(metadata.getTestSourceRoots().contains(
+                    project.resolve("core/test").toAbsolutePath().normalize()));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void gradleModelUsesAuthoritativeMultiProjectRootsForMainScope() throws Exception {
         Assume.assumeTrue("Gradle executable is required for this integration-style regression",
                 commandAvailable("gradle"));

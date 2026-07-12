@@ -599,6 +599,7 @@ public class ProjectAnalyzer {
         for (Path module : collectMavenModuleDirs(effectiveBuildRoot)) {
             addIfDirectory(roots, module.resolve("src/main/java"));
         }
+        addDeclaredMavenSourceRoots(roots, false);
         if (roots.isEmpty()) {
             addConventionSourceRoots(roots, "src/main/java");
         }
@@ -614,10 +615,61 @@ public class ProjectAnalyzer {
         for (Path module : collectMavenModuleDirs(effectiveBuildRoot)) {
             addIfDirectory(roots, module.resolve("src/test/java"));
         }
+        addDeclaredMavenSourceRoots(roots, true);
         if (roots.isEmpty()) {
             addConventionSourceRoots(roots, "src/test/java");
         }
         return new ArrayList<>(roots);
+    }
+
+    private void addDeclaredMavenSourceRoots(Set<Path> roots, boolean tests) {
+        if (!Files.isRegularFile(effectiveBuildRoot.resolve("pom.xml"))) return;
+        String element = tests ? "testSourceDirectory" : "sourceDirectory";
+        for (Path module : mergePaths(List.of(effectiveBuildRoot), collectMavenModuleDirs(effectiveBuildRoot))) {
+            String configured = inheritedMavenBuildPath(module, element);
+            Path resolved = resolveMavenProjectPath(module, configured);
+            addIfDirectory(roots, resolved);
+        }
+    }
+
+    private String inheritedMavenBuildPath(Path module, String element) {
+        Path root = effectiveBuildRoot.toAbsolutePath().normalize();
+        Path current = module.toAbsolutePath().normalize();
+        while (current.startsWith(root)) {
+            String value = directMavenBuildPath(current.resolve("pom.xml"), element);
+            if (value != null && !value.isBlank()) return value;
+            if (current.equals(root)) break;
+            current = current.getParent();
+        }
+        return null;
+    }
+
+    private static String directMavenBuildPath(Path pom, String elementName) {
+        if (!Files.isRegularFile(pom)) return null;
+        try {
+            Element project = parseXml(pom);
+            for (Node child = project.getFirstChild(); child != null; child = child.getNextSibling()) {
+                if (!(child instanceof Element build) || !"build".equals(elementName(build))) continue;
+                for (Node entry = build.getFirstChild(); entry != null; entry = entry.getNextSibling()) {
+                    if (entry instanceof Element value && elementName.equals(elementName(value))) {
+                        return value.getTextContent().trim();
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            // Invalid POMs are classified by the build itself.
+        }
+        return null;
+    }
+
+    private static Path resolveMavenProjectPath(Path module, String configured) {
+        if (configured == null || configured.isBlank()) return null;
+        String resolved = configured
+                .replace("${project.basedir}", module.toAbsolutePath().normalize().toString())
+                .replace("${basedir}", module.toAbsolutePath().normalize().toString());
+        if (resolved.contains("${")) return null;
+        Path path = Path.of(resolved);
+        return (path.isAbsolute() ? path : module.resolve(path)).toAbsolutePath().normalize();
     }
 
     private List<Path> findGeneratedSourceRoots(boolean tests) {
