@@ -461,6 +461,36 @@ public class ProjectAnalyzerTest {
     }
 
     @Test
+    public void gradleModelIsSkippedAfterFailedProjectBuild() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-gradle-failed-build-");
+        try {
+            Files.writeString(project.resolve("settings.gradle"), "rootProject.name = 'failed'\n");
+            Files.writeString(project.resolve("build.gradle"), "plugins { id 'java' }\n");
+            Files.createDirectories(project.resolve("gradle/wrapper"));
+            Files.writeString(project.resolve("gradle/wrapper/gradle-wrapper.properties"),
+                    "distributionUrl=https://services.gradle.org/distributions/gradle-8.10-bin.zip\n");
+            Files.write(project.resolve("gradle/wrapper/gradle-wrapper.jar"), new byte[] {0});
+            Path wrapper = project.resolve("gradlew");
+            Files.writeString(wrapper, "#!/bin/sh\nexit 1\n");
+            assertTrue(wrapper.toFile().setExecutable(true));
+
+            ProjectMetadata metadata = new GradleProjectAdapter(project).toMetadata(ContextRequest.builder()
+                    .projectRoot(project)
+                    .sourceSet("main")
+                    .allowUnsandboxedBuild()
+                    .build());
+
+            assertTrue(metadata.isBuildAttempted());
+            assertFalse(metadata.isBuildSucceeded());
+            assertFalse(metadata.getGradleModelReport().attempted());
+            assertTrue(metadata.getGradleModelReport().diagnostics().stream()
+                    .anyMatch(message -> message.contains("build did not succeed")));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void manifestBytecodeHashIsStableAcrossCheckoutPaths() throws Exception {
         Path rootA = Files.createTempDirectory("cocomut-hash-a-");
         Path rootB = Files.createTempDirectory("cocomut-hash-b-");

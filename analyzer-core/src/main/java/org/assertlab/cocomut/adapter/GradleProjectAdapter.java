@@ -81,6 +81,12 @@ public class GradleProjectAdapter implements ProjectAdapter {
                     .gradleModelReport(GradleModelReport.skipped("--skip-build"))
                     .build();
         }
+        if (base.isBuildAttempted() && !base.isBuildSucceeded()) {
+            System.out.println("[GradleProjectAdapter] project build failed; Gradle metadata task not executed");
+            return ProjectMetadata.Builder.from(base)
+                    .gradleModelReport(GradleModelReport.skipped("project build did not succeed"))
+                    .build();
+        }
 
         boolean includeTests = includeTests(request);
         BuildJavaSelection buildJava = new BuildJavaSelection(
