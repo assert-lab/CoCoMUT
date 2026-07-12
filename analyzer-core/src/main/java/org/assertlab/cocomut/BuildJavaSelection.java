@@ -29,11 +29,10 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
             return new BuildJavaSelection(home, versionFromHome(home), detected.evidence());
         }
 
-        String inherited = env.getOrDefault("JAVA_HOME", "").trim();
-        Path inheritedHome = inherited.isEmpty() ? null : Path.of(inherited).toAbsolutePath().normalize();
+        Path inheritedHome = inheritedJavaHome(env);
         String evidence = detected.version() > 0
-                ? detected.evidence() + "; requested JDK unavailable, inherited environment used"
-                : detected.evidence();
+                ? detected.evidence() + "; requested JDK unavailable, runtime environment used"
+                : detected.evidence() + "; CoCoMUT runtime environment used";
         return new BuildJavaSelection(inheritedHome, versionFromHome(inheritedHome), evidence);
     }
 
@@ -145,6 +144,13 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
         if (major <= 4) return 8;
         if (major <= 6 || (major == 7 && minor < 3)) return 11;
         return 17;
+    }
+
+    static Path inheritedJavaHome(Map<String, String> env) {
+        String configured = env.getOrDefault("JAVA_HOME", "").trim();
+        return configured.isEmpty()
+                ? Path.of(System.getProperty("java.home")).toAbsolutePath().normalize()
+                : Path.of(configured).toAbsolutePath().normalize();
     }
 
     private static int normalize(String raw) {

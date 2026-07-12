@@ -37,6 +37,17 @@ public class BuildJavaSelectionTest {
     }
 
     @Test
+    public void recordsRuntimeJavaWhenNoProjectVersionIsDeclared() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-build-java-default");
+        try {
+            assertEquals(Path.of(System.getProperty("java.home")).toAbsolutePath().normalize(),
+                    BuildJavaSelection.inheritedJavaHome(java.util.Map.of()));
+        } finally {
+            Files.deleteIfExists(project);
+        }
+    }
+
+    @Test
     public void detectsCompilerRequestedRetryVersions() {
         assertEquals(25, ProjectAnalyzer.requiredJavaVersion("error: release version 25 not supported"));
         assertEquals(25, ProjectAnalyzer.requiredJavaVersion("error: invalid target release: 25"));
