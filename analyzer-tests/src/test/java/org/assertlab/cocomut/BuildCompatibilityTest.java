@@ -37,6 +37,10 @@ public class BuildCompatibilityTest {
                 BuildFailureReason.classify("Cannot run program npm: error=2, No such file or directory", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_REQUIRED_TOOL_UNAVAILABLE,
                 BuildFailureReason.classify("mvnw: line 278: shasum: command not found", false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_VCS_HISTORY_UNAVAILABLE,
+                BuildFailureReason.classify(
+                        "Unable to find commits until some tag: Walk failure. Missing commit abc123",
+                        false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_AUTHENTICATION_REQUIRED,
                 BuildFailureReason.classify("Host key verification failed", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_DEPENDENCY_UNAVAILABLE,

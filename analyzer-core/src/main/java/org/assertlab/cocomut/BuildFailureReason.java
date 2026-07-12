@@ -14,6 +14,7 @@ public enum BuildFailureReason {
     BUILD_FAILED_PLUGIN_INCOMPATIBLE,
     BUILD_FAILED_BUILD_TASK_UNAVAILABLE,
     BUILD_FAILED_REQUIRED_TOOL_UNAVAILABLE,
+    BUILD_FAILED_VCS_HISTORY_UNAVAILABLE,
     BUILD_FAILED_PROJECT_COMPILATION_ERROR,
     BUILD_FAILED_NETWORK_FAILURE,
     BUILD_FAILED_TIMEOUT,
@@ -49,6 +50,9 @@ public enum BuildFailureReason {
             return BUILD_FAILED_REQUIRED_TOOL_UNAVAILABLE;
         if (text.contains(": command not found"))
             return BUILD_FAILED_REQUIRED_TOOL_UNAVAILABLE;
+        if (containsAny(text, "unable to find commits until some tag", "walk failure. missing commit",
+                "shallow update not allowed", "shallow repository"))
+            return BUILD_FAILED_VCS_HISTORY_UNAVAILABLE;
         if (text.contains("no plugin descriptor found at meta-inf/maven/plugin.xml"))
             return BUILD_FAILED_REACTOR_ARTIFACT_MISSING;
         if (text.contains("failed to create enforcer rules"))
