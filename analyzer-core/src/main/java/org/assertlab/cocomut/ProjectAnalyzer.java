@@ -931,6 +931,10 @@ public class ProjectAnalyzer {
         if (Pattern.compile("invalid flag:\\s*--release", Pattern.CASE_INSENSITIVE).matcher(output).find()) {
             return 11;
         }
+        if (Pattern.compile("unrecognized option:\\s*--add-(?:opens|exports)", Pattern.CASE_INSENSITIVE)
+                .matcher(output).find()) {
+            return 11;
+        }
         Matcher classVersion = Pattern.compile(
                 "compiled by a more recent version of the java runtime.*?class file version\\s+(\\d+)(?:\\.\\d+)?",
                 Pattern.CASE_INSENSITIVE | Pattern.DOTALL).matcher(output);
