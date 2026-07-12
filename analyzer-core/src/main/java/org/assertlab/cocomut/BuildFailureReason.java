@@ -31,7 +31,8 @@ public enum BuildFailureReason {
                 "compile sdk version is not specified")) return BUILD_FAILED_ANDROID_SDK_UNAVAILABLE;
         if (containsAny(text, "toolchain", "no matching toolchains found", "cannot find matching toolchain"))
             return BUILD_FAILED_TOOLCHAIN_UNAVAILABLE;
-        if (containsAny(text, "invalid target release", "release version", "unsupported class file major version",
+        if (containsAny(text, "invalid target release", "invalid source release", "release version",
+                "unsupported class file major version",
                 "source option", "target option", "requires java", "jdk version")) return BUILD_FAILED_JDK_UNAVAILABLE;
         if (containsAny(text, "could not find artifact") && text.contains("snapshot"))
             return BUILD_FAILED_REACTOR_ARTIFACT_MISSING;
