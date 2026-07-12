@@ -4,9 +4,14 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 
+import org.assertlab.cocomut.source.ProjectModel;
+import org.assertlab.cocomut.source.SourceAnalysisSession;
+import org.assertlab.cocomut.source.SourceBackends;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import org.junit.Before;
 import org.junit.Test;
@@ -45,6 +50,24 @@ public class ContextExtractorTest {
     @Test
     public void testContextExtractorCreation() {
         assertNotNull("Extractor should be created", extractor);
+    }
+
+    @Test
+    public void sourceContextRemainsAvailableWithoutCallGraph() throws Exception {
+        try (SourceAnalysisSession session = SourceBackends.spoon().open(ProjectModel.from(projectMetadata))) {
+            MethodInfo method = new MethodIdentifier(projectMetadata).identify(session).stream()
+                    .filter(candidate -> "greet".equals(candidate.getMethodName()))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("Missing fixture greet method"));
+
+            ContextExtractor sourceOnly = new ContextExtractor(projectMetadata, null, session);
+            MethodContext context = sourceOnly.extractContext(method);
+
+            assertNotNull("Source context should be emitted without a call graph", context);
+            assertEquals(method.getMethodUri(), context.getMethodUri());
+            assertEquals("greet", context.getMethodName());
+            assertNull(context.getCallGraph());
+        }
     }
 
     @Test
