@@ -72,6 +72,8 @@ public class BuildJavaSelectionTest {
         assertEquals(11, ProjectAnalyzer.requiredJavaVersion(
                 "AuditListener has been compiled by a more recent version of the Java Runtime "
                         + "(class file version 55.0), this runtime recognizes versions up to 52.0"));
+        assertEquals(17, ProjectAnalyzer.requiredJavaVersion(
+                "bad class file: dependency.jar class file has wrong version 61.0, should be 55.0"));
         assertEquals(11, ProjectAnalyzer.requiredJavaVersion(
                 "Unrecognized option: --add-opens=java.xml/com.sun.org.apache.xpath.internal=ALL-UNNAMED"));
         assertEquals(8, ProjectAnalyzer.requiredJavaVersion(

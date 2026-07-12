@@ -1024,7 +1024,13 @@ public class ProjectAnalyzer {
         Matcher classVersion = Pattern.compile(
                 "compiled by a more recent version of the java runtime.*?class file version\\s+(\\d+)(?:\\.\\d+)?",
                 Pattern.CASE_INSENSITIVE | Pattern.DOTALL).matcher(output);
-        if (classVersion.find()) {
+        boolean classVersionFound = classVersion.find();
+        if (!classVersionFound) {
+            classVersion = Pattern.compile("class file has wrong version\\s+(\\d+)(?:\\.\\d+)?",
+                    Pattern.CASE_INSENSITIVE).matcher(output);
+            classVersionFound = classVersion.find();
+        }
+        if (classVersionFound) {
             int major = Integer.parseInt(classVersion.group(1));
             if (major >= 45) {
                 return major - 44;
