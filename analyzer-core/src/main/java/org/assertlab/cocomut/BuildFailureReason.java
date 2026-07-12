@@ -12,6 +12,7 @@ public enum BuildFailureReason {
     BUILD_FAILED_DEPENDENCY_UNAVAILABLE,
     BUILD_FAILED_AUTHENTICATION_REQUIRED,
     BUILD_FAILED_PLUGIN_INCOMPATIBLE,
+    BUILD_FAILED_BUILD_TASK_UNAVAILABLE,
     BUILD_FAILED_PROJECT_COMPILATION_ERROR,
     BUILD_FAILED_NETWORK_FAILURE,
     BUILD_FAILED_TIMEOUT,
@@ -37,6 +38,8 @@ public enum BuildFailureReason {
         if (containsAny(text, "pluginresolutionexception", "could not find goal", "failed to apply plugin",
                 "plugin with id") || (text.contains("plugin") && text.contains("incompatible")))
             return BUILD_FAILED_PLUGIN_INCOMPATIBLE;
+        if (containsAny(text, "task 'classes' not found", "task 'testclasses' not found"))
+            return BUILD_FAILED_BUILD_TASK_UNAVAILABLE;
         if (containsAny(text, "compilation failure", "compilation error", "cannot find symbol", "does not exist",
                 "should be declared in a file named")) return BUILD_FAILED_PROJECT_COMPILATION_ERROR;
         return BUILD_FAILED_UNKNOWN_ERROR;

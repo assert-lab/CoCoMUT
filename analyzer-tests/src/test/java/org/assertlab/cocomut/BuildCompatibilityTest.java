@@ -22,6 +22,8 @@ public class BuildCompatibilityTest {
                 BuildFailureReason.classify("status code 503", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_TIMEOUT,
                 BuildFailureReason.classify("", true, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_BUILD_TASK_UNAVAILABLE,
+                BuildFailureReason.classify("Task 'classes' not found in root project", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_UNKNOWN_ERROR,
                 BuildFailureReason.classify("unrecognized failure", false, false));
     }

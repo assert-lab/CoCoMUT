@@ -834,6 +834,17 @@ public class ProjectAnalyzer {
                         result.output() + "\n[CoCoMUT retried Maven package because only declared reactor artifacts were missing]\n"
                                 + packaged.output(), packaged.timedOut());
             }
+            if ("gradle".equals(buildSystem) && !includeTests && result.exitCode() != 0
+                    && !result.timedOut() && result.output().contains("Task 'classes' not found")) {
+                List<String> assembleCommand = new ArrayList<>(command);
+                assembleCommand.set(assembleCommand.indexOf("classes"), "assemble");
+                CommandResult assembled = runWithTransientRetries(assembleCommand);
+                result = new CommandResult(assembled.exitCode(),
+                        result.output()
+                                + "\n[CoCoMUT retried Gradle assemble because the aggregator has no classes task]\n"
+                                + assembled.output(),
+                        assembled.timedOut());
+            }
             lastBuildResult = new BuildResult(true, result.exitCode(), result.exitCode() == 0,
                     result.timedOut(), result.timedOut() ? "BUILD TIMED OUT" : (result.exitCode() == 0 ? "BUILD SUCCESS" : "BUILD FAILED"),
                     diagnosticTail(result.output()),
