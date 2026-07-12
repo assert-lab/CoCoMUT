@@ -21,6 +21,8 @@ public class BuildCompatibilityTest {
                 BuildFailureReason.classify(
                         "Dependency requires at least JVM runtime version 21. This build uses Java 17.",
                         false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
+                BuildFailureReason.classify("JDK 21+ is required to build this project.", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_ANDROID_SDK_UNAVAILABLE,
                 BuildFailureReason.classify("SDK location not found", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_AUTHENTICATION_REQUIRED,
