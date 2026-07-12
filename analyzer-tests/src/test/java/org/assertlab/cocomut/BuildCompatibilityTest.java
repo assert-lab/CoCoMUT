@@ -23,6 +23,10 @@ public class BuildCompatibilityTest {
                         false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
                 BuildFailureReason.classify("JDK 21+ is required to build this project.", false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
+                BuildFailureReason.classify(
+                        "AuditListener has been compiled by a more recent version of the Java Runtime "
+                                + "(class file version 55.0)", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_ANDROID_SDK_UNAVAILABLE,
                 BuildFailureReason.classify("SDK location not found", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_AUTHENTICATION_REQUIRED,

@@ -931,6 +931,15 @@ public class ProjectAnalyzer {
         if (Pattern.compile("invalid flag:\\s*--release", Pattern.CASE_INSENSITIVE).matcher(output).find()) {
             return 11;
         }
+        Matcher classVersion = Pattern.compile(
+                "compiled by a more recent version of the java runtime.*?class file version\\s+(\\d+)(?:\\.\\d+)?",
+                Pattern.CASE_INSENSITIVE | Pattern.DOTALL).matcher(output);
+        if (classVersion.find()) {
+            int major = Integer.parseInt(classVersion.group(1));
+            if (major >= 45) {
+                return major - 44;
+            }
+        }
         for (Pattern pattern : List.of(
                 Pattern.compile("languageVersion=(\\d+)", Pattern.CASE_INSENSITIVE),
                 Pattern.compile("(?:release version|invalid target release:)\\s*(\\d+)\\s*(?:not supported)?", Pattern.CASE_INSENSITIVE),

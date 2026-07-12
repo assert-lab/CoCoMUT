@@ -37,6 +37,9 @@ public enum BuildFailureReason {
                 "source option", "target option", "requires java", "jdk version",
                 "requires at least jvm runtime version", "run this build using a java"))
             return BUILD_FAILED_JDK_UNAVAILABLE;
+        if (text.contains("compiled by a more recent version of the java runtime")
+                && text.contains("class file version"))
+            return BUILD_FAILED_JDK_UNAVAILABLE;
         if (text.contains("jdk ") && text.contains(" is required to build"))
             return BUILD_FAILED_JDK_UNAVAILABLE;
         if (containsAny(text, "could not find artifact") && text.contains("snapshot"))

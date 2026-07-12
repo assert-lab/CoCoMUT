@@ -60,6 +60,9 @@ public class BuildJavaSelectionTest {
         assertEquals(21, ProjectAnalyzer.requiredJavaVersion(
                 "Dependency requires at least JVM runtime version 21. This build uses a Java 17 JVM."));
         assertEquals(21, ProjectAnalyzer.requiredJavaVersion("JDK 21+ is required to build Apache Camel."));
+        assertEquals(11, ProjectAnalyzer.requiredJavaVersion(
+                "AuditListener has been compiled by a more recent version of the Java Runtime "
+                        + "(class file version 55.0), this runtime recognizes versions up to 52.0"));
         assertEquals(17, ProjectAnalyzer.requiredJavaVersion("Gradle requires JVM 17 or later to run"));
         assertEquals(6, ProjectAnalyzer.requiredJavaVersion("Source option 6 is no longer supported"));
         assertEquals(-1, ProjectAnalyzer.requiredJavaVersion("ordinary compilation failure"));
