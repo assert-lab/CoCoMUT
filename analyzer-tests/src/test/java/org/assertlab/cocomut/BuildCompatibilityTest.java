@@ -32,6 +32,10 @@ public class BuildCompatibilityTest {
         assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
                 BuildFailureReason.classify("Java 1.8 is required for amd64. Detected version 17", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
+                BuildFailureReason.classify(
+                        "RequireJavaVendor failed: Trino requires Temurin or Oracle JDK for development.",
+                        false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
                 BuildFailureReason.classify("NullAway only builds on JDK 21 or higher now", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
                 BuildFailureReason.classify("This project should be built with Java 25 or above", false, false));

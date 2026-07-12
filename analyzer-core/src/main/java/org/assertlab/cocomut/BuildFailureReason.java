@@ -50,6 +50,10 @@ public enum BuildFailureReason {
             return BUILD_FAILED_JDK_UNAVAILABLE;
         if (text.contains("jdk ") && text.contains(" is required to build"))
             return BUILD_FAILED_JDK_UNAVAILABLE;
+        if (text.contains("requirejavavendor")
+                || (text.contains("requires ") && text.contains(" jdk for development"))
+                || (text.contains("jdk vendor") && text.contains("required")))
+            return BUILD_FAILED_JDK_UNAVAILABLE;
         if (java.util.regex.Pattern.compile("java\\s+(?:1\\.)?\\d+\\s+is required")
                 .matcher(text).find())
             return BUILD_FAILED_JDK_UNAVAILABLE;
