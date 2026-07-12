@@ -46,6 +46,9 @@ public class BuildCompatibilityTest {
         assertEquals(BuildFailureReason.BUILD_FAILED_REQUIRED_TOOL_UNAVAILABLE,
                 BuildFailureReason.classify("Cannot run program npm: error=2, No such file or directory", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_REQUIRED_TOOL_UNAVAILABLE,
+                BuildFailureReason.classify(
+                        "A problem occurred starting process 'command 'go''", false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_REQUIRED_TOOL_UNAVAILABLE,
                 BuildFailureReason.classify("mvnw: line 278: shasum: command not found", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_VCS_HISTORY_UNAVAILABLE,
                 BuildFailureReason.classify(

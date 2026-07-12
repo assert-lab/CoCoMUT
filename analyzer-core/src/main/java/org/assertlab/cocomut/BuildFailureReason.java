@@ -65,6 +65,8 @@ public enum BuildFailureReason {
         if (text.contains("cannot run program")
                 && containsAny(text, "no such file or directory", "error=2"))
             return BUILD_FAILED_REQUIRED_TOOL_UNAVAILABLE;
+        if (text.contains("problem occurred starting process 'command '"))
+            return BUILD_FAILED_REQUIRED_TOOL_UNAVAILABLE;
         if (text.contains(": command not found"))
             return BUILD_FAILED_REQUIRED_TOOL_UNAVAILABLE;
         if (containsAny(text, "unable to find commits until some tag", "walk failure. missing commit",
