@@ -6,6 +6,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Set;
 import org.junit.Test;
 
@@ -75,6 +76,7 @@ public class BuildCompatibilityTest {
             ProjectMetadata metadata = new ProjectAnalyzer(project).analyze();
             assertEquals("maven", metadata.getBuildSystem());
             assertEquals(service, metadata.getBuildRoot());
+            assertEquals(List.of(service), metadata.getBuildRootCandidates());
 
             Files.createDirectories(project.resolve("other"));
             Files.writeString(project.resolve("other/pom.xml"), """
@@ -84,6 +86,7 @@ public class BuildCompatibilityTest {
             ProjectMetadata ambiguous = new ProjectAnalyzer(project).analyze();
             assertEquals("none", ambiguous.getBuildSystem());
             assertEquals(project, ambiguous.getBuildRoot());
+            assertEquals(2, ambiguous.getBuildRootCandidates().size());
         } finally {
             delete(project);
         }

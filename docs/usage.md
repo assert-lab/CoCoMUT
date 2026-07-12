@@ -161,7 +161,9 @@ Useful options:
 For Maven and Gradle projects, `--project` must identify the intended build
 root: the directory containing the root `pom.xml`, `build.gradle`,
 `build.gradle.kts`, or settings file. CoCoMUT does not guess between multiple
-nested builds in a monorepo.
+nested builds in a monorepo. It reports `BUILD_ROOT_AMBIGUOUS` together with
+`phase_1_build_root_candidates`; absence of both a build and usable project
+bytecode is reported as `PROJECT_BYTECODE_UNAVAILABLE`, not `BUILD_FAILED`.
 
 CoCoMUT performs static bytecode analysis. The analyzed checkout must provide
 usable project bytecode through project class directories or project JARs. By

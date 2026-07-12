@@ -46,6 +46,7 @@ REPO_COLUMNS = [
     "phase_1_build_succeeded",
     "phase_1_build_timed_out",
     "phase_1_build_root",
+    "phase_1_build_root_candidates",
     "phase_1_build_command",
     "phase_1_build_attempts",
     "phase_1_build_output_tail",

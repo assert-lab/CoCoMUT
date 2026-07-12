@@ -170,6 +170,8 @@ public class OrchestratorTest {
             assertEquals(1, report.get("failed_at_phase"));
             assertEquals(false, report.get("phase_1_compiles"));
             assertEquals(true, report.get("phase_1_source_available"));
+            assertTrue(String.valueOf(report.get("failure_codes"))
+                    .contains("PROJECT_BYTECODE_UNAVAILABLE"));
             assertTrue(String.valueOf(report.get("phase_1_error")).contains("NO PROJECT BYTECODE"));
             assertTrue(Files.isRegularFile(Path.of(String.valueOf(report.get("extraction_report_file")))));
         } finally {

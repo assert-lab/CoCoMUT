@@ -14,6 +14,7 @@ public class ProjectMetadata {
     private final String projectName;
     private final Path projectPath;
     private final Path buildRoot;
+    private final List<Path> buildRootCandidates;
     private final String buildSystem;  // "maven" or "gradle"
     private final String javaVersion;
     private final Path sourceRoot;
@@ -57,6 +58,7 @@ public class ProjectMetadata {
         this.projectName = Objects.requireNonNull(builder.projectName, "projectName cannot be null");
         this.projectPath = Objects.requireNonNull(builder.projectPath, "projectPath cannot be null");
         this.buildRoot = builder.buildRoot == null ? this.projectPath : builder.buildRoot;
+        this.buildRootCandidates = Collections.unmodifiableList(safeList(builder.buildRootCandidates));
         this.buildSystem = Objects.requireNonNull(builder.buildSystem, "buildSystem cannot be null");
         this.javaVersion = Objects.requireNonNull(builder.javaVersion, "javaVersion cannot be null");
         this.sourceRoot = Objects.requireNonNull(builder.sourceRoot, "sourceRoot cannot be null");
@@ -121,6 +123,10 @@ public class ProjectMetadata {
 
     public Path getBuildRoot() {
         return buildRoot;
+    }
+
+    public List<Path> getBuildRootCandidates() {
+        return buildRootCandidates;
     }
 
     public String getBuildSystem() {
@@ -309,6 +315,7 @@ public class ProjectMetadata {
         private String projectName;
         private Path projectPath;
         private Path buildRoot;
+        private List<Path> buildRootCandidates = Collections.emptyList();
         private String buildSystem;
         private String javaVersion;
         private Path sourceRoot;
@@ -358,6 +365,7 @@ public class ProjectMetadata {
                     .projectName(src.projectName)
                     .projectPath(src.projectPath)
                     .buildRoot(src.buildRoot)
+                    .buildRootCandidates(src.buildRootCandidates)
                     .buildSystem(src.buildSystem)
                     .javaVersion(src.javaVersion)
                     .sourceRoot(src.sourceRoot)
@@ -410,6 +418,12 @@ public class ProjectMetadata {
 
         public Builder buildRoot(Path buildRoot) {
             this.buildRoot = buildRoot;
+            return this;
+        }
+
+        public Builder buildRootCandidates(List<Path> buildRootCandidates) {
+            this.buildRootCandidates = buildRootCandidates == null
+                    ? Collections.emptyList() : List.copyOf(buildRootCandidates);
             return this;
         }
 

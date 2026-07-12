@@ -291,6 +291,8 @@ final class Orchestrator {
 
             executionReport.put("phase_1_project", projectMetadata.getProjectName());
             executionReport.put("phase_1_build_root", projectMetadata.getBuildRoot().toString());
+            executionReport.put("phase_1_build_root_candidates",
+                    projectMetadata.getBuildRootCandidates().stream().map(Path::toString).toList());
             executionReport.put("phase_1_build_system", projectMetadata.getBuildSystem());
             executionReport.put("phase_1_java_version", projectMetadata.getJavaVersion());
             executionReport.put("phase_1_compiles", projectMetadata.isCompiles());
@@ -350,7 +352,13 @@ final class Orchestrator {
             executionReport.put("phase_1_explicit_classpath_files", projectMetadata.getExplicitClasspathFiles().size());
 
             if (!projectMetadata.isAnalysisCanProceed()) {
-                failureCodes.add(FailureCode.BUILD_FAILED);
+                if (!projectMetadata.isBuildAttempted() && "none".equals(projectMetadata.getBuildSystem())) {
+                    failureCodes.add(projectMetadata.getBuildRootCandidates().size() > 1
+                            ? FailureCode.BUILD_ROOT_AMBIGUOUS
+                            : FailureCode.PROJECT_BYTECODE_UNAVAILABLE);
+                } else {
+                    failureCodes.add(FailureCode.BUILD_FAILED);
+                }
                 executionReport.put("phase_1_error", projectMetadata.getCompileStatus());
                 return false;
             }

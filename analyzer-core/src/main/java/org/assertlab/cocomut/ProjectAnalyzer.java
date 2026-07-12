@@ -56,6 +56,7 @@ public class ProjectAnalyzer {
     private BuildResult lastBuildResult = BuildResult.notAttempted("BUILD DENIED");
     private BuildJavaSelection buildJavaSelection = new BuildJavaSelection(null, "inherited", "inherited_environment");
     private final List<BuildAttempt> buildAttempts = new ArrayList<>();
+    private List<Path> buildRootCandidates = List.of();
 
     /**
      * Create a ProjectAnalyzer for the given project path
@@ -202,6 +203,7 @@ public class ProjectAnalyzer {
                 .projectName(projectName)
                 .projectPath(projectPath)
                 .buildRoot(effectiveBuildRoot)
+                .buildRootCandidates(buildRootCandidates)
                 .buildSystem(detectedBuildSystem)
                 .javaVersion(javaVersion)
                 .sourceRoot(sourceRoot)
@@ -365,6 +367,7 @@ public class ProjectAnalyzer {
         }
 
         List<Path> nestedRoots = nestedBuildRoots();
+        buildRootCandidates = nestedRoots;
         if (nestedRoots.size() == 1) {
             effectiveBuildRoot = nestedRoots.get(0);
             return Files.isRegularFile(effectiveBuildRoot.resolve("pom.xml")) ? "maven" : "gradle";

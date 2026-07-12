@@ -177,6 +177,9 @@ code and add a stable `phase_1_build_failure_reason`, such as
 
 When no build descriptor exists at the requested root, CoCoMUT uses one unique
 nested Maven or Gradle root. Multiple independent nested builds remain
-ambiguous and require an explicit project root per invocation. Generated Maven
+ambiguous and require an explicit project root per invocation; reports use
+`BUILD_ROOT_AMBIGUOUS` and list `phase_1_build_root_candidates` rather than
+misreporting a failed build. A plain project without usable bytecode uses
+`PROJECT_BYTECODE_UNAVAILABLE`. Generated Maven
 and Gradle source directories are added after a successful build; generated
 test sources are included only when the requested source sets include tests.
