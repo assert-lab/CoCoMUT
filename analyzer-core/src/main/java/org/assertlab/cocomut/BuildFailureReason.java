@@ -70,6 +70,8 @@ public enum BuildFailureReason {
             return BUILD_FAILED_DEPENDENCY_UNAVAILABLE;
         if (containsAny(text, "maven-default-http-blocker", "blocked mirror for repositories"))
             return BUILD_FAILED_DEPENDENCY_UNAVAILABLE;
+        if (text.contains("unable to find the local maven repo"))
+            return BUILD_FAILED_DEPENDENCY_UNAVAILABLE;
         if (text.contains("cannot run program")
                 && containsAny(text, "no such file or directory", "error=2"))
             return BUILD_FAILED_REQUIRED_TOOL_UNAVAILABLE;

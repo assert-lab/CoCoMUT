@@ -73,6 +73,8 @@ public class BuildCompatibilityTest {
         assertEquals(BuildFailureReason.BUILD_FAILED_DEPENDENCY_UNAVAILABLE,
                 BuildFailureReason.classify("Blocked mirror for repositories: maven-default-http-blocker", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_DEPENDENCY_UNAVAILABLE,
+                BuildFailureReason.classify("Unable to find the local maven repo", false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_DEPENDENCY_UNAVAILABLE,
                 BuildFailureReason.classify("Could not resolve all dependencies for configuration compileClasspath", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_DEPENDENCY_UNAVAILABLE,
                 BuildFailureReason.classify(
