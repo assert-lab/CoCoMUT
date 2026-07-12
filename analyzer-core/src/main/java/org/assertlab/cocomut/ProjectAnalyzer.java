@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -389,16 +390,32 @@ public class ProjectAnalyzer {
                         || name.equals("build.gradle") || name.equals("build.gradle.kts")) {
                     Path parent = file.getParent();
                     String relative = projectPath.relativize(parent).toString().replace('\\', '/');
-                    if (!relative.contains("build/") && !relative.contains("target/")
-                            && !relative.contains("examples/") && !relative.contains("benchmark")) roots.add(parent);
+                    if (!relative.contains("build/") && !relative.contains("target/")) roots.add(parent);
                 }
             }
         } catch (IOException ignored) {
             return List.of();
         }
-        return roots.stream()
+        List<Path> topLevelRoots = roots.stream()
                 .filter(root -> roots.stream().noneMatch(other -> !other.equals(root) && root.startsWith(other)))
                 .toList();
+        List<Path> productionRoots = topLevelRoots.stream()
+                .filter(root -> !isAuxiliaryBuildRoot(root))
+                .toList();
+        return productionRoots.isEmpty() ? topLevelRoots : productionRoots;
+    }
+
+    private boolean isAuxiliaryBuildRoot(Path root) {
+        Set<String> auxiliarySegments = Set.of(
+                "example", "examples", "demo", "demos", "sample", "samples",
+                "benchmark", "benchmarks");
+        Path relative = projectPath.relativize(root);
+        for (Path segment : relative) {
+            if (auxiliarySegments.contains(segment.toString().toLowerCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

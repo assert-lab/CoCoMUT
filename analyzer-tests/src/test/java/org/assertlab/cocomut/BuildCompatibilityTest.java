@@ -101,6 +101,46 @@ public class BuildCompatibilityTest {
     }
 
     @Test
+    public void prefersProductionNestedBuildOverExampleBuild() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-production-root");
+        try {
+            Path library = project.resolve("android");
+            Path example = project.resolve("example/android");
+            Files.createDirectories(library);
+            Files.createDirectories(example);
+            Files.writeString(library.resolve("build.gradle"), "plugins { id 'java-library' }");
+            Files.writeString(example.resolve("build.gradle"), "plugins { id 'java' }");
+
+            ProjectMetadata metadata = new ProjectAnalyzer(project).analyze();
+            assertEquals("gradle", metadata.getBuildSystem());
+            assertEquals(library, metadata.getBuildRoot());
+            assertEquals(List.of(library), metadata.getBuildRootCandidates());
+        } finally {
+            delete(project);
+        }
+    }
+
+    @Test
+    public void acceptsExampleNestedBuildWhenItIsTheOnlyBuild() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-example-root");
+        try {
+            Path example = project.resolve("example");
+            Files.createDirectories(example);
+            Files.writeString(example.resolve("pom.xml"), """
+                    <project><modelVersion>4.0.0</modelVersion><groupId>demo</groupId>
+                    <artifactId>example</artifactId><version>1</version></project>
+                    """);
+
+            ProjectMetadata metadata = new ProjectAnalyzer(project).analyze();
+            assertEquals("maven", metadata.getBuildSystem());
+            assertEquals(example, metadata.getBuildRoot());
+            assertEquals(List.of(example), metadata.getBuildRootCandidates());
+        } finally {
+            delete(project);
+        }
+    }
+
+    @Test
     public void recognizesOnlyDeclaredReactorArtifacts() throws Exception {
         Path project = Files.createTempDirectory("cocomut-reactor-fallback");
         try {
