@@ -455,6 +455,23 @@ public class ProjectAnalyzerTest {
     }
 
     @Test
+    public void discoversBuiltMavenOutputsFromProfileModules() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-maven-profile-output-");
+        try {
+            Path module = project.resolve("profile-module");
+            Files.createDirectories(module.resolve("target/classes/demo"));
+            Files.writeString(module.resolve("pom.xml"), "<project/>\n");
+            Files.write(module.resolve("target/classes/demo/App.class"), new byte[] {1, 2, 3});
+
+            assertEquals(List.of(module.resolve("target/classes").toAbsolutePath().normalize()),
+                    ProjectAnalyzer.builtMavenClassOutputs(project, false));
+            assertEquals(List.of(), ProjectAnalyzer.builtMavenClassOutputs(project, true));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void gradleModelUsesAuthoritativeMultiProjectRootsForMainScope() throws Exception {
         Assume.assumeTrue("Gradle executable is required for this integration-style regression",
                 commandAvailable("gradle"));

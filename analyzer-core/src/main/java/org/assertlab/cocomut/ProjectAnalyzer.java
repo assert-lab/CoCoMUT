@@ -164,6 +164,10 @@ public class ProjectAnalyzer {
                 || !explicitProjectJars.isEmpty();
         BuildResult buildResult = runBuildIfAllowed(detectedBuildSystem);
         if (buildResult.succeeded()) {
+            if ("maven".equals(detectedBuildSystem)) {
+                sourceRoots = mergePaths(sourceRoots, findBuiltMavenSourceRoots(false));
+                if (includeTests) testSourceRoots = mergePaths(testSourceRoots, findBuiltMavenSourceRoots(true));
+            }
             sourceRoots = mergePaths(sourceRoots, findGeneratedSourceRoots(false));
             if (includeTests) testSourceRoots = mergePaths(testSourceRoots, findGeneratedSourceRoots(true));
             sourceRoot = !sourceRoots.isEmpty() ? sourceRoots.get(0) : sourceRoot;
@@ -687,6 +691,20 @@ public class ProjectAnalyzer {
             }
         } catch (IOException ignored) {
             // Generated sources are optional enrichment.
+        }
+        return new ArrayList<>(roots);
+    }
+
+    private List<Path> findBuiltMavenSourceRoots(boolean tests) {
+        Set<Path> roots = new LinkedHashSet<>();
+        for (Path output : builtMavenClassOutputs(effectiveBuildRoot, tests)) {
+            Path target = output.getParent();
+            Path module = target == null ? null : target.getParent();
+            if (module == null || !Files.isRegularFile(module.resolve("pom.xml"))) continue;
+            String element = tests ? "testSourceDirectory" : "sourceDirectory";
+            Path configured = resolveMavenProjectPath(module, inheritedMavenBuildPath(module, element));
+            Path conventional = module.resolve(tests ? "src/test/java" : "src/main/java");
+            addIfDirectory(roots, configured != null ? configured : conventional);
         }
         return new ArrayList<>(roots);
     }
@@ -1329,6 +1347,9 @@ public class ProjectAnalyzer {
             for (Path module : collectMavenModuleDirs(effectiveBuildRoot)) {
                 addClassDir(dirs, module.resolve("target/classes"));
             }
+            if (lastBuildResult != null && lastBuildResult.succeeded()) {
+                dirs.addAll(builtMavenClassOutputs(effectiveBuildRoot, false));
+            }
             return new ArrayList<>(new LinkedHashSet<>(dirs));
         } else if ("gradle".equals(buildSystem)) {
             for (Path candidate : List.of(
@@ -1357,6 +1378,9 @@ public class ProjectAnalyzer {
             for (Path module : collectMavenModuleDirs(effectiveBuildRoot)) {
                 addClassDir(dirs, module.resolve("target/test-classes"));
             }
+            if (lastBuildResult != null && lastBuildResult.succeeded()) {
+                dirs.addAll(builtMavenClassOutputs(effectiveBuildRoot, true));
+            }
         } else if ("gradle".equals(buildSystem)) {
             for (Path candidate : List.of(
                     projectPath.resolve("build/classes/java/test"),
@@ -1366,6 +1390,27 @@ public class ProjectAnalyzer {
             addGradleOutputDirs(dirs, "test");
         }
         return new ArrayList<>(new LinkedHashSet<>(dirs));
+    }
+
+    static List<Path> builtMavenClassOutputs(Path root, boolean tests) {
+        if (root == null || !Files.isDirectory(root)) return List.of();
+        Path suffix = Path.of("target", tests ? "test-classes" : "classes");
+        List<Path> outputs = new ArrayList<>();
+        try (var walk = Files.walk(root, 12)) {
+            for (Path dir : walk.filter(Files::isDirectory)
+                    .filter(path -> path.endsWith(suffix))
+                    .toList()) {
+                Path target = dir.getParent();
+                Path module = target == null ? null : target.getParent();
+                if (module != null && Files.isRegularFile(module.resolve("pom.xml"))
+                        && containsClassFile(dir)) {
+                    outputs.add(dir.toAbsolutePath().normalize());
+                }
+            }
+        } catch (IOException ignored) {
+            // Conventional and explicitly supplied outputs remain available.
+        }
+        return new ArrayList<>(new LinkedHashSet<>(outputs));
     }
 
     private List<Path> existingProjectArtifactJars(String buildSystem) throws IOException {
@@ -1437,7 +1482,7 @@ public class ProjectAnalyzer {
         }
     }
 
-    private boolean containsClassFile(Path dir) {
+    private static boolean containsClassFile(Path dir) {
         try (java.util.stream.Stream<Path> stream = Files.walk(dir)) {
             return stream.anyMatch(p -> p.toString().endsWith(".class"));
         } catch (IOException e) {
