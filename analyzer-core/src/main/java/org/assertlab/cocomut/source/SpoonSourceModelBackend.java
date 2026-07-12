@@ -494,7 +494,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 parameters,
                 annotations(executable),
                 thrownExceptions(executable),
-                sourceSet(project.projectPath(), sourceFile),
+                sourceSet(project, sourceFile),
                 executable instanceof CtConstructor<?>));
     }
 
@@ -517,7 +517,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 modifiers(field),
                 annotations(field),
                 docComment(field),
-                sourceSet(project.projectPath(), sourceFile)));
+                sourceSet(project, sourceFile)));
     }
 
     private static String methodName(CtExecutable<?> executable, CtType<?> owner) {
@@ -2910,7 +2910,40 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return element.getPosition().getLine();
     }
 
-    private static String sourceSet(Path projectRoot, Path sourceFile) {
+    static String sourceSet(ProjectModel project, Path sourceFile) {
+        Path normalizedSource = sourceFile.toAbsolutePath().normalize();
+        String modeledSourceSet = project.metadata().getModuleSourceSets().stream()
+                .flatMap(sourceSet -> sourceSet.sources().stream()
+                        .map(root -> Map.entry(root.toAbsolutePath().normalize(), sourceSet.sourceSet())))
+                .filter(entry -> normalizedSource.startsWith(entry.getKey()))
+                .max(Comparator.comparingInt(entry -> entry.getKey().getNameCount()))
+                .map(Map.Entry::getValue)
+                .map(SpoonSourceModelBackend::normalizeSourceSet)
+                .orElse("");
+        if (!modeledSourceSet.isBlank()) {
+            return modeledSourceSet;
+        }
+        if (project.testSourceRoots().stream().anyMatch(normalizedSource::startsWith)) {
+            return "test";
+        }
+        if (project.sourceRoots().stream().anyMatch(normalizedSource::startsWith)) {
+            return "main";
+        }
+        return sourceSetFromPath(project.projectPath(), normalizedSource);
+    }
+
+    private static String normalizeSourceSet(String sourceSet) {
+        String normalized = sourceSet == null ? "" : sourceSet.trim().toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case "main" -> "main";
+            case "test" -> "test";
+            case "integrationtest", "integration-test", "integration_test", "it", "itest" ->
+                    "integration_test";
+            default -> normalized;
+        };
+    }
+
+    private static String sourceSetFromPath(Path projectRoot, Path sourceFile) {
         String relative = projectRoot.toAbsolutePath().normalize()
                 .relativize(sourceFile.toAbsolutePath().normalize())
                 .toString()
