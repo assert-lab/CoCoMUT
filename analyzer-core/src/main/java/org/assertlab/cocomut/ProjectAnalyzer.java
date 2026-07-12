@@ -1007,21 +1007,81 @@ public class ProjectAnalyzer {
         if (lower.contains("artifact has not been packaged yet")
                 && lower.contains("when used on reactor artifact")) return true;
         if (!output.contains("Could not find artifact")) return false;
-        Set<String> reactorArtifacts = new HashSet<>();
+        Set<MavenCoordinate> reactorArtifacts = new HashSet<>();
         for (Path dir : mergePaths(List.of(effectiveBuildRoot), collectMavenModuleDirs(effectiveBuildRoot))) {
-            String pom = readQuietly(dir.resolve("pom.xml"));
-            Matcher artifact = Pattern.compile("<artifactId>\\s*([^<]+)\\s*</artifactId>").matcher(pom);
-            if (artifact.find()) reactorArtifacts.add(artifact.group(1).trim());
+            MavenCoordinate coordinate = readMavenCoordinate(dir.resolve("pom.xml"));
+            if (coordinate != null) reactorArtifacts.add(coordinate);
         }
-        Matcher missing = Pattern.compile("Could not find artifact\\s+[^:\\s]+:([^:\\s]+):", Pattern.CASE_INSENSITIVE)
+        Matcher missing = Pattern.compile("Could not find artifact\\s+([^\\s]+)", Pattern.CASE_INSENSITIVE)
                 .matcher(output);
         boolean found = false;
         while (missing.find()) {
             found = true;
-            if (!reactorArtifacts.contains(missing.group(1))) return false;
+            String[] parts = missing.group(1).replaceAll("[.,;]+$", "").split(":");
+            if (parts.length < 4
+                    || !reactorArtifacts.contains(new MavenCoordinate(parts[0], parts[1], parts[parts.length - 1]))) {
+                return false;
+            }
         }
         return found;
     }
+
+    private static MavenCoordinate readMavenCoordinate(Path pom) {
+        if (!Files.isRegularFile(pom)) return null;
+        try {
+            Element project = parseXml(pom);
+            Map<String, String> properties = new java.util.LinkedHashMap<>();
+            Element propertiesElement = directChild(project, "properties");
+            if (propertiesElement != null) {
+                for (Node child = propertiesElement.getFirstChild(); child != null; child = child.getNextSibling()) {
+                    if (child instanceof Element element) {
+                        properties.put(elementName(element), element.getTextContent().trim());
+                    }
+                }
+            }
+            Element parent = directChild(project, "parent");
+            String groupId = directChildText(project, "groupId");
+            String artifactId = directChildText(project, "artifactId");
+            String version = directChildText(project, "version");
+            if (groupId.isBlank() && parent != null) groupId = directChildText(parent, "groupId");
+            if (version.isBlank() && parent != null) version = directChildText(parent, "version");
+            properties.putIfAbsent("project.groupId", groupId);
+            properties.putIfAbsent("project.artifactId", artifactId);
+            properties.putIfAbsent("project.version", version);
+            properties.putIfAbsent("pom.groupId", groupId);
+            properties.putIfAbsent("pom.artifactId", artifactId);
+            properties.putIfAbsent("pom.version", version);
+            groupId = resolveMavenProperties(groupId, properties);
+            artifactId = resolveMavenProperties(artifactId, properties);
+            version = resolveMavenProperties(version, properties);
+            if (groupId.isBlank() || artifactId.isBlank() || version.isBlank()
+                    || groupId.contains("${") || artifactId.contains("${") || version.contains("${")) return null;
+            return new MavenCoordinate(groupId, artifactId, version);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static String resolveMavenProperties(String value, Map<String, String> properties) {
+        String resolved = value == null ? "" : value.trim();
+        for (int pass = 0; pass < 5; pass++) {
+            Matcher matcher = Pattern.compile("\\$\\{([^}]+)}").matcher(resolved);
+            StringBuffer next = new StringBuffer();
+            boolean changed = false;
+            while (matcher.find()) {
+                String replacement = properties.get(matcher.group(1));
+                if (replacement == null) continue;
+                matcher.appendReplacement(next, Matcher.quoteReplacement(replacement));
+                changed = true;
+            }
+            matcher.appendTail(next);
+            resolved = next.toString();
+            if (!changed) break;
+        }
+        return resolved;
+    }
+
+    private record MavenCoordinate(String groupId, String artifactId, String version) {}
 
     private static String readQuietly(Path path) {
         try {
@@ -1440,12 +1500,7 @@ public class ProjectAnalyzer {
 
     private static List<String> directMavenModules(Path pom) {
         try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            factory.setNamespaceAware(true);
-            factory.setXIncludeAware(false);
-            factory.setExpandEntityReferences(false);
-            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-            Element project = factory.newDocumentBuilder().parse(pom.toFile()).getDocumentElement();
+            Element project = parseXml(pom);
             for (Node child = project.getFirstChild(); child != null; child = child.getNextSibling()) {
                 if (!(child instanceof Element element) || !"modules".equals(elementName(element))) {
                     continue;
@@ -1465,6 +1520,27 @@ public class ProjectAnalyzer {
             // Malformed or unsupported POMs are handled as projects without declared modules.
         }
         return List.of();
+    }
+
+    private static Element parseXml(Path path) throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(true);
+        factory.setXIncludeAware(false);
+        factory.setExpandEntityReferences(false);
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        return factory.newDocumentBuilder().parse(path.toFile()).getDocumentElement();
+    }
+
+    private static Element directChild(Element parent, String name) {
+        for (Node child = parent.getFirstChild(); child != null; child = child.getNextSibling()) {
+            if (child instanceof Element element && name.equals(elementName(element))) return element;
+        }
+        return null;
+    }
+
+    private static String directChildText(Element parent, String name) {
+        Element child = directChild(parent, name);
+        return child == null ? "" : child.getTextContent().trim();
     }
 
     private static String elementName(Element element) {

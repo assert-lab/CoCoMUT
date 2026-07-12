@@ -253,13 +253,19 @@ public class BuildCompatibilityTest {
                     """);
             Files.createDirectories(project.resolve("api"));
             Files.writeString(project.resolve("api/pom.xml"), """
-                    <project><modelVersion>4.0.0</modelVersion><artifactId>api</artifactId></project>
+                    <project><modelVersion>4.0.0</modelVersion>
+                    <parent><groupId>demo</groupId><artifactId>parent</artifactId><version>1-SNAPSHOT</version></parent>
+                    <artifactId>api</artifactId></project>
                     """);
             ProjectAnalyzer analyzer = new ProjectAnalyzer(project);
             assertTrue(analyzer.missingSameReactorArtifacts(
                     "Could not find artifact demo:api:jar:1-SNAPSHOT"));
             assertFalse(analyzer.missingSameReactorArtifacts(
                     "Could not find artifact external:missing:jar:1-SNAPSHOT"));
+            assertFalse(analyzer.missingSameReactorArtifacts(
+                    "Could not find artifact external:api:jar:1-SNAPSHOT"));
+            assertFalse(analyzer.missingSameReactorArtifacts(
+                    "Could not find artifact demo:api:jar:2-SNAPSHOT"));
             assertTrue(analyzer.missingSameReactorArtifacts(
                     "Artifact has not been packaged yet. When used on reactor artifact, copy should be executed after packaging"));
         } finally {
