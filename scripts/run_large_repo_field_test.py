@@ -353,6 +353,8 @@ def result_row(repo: str,
     for key in REPO_COLUMNS:
         if key in report:
             row[key] = format_value(report[key])
+    row["phase_1_build_output_tail"] = compact_text(
+        report.get("phase_1_build_output_tail"), limit=1_000)
     row["failure_codes"] = format_value(report.get("failure_codes") or fallback_failure_codes(row["status"]))
     row.update(jsonl_metrics)
     expected = as_int(row.get("phase_5_jsonl_rows"))
@@ -543,6 +545,13 @@ def format_value(value: Any) -> str:
     if isinstance(value, (list, dict)):
         return json.dumps(value, sort_keys=True)
     return "" if value is None else str(value)
+
+
+def compact_text(value: Any, limit: int) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3] + "..."
 
 
 def as_int(value: Any) -> int | None:
