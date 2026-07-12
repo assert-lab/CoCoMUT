@@ -62,7 +62,8 @@ public enum BuildFailureReason {
                 && text.contains("when used on reactor artifact"))
             return BUILD_FAILED_REACTOR_ARTIFACT_MISSING;
         if (containsAny(text, "could not resolve dependencies", "could not resolve all dependencies",
-                "could not determine the dependencies", "could not find artifact", "could not resolve all files"))
+                "could not resolve all artifacts", "could not determine the dependencies",
+                "could not find artifact", "could not resolve all files"))
             return BUILD_FAILED_DEPENDENCY_UNAVAILABLE;
         if (text.contains("could not find ")
                 && text.contains("searched in the following locations:")
