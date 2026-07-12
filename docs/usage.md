@@ -164,6 +164,8 @@ root: the directory containing the root `pom.xml`, `build.gradle`,
 nested builds in a monorepo. It reports `BUILD_ROOT_AMBIGUOUS` together with
 `phase_1_build_root_candidates`; absence of both a build and usable project
 bytecode is reported as `PROJECT_BYTECODE_UNAVAILABLE`, not `BUILD_FAILED`.
+Ant, Bazel, Buck, and sbt root descriptors are identified explicitly as
+`BUILD_SYSTEM_UNSUPPORTED`; CoCoMUT does not guess an alternative nested build.
 
 CoCoMUT performs static bytecode analysis. The analyzed checkout must provide
 usable project bytecode through project class directories or project JARs. By

@@ -368,6 +368,12 @@ public class ProjectAnalyzer {
             return "maven";
         }
 
+        String unsupportedBuildSystem = unsupportedRootBuildSystem();
+        if (unsupportedBuildSystem != null) {
+            buildRootCandidates = List.of(projectPath);
+            return unsupportedBuildSystem;
+        }
+
         List<Path> nestedRoots = nestedBuildRoots();
         buildRootCandidates = nestedRoots;
         if (nestedRoots.size() == 1) {
@@ -379,6 +385,16 @@ public class ProjectAnalyzer {
         // project. Return "none" so conventional source and bytecode layouts can
         // still be analyzed.
         return "none";
+    }
+
+    private String unsupportedRootBuildSystem() {
+        if (Files.isRegularFile(projectPath.resolve("build.xml"))) return "ant";
+        if (Files.isRegularFile(projectPath.resolve("MODULE.bazel"))
+                || Files.isRegularFile(projectPath.resolve("WORKSPACE"))
+                || Files.isRegularFile(projectPath.resolve("WORKSPACE.bazel"))) return "bazel";
+        if (Files.isRegularFile(projectPath.resolve("BUCK"))) return "buck";
+        if (Files.isRegularFile(projectPath.resolve("build.sbt"))) return "sbt";
+        return null;
     }
 
     private List<Path> nestedBuildRoots() {
@@ -780,7 +796,9 @@ public class ProjectAnalyzer {
         }
 
         if (!"maven".equals(buildSystem) && !"gradle".equals(buildSystem)) {
-            lastBuildResult = BuildResult.notAttempted(NO_ROOT_BUILD_DESCRIPTOR);
+            lastBuildResult = BuildResult.notAttempted("none".equals(buildSystem)
+                    ? NO_ROOT_BUILD_DESCRIPTOR
+                    : "UNSUPPORTED BUILD SYSTEM: " + buildSystem.toUpperCase(Locale.ROOT));
             return lastBuildResult;
         }
 

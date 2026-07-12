@@ -183,3 +183,6 @@ misreporting a failed build. A plain project without usable bytecode uses
 `PROJECT_BYTECODE_UNAVAILABLE`. Generated Maven
 and Gradle source directories are added after a successful build; generated
 test sources are included only when the requested source sets include tests.
+An authoritative Ant, Bazel, Buck, or sbt descriptor at the requested root is
+reported as `BUILD_SYSTEM_UNSUPPORTED`; CoCoMUT does not replace it with an
+incidental nested Maven or Gradle build.

@@ -354,6 +354,9 @@ final class Orchestrator {
             if (!projectMetadata.isAnalysisCanProceed()) {
                 if (projectMetadata.isBuildSucceeded() && !projectMetadata.isBytecodeAvailable()) {
                     failureCodes.add(FailureCode.PROJECT_BYTECODE_UNAVAILABLE);
+                } else if (!projectMetadata.isBuildAttempted()
+                        && !Set.of("maven", "gradle", "none").contains(projectMetadata.getBuildSystem())) {
+                    failureCodes.add(FailureCode.BUILD_SYSTEM_UNSUPPORTED);
                 } else if (!projectMetadata.isBuildAttempted() && "none".equals(projectMetadata.getBuildSystem())) {
                     failureCodes.add(projectMetadata.getBuildRootCandidates().size() > 1
                             ? FailureCode.BUILD_ROOT_AMBIGUOUS

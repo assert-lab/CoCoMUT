@@ -141,6 +141,31 @@ public class BuildCompatibilityTest {
     }
 
     @Test
+    public void reportsUnsupportedRootBuildBeforeNestedBuilds() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-ant-root");
+        try {
+            Files.writeString(project.resolve("build.xml"), "<project name=\"demo\"/>");
+            Path incidentalModule = project.resolve("modules/incidental");
+            Files.createDirectories(incidentalModule);
+            Files.writeString(incidentalModule.resolve("pom.xml"), """
+                    <project><modelVersion>4.0.0</modelVersion><groupId>demo</groupId>
+                    <artifactId>incidental</artifactId><version>1</version></project>
+                    """);
+
+            ProjectMetadata metadata = new ProjectAnalyzer(project, true, "auto", false,
+                    ContextRequest.BuildPolicy.ALLOW_UNSANDBOXED_BUILD,
+                    List.of(), List.of(), List.of(), List.of(), List.of(), List.of(), List.of()).analyze();
+            assertEquals("ant", metadata.getBuildSystem());
+            assertEquals(project, metadata.getBuildRoot());
+            assertEquals(List.of(project), metadata.getBuildRootCandidates());
+            assertFalse(metadata.isBuildAttempted());
+            assertTrue(metadata.getCompileStatus().contains("UNSUPPORTED BUILD SYSTEM: ANT"));
+        } finally {
+            delete(project);
+        }
+    }
+
+    @Test
     public void recognizesOnlyDeclaredReactorArtifacts() throws Exception {
         Path project = Files.createTempDirectory("cocomut-reactor-fallback");
         try {
