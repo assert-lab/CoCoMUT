@@ -40,7 +40,8 @@ public enum BuildFailureReason {
         if (containsAny(text, "invalid target release", "invalid source release", "release version",
                 "unsupported class file major version",
                 "source option", "target option", "requires java", "jdk version",
-                "requires at least jvm runtime version", "run this build using a java"))
+                "requires at least jvm runtime version", "run this build using a java",
+                "built with java"))
             return BUILD_FAILED_JDK_UNAVAILABLE;
         if (text.contains("compiled by a more recent version of the java runtime")
                 && text.contains("class file version"))
