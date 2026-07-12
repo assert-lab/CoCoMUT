@@ -1006,12 +1006,27 @@ public class ProjectAnalyzer {
         String lower = output.toLowerCase(Locale.ROOT);
         if (lower.contains("artifact has not been packaged yet")
                 && lower.contains("when used on reactor artifact")) return true;
-        if (!output.contains("Could not find artifact")) return false;
         Set<MavenCoordinate> reactorArtifacts = new HashSet<>();
         for (Path dir : mergePaths(List.of(effectiveBuildRoot), collectMavenModuleDirs(effectiveBuildRoot))) {
             MavenCoordinate coordinate = readMavenCoordinate(dir.resolve("pom.xml"));
             if (coordinate != null) reactorArtifacts.add(coordinate);
         }
+        Matcher pluginDescriptor = Pattern.compile(
+                "plugin descriptor for\\s+([^\\s]+)\\s+\\(([^)]+)\\).*?no plugin descriptor found",
+                Pattern.CASE_INSENSITIVE | Pattern.DOTALL).matcher(output);
+        if (pluginDescriptor.find()) {
+            String[] parts = pluginDescriptor.group(1).split(":");
+            Path pluginPath;
+            try {
+                pluginPath = Path.of(pluginDescriptor.group(2)).toAbsolutePath().normalize();
+            } catch (Exception ignored) {
+                return false;
+            }
+            return parts.length == 3
+                    && pluginPath.startsWith(effectiveBuildRoot.toAbsolutePath().normalize())
+                    && reactorArtifacts.contains(new MavenCoordinate(parts[0], parts[1], parts[2]));
+        }
+        if (!output.contains("Could not find artifact")) return false;
         Matcher missing = Pattern.compile("Could not find artifact\\s+([^\\s]+)", Pattern.CASE_INSENSITIVE)
                 .matcher(output);
         boolean found = false;

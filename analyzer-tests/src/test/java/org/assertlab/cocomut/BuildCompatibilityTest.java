@@ -268,6 +268,14 @@ public class BuildCompatibilityTest {
                     "Could not find artifact demo:api:jar:2-SNAPSHOT"));
             assertTrue(analyzer.missingSameReactorArtifacts(
                     "Artifact has not been packaged yet. When used on reactor artifact, copy should be executed after packaging"));
+            assertTrue(analyzer.missingSameReactorArtifacts(
+                    "Failed to parse plugin descriptor for demo:api:1-SNAPSHOT ("
+                            + project.resolve("api/target/classes")
+                            + "): No plugin descriptor found at META-INF/maven/plugin.xml"));
+            assertFalse(analyzer.missingSameReactorArtifacts(
+                    "Failed to parse plugin descriptor for external:api:1-SNAPSHOT ("
+                            + project.resolve("api/target/classes")
+                            + "): No plugin descriptor found at META-INF/maven/plugin.xml"));
         } finally {
             delete(project);
         }
