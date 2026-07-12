@@ -431,17 +431,20 @@ final class Orchestrator {
             callGraphGenerator = new CallGraphGenerator(projectMetadata, effectiveAlgorithm);
             if (!callGraphGenerator.initialize()) {
                 callGraphResults = new HashMap<>();
-                failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
+                callGraphGenerator = null;
+                partialWithoutFailure = true;
                 executionReport.put("phase_3_available", false);
+                executionReport.put("phase_3_degraded", true);
                 executionReport.put("phase_3_algorithm", callGraphAlgorithm.toString());
                 executionReport.put("phase_3_effective_algorithm", effectiveAlgorithm.toString());
-                executionReport.put("phase_3_error",
-                        "Static bytecode analysis could not be initialized.");
+                executionReport.put("phase_3_warning",
+                        "Static bytecode analysis could not be initialized; "
+                                + "records will be emitted without caller/callee context.");
                 executionReport.put("phase_3_call_graph_artifact_exists", false);
                 executionReport.put("phase_3_call_graphs_generated", 0);
                 executionReport.put("phase_3_non_empty_call_graphs", 0);
                 executionReport.put("phase_3_call_edges_generated", 0);
-                return false;
+                return true;
             }
 
             callGraphResults = callGraphGenerator.generateForMethods(analysisUniverseMethods, methodInfos);
@@ -494,9 +497,22 @@ final class Orchestrator {
             }
             return true;
         } catch (Exception e) {
-            executionReport.put("phase_3_error", e.getMessage());
-            failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
-            return false;
+            callGraphGenerator = null;
+            callGraphResults = new HashMap<>();
+            partialWithoutFailure = true;
+            executionReport.put("phase_3_available", false);
+            executionReport.put("phase_3_degraded", true);
+            executionReport.put("phase_3_algorithm", callGraphAlgorithm.toString());
+            executionReport.put("phase_3_effective_algorithm", callGraphAlgorithm.toString());
+            executionReport.put("phase_3_warning",
+                    "Static bytecode analysis failed: " + e.getMessage()
+                            + "; records will be emitted without caller/callee context.");
+            executionReport.put("phase_3_call_graph_artifact_exists", false);
+            executionReport.put("phase_3_call_graphs_generated", 0);
+            executionReport.put("phase_3_focal_methods_matched_to_bytecode", 0);
+            executionReport.put("phase_3_non_empty_call_graphs", 0);
+            executionReport.put("phase_3_call_edges_generated", 0);
+            return true;
         }
     }
 

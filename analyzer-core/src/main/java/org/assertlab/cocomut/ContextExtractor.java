@@ -42,7 +42,10 @@ public class ContextExtractor {
     public ContextExtractor(ProjectMetadata projectMetadata, CallGraphGenerator callGraphGenerator,
                             SourceAnalysisSession sourceSession) {
         this.projectMetadata = Objects.requireNonNull(projectMetadata, "projectMetadata cannot be null");
-        this.callGraphGenerator = Objects.requireNonNull(callGraphGenerator, "callGraphGenerator cannot be null");
+        // Source context remains useful when bytecode call-graph construction is
+        // unavailable. In that case caller/callee fields are emitted empty and
+        // the run-level report records the degraded phase separately.
+        this.callGraphGenerator = callGraphGenerator;
         this.cache = new HashMap<>();
         this.projectModel = ProjectModel.from(projectMetadata);
         this.sourceBackend = SourceBackends.spoon();
@@ -76,7 +79,9 @@ public class ContextExtractor {
 
     private MethodContext fromSourceContext(MethodInfo method, SourceContext sourceContext) {
         SourceMethod sourceMethod = sourceContext.method();
-        CallGraphResult callGraph = callGraphGenerator.getCachedResult(method.getMethodUri());
+        CallGraphResult callGraph = callGraphGenerator == null
+                ? null
+                : callGraphGenerator.getCachedResult(method.getMethodUri());
         String methodBody = sourceContext.methodBody();
 
         return new MethodContext.Builder()
