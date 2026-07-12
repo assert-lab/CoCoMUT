@@ -54,6 +54,10 @@ public class BuildCompatibilityTest {
                 BuildFailureReason.classify(
                         "Unable to find commits until some tag: Walk failure. Missing commit abc123",
                         false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_VCS_HISTORY_UNAVAILABLE,
+                BuildFailureReason.classify(
+                        "Unexpected error while parsing HEAD commit: Missing commit abc123",
+                        false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_AUTHENTICATION_REQUIRED,
                 BuildFailureReason.classify("Host key verification failed", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_AUTHENTICATION_REQUIRED,

@@ -79,6 +79,8 @@ public enum BuildFailureReason {
         if (containsAny(text, "unable to find commits until some tag", "walk failure. missing commit",
                 "shallow update not allowed", "shallow repository"))
             return BUILD_FAILED_VCS_HISTORY_UNAVAILABLE;
+        if (text.contains("parsing head commit") && text.contains("missing commit"))
+            return BUILD_FAILED_VCS_HISTORY_UNAVAILABLE;
         if (text.contains("no plugin descriptor found at meta-inf/maven/plugin.xml"))
             return BUILD_FAILED_REACTOR_ARTIFACT_MISSING;
         if (text.contains("failed to create enforcer rules"))
