@@ -180,6 +180,31 @@ public class OrchestratorTest {
     }
 
     @Test
+    public void successfulEmptyBuildReportsUnavailableProjectBytecode() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-empty-maven-");
+        try {
+            write(project.resolve("pom.xml"), """
+                    <project><modelVersion>4.0.0</modelVersion>
+                      <groupId>demo</groupId><artifactId>empty</artifactId><version>1</version>
+                    </project>
+                    """);
+            Orchestrator empty = new Orchestrator(ContextRequest.builder()
+                    .projectRoot(project)
+                    .allowUnsandboxedBuild()
+                    .build());
+
+            assertFalse(empty.execute());
+            Map<String, Object> report = empty.getExecutionReport();
+            assertEquals(true, report.get("phase_1_build_succeeded"));
+            assertTrue(String.valueOf(report.get("failure_codes"))
+                    .contains("PROJECT_BYTECODE_UNAVAILABLE"));
+            assertFalse(String.valueOf(report.get("failure_codes")).contains("BUILD_FAILED"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void normalMavenTestSourceSetIsParsedAndCompiled() throws Exception {
         Path project = Files.createTempDirectory("cocomut-maven-test-source-set-");
         try {

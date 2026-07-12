@@ -352,7 +352,9 @@ final class Orchestrator {
             executionReport.put("phase_1_explicit_classpath_files", projectMetadata.getExplicitClasspathFiles().size());
 
             if (!projectMetadata.isAnalysisCanProceed()) {
-                if (!projectMetadata.isBuildAttempted() && "none".equals(projectMetadata.getBuildSystem())) {
+                if (projectMetadata.isBuildSucceeded() && !projectMetadata.isBytecodeAvailable()) {
+                    failureCodes.add(FailureCode.PROJECT_BYTECODE_UNAVAILABLE);
+                } else if (!projectMetadata.isBuildAttempted() && "none".equals(projectMetadata.getBuildSystem())) {
                     failureCodes.add(projectMetadata.getBuildRootCandidates().size() > 1
                             ? FailureCode.BUILD_ROOT_AMBIGUOUS
                             : FailureCode.PROJECT_BYTECODE_UNAVAILABLE);
