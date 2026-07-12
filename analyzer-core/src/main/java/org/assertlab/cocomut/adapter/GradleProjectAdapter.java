@@ -407,6 +407,19 @@ public class GradleProjectAdapter implements ProjectAdapter {
                 "                        }\n" +
                 "                    } catch (Throwable ignored) { }\n" +
                 "                }\n" +
+                "                def androidExt = p.extensions.findByName('android')\n" +
+                "                if (androidExt != null) {\n" +
+                "                    try {\n" +
+                "                        androidExt.sourceSets.each { ss ->\n" +
+                "                            if (sourceSetNames.contains(ss.name)) {\n" +
+                "                                def javaDirs = [] as LinkedHashSet\n" +
+                "                                try { javaDirs.addAll(ss.java.srcDirs) } catch (Throwable ignored) { }\n" +
+                "                                javaDirs.each { d -> if (d.exists()) println((ss.name == 'test' ? '" + TEST_SOURCE_PREFIX + "' : '" + SOURCE_PREFIX + "') + d.absolutePath) }\n" +
+                "                                javaDirs.each { d -> if (d.exists()) println '" + SOURCESET_SOURCE_PREFIX + "' + p.path + '\\t' + ss.name + '\\t' + d.absolutePath }\n" +
+                "                            }\n" +
+                "                        }\n" +
+                "                    } catch (Throwable ignored) { }\n" +
+                "                }\n" +
                 "            }\n" +
                 "        }\n" +
                 "    }\n" +

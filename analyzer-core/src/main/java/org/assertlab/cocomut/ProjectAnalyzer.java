@@ -822,7 +822,8 @@ public class ProjectAnalyzer {
                 command = mavenCommand;
             } else if ("gradle".equals(buildSystem)) {
                 String gradle = executableWithWrapper("gradle", isWindows);
-                command = List.of(gradle, "--no-daemon", includeTests ? "testClasses" : "classes",
+                command = List.of(gradle, "--no-daemon",
+                        gradleBuildTask(androidPreparation.androidProject(), includeTests),
                         "-x", "test", "--build-cache", "-q");
             } else {
                 lastBuildResult = BuildResult.notAttempted(NO_ROOT_BUILD_DESCRIPTOR);
@@ -904,6 +905,11 @@ public class ProjectAnalyzer {
                     BuildFailureReason.BUILD_FAILED_UNKNOWN_ERROR);
             return lastBuildResult;
         }
+    }
+
+    static String gradleBuildTask(boolean androidProject, boolean includeTests) {
+        if (includeTests) return "testClasses";
+        return androidProject ? "assemble" : "classes";
     }
 
     private static String diagnosticTail(String raw) {
@@ -1246,16 +1252,27 @@ public class ProjectAnalyzer {
     }
 
     private void addGradleOutputDirs(List<Path> dirs, String sourceSet) {
-        try (var walk = Files.walk(projectPath, 6)) {
+        try (var walk = Files.walk(projectPath, 10)) {
             for (Path dir : walk.filter(Files::isDirectory)
                     .filter(path -> path.endsWith(Path.of("build/classes/java/" + sourceSet))
-                            || path.endsWith(Path.of("build/classes/kotlin/" + sourceSet)))
+                            || path.endsWith(Path.of("build/classes/kotlin/" + sourceSet))
+                            || isAndroidClassOutput(path, sourceSet))
                     .toList()) {
                 addClassDir(dirs, dir);
             }
         } catch (IOException ignored) {
             // Missing output dirs are reported through phase-1 bytecode counts.
         }
+    }
+
+    private static boolean isAndroidClassOutput(Path path, String sourceSet) {
+        String normalized = path.toString().replace('\\', '/');
+        boolean testOutput = normalized.contains("/androidTest/") || normalized.contains("/test/")
+                || normalized.contains("/testDebug/") || normalized.contains("/testRelease/");
+        if ("test".equals(sourceSet) != testOutput) return false;
+        return (normalized.contains("/build/intermediates/javac/") && normalized.endsWith("/classes"))
+                || normalized.contains("/build/tmp/kotlin-classes/")
+                || normalized.contains("/build/intermediates/classes/");
     }
 
     private void addClassDir(List<Path> dirs, Path dir) {

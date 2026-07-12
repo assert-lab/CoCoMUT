@@ -21,14 +21,22 @@ final class AndroidSdkSupport {
     }
 
     static Preparation prepare(Path projectRoot) {
+        boolean androidProject = isAndroidProject(projectRoot);
+        if (!androidProject) return Preparation.notAndroid();
         Set<String> components = declaredComponents(projectRoot);
-        if (components.isEmpty()) return Preparation.notAndroid();
         Map<String, String> env = System.getenv();
         String rootText = !env.getOrDefault("ANDROID_SDK_ROOT", "").isBlank()
                 ? env.get("ANDROID_SDK_ROOT") : env.getOrDefault("ANDROID_HOME", "");
         if (rootText == null || rootText.isBlank()) {
             return new Preparation(true, false, false,
-                    "Android SDK components are declared but ANDROID_SDK_ROOT/ANDROID_HOME is unset.");
+                    components.isEmpty()
+                            ? "Android project detected, but SDK components are not statically declared and "
+                                    + "ANDROID_SDK_ROOT/ANDROID_HOME is unset."
+                            : "Android SDK components are declared but ANDROID_SDK_ROOT/ANDROID_HOME is unset.");
+        }
+        if (components.isEmpty()) {
+            return new Preparation(true, false, true,
+                    "Android project detected; no statically declared SDK components require provisioning.");
         }
         Path sdkRoot = Path.of(rootText).toAbsolutePath().normalize();
         Set<String> missing = missingComponents(sdkRoot, components);
@@ -82,6 +90,20 @@ final class AndroidSdkSupport {
             return Set.of();
         }
         return components;
+    }
+
+    static boolean isAndroidProject(Path root) {
+        try (var walk = Files.walk(root, 5)) {
+            for (Path file : walk.filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().matches("build\\.gradle(?:\\.kts)?"))
+                    .toList()) {
+                String text = Files.readString(file);
+                if (text.contains("com.android.") || text.contains("android {")) return true;
+            }
+        } catch (IOException ignored) {
+            return false;
+        }
+        return false;
     }
 
     static Set<String> missingComponents(Path sdkRoot, Set<String> components) {

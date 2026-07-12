@@ -606,6 +606,33 @@ public class ProjectAnalyzerTest {
     }
 
     @Test
+    public void discoversConventionalAndroidSourcesAndCompiledOutputs() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-android-layout-");
+        try {
+            Files.writeString(project.resolve("settings.gradle"), "include ':library'\n");
+            Files.createDirectories(project.resolve("library/src/main/java/example"));
+            Files.writeString(project.resolve("library/src/main/java/example/Library.java"),
+                    "package example; class Library {}\n");
+            Path classes = Files.createDirectories(project.resolve(
+                    "library/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/example"));
+            Files.write(classes.resolve("Library.class"), new byte[] {0, 0, 0, 0});
+
+            ProjectMetadata metadata = new ProjectAnalyzer(ContextRequest.builder()
+                    .projectRoot(project)
+                    .skipBuild(true)
+                    .build()).analyze();
+
+            assertTrue(metadata.getSourceRoots().contains(
+                    project.resolve("library/src/main/java").toAbsolutePath().normalize()));
+            assertTrue(metadata.getMainClassOutputs().stream().anyMatch(path ->
+                    path.endsWith(Path.of(
+                            "library/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes"))));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void projectJarPathIsRemovedFromDependencyClasspath() throws IOException {
         Path project = Files.createTempDirectory("cocomut-disjoint-artifacts-");
         try {

@@ -87,6 +87,25 @@ public class BuildCompatibilityTest {
                     """);
             assertEquals(Set.of("platforms;android-35", "build-tools;35.0.0"),
                     AndroidSdkSupport.declaredComponents(project));
+            assertTrue(AndroidSdkSupport.isAndroidProject(project));
+            assertEquals("assemble", ProjectAnalyzer.gradleBuildTask(true, false));
+            assertEquals("classes", ProjectAnalyzer.gradleBuildTask(false, false));
+            assertEquals("testClasses", ProjectAnalyzer.gradleBuildTask(true, true));
+        } finally {
+            delete(project);
+        }
+    }
+
+    @Test
+    public void detectsAndroidPluginWhenSdkVersionComesFromBuildMetadata() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-android-catalog");
+        try {
+            Files.writeString(project.resolve("build.gradle.kts"), """
+                    plugins { id("com.android.library") }
+                    android { compileSdk = libs.versions.compileSdk.get().toInt() }
+                    """);
+            assertTrue(AndroidSdkSupport.isAndroidProject(project));
+            assertTrue(AndroidSdkSupport.declaredComponents(project).isEmpty());
         } finally {
             delete(project);
         }
