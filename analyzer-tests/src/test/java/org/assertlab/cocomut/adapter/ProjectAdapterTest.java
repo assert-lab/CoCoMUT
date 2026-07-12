@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.List;
 
 import static org.junit.Assert.*;
 
@@ -109,5 +110,19 @@ public class ProjectAdapterTest {
         assertFalse(new GradleProjectAdapter(tempDir).canHandle(tempDir));
         assertTrue("Generic adapter always matches",
                 new GenericJavaAdapter(tempDir).canHandle(tempDir));
+    }
+
+    @Test
+    public void gradleSourceRootsCanBeRecoveredFromBuiltModuleOutputs() throws IOException {
+        Path module = tempDir.resolve("modules/library");
+        Path sourceRoot = module.resolve("src/main/java/example");
+        Path output = module.resolve("build/classes/java/main");
+        Files.createDirectories(sourceRoot);
+        Files.createDirectories(output);
+        Files.writeString(sourceRoot.resolve("Library.java"), "package example; class Library {}\n");
+
+        assertEquals(List.of(module.resolve("src/main/java").toAbsolutePath().normalize()),
+                GradleProjectAdapter.sourceRootsForOutputs(List.of(output), false));
+        assertEquals(List.of(), GradleProjectAdapter.sourceRootsForOutputs(List.of(output), true));
     }
 }

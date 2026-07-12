@@ -114,6 +114,8 @@ public class GradleProjectAdapter implements ProjectAdapter {
         mainOutputs.addAll(base.getMainClassOutputs());
         Set<Path> testOutputs = new LinkedHashSet<>(nativeModel.testOutputs());
         testOutputs.addAll(base.getTestClassOutputs());
+        sourceRoots.addAll(sourceRootsForOutputs(mainOutputs, false));
+        testSourceRoots.addAll(sourceRootsForOutputs(testOutputs, true));
         Set<Path> dependencies = new LinkedHashSet<>(base.getDependencyClasspath());
         Set<Path> projectOutputs = new LinkedHashSet<>();
         projectOutputs.addAll(mainOutputs);
@@ -151,6 +153,33 @@ public class GradleProjectAdapter implements ProjectAdapter {
                 .analysisCanProceed(analysisCanProceed)
                 .artifactOrigins(artifactOrigins(base, mainOutputs, testOutputs, base.getProjectArtifactJars(), dependencies))
                 .build();
+    }
+
+    static List<Path> sourceRootsForOutputs(Iterable<Path> outputs, boolean tests) {
+        Set<Path> roots = new LinkedHashSet<>();
+        for (Path output : outputs) {
+            if (output == null) continue;
+            Path current = output.toAbsolutePath().normalize();
+            while (current != null && current.getFileName() != null
+                    && !"build".equals(current.getFileName().toString())) {
+                current = current.getParent();
+            }
+            Path module = current == null ? null : current.getParent();
+            if (module == null) continue;
+            Path sourceRoot = module.resolve(tests ? "src/test/java" : "src/main/java");
+            if (Files.isDirectory(sourceRoot) && containsJavaSource(sourceRoot)) {
+                roots.add(sourceRoot.toAbsolutePath().normalize());
+            }
+        }
+        return new ArrayList<>(roots);
+    }
+
+    private static boolean containsJavaSource(Path root) {
+        try (var walk = Files.walk(root)) {
+            return walk.anyMatch(path -> Files.isRegularFile(path) && path.toString().endsWith(".java"));
+        } catch (IOException ignored) {
+            return false;
+        }
     }
 
     private static java.util.Map<String, String> artifactOrigins(ProjectMetadata base,
