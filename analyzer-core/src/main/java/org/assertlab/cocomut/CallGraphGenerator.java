@@ -273,8 +273,18 @@ public class CallGraphGenerator {
         sourceMethodsByKey.replaceAll((key, value) -> value.stream()
                 .sorted(Comparator.comparing(MethodInfo::getMethodUri))
                 .toList());
-        for (Map.Entry<String, List<MethodInfo>> entry : sourceMethodsByClass.entrySet()) {
-            sourceClassSummaries.put(entry.getKey(), SourceClassSummary.from(entry.getValue()));
+        List<Map.Entry<String, List<MethodInfo>>> classesBySourceFile = sourceMethodsByClass.entrySet().stream()
+                .sorted(Comparator.comparing(entry -> sourceFileSortKey(entry.getValue())))
+                .toList();
+        Path currentSourceFile = null;
+        String currentSource = null;
+        for (Map.Entry<String, List<MethodInfo>> entry : classesBySourceFile) {
+            Path sourceFile = firstSourceFile(entry.getValue());
+            if (!Objects.equals(currentSourceFile, sourceFile)) {
+                currentSourceFile = sourceFile;
+                currentSource = readSourceFile(sourceFile);
+            }
+            sourceClassSummaries.put(entry.getKey(), SourceClassSummary.from(entry.getValue(), currentSource));
         }
 
         for (MethodInfo method : methods) {
@@ -282,6 +292,26 @@ public class CallGraphGenerator {
             if (sig != null) {
                 signatureToMethodUri.put(sig.toString(), method.getMethodUri());
             }
+        }
+    }
+
+    private static Path firstSourceFile(List<MethodInfo> methods) {
+        return methods == null || methods.isEmpty() ? null : methods.get(0).getSourceFile();
+    }
+
+    private static String sourceFileSortKey(List<MethodInfo> methods) {
+        Path sourceFile = firstSourceFile(methods);
+        return sourceFile == null ? "" : sourceFile.toAbsolutePath().normalize().toString();
+    }
+
+    private static String readSourceFile(Path sourceFile) {
+        if (sourceFile == null || !Files.isRegularFile(sourceFile)) {
+            return null;
+        }
+        try {
+            return Files.readString(sourceFile);
+        } catch (Exception ignored) {
+            return null;
         }
     }
 
@@ -734,15 +764,17 @@ public class CallGraphGenerator {
 
     private record SourceClassSummary(SourceClassKind kind, Set<String> recordComponents) {
         private static SourceClassSummary from(List<MethodInfo> methods) {
+            return from(methods, readSourceFile(firstSourceFile(methods)));
+        }
+
+        private static SourceClassSummary from(List<MethodInfo> methods, String source) {
             if (methods == null || methods.isEmpty()) {
                 return new SourceClassSummary(SourceClassKind.UNKNOWN, Set.of());
             }
-            Path sourceFile = methods.get(0).getSourceFile();
-            if (sourceFile == null || !Files.isRegularFile(sourceFile)) {
+            if (source == null) {
                 return new SourceClassSummary(SourceClassKind.UNKNOWN, Set.of());
             }
             try {
-                String source = Files.readString(sourceFile);
                 String simpleName = simpleClassName(methods.get(0).getClassname());
                 SourceClassKind kind = inferSourceClassKind(source, simpleName);
                 Set<String> components = kind == SourceClassKind.RECORD
@@ -768,22 +800,31 @@ public class CallGraphGenerator {
                 return SourceClassKind.UNKNOWN;
             }
             String name = java.util.regex.Pattern.quote(simpleName);
-            if (source.matches("(?s).*\\b@interface\\s+" + name + "\\b.*")) {
+            if (containsDeclaration(source, "@interface", name, "\\b")) {
                 return SourceClassKind.ANNOTATION;
             }
-            if (source.matches("(?s).*\\benum\\s+" + name + "\\b.*")) {
+            if (containsDeclaration(source, "enum", name, "\\b")) {
                 return SourceClassKind.ENUM;
             }
-            if (source.matches("(?s).*\\brecord\\s+" + name + "\\s*\\(.*")) {
+            if (containsDeclaration(source, "record", name, "\\s*\\(")) {
                 return SourceClassKind.RECORD;
             }
-            if (source.matches("(?s).*\\binterface\\s+" + name + "\\b.*")) {
+            if (containsDeclaration(source, "interface", name, "\\b")) {
                 return SourceClassKind.INTERFACE;
             }
-            if (source.matches("(?s).*\\bclass\\s+" + name + "\\b.*")) {
+            if (containsDeclaration(source, "class", name, "\\b")) {
                 return SourceClassKind.CLASS;
             }
             return SourceClassKind.UNKNOWN;
+        }
+
+        private static boolean containsDeclaration(String source, String keyword, String quotedName,
+                                                   String suffix) {
+            String prefix = keyword.startsWith("@") ? "" : "\\b";
+            return java.util.regex.Pattern.compile(
+                            prefix + java.util.regex.Pattern.quote(keyword) + "\\s+" + quotedName + suffix)
+                    .matcher(source)
+                    .find();
         }
 
         private static Set<String> inferRecordComponents(String source, String simpleName) {
