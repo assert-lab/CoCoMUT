@@ -906,50 +906,13 @@ public class ProjectAnalyzer {
                         "[CoCoMUT Android SDK preparation]\n" + androidPreparation.diagnostic() + "\n"
                                 + result.output(), result.timedOut());
             }
-            if (!"COCOMUT_BUILD_JAVA_HOME".equals(buildJavaSelection.evidence())) {
-                StringBuilder attempts = new StringBuilder(result.output());
-                Set<Path> attemptedJavaHomes = new HashSet<>();
-                if (buildJavaSelection.javaHome() != null) {
-                    attemptedJavaHomes.add(buildJavaSelection.javaHome().toAbsolutePath().normalize());
-                }
-                for (int retryCount = 0;
-                        retryCount < 4 && result.exitCode() != 0 && !result.timedOut();
-                        retryCount++) {
-                    int requiredVersion = requiredJavaVersion(result.output());
-                    BuildJavaSelection retrySelection = BuildJavaSelection.forRequiredVersion(
-                            requiredVersion,
-                            "compiler requested Java " + requiredVersion + " after build failure");
-                    Path retryHome = retrySelection == null || retrySelection.javaHome() == null
-                            ? null : retrySelection.javaHome().toAbsolutePath().normalize();
-                    boolean exactRequirement = exactJavaVersionRequired(result.output());
-                    boolean downgradeRequired = obsoleteJavaSourceLevel(result.output());
-                    if (retrySelection == null
-                            || retrySelection.javaHome().equals(buildJavaSelection.javaHome())
-                            || attemptedJavaHomes.contains(retryHome)
-                            || (!exactRequirement && !downgradeRequired && buildJavaSelection.majorVersion() > 0
-                                    && retrySelection.majorVersion() <= buildJavaSelection.majorVersion())) {
-                        break;
-                    }
-                    BuildJavaSelection previousSelection = buildJavaSelection;
-                    buildJavaSelection = retrySelection;
-                    attemptedJavaHomes.add(retryHome);
-                    System.err.println("[ProjectAnalyzer] Retrying build with JDK " + retrySelection.version()
-                            + " because the compiler requested Java " + requiredVersion);
-                    result = runWithTransientRetries(command);
-                    attempts.append("\n[CoCoMUT retried after ")
-                            .append(previousSelection.evidence())
-                            .append(" using ")
-                            .append(retrySelection.javaHome())
-                            .append("]\n")
-                            .append(result.output());
-                }
-                result = new CommandResult(result.exitCode(), attempts.toString(), result.timedOut());
-            }
+            result = retryForRequestedJava(command, result);
             if ("maven".equals(buildSystem) && result.exitCode() != 0 && !result.timedOut()
                     && missingSameReactorArtifacts(result.output())) {
                 List<String> packageCommand = new ArrayList<>(command);
                 packageCommand.set(packageCommand.size() - 1, "package");
-                CommandResult packaged = runWithTransientRetries(packageCommand);
+                CommandResult packaged = retryForRequestedJava(packageCommand,
+                        runWithTransientRetries(packageCommand));
                 result = new CommandResult(packaged.exitCode(),
                         result.output() + "\n[CoCoMUT retried Maven package because only declared reactor artifacts were missing]\n"
                                 + packaged.output(), packaged.timedOut());
@@ -958,7 +921,8 @@ public class ProjectAnalyzer {
                     && !result.timedOut() && result.output().contains("Task 'classes' not found")) {
                 List<String> assembleCommand = new ArrayList<>(command);
                 assembleCommand.set(assembleCommand.indexOf("classes"), "assemble");
-                CommandResult assembled = runWithTransientRetries(assembleCommand);
+                CommandResult assembled = retryForRequestedJava(assembleCommand,
+                        runWithTransientRetries(assembleCommand));
                 result = new CommandResult(assembled.exitCode(),
                         result.output()
                                 + "\n[CoCoMUT retried Gradle assemble because the aggregator has no classes task]\n"
@@ -976,6 +940,46 @@ public class ProjectAnalyzer {
                     BuildFailureReason.BUILD_FAILED_UNKNOWN_ERROR);
             return lastBuildResult;
         }
+    }
+
+    private CommandResult retryForRequestedJava(List<String> command, CommandResult initial)
+            throws IOException, InterruptedException {
+        if ("COCOMUT_BUILD_JAVA_HOME".equals(buildJavaSelection.evidence())) return initial;
+        CommandResult result = initial;
+        StringBuilder attempts = new StringBuilder(result.output());
+        Set<Path> attemptedJavaHomes = new HashSet<>();
+        if (buildJavaSelection.javaHome() != null) {
+            attemptedJavaHomes.add(buildJavaSelection.javaHome().toAbsolutePath().normalize());
+        }
+        for (int retryCount = 0; retryCount < 4 && result.exitCode() != 0 && !result.timedOut(); retryCount++) {
+            int requiredVersion = requiredJavaVersion(result.output());
+            BuildJavaSelection retrySelection = BuildJavaSelection.forRequiredVersion(requiredVersion,
+                    "compiler requested Java " + requiredVersion + " after build failure");
+            Path retryHome = retrySelection == null || retrySelection.javaHome() == null
+                    ? null : retrySelection.javaHome().toAbsolutePath().normalize();
+            boolean exactRequirement = exactJavaVersionRequired(result.output());
+            boolean downgradeRequired = obsoleteJavaSourceLevel(result.output());
+            if (retrySelection == null
+                    || retrySelection.javaHome().equals(buildJavaSelection.javaHome())
+                    || attemptedJavaHomes.contains(retryHome)
+                    || (!exactRequirement && !downgradeRequired && buildJavaSelection.majorVersion() > 0
+                            && retrySelection.majorVersion() <= buildJavaSelection.majorVersion())) {
+                break;
+            }
+            BuildJavaSelection previousSelection = buildJavaSelection;
+            buildJavaSelection = retrySelection;
+            attemptedJavaHomes.add(retryHome);
+            System.err.println("[ProjectAnalyzer] Retrying build with JDK " + retrySelection.version()
+                    + " because the compiler requested Java " + requiredVersion);
+            result = runWithTransientRetries(command);
+            attempts.append("\n[CoCoMUT retried after ")
+                    .append(previousSelection.evidence())
+                    .append(" using ")
+                    .append(retrySelection.javaHome())
+                    .append("]\n")
+                    .append(result.output());
+        }
+        return new CommandResult(result.exitCode(), attempts.toString(), result.timedOut());
     }
 
     static String gradleBuildTask(boolean androidProject, boolean includeTests) {
