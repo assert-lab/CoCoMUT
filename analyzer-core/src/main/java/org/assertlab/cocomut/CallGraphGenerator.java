@@ -33,6 +33,9 @@ import sootup.callgraph.RapidTypeAnalysisAlgorithm;
  * - Exposes raw call graph text for human-readable {@code Output_CallGraph_<ALGORITHM>.txt}
  */
 public class CallGraphGenerator {
+    private static final int MAX_CALL_GRAPH_TEXT_EDGES = 20_000;
+    private static final int MAX_CALL_GRAPH_TEXT_CHARS = 4 * 1024 * 1024;
+
     private final ProjectMetadata projectMetadata;
     private final Algorithm algorithm;
     private final Map<String, CallGraphResult> cache;
@@ -600,7 +603,31 @@ public class CallGraphGenerator {
 
     public String getCallGraphText() {
         if (!initialized || cg == null) return "";
-        return cg.toString();
+        StringBuilder text = new StringBuilder();
+        int emittedEdges = 0;
+        boolean truncated = false;
+
+        outer:
+        for (MethodSignature source : cg.getMethodSignatures()) {
+            for (CallGraph.Call call : cg.callsFrom(source)) {
+                String line = call.getSourceMethodSignature() + " -> "
+                        + call.getTargetMethodSignature() + System.lineSeparator();
+                if (emittedEdges >= MAX_CALL_GRAPH_TEXT_EDGES
+                        || text.length() + line.length() > MAX_CALL_GRAPH_TEXT_CHARS) {
+                    truncated = true;
+                    break outer;
+                }
+                text.append(line);
+                emittedEdges++;
+            }
+        }
+        if (truncated) {
+            text.append("[CoCoMUT truncated the human-readable call-graph artifact after ")
+                    .append(emittedEdges)
+                    .append(" edges; method-context JSONL records retain their own caller/callee entries.]")
+                    .append(System.lineSeparator());
+        }
+        return text.toString();
     }
 
     // ---- Method matching ----

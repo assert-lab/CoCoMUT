@@ -222,6 +222,24 @@ public class CallGraphGeneratorTest {
     }
 
     @Test
+    public void callGraphTextUsesBoundedEdgeListing() {
+        generator.initialize();
+        generator.generateForMethods(List.of(
+                new MethodInfo.Builder()
+                        .methodUri("1")
+                        .classname("com.example.MyClass")
+                        .methodName("method1")
+                        .methodSignature("method1()")
+                        .sourceFile(Paths.get("MyClass.java"))
+                        .lineNumber(10)
+                        .build()));
+
+        String text = generator.getCallGraphText();
+        assertNotNull(text);
+        assertTrue("Human-readable call graph text must stay bounded", text.length() <= 4 * 1024 * 1024 + 256);
+    }
+
+    @Test
     public void testCacheStats() {
         generator.initialize();
         
