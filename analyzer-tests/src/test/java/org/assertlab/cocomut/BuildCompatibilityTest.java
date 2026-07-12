@@ -49,6 +49,8 @@ public class BuildCompatibilityTest {
                 BuildFailureReason.classify("Host key verification failed", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_DEPENDENCY_UNAVAILABLE,
                 BuildFailureReason.classify("Blocked mirror for repositories: maven-default-http-blocker", false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_DEPENDENCY_UNAVAILABLE,
+                BuildFailureReason.classify("Could not resolve all dependencies for configuration compileClasspath", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_REACTOR_ARTIFACT_MISSING,
                 BuildFailureReason.classify("No plugin descriptor found at META-INF/maven/plugin.xml", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_PLUGIN_INCOMPATIBLE,
