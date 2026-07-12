@@ -31,6 +31,14 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
             return new BuildJavaSelection(home, versionFromHome(home), detected.evidence());
         }
 
+        if (detected.version() <= 0) {
+            Path defaultHome = resolveHome(17, env);
+            if (defaultHome != null) {
+                return new BuildJavaSelection(defaultHome, versionFromHome(defaultHome),
+                        detected.evidence() + "; default build JDK 17 used");
+            }
+        }
+
         Path inheritedHome = inheritedJavaHome(env);
         String evidence = detected.version() > 0
                 ? detected.evidence() + "; requested JDK unavailable, runtime environment used"

@@ -29,6 +29,10 @@ public class BuildCompatibilityTest {
                                 + "(class file version 55.0)", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
                 BuildFailureReason.classify("Unrecognized option: --add-opens=java.base/java.lang", false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
+                BuildFailureReason.classify("Java 1.8 is required for amd64. Detected version 17", false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
+                BuildFailureReason.classify("NullAway only builds on JDK 21 or higher now", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_ANDROID_SDK_UNAVAILABLE,
                 BuildFailureReason.classify("SDK location not found", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_AUTHENTICATION_REQUIRED,

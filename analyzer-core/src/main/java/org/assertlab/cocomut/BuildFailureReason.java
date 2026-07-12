@@ -44,6 +44,12 @@ public enum BuildFailureReason {
             return BUILD_FAILED_JDK_UNAVAILABLE;
         if (text.contains("jdk ") && text.contains(" is required to build"))
             return BUILD_FAILED_JDK_UNAVAILABLE;
+        if (java.util.regex.Pattern.compile("java\\s+(?:1\\.)?\\d+\\s+is required")
+                .matcher(text).find())
+            return BUILD_FAILED_JDK_UNAVAILABLE;
+        if (java.util.regex.Pattern.compile("only builds on jdk\\s*\\d+\\s+or higher")
+                .matcher(text).find())
+            return BUILD_FAILED_JDK_UNAVAILABLE;
         if (containsAny(text, "could not find artifact") && text.contains("snapshot"))
             return BUILD_FAILED_REACTOR_ARTIFACT_MISSING;
         if (containsAny(text, "could not resolve dependencies", "could not resolve all dependencies",

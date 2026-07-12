@@ -837,6 +837,10 @@ public class ProjectAnalyzer {
             }
             if (!"COCOMUT_BUILD_JAVA_HOME".equals(buildJavaSelection.evidence())) {
                 StringBuilder attempts = new StringBuilder(result.output());
+                Set<Path> attemptedJavaHomes = new HashSet<>();
+                if (buildJavaSelection.javaHome() != null) {
+                    attemptedJavaHomes.add(buildJavaSelection.javaHome().toAbsolutePath().normalize());
+                }
                 for (int retryCount = 0;
                         retryCount < 4 && result.exitCode() != 0 && !result.timedOut();
                         retryCount++) {
@@ -844,14 +848,19 @@ public class ProjectAnalyzer {
                     BuildJavaSelection retrySelection = BuildJavaSelection.forRequiredVersion(
                             requiredVersion,
                             "compiler requested Java " + requiredVersion + " after build failure");
+                    Path retryHome = retrySelection == null || retrySelection.javaHome() == null
+                            ? null : retrySelection.javaHome().toAbsolutePath().normalize();
+                    boolean exactRequirement = exactJavaVersionRequired(result.output());
                     if (retrySelection == null
                             || retrySelection.javaHome().equals(buildJavaSelection.javaHome())
-                            || (buildJavaSelection.majorVersion() > 0
+                            || attemptedJavaHomes.contains(retryHome)
+                            || (!exactRequirement && buildJavaSelection.majorVersion() > 0
                                     && retrySelection.majorVersion() <= buildJavaSelection.majorVersion())) {
                         break;
                     }
                     BuildJavaSelection previousSelection = buildJavaSelection;
                     buildJavaSelection = retrySelection;
+                    attemptedJavaHomes.add(retryHome);
                     System.err.println("[ProjectAnalyzer] Retrying build with JDK " + retrySelection.version()
                             + " because the compiler requested Java " + requiredVersion);
                     result = runWithTransientRetries(command);
@@ -950,6 +959,8 @@ public class ProjectAnalyzer {
                 Pattern.compile("invalid source release:\\s*(\\d+)", Pattern.CASE_INSENSITIVE),
                 Pattern.compile("requires at least jvm runtime version\\s*(\\d+)", Pattern.CASE_INSENSITIVE),
                 Pattern.compile("jdk\\s*(\\d+)\\+?\\s+is required", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("java\\s+(?:1\\.)?(\\d+)\\s+is required", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("only builds on jdk\\s*(\\d+)\\s+or higher", Pattern.CASE_INSENSITIVE),
                 Pattern.compile("requires (?:a )?jvm\\s*(\\d+)\\s*(?:or later|\\+)", Pattern.CASE_INSENSITIVE),
                 Pattern.compile("not in the allowed range\\s*\\[(\\d+)\\s*,", Pattern.CASE_INSENSITIVE),
                 Pattern.compile("(?:source|target) option\\s+(\\d+)\\s+is no longer supported", Pattern.CASE_INSENSITIVE))) {
@@ -959,6 +970,15 @@ public class ProjectAnalyzer {
             }
         }
         return -1;
+    }
+
+    static boolean exactJavaVersionRequired(String output) {
+        if (output == null || output.isBlank()) {
+            return false;
+        }
+        return Pattern.compile("java\\s+(?:1\\.)?\\d+\\s+is required", Pattern.CASE_INSENSITIVE)
+                .matcher(output)
+                .find();
     }
 
     private CommandResult runWithTransientRetries(List<String> command) throws IOException, InterruptedException {

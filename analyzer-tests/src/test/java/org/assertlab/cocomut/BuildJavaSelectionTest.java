@@ -42,6 +42,11 @@ public class BuildJavaSelectionTest {
         try {
             assertEquals(Path.of(System.getProperty("java.home")).toAbsolutePath().normalize(),
                     BuildJavaSelection.inheritedJavaHome(java.util.Map.of()));
+            BuildJavaSelection selection = BuildJavaSelection.select(project, "maven", "unknown");
+            if (BuildJavaSelection.installedJdkHomes().containsKey(17)) {
+                assertEquals("17", selection.version());
+                assertTrue(selection.evidence().contains("default build JDK 17"));
+            }
         } finally {
             Files.deleteIfExists(project);
         }
@@ -65,6 +70,12 @@ public class BuildJavaSelectionTest {
                         + "(class file version 55.0), this runtime recognizes versions up to 52.0"));
         assertEquals(11, ProjectAnalyzer.requiredJavaVersion(
                 "Unrecognized option: --add-opens=java.xml/com.sun.org.apache.xpath.internal=ALL-UNNAMED"));
+        assertEquals(8, ProjectAnalyzer.requiredJavaVersion(
+                "Java 1.8 is required for amd64. Detected version 17"));
+        assertTrue(ProjectAnalyzer.exactJavaVersionRequired(
+                "Java 1.8 is required for amd64. Detected version 17"));
+        assertEquals(21, ProjectAnalyzer.requiredJavaVersion(
+                "NullAway only builds on JDK 21 or higher now"));
         assertEquals(17, ProjectAnalyzer.requiredJavaVersion("Gradle requires JVM 17 or later to run"));
         assertEquals(6, ProjectAnalyzer.requiredJavaVersion("Source option 6 is no longer supported"));
         assertEquals(-1, ProjectAnalyzer.requiredJavaVersion("ordinary compilation failure"));
