@@ -2,8 +2,10 @@ package org.assertlab.cocomut;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /** Selects a project build JDK independently from the JDK running CoCoMUT. */
 public record BuildJavaSelection(Path javaHome, String version, String evidence) {
@@ -81,15 +83,21 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
         }
 
         if ("gradle".equals(buildSystem)) {
-            String wrapper = read(root.resolve("gradle/wrapper/gradle-wrapper.properties"));
+            boolean windows = System.getProperty("os.name", "").toLowerCase().contains("win");
+            String executable = BuildToolExecutable.resolve(root, "gradle", windows);
+            String systemCommand = windows ? "gradle.cmd" : "gradle";
+            String wrapper = executable.equals(systemCommand)
+                    ? gradleVersionOutput(executable)
+                    : read(root.resolve("gradle/wrapper/gradle-wrapper.properties"));
             java.util.regex.Matcher gradle = java.util.regex.Pattern
-                    .compile("gradle-(\\d+)(?:\\.(\\d+))?[^/]*\\.(?:zip|tar)")
+                    .compile("(?:gradle-|gradle\\s+)(\\d+)(?:\\.(\\d+))?", java.util.regex.Pattern.CASE_INSENSITIVE)
                     .matcher(wrapper);
             if (gradle.find()) {
                 int major = Integer.parseInt(gradle.group(1));
                 int minor = gradle.group(2) == null ? 0 : Integer.parseInt(gradle.group(2));
                 int selected = gradleRuntimeVersion(major, minor);
-                return new VersionEvidence(selected, "Gradle wrapper " + gradle.group(1)
+                String source = executable.equals(systemCommand) ? "system Gradle " : "Gradle wrapper ";
+                return new VersionEvidence(selected, source + gradle.group(1)
                         + (gradle.group(2) == null ? "" : "." + gradle.group(2)));
             }
         }
@@ -99,6 +107,21 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
             return new VersionEvidence(declared, "declared project Java version");
         }
         return new VersionEvidence(-1, "no deterministic build JDK declaration");
+    }
+
+    private static String gradleVersionOutput(String executable) {
+        try {
+            Process process = new ProcessBuilder(executable, "--version")
+                    .redirectErrorStream(true)
+                    .start();
+            if (!process.waitFor(5, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                return "";
+            }
+            return new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        } catch (Exception ignored) {
+            return "";
+        }
     }
 
     private static Path resolveHome(int version, Map<String, String> env) {
