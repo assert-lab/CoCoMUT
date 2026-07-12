@@ -46,6 +46,8 @@ public class CallGraphGenerator {
     // Reverse lookup: SootUp signature string → project methodUri
     private Map<String, String> signatureToMethodUri;
     private Map<SourceMethodKey, List<MethodInfo>> sourceMethodsByKey;
+    private Map<SourceMethodShapeKey, List<MethodInfo>> sourceMethodsByShape;
+    private Map<SourceMethodNameKey, List<MethodInfo>> sourceMethodsByName;
     private Set<String> projectSourceClasses;
     private Map<String, List<MethodInfo>> sourceMethodsByClass;
     private Map<String, SourceClassSummary> sourceClassSummaries;
@@ -98,6 +100,8 @@ public class CallGraphGenerator {
         this.cache = new HashMap<>();
         this.signatureToMethodUri = new HashMap<>();
         this.sourceMethodsByKey = new HashMap<>();
+        this.sourceMethodsByShape = new HashMap<>();
+        this.sourceMethodsByName = new HashMap<>();
         this.projectSourceClasses = new HashSet<>();
         this.sourceMethodsByClass = new HashMap<>();
         this.sourceClassSummaries = new HashMap<>();
@@ -258,6 +262,8 @@ public class CallGraphGenerator {
 
     private void indexMethodSignatures(List<MethodInfo> methods) {
         sourceMethodsByKey = new HashMap<>();
+        sourceMethodsByShape = new HashMap<>();
+        sourceMethodsByName = new HashMap<>();
         projectSourceClasses = new HashSet<>();
         sourceMethodsByClass = new HashMap<>();
         sourceClassSummaries = new HashMap<>();
@@ -266,11 +272,21 @@ public class CallGraphGenerator {
             sourceMethodsByClass.computeIfAbsent(method.getClassname(), ignored -> new ArrayList<>()).add(method);
             SourceMethodKey key = SourceMethodKey.from(method);
             sourceMethodsByKey.computeIfAbsent(key, ignored -> new ArrayList<>()).add(method);
+            sourceMethodsByShape.computeIfAbsent(SourceMethodShapeKey.from(key), ignored -> new ArrayList<>())
+                    .add(method);
+            sourceMethodsByName.computeIfAbsent(SourceMethodNameKey.from(key), ignored -> new ArrayList<>())
+                    .add(method);
         }
         sourceMethodsByClass.replaceAll((key, value) -> value.stream()
                 .sorted(Comparator.comparing(MethodInfo::getMethodUri))
                 .toList());
         sourceMethodsByKey.replaceAll((key, value) -> value.stream()
+                .sorted(Comparator.comparing(MethodInfo::getMethodUri))
+                .toList());
+        sourceMethodsByShape.replaceAll((key, value) -> value.stream()
+                .sorted(Comparator.comparing(MethodInfo::getMethodUri))
+                .toList());
+        sourceMethodsByName.replaceAll((key, value) -> value.stream()
                 .sorted(Comparator.comparing(MethodInfo::getMethodUri))
                 .toList());
         List<Map.Entry<String, List<MethodInfo>>> classesBySourceFile = sourceMethodsByClass.entrySet().stream()
@@ -352,11 +368,8 @@ public class CallGraphGenerator {
                     methodUris(exactCandidates), "multiple_source_methods_match_normalized_exact_signature"));
         }
 
-        List<MethodInfo> returnAgnosticCandidates = sourceMethodsByKey.entrySet().stream()
-                .filter(entry -> entry.getKey().sameClassNameParams(returnAgnosticKey))
-                .flatMap(entry -> entry.getValue().stream())
-                .sorted(Comparator.comparing(MethodInfo::getMethodUri))
-                .toList();
+        List<MethodInfo> returnAgnosticCandidates = sourceMethodsByShape
+                .getOrDefault(SourceMethodShapeKey.from(returnAgnosticKey), List.of());
         if (returnAgnosticCandidates.size() == 1) {
             MethodInfo method = returnAgnosticCandidates.get(0);
             signatureToMethodUri.put(raw, method.getMethodUri());
@@ -368,11 +381,8 @@ public class CallGraphGenerator {
                     methodUris(returnAgnosticCandidates), "multiple_source_methods_match_name_and_parameters"));
         }
 
-        List<MethodInfo> sameNameCandidates = sourceMethodsByKey.entrySet().stream()
-                .filter(entry -> entry.getKey().sameClassName(returnAgnosticKey))
-                .flatMap(entry -> entry.getValue().stream())
-                .sorted(Comparator.comparing(MethodInfo::getMethodUri))
-                .toList();
+        List<MethodInfo> sameNameCandidates = sourceMethodsByName
+                .getOrDefault(SourceMethodNameKey.from(returnAgnosticKey), List.of());
         if (sameNameCandidates.size() == 1 && parametersCompatibleForSingleCandidate(sig, sameNameCandidates.get(0))) {
             MethodInfo method = sameNameCandidates.get(0);
             signatureToMethodUri.put(raw, method.getMethodUri());
@@ -737,6 +747,30 @@ public class CallGraphGenerator {
 
         private boolean sameMethodNameParams(BytecodeMethodKey key) {
             return methodName.equals(key.methodName()) && parameterTypes.equals(key.parameterTypes());
+        }
+    }
+
+    private record SourceMethodShapeKey(String className, String methodName, List<String> parameterTypes) {
+        private SourceMethodShapeKey {
+            parameterTypes = parameterTypes == null ? List.of() : List.copyOf(parameterTypes);
+        }
+
+        private static SourceMethodShapeKey from(SourceMethodKey key) {
+            return new SourceMethodShapeKey(key.className(), key.methodName(), key.parameterTypes());
+        }
+
+        private static SourceMethodShapeKey from(BytecodeMethodKey key) {
+            return new SourceMethodShapeKey(key.className(), key.methodName(), key.parameterTypes());
+        }
+    }
+
+    private record SourceMethodNameKey(String className, String methodName) {
+        private static SourceMethodNameKey from(SourceMethodKey key) {
+            return new SourceMethodNameKey(key.className(), key.methodName());
+        }
+
+        private static SourceMethodNameKey from(BytecodeMethodKey key) {
+            return new SourceMethodNameKey(key.className(), key.methodName());
         }
     }
 
