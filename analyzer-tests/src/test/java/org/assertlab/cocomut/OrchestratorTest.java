@@ -221,6 +221,8 @@ public class OrchestratorTest {
             assertTrue(testOnly.getExecutionReport().get("phase_1_build_attempts") instanceof java.util.List<?>);
             assertFalse(((java.util.List<?>) testOnly.getExecutionReport().get("phase_1_build_attempts")).isEmpty());
             assertTrue(testOnly.getExecutionReport().get("phase_1_build_command") instanceof java.util.List<?>);
+            assertTrue(((java.util.List<?>) testOnly.getExecutionReport().get("phase_1_build_command"))
+                    .contains("test-compile"));
             assertTrue(testOnly.getMethodInfos().stream()
                     .anyMatch(method -> "test".equals(method.getSourceSet())
                             && "testHelper".equals(method.getMethodName())));

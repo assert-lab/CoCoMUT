@@ -725,7 +725,7 @@ public class ProjectAnalyzer {
             try {
                 result = runCommand(List.of(mvn, "-q", "-DincludeScope=" + (includeTests ? "test" : "compile"),
                         "-Dmdep.outputFile=" + output.toAbsolutePath(),
-                        "dependency:build-classpath"));
+                        "dependency:build-classpath"), false);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return List.of();
@@ -905,12 +905,12 @@ public class ProjectAnalyzer {
     }
 
     private CommandResult runWithTransientRetries(List<String> command) throws IOException, InterruptedException {
-        CommandResult result = runCommand(command);
+        CommandResult result = runCommand(command, true);
         StringBuilder attempts = new StringBuilder(result.output());
         for (int retry = 1; retry <= 2 && result.exitCode() != 0 && !result.timedOut()
                 && BuildFailureReason.isTransientNetworkFailure(result.output()); retry++) {
             Thread.sleep(500L * retry);
-            result = runCommand(command);
+            result = runCommand(command, true);
             attempts.append("\n[CoCoMUT transient network retry ").append(retry).append("/2]\n")
                     .append(result.output());
         }
@@ -972,7 +972,8 @@ public class ProjectAnalyzer {
                 .replace("\"", "&quot;").replace("'", "&apos;");
     }
 
-    private CommandResult runCommand(List<String> command) throws IOException, InterruptedException {
+    private CommandResult runCommand(List<String> command, boolean recordAttempt)
+            throws IOException, InterruptedException {
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.directory(effectiveBuildRoot.toFile());
         pb.redirectErrorStream(true);
@@ -1005,12 +1006,12 @@ public class ProjectAnalyzer {
             process.destroyForcibly();
             drainer.join(1000);
             CommandResult result = new CommandResult(-1, output.toString(), true);
-            recordBuildAttempt(command, result);
+            if (recordAttempt) recordBuildAttempt(command, result);
             return result;
         }
         drainer.join(1000);
         CommandResult result = new CommandResult(process.exitValue(), output.toString(), false);
-        recordBuildAttempt(command, result);
+        if (recordAttempt) recordBuildAttempt(command, result);
         return result;
     }
 
