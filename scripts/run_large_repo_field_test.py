@@ -416,6 +416,9 @@ def detect_anomalies(row: dict[str, Any],
         add("high", "success_failure_codes", f"status SUCCESS has failure_codes={failure_codes}")
     if status in {"FAILED", "ERROR"} and failure_codes in {"", "[NONE]", "NONE", "[]", "[\"NONE\"]"}:
         add("high", "unclassified_failure", f"status {status} has no specific failure code")
+    if "OutOfMemoryError" in str(row.get("error_type") or "") \
+            or "OutOfMemoryError" in str(row.get("error_message") or ""):
+        add("high", "resource_exhaustion", "CoCoMUT exhausted the configured Java heap")
     if row.get("row_count_matches_contexts") == "false":
         add("high", "row_count_mismatch", "JSONL rows do not match report/context counts")
     if int(row.get("jsonl_malformed_rows") or 0) > 0:
