@@ -935,6 +935,7 @@ public class ProjectAnalyzer {
                 Pattern.compile("languageVersion=(\\d+)", Pattern.CASE_INSENSITIVE),
                 Pattern.compile("(?:release version|invalid target release:)\\s*(\\d+)\\s*(?:not supported)?", Pattern.CASE_INSENSITIVE),
                 Pattern.compile("invalid source release:\\s*(\\d+)", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("requires at least jvm runtime version\\s*(\\d+)", Pattern.CASE_INSENSITIVE),
                 Pattern.compile("requires (?:a )?jvm\\s*(\\d+)\\s*(?:or later|\\+)", Pattern.CASE_INSENSITIVE),
                 Pattern.compile("not in the allowed range\\s*\\[(\\d+)\\s*,", Pattern.CASE_INSENSITIVE),
                 Pattern.compile("(?:source|target) option\\s+(\\d+)\\s+is no longer supported", Pattern.CASE_INSENSITIVE))) {

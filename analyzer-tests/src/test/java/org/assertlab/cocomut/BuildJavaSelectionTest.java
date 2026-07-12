@@ -57,6 +57,8 @@ public class BuildJavaSelectionTest {
         assertEquals(22, ProjectAnalyzer.requiredJavaVersion(
                 "Cannot find a Java installation matching: {languageVersion=22, vendor=any vendor}"));
         assertEquals(25, ProjectAnalyzer.requiredJavaVersion("error: invalid source release: 25"));
+        assertEquals(21, ProjectAnalyzer.requiredJavaVersion(
+                "Dependency requires at least JVM runtime version 21. This build uses a Java 17 JVM."));
         assertEquals(17, ProjectAnalyzer.requiredJavaVersion("Gradle requires JVM 17 or later to run"));
         assertEquals(6, ProjectAnalyzer.requiredJavaVersion("Source option 6 is no longer supported"));
         assertEquals(-1, ProjectAnalyzer.requiredJavaVersion("ordinary compilation failure"));

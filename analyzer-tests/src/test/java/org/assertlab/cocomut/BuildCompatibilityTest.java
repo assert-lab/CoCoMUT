@@ -17,6 +17,10 @@ public class BuildCompatibilityTest {
                 BuildFailureReason.classify("error: invalid target release: 25", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
                 BuildFailureReason.classify("error: invalid source release: 21", false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
+                BuildFailureReason.classify(
+                        "Dependency requires at least JVM runtime version 21. This build uses Java 17.",
+                        false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_ANDROID_SDK_UNAVAILABLE,
                 BuildFailureReason.classify("SDK location not found", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_AUTHENTICATION_REQUIRED,

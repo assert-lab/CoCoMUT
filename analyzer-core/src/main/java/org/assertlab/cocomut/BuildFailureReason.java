@@ -33,7 +33,9 @@ public enum BuildFailureReason {
             return BUILD_FAILED_TOOLCHAIN_UNAVAILABLE;
         if (containsAny(text, "invalid target release", "invalid source release", "release version",
                 "unsupported class file major version",
-                "source option", "target option", "requires java", "jdk version")) return BUILD_FAILED_JDK_UNAVAILABLE;
+                "source option", "target option", "requires java", "jdk version",
+                "requires at least jvm runtime version", "run this build using a java"))
+            return BUILD_FAILED_JDK_UNAVAILABLE;
         if (containsAny(text, "could not find artifact") && text.contains("snapshot"))
             return BUILD_FAILED_REACTOR_ARTIFACT_MISSING;
         if (containsAny(text, "could not resolve dependencies", "could not find artifact", "could not resolve all files"))
