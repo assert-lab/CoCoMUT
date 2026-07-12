@@ -60,6 +60,9 @@ public enum BuildFailureReason {
         if (java.util.regex.Pattern.compile("jdk\\s*\\d+\\s*(?:\\([^)]*\\)\\s*)?is required")
                 .matcher(text).find())
             return BUILD_FAILED_JDK_UNAVAILABLE;
+        if (java.util.regex.Pattern.compile("build requires jdk\\s*\\d+\\s+or\\s+later")
+                .matcher(text).find())
+            return BUILD_FAILED_JDK_UNAVAILABLE;
         if (java.util.regex.Pattern.compile("only builds on jdk\\s*\\d+\\s+or higher")
                 .matcher(text).find())
             return BUILD_FAILED_JDK_UNAVAILABLE;
@@ -104,6 +107,9 @@ public enum BuildFailureReason {
         if (text.contains("spotless") && text.contains("limits you to google-java-format"))
             return BUILD_FAILED_PLUGIN_INCOMPATIBLE;
         if (text.contains("provider.foruseatconfigurationtime()"))
+            return BUILD_FAILED_PLUGIN_INCOMPATIBLE;
+        if (text.contains("unknown property 'sourcecompatibility'")
+                || text.contains("unknown property \"sourcecompatibility\""))
             return BUILD_FAILED_PLUGIN_INCOMPATIBLE;
         if (containsAny(text, "compilation failure", "compilation error", "cannot find symbol", "does not exist",
                 "should be declared in a file named")) return BUILD_FAILED_PROJECT_COMPILATION_ERROR;

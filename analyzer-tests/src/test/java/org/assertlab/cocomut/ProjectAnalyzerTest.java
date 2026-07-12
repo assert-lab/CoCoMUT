@@ -58,6 +58,12 @@ public class ProjectAnalyzerTest {
     }
 
     @Test
+    public void detectsBuildRequiresJdkOrLater() {
+        assertEquals(17, ProjectAnalyzer.requiredJavaVersion(
+                "Build requires JDK 17 or later. Use SDKMAN to install it."));
+    }
+
+    @Test
     public void testBuildSystemDetection() throws IOException {
         ProjectMetadata metadata = analyzer.analyze();
         assertNotNull("Metadata should not be null", metadata);

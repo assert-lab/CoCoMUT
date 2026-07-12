@@ -38,6 +38,8 @@ public class BuildCompatibilityTest {
         assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
                 BuildFailureReason.classify("JDK 21 (or greater) is required.", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
+                BuildFailureReason.classify("Build requires JDK 17 or later.", false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
                 BuildFailureReason.classify("NullAway only builds on JDK 21 or higher now", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
                 BuildFailureReason.classify("This project should be built with Java 25 or above", false, false));
@@ -99,6 +101,9 @@ public class BuildCompatibilityTest {
         assertEquals(BuildFailureReason.BUILD_FAILED_PLUGIN_INCOMPATIBLE,
                 BuildFailureReason.classify(
                         "org.gradle.api.provider.Provider.forUseAtConfigurationTime()", false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_PLUGIN_INCOMPATIBLE,
+                BuildFailureReason.classify(
+                        "Could not set unknown property 'sourceCompatibility' for root project", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_UNKNOWN_ERROR,
                 BuildFailureReason.classify("unrecognized failure", false, false));
     }
