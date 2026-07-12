@@ -36,6 +36,8 @@ public class BuildCompatibilityTest {
                         "RequireJavaVendor failed: Trino requires Temurin or Oracle JDK for development.",
                         false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
+                BuildFailureReason.classify("JDK 21 (or greater) is required.", false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
                 BuildFailureReason.classify("NullAway only builds on JDK 21 or higher now", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
                 BuildFailureReason.classify("This project should be built with Java 25 or above", false, false));

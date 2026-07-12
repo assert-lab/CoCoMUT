@@ -52,6 +52,12 @@ public class ProjectAnalyzerTest {
     }
 
     @Test
+    public void detectsParenthesizedMinimumJdkRequirement() {
+        assertEquals(21, ProjectAnalyzer.requiredJavaVersion(
+                "To build this project JDK 21 (or greater) is required. Please install it."));
+    }
+
+    @Test
     public void testBuildSystemDetection() throws IOException {
         ProjectMetadata metadata = analyzer.analyze();
         assertNotNull("Metadata should not be null", metadata);

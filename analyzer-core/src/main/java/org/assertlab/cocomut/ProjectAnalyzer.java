@@ -1051,6 +1051,8 @@ public class ProjectAnalyzer {
                 Pattern.compile("(?:this )?build requires java\\s*(\\d+)(?:\\s+or\\s+\\d+)?",
                         Pattern.CASE_INSENSITIVE),
                 Pattern.compile("jdk\\s*(\\d+)\\+?\\s+is required", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("jdk\\s*(\\d+)\\s*(?:\\([^)]*\\)\\s*)?is required",
+                        Pattern.CASE_INSENSITIVE),
                 Pattern.compile("java\\s+(?:1\\.)?(\\d+)\\s+is required", Pattern.CASE_INSENSITIVE),
                 Pattern.compile("only builds on jdk\\s*(\\d+)\\s+or higher", Pattern.CASE_INSENSITIVE),
                 Pattern.compile("built with java\\s*(\\d+)\\s+or (?:above|higher|later)", Pattern.CASE_INSENSITIVE),
