@@ -57,6 +57,7 @@ public class ProjectAnalyzer {
     private BuildJavaSelection buildJavaSelection = new BuildJavaSelection(null, "inherited", "inherited_environment");
     private final List<BuildAttempt> buildAttempts = new ArrayList<>();
     private List<Path> buildRootCandidates = List.of();
+    private String finalBuildOutput = "";
 
     /**
      * Create a ProjectAnalyzer for the given project path
@@ -879,9 +880,10 @@ public class ProjectAnalyzer {
 
     private BuildFailureReason classifiedBuildFailure(CommandResult result) {
         BuildFailureReason reason = BuildFailureReason.classify(
-                result.output(), result.timedOut(), result.exitCode() == 0);
+                finalBuildOutput, result.timedOut(), result.exitCode() == 0);
         if (reason == BuildFailureReason.BUILD_FAILED_REACTOR_ARTIFACT_MISSING
-                && !missingSameReactorArtifacts(result.output())) {
+                && finalBuildOutput.contains("Could not find artifact")
+                && !missingSameReactorArtifacts(finalBuildOutput)) {
             return BuildFailureReason.BUILD_FAILED_DEPENDENCY_UNAVAILABLE;
         }
         return reason;
@@ -897,6 +899,8 @@ public class ProjectAnalyzer {
         for (Pattern pattern : List.of(
                 Pattern.compile("languageVersion=(\\d+)", Pattern.CASE_INSENSITIVE),
                 Pattern.compile("(?:release version|invalid target release:)\\s*(\\d+)\\s*(?:not supported)?", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("invalid source release:\\s*(\\d+)", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("requires (?:a )?jvm\\s*(\\d+)\\s*(?:or later|\\+)", Pattern.CASE_INSENSITIVE),
                 Pattern.compile("not in the allowed range\\s*\\[(\\d+)\\s*,", Pattern.CASE_INSENSITIVE),
                 Pattern.compile("(?:source|target) option\\s+(\\d+)\\s+is no longer supported", Pattern.CASE_INSENSITIVE))) {
             Matcher matcher = pattern.matcher(output);
@@ -1019,6 +1023,7 @@ public class ProjectAnalyzer {
     }
 
     private void recordBuildAttempt(List<String> command, CommandResult result) {
+        finalBuildOutput = result.output();
         buildAttempts.add(new BuildAttempt(
                 command,
                 buildJavaSelection.javaHome() == null ? "" : buildJavaSelection.javaHome().toString(),

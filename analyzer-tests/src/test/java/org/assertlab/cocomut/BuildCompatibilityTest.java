@@ -25,6 +25,14 @@ public class BuildCompatibilityTest {
                 BuildFailureReason.classify("", true, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_BUILD_TASK_UNAVAILABLE,
                 BuildFailureReason.classify("Task 'classes' not found in root project", false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_REQUIRED_TOOL_UNAVAILABLE,
+                BuildFailureReason.classify("Cannot run program npm: error=2, No such file or directory", false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_AUTHENTICATION_REQUIRED,
+                BuildFailureReason.classify("Host key verification failed", false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_DEPENDENCY_UNAVAILABLE,
+                BuildFailureReason.classify("Blocked mirror for repositories: maven-default-http-blocker", false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_REACTOR_ARTIFACT_MISSING,
+                BuildFailureReason.classify("No plugin descriptor found at META-INF/maven/plugin.xml", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_UNKNOWN_ERROR,
                 BuildFailureReason.classify("unrecognized failure", false, false));
     }

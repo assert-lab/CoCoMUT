@@ -13,6 +13,7 @@ public enum BuildFailureReason {
     BUILD_FAILED_AUTHENTICATION_REQUIRED,
     BUILD_FAILED_PLUGIN_INCOMPATIBLE,
     BUILD_FAILED_BUILD_TASK_UNAVAILABLE,
+    BUILD_FAILED_REQUIRED_TOOL_UNAVAILABLE,
     BUILD_FAILED_PROJECT_COMPILATION_ERROR,
     BUILD_FAILED_NETWORK_FAILURE,
     BUILD_FAILED_TIMEOUT,
@@ -22,7 +23,8 @@ public enum BuildFailureReason {
         if (succeeded) return NONE;
         if (timedOut) return BUILD_FAILED_TIMEOUT;
         String text = output == null ? "" : output.toLowerCase(Locale.ROOT);
-        if (containsAny(text, "401 unauthorized", "403 forbidden", "authentication failed", "not authorized"))
+        if (containsAny(text, "401 unauthorized", "403 forbidden", "authentication failed", "not authorized",
+                "host key verification failed", "could not read from remote repository"))
             return BUILD_FAILED_AUTHENTICATION_REQUIRED;
         if (isTransientNetworkFailure(output)) return BUILD_FAILED_NETWORK_FAILURE;
         if (containsAny(text, "android sdk", "sdk location not found", "failed to find target with hash string 'android-",
@@ -35,11 +37,20 @@ public enum BuildFailureReason {
             return BUILD_FAILED_REACTOR_ARTIFACT_MISSING;
         if (containsAny(text, "could not resolve dependencies", "could not find artifact", "could not resolve all files"))
             return BUILD_FAILED_DEPENDENCY_UNAVAILABLE;
+        if (containsAny(text, "maven-default-http-blocker", "blocked mirror for repositories"))
+            return BUILD_FAILED_DEPENDENCY_UNAVAILABLE;
+        if (text.contains("cannot run program")
+                && containsAny(text, "no such file or directory", "error=2"))
+            return BUILD_FAILED_REQUIRED_TOOL_UNAVAILABLE;
+        if (text.contains("no plugin descriptor found at meta-inf/maven/plugin.xml"))
+            return BUILD_FAILED_REACTOR_ARTIFACT_MISSING;
         if (containsAny(text, "pluginresolutionexception", "could not find goal", "failed to apply plugin",
                 "plugin with id") || (text.contains("plugin") && text.contains("incompatible")))
             return BUILD_FAILED_PLUGIN_INCOMPATIBLE;
         if (containsAny(text, "task 'classes' not found", "task 'testclasses' not found"))
             return BUILD_FAILED_BUILD_TASK_UNAVAILABLE;
+        if (text.contains("spotless") && text.contains("limits you to google-java-format"))
+            return BUILD_FAILED_PLUGIN_INCOMPATIBLE;
         if (containsAny(text, "compilation failure", "compilation error", "cannot find symbol", "does not exist",
                 "should be declared in a file named")) return BUILD_FAILED_PROJECT_COMPILATION_ERROR;
         return BUILD_FAILED_UNKNOWN_ERROR;
@@ -48,7 +59,8 @@ public enum BuildFailureReason {
     public static boolean isTransientNetworkFailure(String output) {
         String text = output == null ? "" : output.toLowerCase(Locale.ROOT);
         return containsAny(text, "connection reset", "connection timed out", "read timed out",
-                "temporary failure in name resolution", "unknown host", "status code 429",
+                "temporary failure in name resolution", "no address associated with hostname", "unknown host",
+                "status code 429",
                 "status code 500", "status code 502", "status code 503", "status code 504",
                 "remote host terminated the handshake");
     }
