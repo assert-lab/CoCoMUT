@@ -1041,6 +1041,7 @@ public class ProjectAnalyzer {
                 Pattern.compile("(?:release version|invalid target release:)\\s*(\\d+)\\s*(?:not supported)?", Pattern.CASE_INSENSITIVE),
                 Pattern.compile("invalid source release:\\s*(\\d+)", Pattern.CASE_INSENSITIVE),
                 Pattern.compile("requires at least jvm runtime version\\s*(\\d+)", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("requires at least jdk\\s*(\\d+)", Pattern.CASE_INSENSITIVE),
                 Pattern.compile("only compatible with jvm runtime version\\s*(\\d+)\\s+or newer",
                         Pattern.CASE_INSENSITIVE),
                 Pattern.compile("(?:this )?build requires java\\s*(\\d+)(?:\\s+or\\s+\\d+)?",

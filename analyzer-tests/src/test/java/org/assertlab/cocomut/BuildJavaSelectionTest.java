@@ -65,6 +65,8 @@ public class BuildJavaSelectionTest {
         assertEquals(21, ProjectAnalyzer.requiredJavaVersion(
                 "Dependency requires at least JVM runtime version 21. This build uses a Java 17 JVM."));
         assertEquals(25, ProjectAnalyzer.requiredJavaVersion(
+                "This build requires at least JDK 25, but you are using JDK 17."));
+        assertEquals(25, ProjectAnalyzer.requiredJavaVersion(
                 "Project :app is only compatible with JVM runtime version 25 or newer."));
         assertEquals(21, ProjectAnalyzer.requiredJavaVersion(
                 "This build requires Java 21 or 25, but is running on Java 17."));
