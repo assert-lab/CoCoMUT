@@ -1118,6 +1118,18 @@ public class ProjectAnalyzer {
                     && pluginPath.startsWith(effectiveBuildRoot.toAbsolutePath().normalize())
                     && reactorArtifacts.contains(new MavenCoordinate(parts[0], parts[1], parts[2]));
         }
+        Matcher absentArtifact = Pattern.compile(
+                "([A-Za-z0-9_.-]+):([A-Za-z0-9_.-]+):[^:\\s]+(?::[^:\\s]+)?:([A-Za-z0-9_.${}-]+)\\s+\\(absent\\)",
+                Pattern.CASE_INSENSITIVE).matcher(output);
+        boolean absentFound = false;
+        while (absentArtifact.find()) {
+            absentFound = true;
+            if (!reactorArtifacts.contains(new MavenCoordinate(
+                    absentArtifact.group(1), absentArtifact.group(2), absentArtifact.group(3)))) {
+                return false;
+            }
+        }
+        if (absentFound) return true;
         if (!output.contains("Could not find artifact")) return false;
         Matcher missing = Pattern.compile("Could not find artifact\\s+([^\\s]+)", Pattern.CASE_INSENSITIVE)
                 .matcher(output);

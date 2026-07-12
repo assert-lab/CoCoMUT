@@ -269,6 +269,12 @@ public class BuildCompatibilityTest {
             assertFalse(analyzer.missingSameReactorArtifacts(
                     "Could not find artifact demo:api:jar:2-SNAPSHOT"));
             assertTrue(analyzer.missingSameReactorArtifacts(
+                    "The following artifacts could not be resolved: "
+                            + "demo:api:jar:tests:1-SNAPSHOT (absent): not found"));
+            assertFalse(analyzer.missingSameReactorArtifacts(
+                    "The following artifacts could not be resolved: "
+                            + "external:api:jar:tests:1-SNAPSHOT (absent): not found"));
+            assertTrue(analyzer.missingSameReactorArtifacts(
                     "Artifact has not been packaged yet. When used on reactor artifact, copy should be executed after packaging"));
             assertTrue(analyzer.missingSameReactorArtifacts(
                     "Failed to parse plugin descriptor for demo:api:1-SNAPSHOT ("
