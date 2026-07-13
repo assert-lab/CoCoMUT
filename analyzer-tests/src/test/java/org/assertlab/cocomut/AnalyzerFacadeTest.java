@@ -161,6 +161,34 @@ public class AnalyzerFacadeTest {
                 manifestJson.path("hashes").path("combined_project_bytecode").path("sha256").asText().isBlank());
     }
 
+    @Test
+    public void publicApiPreservesAuthoritativeUnsupportedRootOverNestedGradle() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-ant-with-nested-gradle");
+        try {
+            Files.writeString(project.resolve("build.xml"), "<project/>\n");
+            Path nested = project.resolve("tools/helper");
+            Files.createDirectories(nested);
+            Files.writeString(nested.resolve("settings.gradle"), "rootProject.name = 'helper'\n");
+            Files.writeString(nested.resolve("build.gradle"), "plugins { id 'java' }\n");
+
+            ExtractionReport report = ContextExtractorService.createDefault().extract(ContextRequest.builder()
+                    .projectRoot(project)
+                    .allowUnsandboxedBuild()
+                    .outputDirectory(project.resolve("output"))
+                    .build());
+
+            assertEquals("ant", report.asMap().get("phase_1_build_system"));
+            assertEquals(Boolean.FALSE, report.asMap().get("phase_1_build_attempted"));
+            assertTrue(String.valueOf(report.failureCodes()).contains("BUILD_SYSTEM_UNSUPPORTED"));
+        } finally {
+            try (var paths = Files.walk(project)) {
+                for (Path path : paths.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                    Files.deleteIfExists(path);
+                }
+            }
+        }
+    }
+
     private JsonNode findJsonlRowForMethod(Path jsonl, String methodName) throws Exception {
         assertTrue("Expected JSONL output at " + jsonl, Files.exists(jsonl));
         ObjectMapper mapper = new ObjectMapper();

@@ -185,8 +185,9 @@ requirement by themselves.
 
 If an attempted build fails, CoCoMUT fails the extraction even when stale
 bytecode is present. Pre-existing bytecode is accepted only when no build was
-attempted, for example denied-build analysis over already compiled project
-outputs or explicit `--class-output` / `--project-jar` inputs.
+attempted and no preflight requirement blocked execution, for example
+denied-build analysis over already compiled project outputs or explicit
+`--class-output` / `--project-jar` inputs.
 
 The extraction report records `phase_1_build_command`,
 `phase_1_build_attempts`, the selected build JDK and its evidence, a concise
@@ -194,6 +195,12 @@ build-output tail, and `phase_1_build_failure_reason`. Each attempt includes its
 action, command, declared Android components when applicable, JDK, exit code,
 timeout state, environment-change flag, and classified reason so retries can be
 audited without reconstructing them from console output.
+Maven dependency-classpath resolution is recorded as the distinct
+`maven_dependency_classpath` action. Its run-level status is exposed as
+`phase_1_maven_dependency_classpath_status`; a failed invocation yields
+`MODEL_RESOLUTION_PARTIAL` without rewriting a successful compilation as a
+build failure.
+
 
 Build execution runs the subject repository's Maven or Gradle build logic. For
 untrusted public repositories, keep the default denied-build policy and provide
@@ -210,6 +217,10 @@ declared missing Android components, it reports
 controlled disposable environment to allow `sdkmanager` to install those exact
 declared components. This action is recorded in `phase_1_build_attempts` and in
 the manifest.
+
+When provisioning is disabled or unavailable, no process is reported as
+executed: `phase_1_build_attempted=false` and `phase_1_build_blocked=true`.
+CoCoMUT does not trust stale project bytecode in that preflight-blocked state.
 
 If the project was already compiled elsewhere, or if build execution is not
 acceptable, use the explicit artifact path:

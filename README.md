@@ -182,6 +182,9 @@ before starting Gradle. In an externally controlled disposable environment, set
 `COCOMUT_ALLOW_ANDROID_SDK_PROVISIONING=true` to permit `sdkmanager` to install
 only those declared components. The manifest records the provisioning command,
 components, timeout, exit code, and whether it changed the SDK installation.
+If provisioning is disabled or cannot start, the build is marked as preflight
+blocked: `build.attempted=false`, `build.blocked=true`, and pre-existing bytecode
+is not trusted for analysis.
 
 When no build descriptor exists at the requested root, CoCoMUT uses one unique
 nested Maven or Gradle root. Multiple independent nested builds remain

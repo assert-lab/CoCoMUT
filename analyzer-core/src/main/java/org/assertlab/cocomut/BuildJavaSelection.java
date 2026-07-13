@@ -5,6 +5,8 @@ import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /** Selects a project build JDK independently from the JDK running CoCoMUT. */
@@ -18,7 +20,7 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
     }
 
     public static BuildJavaSelection select(Path projectRoot, String buildSystem, String declaredJavaVersion) {
-        return select(projectRoot, buildSystem, declaredJavaVersion, System.getenv());
+        return select(projectRoot, projectRoot, buildSystem, declaredJavaVersion, System.getenv());
     }
 
     /**
@@ -29,6 +31,11 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
      */
     static BuildJavaSelection select(Path projectRoot, String buildSystem, String declaredJavaVersion,
                                      Map<String, String> env) {
+        return select(projectRoot, projectRoot, buildSystem, declaredJavaVersion, env);
+    }
+
+    static BuildJavaSelection select(Path effectiveBuildRoot, Path repositoryRoot, String buildSystem,
+                                     String declaredJavaVersion, Map<String, String> env) {
         env = env == null ? Map.of() : Map.copyOf(env);
         String explicit = env.getOrDefault("COCOMUT_BUILD_JAVA_HOME", "").trim();
         if (!explicit.isEmpty()) {
@@ -36,7 +43,8 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
             return new BuildJavaSelection(home, versionFromHome(home), "COCOMUT_BUILD_JAVA_HOME");
         }
 
-        VersionEvidence detected = detectProjectVersion(projectRoot, buildSystem, declaredJavaVersion);
+        VersionEvidence detected = detectProjectVersion(
+                effectiveBuildRoot, repositoryRoot, buildSystem, declaredJavaVersion);
         Path home = resolveHome(detected.version(), env);
         if (home != null) {
             return new BuildJavaSelection(home, versionFromHome(home), detected.evidence());
@@ -86,23 +94,38 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
 
     static Map<Integer, Path> installedJdkHomes(Map<String, String> env) {
         Map<Integer, Path> homes = new java.util.LinkedHashMap<>();
+        env = env == null ? Map.of() : Map.copyOf(env);
+        Set<Path> candidates = new LinkedHashSet<>();
+        candidates.add(inheritedJavaHome(env));
+        addConfiguredHome(candidates, env.get("COCOMUT_BUILD_JAVA_HOME"));
         for (int version : SUPPORTED_VERSIONS) {
-            Path home = resolveHome(version, env);
-            if (home != null) homes.put(version, home);
+            addConfiguredHome(candidates, env.get("COCOMUT_JAVA_HOME_" + version));
+            candidates.add(Path.of("/usr/lib/jvm/java-" + version + "-openjdk"));
+            candidates.add(Path.of("/usr/lib/jvm/java-" + version + "-openjdk-amd64"));
+        }
+        for (Path candidate : candidates) {
+            int actualVersion = javaHomeMajorVersion(candidate);
+            if (SUPPORTED_VERSIONS.contains(actualVersion)) {
+                homes.putIfAbsent(actualVersion, candidate.toAbsolutePath().normalize());
+            }
         }
         return homes;
     }
 
-    private static VersionEvidence detectProjectVersion(Path root, String buildSystem, String declaredJavaVersion) {
-        String javaVersion = firstLine(root.resolve(".java-version"));
-        if (!javaVersion.isBlank()) {
-            return new VersionEvidence(normalize(javaVersion), ".java-version");
+    private static void addConfiguredHome(Set<Path> candidates, String raw) {
+        if (raw != null && !raw.isBlank()) {
+            candidates.add(Path.of(raw.trim()).toAbsolutePath().normalize());
         }
+    }
 
-        String sdkman = firstLine(root.resolve(".sdkmanrc"));
-        java.util.regex.Matcher sdkmanJava = java.util.regex.Pattern.compile("(?:^|\\s)java=([^\\s]+)").matcher(sdkman);
-        if (sdkmanJava.find()) {
-            return new VersionEvidence(normalize(sdkmanJava.group(1)), ".sdkmanrc");
+    private static VersionEvidence detectProjectVersion(Path root, Path repositoryRoot,
+                                                        String buildSystem, String declaredJavaVersion) {
+        VersionEvidence local = detectRepositoryVersion(root, "");
+        if (local.version() > 0) return local;
+        if (repositoryRoot != null && !repositoryRoot.toAbsolutePath().normalize()
+                .equals(root.toAbsolutePath().normalize())) {
+            VersionEvidence repository = detectRepositoryVersion(repositoryRoot, "repository-root ");
+            if (repository.version() > 0) return repository;
         }
 
         if ("gradle".equals(buildSystem)) {
@@ -128,6 +151,20 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
         int declared = normalize(declaredJavaVersion);
         if (declared > 0) {
             return new VersionEvidence(declared, "declared project Java version");
+        }
+        return new VersionEvidence(-1, "no deterministic build JDK declaration");
+    }
+
+    private static VersionEvidence detectRepositoryVersion(Path root, String evidencePrefix) {
+        String javaVersion = firstLine(root.resolve(".java-version"));
+        if (!javaVersion.isBlank()) {
+            return new VersionEvidence(normalize(javaVersion), evidencePrefix + ".java-version");
+        }
+
+        String sdkman = firstLine(root.resolve(".sdkmanrc"));
+        java.util.regex.Matcher sdkmanJava = java.util.regex.Pattern.compile("(?:^|\\s)java=([^\\s]+)").matcher(sdkman);
+        if (sdkmanJava.find()) {
+            return new VersionEvidence(normalize(sdkmanJava.group(1)), evidencePrefix + ".sdkmanrc");
         }
         return new VersionEvidence(-1, "no deterministic build JDK declaration");
     }
@@ -222,7 +259,7 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
         return version > 0 ? Integer.toString(version) : "inherited";
     }
 
-    private static int javaHomeMajorVersion(Path home) {
+    static int javaHomeMajorVersion(Path home) {
         if (home == null || !Files.isDirectory(home.resolve("bin"))) {
             return -1;
         }

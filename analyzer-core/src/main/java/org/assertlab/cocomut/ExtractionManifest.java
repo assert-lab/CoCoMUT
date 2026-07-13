@@ -84,7 +84,7 @@ final class ExtractionManifest {
                 : new java.util.LinkedHashMap<>(executionReport);
 
         ObjectNode root = MAPPER.createObjectNode();
-        root.put("schema_version", "0.3.0");
+        root.put("schema_version", "0.4.0");
         root.put("generated_at", Instant.now().toString());
         root.put("tool", "CoCoMUT");
         root.put("tool_version", toolVersion());
@@ -108,11 +108,14 @@ final class ExtractionManifest {
         build.put("exit_code", metadata != null ? metadata.getBuildExitCode() : -1);
         build.put("succeeded", metadata != null && metadata.isBuildSucceeded());
         build.put("timed_out", metadata != null && metadata.isBuildTimedOut());
+        build.put("blocked", metadata != null && metadata.isBuildBlocked());
         build.put("output_tail", metadata != null ? metadata.getBuildOutputTail() : "");
         build.put("java_home", metadata != null ? metadata.getBuildJavaHome() : "");
         build.put("java_version", metadata != null ? metadata.getBuildJavaVersion() : "inherited");
         build.put("java_evidence", metadata != null ? metadata.getBuildJavaEvidence() : "inherited_environment");
         build.set("attempts", MAPPER.valueToTree(metadata != null ? metadata.getBuildAttempts() : List.of()));
+        build.put("maven_dependency_classpath_status",
+                metadata != null ? metadata.getMavenDependencyClasspathStatus() : "NOT_ATTEMPTED");
         build.put("skipped", metadata != null && metadata.isBuildSkipped());
         build.put("sandboxed", metadata != null && metadata.isBuildSandboxed());
         build.put("status", metadata != null ? metadata.getCompileStatus() : "NOT_ANALYZED");

@@ -75,6 +75,9 @@ public class GradleProjectAdapter implements ProjectAdapter {
     }
 
     private ProjectMetadata enrichWithGradleModel(ProjectMetadata base, ContextRequest request) {
+        if (!"gradle".equals(base.getBuildSystem())) {
+            return base;
+        }
         if (request.skipBuild()) {
             System.out.println("[GradleProjectAdapter] --skip-build active; Gradle metadata task not executed");
             return ProjectMetadata.Builder.from(base)

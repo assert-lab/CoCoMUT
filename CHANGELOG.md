@@ -9,13 +9,15 @@
 - Updated the bytecode parser used by SootUp so Java 25 and 26 project classes
   remain available to call-graph analysis.
 - Added second-level build-failure reasons, bounded network retries, isolated
-  Maven toolchain selection, deterministic Android SDK preparation, same-reactor
+  Maven toolchain selection, opt-in deterministic Android SDK preparation, same-reactor
   Maven lifecycle fallback, nested build-root detection, generated-source
   discovery, and explicit class-file version diagnostics.
 - Added typed Java API objects and a standalone Picocli CLI distribution.
 - Added a versioned JSONL schema for method-context records. The schema is
   intentionally extensible through `additionalProperties` while the top-level
   record shape remains documented.
+- Bumped the extraction-manifest schema to `0.4.0` for structured build actions
+  and retained the previous `0.3.0` schema for archived manifests.
 - Added public-repository field-test evidence for 541 filtered Java repositories.
 - Moved Java packages to `org.assertlab.cocomut`.
 - Added Maven wrapper, GitHub Actions CI, contributor docs, and citation metadata.

@@ -736,7 +736,7 @@ public class ProjectAnalyzerTest {
                     null, java.util.Map.of(), "3".repeat(64), null, report);
 
             JsonNode root = new ObjectMapper().readTree(manifest.toFile());
-            assertEquals("0.3.0", root.path("schema_version").asText());
+            assertEquals("0.4.0", root.path("schema_version").asText());
             JsonNode emitted = root.path("hashes").path("emitted_jsonl");
             assertEquals("empty", emitted.path("status").asText());
             assertEquals(0, emitted.path("errors").size());
@@ -747,6 +747,22 @@ public class ProjectAnalyzerTest {
             deleteRecursively(project);
             deleteRecursively(output);
         }
+    }
+
+    @Test
+    public void archivedManifestValidatesAgainstPreservedV030Schema() throws Exception {
+        Path repository = Paths.get(System.getProperty("user.dir")).getParent();
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode manifest = mapper.readTree(repository.resolve(
+                "examples/sample-output/minimal-extraction-manifest.json").toFile());
+        JsonNode schemaNode = mapper.readTree(repository.resolve(
+                "schemas/extraction-manifest-v0.3.0.schema.json").toFile());
+        JsonSchema schema = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012)
+                .getSchema(schemaNode);
+
+        assertEquals("0.3.0", manifest.path("schema_version").asText());
+        assertTrue("Archived 0.3.0 manifest must retain a validating schema: " + schema.validate(manifest),
+                schema.validate(manifest).isEmpty());
     }
 
     @Test

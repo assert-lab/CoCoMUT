@@ -56,6 +56,50 @@ public class BuildJavaSelectionTest {
     }
 
     @Test
+    public void exactToolchainInventoryUsesActualHomeVersion() throws Exception {
+        Path fakeJdk = Files.createTempDirectory("cocomut-fake-jdk");
+        try {
+            Files.createDirectories(fakeJdk.resolve("bin"));
+            Files.writeString(fakeJdk.resolve("release"), "JAVA_VERSION=\"17.0.12\"\n");
+
+            java.util.Map<Integer, Path> homes = BuildJavaSelection.installedJdkHomes(java.util.Map.of(
+                    "JAVA_HOME", fakeJdk.toString(),
+                    "COCOMUT_JAVA_HOME_12", fakeJdk.toString()));
+
+            assertEquals(fakeJdk.toAbsolutePath().normalize(), homes.get(17));
+            assertTrue("JDK 17 must not be advertised as exact JDK 12",
+                    !fakeJdk.toAbsolutePath().normalize().equals(homes.get(12)));
+            homes.forEach((version, home) -> assertEquals(version.intValue(),
+                    BuildJavaSelection.javaHomeMajorVersion(home)));
+        } finally {
+            Files.deleteIfExists(fakeJdk.resolve("release"));
+            Files.deleteIfExists(fakeJdk.resolve("bin"));
+            Files.deleteIfExists(fakeJdk);
+        }
+    }
+
+    @Test
+    public void nestedBuildFallsBackToRepositoryRootJavaDeclaration() throws Exception {
+        Path repository = Files.createTempDirectory("cocomut-repository-java");
+        Path nested = repository.resolve("service");
+        try {
+            Files.createDirectories(nested);
+            int runtimeVersion = Runtime.version().feature();
+            Files.writeString(repository.resolve(".java-version"), runtimeVersion + "\n");
+
+            BuildJavaSelection selection = BuildJavaSelection.select(nested, repository, "maven", "8",
+                    java.util.Map.of("JAVA_HOME", System.getProperty("java.home")));
+
+            assertEquals("repository-root .java-version", selection.evidence());
+            assertEquals(Integer.toString(runtimeVersion), selection.version());
+        } finally {
+            Files.deleteIfExists(repository.resolve(".java-version"));
+            Files.deleteIfExists(nested);
+            Files.deleteIfExists(repository);
+        }
+    }
+
+    @Test
     public void detectsCompilerRequestedRetryVersions() {
         assertEquals(25, ProjectAnalyzer.requiredJavaVersion("error: release version 25 not supported"));
         assertEquals(25, ProjectAnalyzer.requiredJavaVersion("error: invalid target release: 25"));

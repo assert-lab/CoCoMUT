@@ -301,15 +301,21 @@ final class Orchestrator {
             executionReport.put("phase_1_build_exit_code", projectMetadata.getBuildExitCode());
             executionReport.put("phase_1_build_succeeded", projectMetadata.isBuildSucceeded());
             executionReport.put("phase_1_build_timed_out", projectMetadata.isBuildTimedOut());
+            executionReport.put("phase_1_build_blocked", projectMetadata.isBuildBlocked());
             executionReport.put("phase_1_build_output_tail", projectMetadata.getBuildOutputTail());
             executionReport.put("phase_1_build_failure_reason", projectMetadata.getBuildFailureReason().toString());
             executionReport.put("phase_1_build_java_home", projectMetadata.getBuildJavaHome());
             executionReport.put("phase_1_build_java_version", projectMetadata.getBuildJavaVersion());
             executionReport.put("phase_1_build_java_evidence", projectMetadata.getBuildJavaEvidence());
             executionReport.put("phase_1_build_attempts", projectMetadata.getBuildAttempts());
-            if (!projectMetadata.getBuildAttempts().isEmpty()) {
-                executionReport.put("phase_1_build_command",
-                        projectMetadata.getBuildAttempts().get(projectMetadata.getBuildAttempts().size() - 1).command());
+            projectMetadata.getBuildAttempts().stream()
+                    .filter(attempt -> "build".equals(attempt.action()))
+                    .reduce((first, second) -> second)
+                    .ifPresent(attempt -> executionReport.put("phase_1_build_command", attempt.command()));
+            executionReport.put("phase_1_maven_dependency_classpath_status",
+                    projectMetadata.getMavenDependencyClasspathStatus());
+            if ("PARTIAL".equals(projectMetadata.getMavenDependencyClasspathStatus())) {
+                failureCodes.add(FailureCode.MODEL_RESOLUTION_PARTIAL);
             }
             executionReport.put("phase_1_build_skipped", projectMetadata.isBuildSkipped());
             executionReport.put("phase_1_build_sandboxed", projectMetadata.isBuildSandboxed());
@@ -352,7 +358,9 @@ final class Orchestrator {
             executionReport.put("phase_1_explicit_classpath_files", projectMetadata.getExplicitClasspathFiles().size());
 
             if (!projectMetadata.isAnalysisCanProceed()) {
-                if (projectMetadata.isBuildSucceeded() && !projectMetadata.isBytecodeAvailable()) {
+                if (projectMetadata.isBuildBlocked()) {
+                    failureCodes.add(FailureCode.BUILD_PREFLIGHT_BLOCKED);
+                } else if (projectMetadata.isBuildSucceeded() && !projectMetadata.isBytecodeAvailable()) {
                     failureCodes.add(FailureCode.PROJECT_BYTECODE_UNAVAILABLE);
                 } else if (!projectMetadata.isBuildAttempted()
                         && !Set.of("maven", "gradle", "none").contains(projectMetadata.getBuildSystem())) {
@@ -377,6 +385,7 @@ final class Orchestrator {
             return true;
         } catch (Exception e) {
             executionReport.put("phase_1_error", e.getMessage());
+            failureCodes.add(FailureCode.METADATA_RESOLUTION_FAILED);
             return false;
         }
     }

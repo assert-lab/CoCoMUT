@@ -149,7 +149,8 @@ public class ProjectAnalyzer {
     public ProjectMetadata analyze() throws IOException {
         String detectedBuildSystem = detectBuildSystem();
         String javaVersion = detectJavaVersion(detectedBuildSystem);
-        buildJavaSelection = BuildJavaSelection.select(effectiveBuildRoot, detectedBuildSystem, javaVersion);
+        buildJavaSelection = BuildJavaSelection.select(
+                effectiveBuildRoot, projectPath, detectedBuildSystem, javaVersion, System.getenv());
         List<Path> sourceRoots = !explicitSourceRoots.isEmpty()
                 ? existingDirs(explicitSourceRoots)
                 : findSourceRoots();
@@ -225,6 +226,7 @@ public class ProjectAnalyzer {
                 .buildExitCode(buildResult.exitCode())
                 .buildSucceeded(buildResult.succeeded())
                 .buildTimedOut(buildResult.timedOut())
+                .buildBlocked(buildResult.blocked())
                 .buildOutputTail(buildResult.outputTail())
                 .buildFailureReason(buildResult.failureReason())
                 .buildJavaHome(buildJavaSelection.javaHome() == null ? "" : buildJavaSelection.javaHome().toString())
@@ -253,6 +255,9 @@ public class ProjectAnalyzer {
     }
 
     private boolean canTrustBytecodeForAnalysis(BuildResult buildResult) {
+        if (buildResult.blocked()) {
+            return false;
+        }
         if (!buildResult.attempted()) {
             return true;
         }
@@ -269,6 +274,10 @@ public class ProjectAnalyzer {
     }
 
     private String compileStatus(BuildResult buildResult, boolean bytecodeAvailable) {
+        if (buildResult.blocked()) {
+            return bytecodeAvailable ? buildResult.status() + "; PREEXISTING PROJECT BYTECODE NOT TRUSTED"
+                    : buildResult.status() + "; NO PROJECT BYTECODE";
+        }
         if (!buildResult.attempted()) {
             return bytecodeAvailable ? buildResult.status() + "; PROJECT BYTECODE AVAILABLE"
                     : buildResult.status() + "; NO PROJECT BYTECODE";
@@ -406,7 +415,7 @@ public class ProjectAnalyzer {
      * requested path so callers retain generic-project behavior.
      */
     public static Path preferredAdapterRoot(Path projectPath) {
-        if (hasBuildDescriptor(projectPath)) {
+        if (hasBuildDescriptor(projectPath) || hasAuthoritativeUnsupportedBuildDescriptor(projectPath)) {
             return projectPath;
         }
         List<Path> roots = nestedBuildRoots(projectPath);
@@ -419,6 +428,15 @@ public class ProjectAnalyzer {
                 || Files.isRegularFile(root.resolve("build.gradle.kts"))
                 || Files.isRegularFile(root.resolve("settings.gradle"))
                 || Files.isRegularFile(root.resolve("settings.gradle.kts"));
+    }
+
+    static boolean hasAuthoritativeUnsupportedBuildDescriptor(Path root) {
+        return Files.isRegularFile(root.resolve("build.xml"))
+                || Files.isRegularFile(root.resolve("MODULE.bazel"))
+                || Files.isRegularFile(root.resolve("WORKSPACE"))
+                || Files.isRegularFile(root.resolve("WORKSPACE.bazel"))
+                || Files.isRegularFile(root.resolve("BUCK"))
+                || Files.isRegularFile(root.resolve("build.sbt"));
     }
 
     private static List<Path> nestedBuildRoots(Path projectPath) {
@@ -852,7 +870,7 @@ public class ProjectAnalyzer {
             try {
                 result = runCommand(List.of(mvn, "-q", "-DincludeScope=" + (includeTests ? "test" : "compile"),
                         "-Dmdep.outputFile=" + output.toAbsolutePath(),
-                        "dependency:build-classpath"), false);
+                        "dependency:build-classpath"), true, "maven_dependency_classpath");
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return List.of();
@@ -903,9 +921,9 @@ public class ProjectAnalyzer {
                 recordAndroidSdkPreparation(androidPreparation);
             }
             if (androidPreparation.androidProject() && !androidPreparation.succeeded()) {
-                lastBuildResult = new BuildResult(true, androidPreparation.exitCode(), false,
-                        androidPreparation.timedOut(), "BUILD FAILED: ANDROID SDK UNAVAILABLE",
-                        diagnosticTail(androidPreparation.diagnostic()),
+                lastBuildResult = BuildResult.preflightBlocked(
+                        "BUILD BLOCKED: ANDROID SDK UNAVAILABLE",
+                        androidPreparation.diagnostic(),
                         BuildFailureReason.BUILD_FAILED_ANDROID_SDK_UNAVAILABLE);
                 return lastBuildResult;
             }
@@ -940,7 +958,7 @@ public class ProjectAnalyzer {
                         runWithTransientRetries(packageCommand));
                 result = new CommandResult(packaged.exitCode(),
                         result.output() + "\n[CoCoMUT retried Maven package because only declared reactor artifacts were missing]\n"
-                                + packaged.output(), packaged.timedOut());
+                                + packaged.output(), packaged.timedOut(), packaged.terminalOutput());
             }
             if ("gradle".equals(buildSystem) && !includeTests && result.exitCode() != 0
                     && !result.timedOut() && result.output().contains("Task 'classes' not found")) {
@@ -952,17 +970,17 @@ public class ProjectAnalyzer {
                         result.output()
                                 + "\n[CoCoMUT retried Gradle assemble because the aggregator has no classes task]\n"
                                 + assembled.output(),
-                        assembled.timedOut());
+                        assembled.timedOut(), assembled.terminalOutput());
             }
             lastBuildResult = new BuildResult(true, result.exitCode(), result.exitCode() == 0,
                     result.timedOut(), result.timedOut() ? "BUILD TIMED OUT" : (result.exitCode() == 0 ? "BUILD SUCCESS" : "BUILD FAILED"),
                     diagnosticTail(result.output()),
-                    classifiedBuildFailure(result));
+                    classifiedBuildFailure(result), false);
             return lastBuildResult;
         } catch (Exception e) {
             lastBuildResult = new BuildResult(true, -1, false, false,
                     "BUILD FAILED: " + e.getClass().getSimpleName(), e.getMessage() == null ? "" : e.getMessage(),
-                    BuildFailureReason.BUILD_FAILED_UNKNOWN_ERROR);
+                    BuildFailureReason.BUILD_FAILED_UNKNOWN_ERROR, false);
             return lastBuildResult;
         }
     }
@@ -1004,7 +1022,7 @@ public class ProjectAnalyzer {
                     .append("]\n")
                     .append(result.output());
         }
-        return new CommandResult(result.exitCode(), attempts.toString(), result.timedOut());
+        return new CommandResult(result.exitCode(), attempts.toString(), result.timedOut(), result.terminalOutput());
     }
 
     static String gradleBuildTask(boolean androidProject, boolean includeTests) {
@@ -1029,17 +1047,19 @@ public class ProjectAnalyzer {
     }
 
     private BuildFailureReason classifiedBuildFailure(CommandResult result) {
-        return finalBuildFailureReason(result.output(), result.timedOut(), result.exitCode() == 0,
+        return finalBuildFailureReason(result.output(), result.terminalOutput(),
+                result.timedOut(), result.exitCode() == 0,
                 missingSameReactorArtifacts(result.output()));
     }
 
     /** Classify the complete, final diagnostic returned after all bounded retries. */
-    static BuildFailureReason finalBuildFailureReason(String finalOutput, boolean timedOut, boolean succeeded,
+    static BuildFailureReason finalBuildFailureReason(String transcript, String finalOutput,
+                                                      boolean timedOut, boolean succeeded,
                                                       boolean sameReactorArtifacts) {
         String diagnostic = finalOutput == null ? "" : finalOutput;
         BuildFailureReason reason = BuildFailureReason.classify(diagnostic, timedOut, succeeded);
         if (reason == BuildFailureReason.BUILD_FAILED_REACTOR_ARTIFACT_MISSING
-                && diagnostic.contains("Could not find artifact")
+                && (transcript == null ? diagnostic : transcript).contains("Could not find artifact")
                 && !sameReactorArtifacts) {
             return BuildFailureReason.BUILD_FAILED_DEPENDENCY_UNAVAILABLE;
         }
@@ -1125,7 +1145,7 @@ public class ProjectAnalyzer {
             attempts.append("\n[CoCoMUT transient network retry ").append(retry).append("/2]\n")
                     .append(result.output());
         }
-        return new CommandResult(result.exitCode(), attempts.toString(), result.timedOut());
+        return new CommandResult(result.exitCode(), attempts.toString(), result.timedOut(), result.terminalOutput());
     }
 
     boolean missingSameReactorArtifacts(String output) {
@@ -1276,6 +1296,11 @@ public class ProjectAnalyzer {
 
     private CommandResult runCommand(List<String> command, boolean recordAttempt)
             throws IOException, InterruptedException {
+        return runCommand(command, recordAttempt, "build");
+    }
+
+    private CommandResult runCommand(List<String> command, boolean recordAttempt, String action)
+            throws IOException, InterruptedException {
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.directory(effectiveBuildRoot.toFile());
         pb.redirectErrorStream(true);
@@ -1308,23 +1333,30 @@ public class ProjectAnalyzer {
             process.destroyForcibly();
             drainer.join(1000);
             CommandResult result = new CommandResult(-1, output.toString(), true);
-            if (recordAttempt) recordBuildAttempt(command, result);
+            if (recordAttempt) recordBuildAttempt(action, command, result);
             return result;
         }
         drainer.join(1000);
         CommandResult result = new CommandResult(process.exitValue(), output.toString(), false);
-        if (recordAttempt) recordBuildAttempt(command, result);
+        if (recordAttempt) recordBuildAttempt(action, command, result);
         return result;
     }
 
     private void recordBuildAttempt(List<String> command, CommandResult result) {
+        recordBuildAttempt("build", command, result);
+    }
+
+    private void recordBuildAttempt(String action, List<String> command, CommandResult result) {
         buildAttempts.add(new BuildAttempt(
+                action,
                 command,
+                List.of(),
                 buildJavaSelection.javaHome() == null ? "" : buildJavaSelection.javaHome().toString(),
                 buildJavaSelection.version(),
                 buildJavaSelection.evidence(),
                 result.exitCode(),
                 result.timedOut(),
+                false,
                 BuildFailureReason.classify(result.output(), result.timedOut(), result.exitCode() == 0)));
     }
 
@@ -1359,12 +1391,27 @@ public class ProjectAnalyzer {
         return paths;
     }
 
-    private record CommandResult(int exitCode, String output, boolean timedOut) {}
+    private record CommandResult(int exitCode, String output, boolean timedOut, String terminalOutput) {
+        private CommandResult(int exitCode, String output, boolean timedOut) {
+            this(exitCode, output, timedOut, output);
+        }
+
+        private CommandResult {
+            output = output == null ? "" : output;
+            terminalOutput = terminalOutput == null ? "" : terminalOutput;
+        }
+    }
 
     private record BuildResult(boolean attempted, int exitCode, boolean succeeded, boolean timedOut,
-                               String status, String outputTail, BuildFailureReason failureReason) {
+                               String status, String outputTail, BuildFailureReason failureReason,
+                               boolean blocked) {
         static BuildResult notAttempted(String status) {
-            return new BuildResult(false, -1, false, false, status, "", BuildFailureReason.NONE);
+            return new BuildResult(false, -1, false, false, status, "", BuildFailureReason.NONE, false);
+        }
+
+        static BuildResult preflightBlocked(String status, String diagnostic, BuildFailureReason reason) {
+            return new BuildResult(false, -1, false, false,
+                    status, diagnostic, reason, true);
         }
     }
 

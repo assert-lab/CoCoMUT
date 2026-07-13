@@ -71,11 +71,11 @@ final class AndroidSdkSupport {
             return new Preparation(true, false, false, false, false, List.of(), missing, -1,
                     "Android SDK components are declared but sdkmanager is unavailable under " + sdkRoot);
         }
+        List<String> command = new ArrayList<>();
+        command.add(sdkManager.toString());
+        command.add("--sdk_root=" + sdkRoot);
+        command.addAll(missing);
         try {
-            List<String> command = new ArrayList<>();
-            command.add(sdkManager.toString());
-            command.add("--sdk_root=" + sdkRoot);
-            command.addAll(missing);
             Path log = Files.createTempFile("cocomut-sdkmanager-", ".log");
             ProcessBuilder pb = new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(log.toFile());
             Process process = pb.start();
@@ -86,12 +86,17 @@ final class AndroidSdkSupport {
             String output = Files.readString(log);
             Files.deleteIfExists(log);
             if (output.length() > 20_000) output = output.substring(output.length() - 20_000);
-            return new Preparation(true, true, completed && exit == 0, !completed,
-                    completed && exit == 0, command, missing, exit,
-                    "sdkmanager components=" + missing + " exit=" + exit + "\n"
+            Set<String> remaining = missingComponents(sdkRoot, missing);
+            boolean changed = remaining.size() < missing.size();
+            boolean succeeded = remaining.isEmpty();
+            return new Preparation(true, true, succeeded, !completed,
+                    changed, command, missing, exit,
+                    "sdkmanager components=" + missing + " remaining=" + remaining + " exit=" + exit + "\n"
                             + output);
         } catch (Exception e) {
-            return new Preparation(true, true, false, false, false, List.of(), missing, -1,
+            Set<String> remaining = missingComponents(sdkRoot, missing);
+            return new Preparation(true, true, remaining.isEmpty(), false,
+                    remaining.size() < missing.size(), command, missing, -1,
                     "sdkmanager failed: " + e.getClass().getSimpleName() + ": " + e.getMessage());
         }
     }

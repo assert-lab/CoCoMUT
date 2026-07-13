@@ -145,7 +145,7 @@ Every extraction also writes `extraction_manifest.json` beside the JSONL file.
 This is run-level metadata, not method-level context. The manifest records:
 
 ```text
-schema_version                  Manifest schema version, currently 0.3.0
+schema_version                  Manifest schema version, currently 0.4.0
 generated_at                    Timestamp for the extraction run
 tool / tool_version             CoCoMUT release identity
 tool_git                        Git identity of the CoCoMUT checkout/build
@@ -160,9 +160,12 @@ build.attempted                 Whether CoCoMUT executed Maven/Gradle
 build.exit_code                 Build-process exit code, or -1 when not attempted
 build.succeeded                 Whether the attempted build command succeeded
 build.timed_out                 Whether the attempted build timed out
+build.blocked                   Whether a preflight requirement blocked execution
 build.output_tail               Bounded tail of Maven/Gradle output for diagnostics
 build.attempts                  Structured build and SDK-provisioning actions: command,
                                 components, JDK, exit code, timeout, change flag, reason
+build.maven_dependency_classpath_status
+                                NOT_ATTEMPTED, SUCCESS, or PARTIAL model resolution
 build.skipped                   Whether build execution was denied
 build.sandboxed                 Whether caller claims external sandboxing
 build.policy                    DENY_BUILD, ALLOW_UNSANDBOXED_BUILD,
@@ -186,6 +189,11 @@ hashes.dependency_classpath_content_set
 hashes.emitted_jsonl            Hash over generated JSONL, or empty when the
                                 run failed before JSONL was expected
 ```
+
+The current schema is [extraction-manifest.schema.json](extraction-manifest.schema.json).
+The previous `0.3.0` contract remains available as
+[extraction-manifest-v0.3.0.schema.json](extraction-manifest-v0.3.0.schema.json)
+for validating artifacts produced before structured build attempts were added.
 
 The manifest is intentionally separate from the JSONL rows. Dataset rows remain
 method-centric, while repository revision, build policy, and artifact hashes are

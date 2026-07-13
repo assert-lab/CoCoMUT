@@ -31,6 +31,7 @@ public class ProjectMetadata {
     private final int buildExitCode;
     private final boolean buildSucceeded;
     private final boolean buildTimedOut;
+    private final boolean buildBlocked;
     private final String buildOutputTail;
     private final BuildFailureReason buildFailureReason;
     private final String buildJavaHome;
@@ -75,6 +76,7 @@ public class ProjectMetadata {
         this.buildExitCode = builder.buildExitCode;
         this.buildSucceeded = builder.buildSucceeded;
         this.buildTimedOut = builder.buildTimedOut;
+        this.buildBlocked = builder.buildBlocked;
         this.buildOutputTail = builder.buildOutputTail == null ? "" : builder.buildOutputTail;
         this.buildFailureReason = builder.buildFailureReason == null
                 ? BuildFailureReason.BUILD_FAILED_UNKNOWN_ERROR : builder.buildFailureReason;
@@ -193,6 +195,10 @@ public class ProjectMetadata {
         return buildTimedOut;
     }
 
+    public boolean isBuildBlocked() {
+        return buildBlocked;
+    }
+
     public String getBuildOutputTail() {
         return buildOutputTail;
     }
@@ -215,6 +221,15 @@ public class ProjectMetadata {
 
     public List<BuildAttempt> getBuildAttempts() {
         return buildAttempts;
+    }
+
+    public String getMavenDependencyClasspathStatus() {
+        List<BuildAttempt> attempts = buildAttempts.stream()
+                .filter(attempt -> "maven_dependency_classpath".equals(attempt.action()))
+                .toList();
+        if (attempts.isEmpty()) return "NOT_ATTEMPTED";
+        BuildAttempt terminal = attempts.get(attempts.size() - 1);
+        return terminal.exitCode() == 0 && !terminal.timedOut() ? "SUCCESS" : "PARTIAL";
     }
 
     public boolean isBuildSkipped() {
@@ -332,6 +347,7 @@ public class ProjectMetadata {
         private int buildExitCode = -1;
         private boolean buildSucceeded = false;
         private boolean buildTimedOut = false;
+        private boolean buildBlocked = false;
         private String buildOutputTail = "";
         private BuildFailureReason buildFailureReason = BuildFailureReason.NONE;
         private String buildJavaHome = "";
@@ -382,6 +398,7 @@ public class ProjectMetadata {
                     .buildExitCode(src.buildExitCode)
                     .buildSucceeded(src.buildSucceeded)
                     .buildTimedOut(src.buildTimedOut)
+                    .buildBlocked(src.buildBlocked)
                     .buildOutputTail(src.buildOutputTail)
                     .buildFailureReason(src.buildFailureReason)
                     .buildJavaHome(src.buildJavaHome)
@@ -504,6 +521,11 @@ public class ProjectMetadata {
 
         public Builder buildTimedOut(boolean buildTimedOut) {
             this.buildTimedOut = buildTimedOut;
+            return this;
+        }
+
+        public Builder buildBlocked(boolean buildBlocked) {
+            this.buildBlocked = buildBlocked;
             return this;
         }
 

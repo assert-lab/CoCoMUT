@@ -114,11 +114,11 @@ public class BuildCompatibilityTest {
 
     @Test
     public void classifiesTheCompleteFinalDiagnosticAfterFallbacks() {
-        String combined = "initial attempt: JDK 21 is required to build this project\n"
-                + "[CoCoMUT fallback]\nfinal attempt: ordinary compilation failure";
+        String transcript = "initial attempt: connection reset\n[retry]\nfinal attempt: cannot find symbol";
+        String terminal = "final attempt: cannot find symbol";
 
-        assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
-                ProjectAnalyzer.finalBuildFailureReason(combined, false, false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_PROJECT_COMPILATION_ERROR,
+                ProjectAnalyzer.finalBuildFailureReason(transcript, terminal, false, false, false));
     }
 
     @Test
@@ -161,6 +161,36 @@ public class BuildCompatibilityTest {
             assertFalse(preparation.succeeded());
             assertFalse(preparation.changed());
             assertTrue(preparation.diagnostic().contains(AndroidSdkSupport.ALLOW_PROVISIONING_ENV));
+        } finally {
+            delete(project);
+            delete(sdk);
+        }
+    }
+
+    @Test
+    public void androidProvisioningVerifiesFilesystemStateAfterSdkManager() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-android-verify");
+        Path sdk = Files.createTempDirectory("cocomut-android-sdk-verify");
+        try {
+            Files.writeString(project.resolve("build.gradle.kts"), """
+                    plugins { id("com.android.library") }
+                    android { compileSdk = 35 }
+                    """);
+            Path manager = sdk.resolve("cmdline-tools/latest/bin/sdkmanager");
+            Files.createDirectories(manager.getParent());
+            Files.writeString(manager, "#!/bin/sh\nmkdir -p '" + sdk.resolve("platforms/android-35")
+                    + "'\nexit 1\n");
+            assertTrue(manager.toFile().setExecutable(true));
+
+            AndroidSdkSupport.Preparation preparation = AndroidSdkSupport.prepare(project, java.util.Map.of(
+                    "ANDROID_SDK_ROOT", sdk.toString(),
+                    AndroidSdkSupport.ALLOW_PROVISIONING_ENV, "true"));
+
+            assertTrue(preparation.attempted());
+            assertTrue("Installed component must be detected despite non-zero sdkmanager exit",
+                    preparation.succeeded());
+            assertTrue(preparation.changed());
+            assertEquals(1, preparation.exitCode());
         } finally {
             delete(project);
             delete(sdk);

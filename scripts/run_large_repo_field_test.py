@@ -45,10 +45,12 @@ REPO_COLUMNS = [
     "phase_1_build_attempted",
     "phase_1_build_succeeded",
     "phase_1_build_timed_out",
+    "phase_1_build_blocked",
     "phase_1_build_root",
     "phase_1_build_root_candidates",
     "phase_1_build_command",
     "phase_1_build_attempts",
+    "phase_1_maven_dependency_classpath_status",
     "phase_1_build_output_tail",
     "phase_1_build_failure_reason",
     "phase_1_build_java_home",
@@ -105,7 +107,7 @@ def main() -> int:
     if args.limit is not None:
         rows = rows[: args.limit]
     completed = completed_repos(args.output_root / "repository-results.tsv") if args.resume else set()
-    write_environment(args, rows)
+    ensure_environment(args, rows)
 
     for idx, row in enumerate(rows, 1):
         repo = row["repo"].strip()
@@ -466,10 +468,10 @@ def prune_repo_outputs(args: argparse.Namespace, repo: str) -> None:
         shutil.rmtree(output)
 
 
-def write_environment(args: argparse.Namespace, rows: list[dict[str, str]]) -> None:
-    env = {
+def environment_record(args: argparse.Namespace, rows: list[dict[str, str]]) -> dict[str, Any]:
+    return {
         "repo_count": len(rows),
-        "repos_csv": str(args.repos_csv),
+        "repos_csv": str(args.repos_csv.resolve()),
         "cocomut_command": args.cocomut_command,
         "timeout": args.timeout,
         "compile_timeout": args.compile_timeout,
@@ -479,7 +481,27 @@ def write_environment(args: argparse.Namespace, rows: list[dict[str, str]]) -> N
         "maven": command_text(["mvn", "-version"]),
         "gradle": command_text(["gradle", "--version"]),
     }
-    (args.output_root / "environment.json").write_text(json.dumps(env, indent=2) + "\n")
+
+
+def ensure_environment(args: argparse.Namespace, rows: list[dict[str, str]]) -> None:
+    path = args.output_root / "environment.json"
+    current = environment_record(args, rows)
+    if args.resume:
+        if not path.exists():
+            raise SystemExit(f"Cannot --resume without existing environment metadata: {path}")
+        previous = json.loads(path.read_text(encoding="utf-8"))
+        immutable = ("repo_count", "repos_csv", "cocomut_command", "timeout", "compile_timeout", "heap_gb")
+        changed = {
+            key: {"previous": previous.get(key), "requested": current.get(key)}
+            for key in immutable if previous.get(key) != current.get(key)
+        }
+        if changed:
+            detail = ", ".join(
+                f"{key}: {values['previous']!r} -> {values['requested']!r}"
+                for key, values in changed.items())
+            raise SystemExit("Refusing to mix resumed rows from different field-test environments: " + detail)
+        return
+    path.write_text(json.dumps(current, indent=2) + "\n", encoding="utf-8")
 
 
 def write_summary(output_root: Path) -> None:

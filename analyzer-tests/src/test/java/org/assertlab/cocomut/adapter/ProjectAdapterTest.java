@@ -87,6 +87,21 @@ public class ProjectAdapterTest {
     }
 
     @Test
+    public void authoritativeAntRootDoesNotDispatchToIncidentalNestedGradleBuild() throws IOException {
+        Files.writeString(tempDir.resolve("build.xml"), "<project/>\n");
+        Path nested = tempDir.resolve("tools/helper");
+        Files.createDirectories(nested);
+        Files.writeString(nested.resolve("settings.gradle"), "rootProject.name = 'helper'\n");
+        Files.writeString(nested.resolve("build.gradle"), "plugins { id 'java' }\n");
+
+        ProjectAdapter adapter = ProjectAdapter.of(tempDir);
+
+        assertTrue("An authoritative unsupported root must retain generic dispatch",
+                adapter instanceof GenericJavaAdapter);
+        assertEquals(tempDir, org.assertlab.cocomut.ProjectAnalyzer.preferredAdapterRoot(tempDir));
+    }
+
+    @Test
     public void plainDirectoryFallsBackToGenericAdapter() {
         // tempDir has no build descriptor → fallback
         ProjectAdapter adapter = ProjectAdapter.of(tempDir);

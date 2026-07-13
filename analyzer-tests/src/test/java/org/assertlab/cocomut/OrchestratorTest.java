@@ -102,6 +102,16 @@ public class OrchestratorTest {
     }
 
     @Test
+    public void phaseOneExceptionHasSpecificFailureCode() {
+        Orchestrator invalid = new Orchestrator(Path.of("/nonexistent/cocomut-project"));
+
+        assertFalse(invalid.execute());
+
+        assertTrue(String.valueOf(invalid.getExecutionReport().get("failure_codes"))
+                .contains("METADATA_RESOLUTION_FAILED"));
+    }
+
+    @Test
     public void testExecutionReportPrint() {
         orchestrator.execute();
 
@@ -228,6 +238,44 @@ public class OrchestratorTest {
     }
 
     @Test
+    public void preflightBlockedBuildDoesNotClaimProcessExecutionOrTrustStaleBytecode() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-preflight-blocked-");
+        try {
+            Path sourceRoot = project.resolve("src/main/java");
+            Path classOutput = project.resolve("build/classes/java/main");
+            Files.createDirectories(sourceRoot);
+            Files.createDirectories(classOutput);
+            ProjectMetadata metadata = new ProjectMetadata.Builder()
+                    .projectName("blocked")
+                    .projectPath(project)
+                    .buildSystem("gradle")
+                    .javaVersion("17")
+                    .sourceRoot(sourceRoot)
+                    .sourceRoots(java.util.List.of(sourceRoot))
+                    .mainClassOutputs(java.util.List.of(classOutput))
+                    .classpath(java.util.List.of(classOutput))
+                    .compileStatus("BUILD BLOCKED: ANDROID SDK UNAVAILABLE")
+                    .buildAttempted(false)
+                    .buildBlocked(true)
+                    .buildFailureReason(BuildFailureReason.BUILD_FAILED_ANDROID_SDK_UNAVAILABLE)
+                    .bytecodeAvailable(true)
+                    .bytecodeOrigin("preexisting")
+                    .analysisCanProceed(false)
+                    .build();
+            Orchestrator blocked = new Orchestrator(ContextRequest.builder().projectRoot(project).build(), metadata);
+
+            assertFalse(blocked.execute());
+
+            Map<String, Object> report = blocked.getExecutionReport();
+            assertEquals(Boolean.FALSE, report.get("phase_1_build_attempted"));
+            assertEquals(Boolean.TRUE, report.get("phase_1_build_blocked"));
+            assertTrue(String.valueOf(report.get("failure_codes")).contains("BUILD_PREFLIGHT_BLOCKED"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void successfulEmptyBuildReportsUnavailableProjectBytecode() throws Exception {
         Path project = Files.createTempDirectory("cocomut-empty-maven-");
         try {
@@ -295,6 +343,11 @@ public class OrchestratorTest {
             assertEquals("SUCCESS", testOnly.getExecutionReport().get("status"));
             assertTrue(testOnly.getExecutionReport().get("phase_1_build_attempts") instanceof java.util.List<?>);
             assertFalse(((java.util.List<?>) testOnly.getExecutionReport().get("phase_1_build_attempts")).isEmpty());
+            assertTrue(((java.util.List<?>) testOnly.getExecutionReport().get("phase_1_build_attempts")).stream()
+                    .map(String::valueOf)
+                    .anyMatch(value -> value.contains("maven_dependency_classpath")));
+            assertEquals("SUCCESS", testOnly.getExecutionReport()
+                    .get("phase_1_maven_dependency_classpath_status"));
             assertTrue(testOnly.getExecutionReport().get("phase_1_build_command") instanceof java.util.List<?>);
             assertTrue(((java.util.List<?>) testOnly.getExecutionReport().get("phase_1_build_command"))
                     .contains("test-compile"));
