@@ -750,45 +750,6 @@ public class ProjectAnalyzerTest {
     }
 
     @Test
-    public void archivedManifestValidatesAgainstPreservedV030Schema() throws Exception {
-        Path repository = Paths.get(System.getProperty("user.dir")).getParent();
-        ObjectMapper mapper = new ObjectMapper();
-        JsonNode manifest = mapper.readTree(repository.resolve(
-                "examples/sample-output/minimal-extraction-manifest-v0.3.0.json").toFile());
-        JsonNode schemaNode = mapper.readTree(repository.resolve(
-                "schemas/extraction-manifest-v0.3.0.schema.json").toFile());
-        JsonSchema schema = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012)
-                .getSchema(schemaNode);
-
-        assertEquals("0.3.0", manifest.path("schema_version").asText());
-        assertTrue("Archived 0.3.0 manifest must retain a validating schema: " + schema.validate(manifest),
-                schema.validate(manifest).isEmpty());
-    }
-
-    @Test
-    public void manifestSchemaVersionsHaveDistinctCanonicalIdentities() throws Exception {
-        Path repository = Paths.get(System.getProperty("user.dir")).getParent();
-        ObjectMapper mapper = new ObjectMapper();
-        JsonNode oldSchemaNode = mapper.readTree(repository.resolve(
-                "schemas/extraction-manifest-v0.3.0.schema.json").toFile());
-        JsonNode currentSchemaNode = mapper.readTree(repository.resolve(
-                "schemas/extraction-manifest.schema.json").toFile());
-        JsonNode oldManifest = mapper.readTree(repository.resolve(
-                "examples/sample-output/minimal-extraction-manifest-v0.3.0.json").toFile());
-        JsonNode currentManifest = mapper.readTree(repository.resolve(
-                "examples/sample-output/minimal-extraction-manifest.json").toFile());
-        java.net.URI oldId = java.net.URI.create(oldSchemaNode.path("$id").asText());
-        java.net.URI currentId = java.net.URI.create(currentSchemaNode.path("$id").asText());
-        JsonSchemaFactory factory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
-
-        assertNotEquals(oldId, currentId);
-        JsonSchema oldSchema = factory.getSchema(oldId, oldSchemaNode);
-        JsonSchema currentSchema = factory.getSchema(currentId, currentSchemaNode);
-        assertTrue(oldSchema.validate(oldManifest).isEmpty());
-        assertTrue(currentSchema.validate(currentManifest).isEmpty());
-    }
-
-    @Test
     public void vendorConstrainedMavenToolchainDoesNotUseSynthesizedVersionOnlyInventory() throws Exception {
         Path project = Files.createTempDirectory("cocomut-vendor-toolchain-");
         try {

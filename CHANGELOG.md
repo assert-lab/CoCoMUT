@@ -16,9 +16,10 @@
 - Added a versioned JSONL schema for method-context records. The schema is
   intentionally extensible through `additionalProperties` while the top-level
   record shape remains documented.
-- Bumped the extraction-manifest schema to `0.4.0` for structured build actions
-  and retained the previous `0.3.0` schema for archived manifests.
-- Assigned version-specific manifest schema identifiers, preserved terminal
+- Bumped the output schema to `0.4.0` for structured build actions. CoCoMUT
+  ships the current schema in each release; earlier contracts remain available
+  from Git history and archived release artifacts.
+- Assigned a version-specific manifest schema identifier, preserved terminal
   diagnostics in bounded logs, tightened Android preflight/process cleanup, and
   made field-test resume validate cohort, tool, and runtime identity.
 - Made build cancellation terminate and reap subprocess trees, applied Maven

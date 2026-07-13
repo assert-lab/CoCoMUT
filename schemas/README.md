@@ -191,15 +191,15 @@ hashes.emitted_jsonl            Hash over generated JSONL, or empty when the
 ```
 
 The current schema is [extraction-manifest.schema.json](extraction-manifest.schema.json).
-Project policy is that every published manifest contract has a version-specific
-canonical `$id`; the unversioned filename is the repository alias for the
-current contract.
-The previous `0.3.0` contract remains available as
-[extraction-manifest-v0.3.0.schema.json](extraction-manifest-v0.3.0.schema.json)
-for validating artifacts produced before structured build attempts were added.
-The sample directory follows the same policy:
-`minimal-extraction-manifest.json` is current, while
-`minimal-extraction-manifest-v0.3.0.json` is the explicitly named legacy fixture.
+Its canonical `$id` includes the schema version, while the unversioned filename
+is the repository alias for the current contract.
+
+**Project decision.** CoCoMUT keeps schema maintenance deliberately small: each
+release ships and tests one current schema. Incompatible output changes
+increment `schema_version`; compatible additions should be optional when
+practical. Historical schemas and examples remain available from Git history
+and archived release artifacts instead of being copied into every later
+checkout.
 
 The manifest is intentionally separate from the JSONL rows. Dataset rows remain
 method-centric, while repository revision, build policy, and artifact hashes are
