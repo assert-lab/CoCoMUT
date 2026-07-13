@@ -202,9 +202,10 @@ Maven dependency-classpath resolution is recorded as the distinct
 build failure.
 
 CoCoMUT generates a version-only isolated Maven toolchain inventory only when
-the project requests version matching alone. If the request includes vendor,
-purpose, or another token, Maven's existing project/user toolchain configuration
-is retained rather than replaced with weaker synthesized metadata.
+every POM in the declared reactor requests version matching alone. If any
+module requests vendor, purpose, or another token, Maven's existing project/user
+toolchain configuration is retained rather than replaced with weaker synthesized
+metadata.
 
 
 Build execution runs the subject repository's Maven or Gradle build logic. For

@@ -176,7 +176,8 @@ edit subject repositories or guess credentials, dependency versions, SDK
 levels, or custom setup commands. Reports retain `BUILD_FAILED` as the primary
 code and add a stable `phase_1_build_failure_reason`, such as
 `BUILD_FAILED_JDK_UNAVAILABLE`, `BUILD_FAILED_DEPENDENCY_UNAVAILABLE`, or
-`BUILD_FAILED_VCS_HISTORY_UNAVAILABLE`. Unrecognized failures remain
+`BUILD_FAILED_VCS_HISTORY_UNAVAILABLE`. Caller cancellation reports
+`BUILD_FAILED_INTERRUPTED`; unrecognized failures remain
 `BUILD_FAILED_UNKNOWN_ERROR`.
 
 Android SDK provisioning is disabled by default because it mutates the SDK

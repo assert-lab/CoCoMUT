@@ -18,12 +18,14 @@ public enum BuildFailureReason {
     BUILD_FAILED_PROJECT_COMPILATION_ERROR,
     BUILD_FAILED_NETWORK_FAILURE,
     BUILD_FAILED_TIMEOUT,
+    BUILD_FAILED_INTERRUPTED,
     BUILD_FAILED_UNKNOWN_ERROR;
 
     public static BuildFailureReason classify(String output, boolean timedOut, boolean succeeded) {
         if (succeeded) return NONE;
         if (timedOut) return BUILD_FAILED_TIMEOUT;
         String text = output == null ? "" : output.toLowerCase(Locale.ROOT);
+        if (text.contains("build interrupted by caller")) return BUILD_FAILED_INTERRUPTED;
         if (containsAny(text, "401 unauthorized", "403 forbidden", "authentication failed", "not authorized",
                 "host key verification failed", "could not read from remote repository"))
             return BUILD_FAILED_AUTHENTICATION_REQUIRED;

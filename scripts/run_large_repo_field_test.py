@@ -8,8 +8,9 @@ current default branch, analyzed once, summarized, and then bulky outputs are
 removed.
 
 Existing result roots require an explicit --resume or --force decision. Resume
-is accepted only when the ordered repository cohort, CoCoMUT identity, runtime
-tools, heap, and timeout configuration match the recorded environment.
+is accepted only when the ordered repository cohort, CoCoMUT launcher and
+selected JAR identity, runtime tools, heap, and timeout configuration match the
+recorded environment.
 """
 
 from __future__ import annotations
@@ -524,12 +525,21 @@ def ensure_environment(args: argparse.Namespace, rows: list[dict[str, str]]) -> 
 def cocomut_tool_identity(command: str) -> dict[str, Any]:
     parts = shlex.split(command)
     if not parts:
-        return {"executable": "", "sha256": "", "git_commit": "", "git_diff_sha256": ""}
+        return {
+            "executable": "", "sha256": "", "artifact": {},
+            "git_commit": "", "git_diff_sha256": "",
+        }
     candidate = Path(parts[0]).expanduser()
     if not candidate.is_absolute():
         resolved = shutil.which(parts[0])
         candidate = Path(resolved) if resolved else (Path.cwd() / candidate)
     candidate = candidate.resolve()
+    artifact = selected_cocomut_artifact(parts, candidate)
+    if artifact is None and is_default_cocomut_launcher(candidate):
+        materialize_default_cocomut_artifact(candidate)
+        artifact = selected_cocomut_artifact(parts, candidate)
+        if artifact is None:
+            raise SystemExit(f"CoCoMUT launcher did not produce an executable JAR: {candidate}")
     git_root = command_text(["git", "-C", str(candidate.parent), "rev-parse", "--show-toplevel"]).strip()
     git_commit = ""
     git_diff_hash = ""
@@ -540,9 +550,56 @@ def cocomut_tool_identity(command: str) -> dict[str, Any]:
     return {
         "executable": str(candidate),
         "sha256": sha256_file(candidate) if candidate.is_file() else "",
+        "artifact": ({
+            "selection": artifact[0],
+            "path": str(artifact[1]),
+            "sha256": sha256_file(artifact[1]),
+        } if artifact else {}),
         "git_commit": git_commit,
         "git_diff_sha256": git_diff_hash,
     }
+
+
+def selected_cocomut_artifact(parts: list[str], executable: Path) -> tuple[str, Path] | None:
+    if "-jar" in parts:
+        jar_index = parts.index("-jar") + 1
+        if jar_index < len(parts):
+            jar = Path(parts[jar_index]).expanduser()
+            if not jar.is_absolute():
+                jar = Path.cwd() / jar
+            jar = jar.resolve()
+            if jar.is_file():
+                return "explicit-java-jar", jar
+    if not is_default_cocomut_launcher(executable):
+        return None
+    root = executable.parent.parent
+    release = root / "dist/cocomut-cli.jar"
+    development = root / "cocomut-cli/target/cocomut-cli-0.1.0-all.jar"
+    if release.is_file():
+        return "release-jar", release.resolve()
+    if development.is_file():
+        return "development-jar", development.resolve()
+    return None
+
+
+def is_default_cocomut_launcher(executable: Path) -> bool:
+    return executable.name == "cocomut" and executable.parent.name == "bin"
+
+
+def materialize_default_cocomut_artifact(executable: Path) -> None:
+    try:
+        result = subprocess.run(
+            [str(executable), "--version"], cwd=executable.parent.parent,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            timeout=600, check=False,
+        )
+    except Exception as exc:
+        raise SystemExit(f"Unable to materialize CoCoMUT artifact via {executable}: {exc}") from exc
+    if result.returncode != 0:
+        detail = compact_text(result.stdout, 500)
+        raise SystemExit(
+            f"Unable to materialize CoCoMUT artifact via {executable} "
+            f"(exit {result.returncode}): {detail}")
 
 
 def sha256_file(path: Path) -> str:

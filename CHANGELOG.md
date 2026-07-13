@@ -21,6 +21,9 @@
 - Assigned version-specific manifest schema identifiers, preserved terminal
   diagnostics in bounded logs, tightened Android preflight/process cleanup, and
   made field-test resume validate cohort, tool, and runtime identity.
+- Made build cancellation terminate and reap subprocess trees, applied Maven
+  toolchain constraints across complete reactors, and fingerprinted the JAR
+  selected by the field-test launcher.
 - Added public-repository field-test evidence for 541 filtered Java repositories.
 - Moved Java packages to `org.assertlab.cocomut`.
 - Added Maven wrapper, GitHub Actions CI, contributor docs, and citation metadata.

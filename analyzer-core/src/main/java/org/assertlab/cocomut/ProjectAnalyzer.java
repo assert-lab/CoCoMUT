@@ -988,6 +988,12 @@ public class ProjectAnalyzer {
                     diagnosticTail(result.output()),
                     classifiedBuildFailure(result), false);
             return lastBuildResult;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            lastBuildResult = new BuildResult(true, -1, false, false,
+                    "BUILD INTERRUPTED", "Build execution was interrupted by the caller.",
+                    BuildFailureReason.BUILD_FAILED_INTERRUPTED, false);
+            return lastBuildResult;
         } catch (Exception e) {
             lastBuildResult = new BuildResult(true, -1, false, false,
                     "BUILD FAILED: " + e.getClass().getSimpleName(), e.getMessage() == null ? "" : e.getMessage(),
@@ -1286,18 +1292,23 @@ public class ProjectAnalyzer {
     }
 
     Path isolatedMavenToolchainsFile() throws IOException {
-        String poms = readQuietly(effectiveBuildRoot.resolve("pom.xml"));
-        if (!poms.contains("maven-toolchains-plugin") && !poms.contains("jdkToolchain")
-                && !Files.isRegularFile(effectiveBuildRoot.resolve(".mvn/toolchains.xml"))) return null;
         Path projectToolchains = effectiveBuildRoot.resolve(".mvn/toolchains.xml");
         if (Files.isRegularFile(projectToolchains)) {
             return projectToolchains.toAbsolutePath().normalize();
         }
-        if (requiresNonVersionToolchainTokens(poms)) {
-            // Do not replace Maven's normal user toolchains file with a synthesized
-            // version-only inventory that cannot satisfy vendor/purpose constraints.
-            return null;
+
+        boolean toolchainRequested = false;
+        for (Path reactorDir : mergePaths(
+                List.of(effectiveBuildRoot), collectMavenModuleDirs(effectiveBuildRoot))) {
+            String pom = readQuietly(reactorDir.resolve("pom.xml"));
+            toolchainRequested |= pom.contains("maven-toolchains-plugin") || pom.contains("jdkToolchain");
+            if (requiresNonVersionToolchainTokens(pom)) {
+                // A version-only inventory would weaken a vendor, purpose, or custom
+                // token requested anywhere in the reactor.
+                return null;
+            }
         }
+        if (!toolchainRequested) return null;
         Map<Integer, Path> homes = BuildJavaSelection.installedJdkHomes();
         if (homes.isEmpty()) return null;
         StringBuilder xml = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<toolchains>\n");
@@ -1358,21 +1369,33 @@ public class ProjectAnalyzer {
         }, "cocomut-build-output-drainer");
         drainer.setDaemon(true);
         drainer.start();
-        boolean completed = process.waitFor(compileTimeoutSeconds(), java.util.concurrent.TimeUnit.SECONDS);
-        if (!completed) {
-            process.descendants().forEach(ProcessHandle::destroyForcibly);
-            process.destroyForcibly();
-            process.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
+        boolean interrupted = false;
+        try {
+            boolean completed = process.waitFor(compileTimeoutSeconds(), java.util.concurrent.TimeUnit.SECONDS);
+            if (!completed) {
+                interrupted |= terminateProcess(process);
+                finishDraining(process, drainer);
+                CommandResult result = new CommandResult(-1, output.transcript(), true, output.tailText());
+                if (recordAttempt) recordBuildAttempt(action, command, result);
+                return result;
+            }
             finishDraining(process, drainer);
-            CommandResult result = new CommandResult(-1, output.transcript(), true, output.tailText());
+            CommandResult result = new CommandResult(
+                    process.exitValue(), output.transcript(), false, output.tailText());
             if (recordAttempt) recordBuildAttempt(action, command, result);
             return result;
+        } catch (InterruptedException e) {
+            interrupted = true;
+            if (recordAttempt) {
+                String marker = "[CoCoMUT build interrupted by caller]";
+                recordBuildAttempt(action, command,
+                        new CommandResult(-1, output.transcript() + "\n" + marker, false, marker));
+            }
+            throw e;
+        } finally {
+            interrupted |= cleanupProcessAndDrainer(process, drainer);
+            if (interrupted) Thread.currentThread().interrupt();
         }
-        finishDraining(process, drainer);
-        CommandResult result = new CommandResult(
-                process.exitValue(), output.transcript(), false, output.tailText());
-        if (recordAttempt) recordBuildAttempt(action, command, result);
-        return result;
     }
 
     private static void finishDraining(Process process, Thread drainer) throws InterruptedException, IOException {
@@ -1381,6 +1404,72 @@ public class ProjectAnalyzer {
             process.getInputStream().close();
             drainer.join(1_000);
         }
+    }
+
+    private static boolean cleanupProcessAndDrainer(Process process, Thread drainer) {
+        boolean interrupted = false;
+        if (process.isAlive()) {
+            interrupted |= terminateProcess(process);
+        }
+        if (drainer.isAlive()) {
+            try {
+                process.getInputStream().close();
+            } catch (IOException ignored) {
+                // Closing the stream is only needed to release the diagnostic drainer.
+            }
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+            while (drainer.isAlive() && System.nanoTime() < deadline) {
+                try {
+                    drainer.join(250);
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                }
+            }
+        }
+        return interrupted;
+    }
+
+    private static boolean terminateProcess(Process process) {
+        boolean interrupted = false;
+        List<ProcessHandle> descendants = process.descendants().toList();
+        descendants.forEach(ProcessHandle::destroy);
+        process.destroy();
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+        while (process.isAlive() && System.nanoTime() < deadline) {
+            try {
+                process.waitFor(250, java.util.concurrent.TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                interrupted = true;
+            }
+        }
+        if (process.isAlive()) {
+            descendants.stream().filter(ProcessHandle::isAlive).forEach(ProcessHandle::destroyForcibly);
+            process.destroyForcibly();
+            deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+            while (process.isAlive() && System.nanoTime() < deadline) {
+                try {
+                    process.waitFor(250, java.util.concurrent.TimeUnit.MILLISECONDS);
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                }
+            }
+        }
+        descendants.stream().filter(ProcessHandle::isAlive).forEach(ProcessHandle::destroyForcibly);
+        interrupted |= waitForProcessHandles(descendants, 5);
+        return interrupted;
+    }
+
+    private static boolean waitForProcessHandles(List<ProcessHandle> handles, int seconds) {
+        boolean interrupted = false;
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(seconds);
+        while (handles.stream().anyMatch(ProcessHandle::isAlive) && System.nanoTime() < deadline) {
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                interrupted = true;
+            }
+        }
+        return interrupted;
     }
 
     private void recordBuildAttempt(List<String> command, CommandResult result) {

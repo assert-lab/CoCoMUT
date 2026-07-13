@@ -809,6 +809,34 @@ public class ProjectAnalyzerTest {
     }
 
     @Test
+    public void moduleVendorConstraintPreventsVersionOnlyReactorToolchain() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-module-vendor-toolchain-");
+        try {
+            Files.createDirectories(project.resolve("module"));
+            Files.writeString(project.resolve("pom.xml"), """
+                    <project><modelVersion>4.0.0</modelVersion>
+                      <groupId>p</groupId><artifactId>root</artifactId><version>1</version>
+                      <packaging>pom</packaging><modules><module>module</module></modules>
+                      <build><plugins><plugin><artifactId>maven-toolchains-plugin</artifactId></plugin></plugins></build>
+                    </project>
+                    """);
+            Files.writeString(project.resolve("module/pom.xml"), """
+                    <project><modelVersion>4.0.0</modelVersion>
+                      <parent><groupId>p</groupId><artifactId>root</artifactId><version>1</version></parent>
+                      <artifactId>module</artifactId>
+                      <build><plugins><plugin><artifactId>maven-compiler-plugin</artifactId>
+                        <configuration><jdkToolchain><version>17</version><vendor>temurin</vendor></jdkToolchain></configuration>
+                      </plugin></plugins></build>
+                    </project>
+                    """);
+
+            assertEquals(null, new ProjectAnalyzer(project).isolatedMavenToolchainsFile());
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void repositoryMavenToolchainsFileRemainsAuthoritative() throws Exception {
         Path project = Files.createTempDirectory("cocomut-project-toolchains-");
         try {
@@ -883,6 +911,90 @@ public class ProjectAnalyzerTest {
                     metadata.getBuildFailureReason());
             assertTrue(metadata.getBuildOutputTail().contains("cannot find symbol"));
         } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void interruptedBuildTerminatesWrapperAndRestoresInterrupt() throws Exception {
+        org.junit.Assume.assumeFalse(System.getProperty("os.name", "").toLowerCase().contains("win"));
+        Path project = Files.createTempDirectory("cocomut-build-interrupt-");
+        java.util.concurrent.atomic.AtomicReference<ProjectMetadata> result =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<Throwable> failure =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicBoolean interruptRestored =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+        try {
+            Files.createDirectories(project.resolve(".mvn/wrapper"));
+            Files.writeString(project.resolve(".mvn/wrapper/maven-wrapper.properties"), "distributionUrl=unused\n");
+            Path pidFile = project.resolve("wrapper.pid");
+            Path childPidFile = project.resolve("child.pid");
+            Path wrapper = project.resolve("mvnw");
+            Files.writeString(wrapper, """
+                    #!/bin/sh
+                    echo $$ > wrapper.pid
+                    sleep 60 &
+                    echo $! > child.pid
+                    wait
+                    """);
+            assertTrue(wrapper.toFile().setExecutable(true));
+            Files.writeString(project.resolve("pom.xml"), """
+                    <project><modelVersion>4.0.0</modelVersion>
+                      <groupId>p</groupId><artifactId>a</artifactId><version>1</version>
+                    </project>
+                    """);
+
+            ProjectAnalyzer analyzer = new ProjectAnalyzer(ContextRequest.builder()
+                    .projectRoot(project).allowUnsandboxedBuild().build());
+            Thread worker = new Thread(() -> {
+                try {
+                    result.set(analyzer.analyze());
+                } catch (Throwable throwable) {
+                    failure.set(throwable);
+                } finally {
+                    interruptRestored.set(Thread.currentThread().isInterrupted());
+                }
+            }, "cocomut-interrupted-build-test");
+            worker.start();
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+            while ((!Files.isRegularFile(pidFile) || !Files.isRegularFile(childPidFile))
+                    && System.nanoTime() < deadline) {
+                Thread.sleep(25);
+            }
+            assertTrue("Maven wrapper must start before cancellation", Files.isRegularFile(pidFile));
+            assertTrue("Wrapper child must start before cancellation", Files.isRegularFile(childPidFile));
+            long pid = Long.parseLong(Files.readString(pidFile).trim());
+            long childPid = Long.parseLong(Files.readString(childPidFile).trim());
+
+            worker.interrupt();
+            worker.join(10_000);
+
+            assertFalse("Interrupted analysis must return after cleanup", worker.isAlive());
+            assertEquals("Interrupted analysis should return structured metadata", null, failure.get());
+            assertTrue("Interrupted status must be restored", interruptRestored.get());
+            assertEquals(BuildFailureReason.BUILD_FAILED_INTERRUPTED, result.get().getBuildFailureReason());
+            assertEquals(1, result.get().getBuildAttempts().size());
+            assertEquals(BuildFailureReason.BUILD_FAILED_INTERRUPTED,
+                    result.get().getBuildAttempts().get(0).failureReason());
+            assertFalse("Build wrapper must be gone before analysis returns",
+                    ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false));
+            assertFalse("Build descendants must be gone before analysis returns",
+                    ProcessHandle.of(childPid).map(ProcessHandle::isAlive).orElse(false));
+            assertFalse("Build output drainer must be gone before analysis returns",
+                    Thread.getAllStackTraces().keySet().stream().anyMatch(thread ->
+                            thread.isAlive() && "cocomut-build-output-drainer".equals(thread.getName())));
+        } finally {
+            for (String pidName : List.of("wrapper.pid", "child.pid")) {
+                if (Files.isRegularFile(project.resolve(pidName))) {
+                    try {
+                        long pid = Long.parseLong(Files.readString(project.resolve(pidName)).trim());
+                        ProcessHandle.of(pid).filter(ProcessHandle::isAlive).ifPresent(ProcessHandle::destroyForcibly);
+                    } catch (Exception ignored) {
+                        // Best-effort cleanup for a failed assertion.
+                    }
+                }
+            }
             deleteRecursively(project);
         }
     }
