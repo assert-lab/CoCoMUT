@@ -92,7 +92,9 @@ Each JSONL row contains:
 If the SootUp call graph is generated but some selected source methods do not
 receive matched bytecode call-graph projections, CoCoMUT records that as a
 run warning. The call graph remains available, and resolved caller/callee edges
-are still emitted.
+are still emitted. If none of the selected methods match project bytecode, the
+run is `PARTIAL`: source records are retained, but they do not contain usable
+method-level call context.
 
 See [schemas/README.md](schemas/README.md) for the full schema.
 
@@ -146,3 +148,61 @@ trusted checkouts, or `--externally-sandboxed-build` when a container/VM policy
 is provided outside CoCoMUT. The analyzed project must provide usable project
 bytecode in a conventional build layout, or use explicit artifact inputs such as
 `--class-output` / `--project-jar` before extraction can succeed.
+
+CoCoMUT itself requires JDK 17+, but repository builds may use a different JDK.
+For build subprocesses, CoCoMUT checks `COCOMUT_BUILD_JAVA_HOME`, then project
+declarations such as `.java-version`, `.sdkmanrc`, and the Gradle wrapper. Known
+JDK homes can be supplied as `COCOMUT_JAVA_HOME_<major>` for Java 8 through
+26. Exact installed versions are preferred for Maven and Gradle toolchains;
+otherwise, a compatible newer compiler may be used for release-target builds.
+For Maven, CoCoMUT synthesizes an isolated toolchain inventory only for
+version-only requirements. Vendor, purpose, and custom-token constraints keep
+Maven's caller/project toolchain configuration authoritative; a repository-local
+`.mvn/toolchains.xml` is used directly when present.
+If a compiler, build-tool toolchain, or Maven Enforcer rule explicitly
+requests a newer Java release, CoCoMUT performs bounded, monotonic retries with
+compatible installed JDKs. This supports multi-module builds whose later
+modules require newer Java versions. The extraction report and manifest record the selected
+build JDK and the evidence used. The extraction report also records the final
+`phase_1_build_command` and a structured `phase_1_build_attempts` list containing
+the command, selected JDK, exit code, timeout state, and reason for every bounded
+invocation. If the requested JDK is unavailable, CoCoMUT
+uses the inherited build environment and reports that fallback explicitly.
+
+Build recovery is bounded and evidence-driven. CoCoMUT retries transient network
+failures at most twice, and retries Maven `package`
+only when every missing artifact belongs to the declared reactor. It does not
+edit subject repositories or guess credentials, dependency versions, SDK
+levels, or custom setup commands. Reports retain `BUILD_FAILED` as the primary
+code and add a stable `phase_1_build_failure_reason`, such as
+`BUILD_FAILED_JDK_UNAVAILABLE`, `BUILD_FAILED_DEPENDENCY_UNAVAILABLE`, or
+`BUILD_FAILED_VCS_HISTORY_UNAVAILABLE`. Caller cancellation reports
+`BUILD_FAILED_INTERRUPTED`; unrecognized failures remain
+`BUILD_FAILED_UNKNOWN_ERROR`.
+
+Android SDK provisioning is disabled by default because it mutates the SDK
+installation used by the caller. For an Android project with explicitly declared
+missing components, CoCoMUT reports `BUILD_FAILED_ANDROID_SDK_UNAVAILABLE`
+before starting Gradle. In an externally controlled disposable environment, set
+`COCOMUT_ALLOW_ANDROID_SDK_PROVISIONING=true` to permit `sdkmanager` to install
+only those declared components. The manifest records the provisioning command,
+components, timeout, exit code, and whether it changed the SDK installation.
+If provisioning is disabled or cannot start, the build is marked as preflight
+blocked: `build.attempted=false`, `build.blocked=true`, and pre-existing bytecode
+is not trusted for analysis.
+Android preflight requires an explicit Android Gradle plugin declaration and a
+statically declared SDK component. Comments, dependency coordinates, and
+arbitrary strings do not trigger provisioning; dynamic SDK declarations are
+left to Gradle to classify.
+
+When no build descriptor exists at the requested root, CoCoMUT uses one unique
+nested Maven or Gradle root. Multiple independent nested builds remain
+ambiguous and require an explicit project root per invocation; reports use
+`BUILD_ROOT_AMBIGUOUS` and list `phase_1_build_root_candidates` rather than
+misreporting a failed build. A plain project without usable bytecode uses
+`PROJECT_BYTECODE_UNAVAILABLE`. Generated Maven
+and Gradle source directories are added after a successful build; generated
+test sources are included only when the requested source sets include tests.
+An authoritative Ant, Bazel, Buck, or sbt descriptor at the requested root is
+reported as `BUILD_SYSTEM_UNSUPPORTED`; CoCoMUT does not replace it with an
+incidental nested Maven or Gradle build.

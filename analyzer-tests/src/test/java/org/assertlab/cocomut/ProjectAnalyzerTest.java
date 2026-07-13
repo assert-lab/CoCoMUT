@@ -52,10 +52,100 @@ public class ProjectAnalyzerTest {
     }
 
     @Test
+    public void detectsParenthesizedMinimumJdkRequirement() {
+        assertEquals(21, ProjectAnalyzer.requiredJavaVersion(
+                "To build this project JDK 21 (or greater) is required. Please install it."));
+    }
+
+    @Test
+    public void detectsBuildRequiresJdkOrLater() {
+        assertEquals(17, ProjectAnalyzer.requiredJavaVersion(
+                "Build requires JDK 17 or later. Use SDKMAN to install it."));
+    }
+
+    @Test
     public void testBuildSystemDetection() throws IOException {
         ProjectMetadata metadata = analyzer.analyze();
         assertNotNull("Metadata should not be null", metadata);
         assertEquals("Should detect Maven build system", "maven", metadata.getBuildSystem());
+    }
+
+    @Test
+    public void gradleRootDescriptorsTakePrecedenceOverPublishedPom() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-gradle-with-pom-");
+        try {
+            Files.writeString(project.resolve("pom.xml"), "<project/>");
+            Files.writeString(project.resolve("settings.gradle"), "include 'library'\n");
+            Files.writeString(project.resolve("build.gradle"), "plugins { id 'java' }\n");
+
+            ProjectMetadata metadata = new ProjectAnalyzer(project).analyze();
+
+            assertEquals("Gradle descriptors should win over a root pom.xml in auto mode",
+                    "gradle", metadata.getBuildSystem());
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void incompleteMavenWrapperFallsBackToSystemMaven() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-incomplete-maven-wrapper-");
+        try {
+            Path wrapper = project.resolve("mvnw");
+            Files.writeString(wrapper, "#!/bin/sh\nexit 1\n");
+            wrapper.toFile().setExecutable(true);
+
+            assertEquals("mvn", BuildToolExecutable.resolve(project, "mvn", false));
+
+            Files.createDirectories(project.resolve(".mvn/wrapper"));
+            Files.writeString(project.resolve(".mvn/wrapper/maven-wrapper.properties"),
+                    "distributionUrl=https://example.invalid/apache-maven.zip\n");
+            assertEquals(wrapper.toAbsolutePath().toString(),
+                    BuildToolExecutable.resolve(project, "mvn", false));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void incompleteGradleWrapperFallsBackToSystemGradle() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-incomplete-gradle-wrapper-");
+        try {
+            Path wrapper = project.resolve("gradlew");
+            Files.writeString(wrapper, "#!/bin/sh\nexit 1\n");
+            wrapper.toFile().setExecutable(true);
+            Files.createDirectories(project.resolve("gradle/wrapper"));
+            Files.writeString(project.resolve("gradle/wrapper/gradle-wrapper.properties"),
+                    "distributionUrl=https://example.invalid/gradle.zip\n");
+
+            assertEquals("gradle", BuildToolExecutable.resolve(project, "gradle", false));
+
+            Files.write(project.resolve("gradle/wrapper/gradle-wrapper.jar"), new byte[] {0});
+            assertEquals(wrapper.toAbsolutePath().toString(),
+                    BuildToolExecutable.resolve(project, "gradle", false));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void missingRootBuildDescriptorHasActionableStatus() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-no-root-build-");
+        try {
+            Files.createDirectories(project.resolve("src/main/java/demo"));
+            Files.writeString(project.resolve("src/main/java/demo/App.java"),
+                    "package demo; class App {}\n");
+
+            ProjectMetadata metadata = new ProjectAnalyzer(ContextRequest.builder()
+                    .projectRoot(project)
+                    .allowUnsandboxedBuild()
+                    .build()).analyze();
+
+            assertTrue(metadata.getCompileStatus().startsWith(
+                    "NO MAVEN OR GRADLE BUILD DESCRIPTOR AT PROJECT ROOT"));
+        } finally {
+            deleteRecursively(project);
+        }
     }
 
     @Test
@@ -294,7 +384,10 @@ public class ProjectAnalyzerTest {
                       <artifactId>root</artifactId>
                       <version>1.0-SNAPSHOT</version>
                       <packaging>pom</packaging>
-                      <modules><module>core</module></modules>
+                      <modules>
+                        <module>core</module>
+                        <!-- <module>inactive</module> -->
+                      </modules>
                     </project>
                     """);
             Files.createDirectories(project.resolve("core/src/main/java/core"));
@@ -306,6 +399,9 @@ public class ProjectAnalyzerTest {
                       <artifactId>core</artifactId>
                     </project>
                     """);
+            Files.createDirectories(project.resolve("inactive/src/main/java/inactive"));
+            Files.writeString(project.resolve("inactive/src/main/java/inactive/Inactive.java"),
+                    "package inactive; class Inactive {}\n");
             Files.createDirectories(project.resolve("vendor/demo/src/main/java/vendor"));
             Files.writeString(project.resolve("vendor/demo/src/main/java/vendor/Vendor.java"),
                     "package vendor; class Vendor {}\n");
@@ -320,6 +416,68 @@ public class ProjectAnalyzerTest {
                     roots.contains(project.resolve("core/src/main/java").toAbsolutePath().normalize()));
             assertFalse("Unrelated nested Maven-looking projects must not be scanned when declared roots exist",
                     roots.contains(project.resolve("vendor/demo/src/main/java").toAbsolutePath().normalize()));
+            assertFalse("Commented Maven modules must not enter the source universe",
+                    roots.contains(project.resolve("inactive/src/main/java").toAbsolutePath().normalize()));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void mavenInheritedCustomSourceDirectoriesAreDiscovered() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-maven-custom-roots-");
+        try {
+            Files.writeString(project.resolve("pom.xml"), """
+                    <project xmlns="http://maven.apache.org/POM/4.0.0">
+                      <modelVersion>4.0.0</modelVersion>
+                      <groupId>demo</groupId><artifactId>root</artifactId><version>1</version>
+                      <packaging>pom</packaging>
+                      <modules><module>core</module></modules>
+                      <build>
+                        <sourceDirectory>${project.basedir}/src</sourceDirectory>
+                        <testSourceDirectory>${project.basedir}/test</testSourceDirectory>
+                      </build>
+                    </project>
+                    """);
+            Files.createDirectories(project.resolve("core/src/demo"));
+            Files.writeString(project.resolve("core/src/demo/App.java"), "package demo; class App {}\n");
+            Files.createDirectories(project.resolve("core/test/demo"));
+            Files.writeString(project.resolve("core/test/demo/AppTest.java"), "package demo; class AppTest {}\n");
+            Files.writeString(project.resolve("core/pom.xml"), """
+                    <project xmlns="http://maven.apache.org/POM/4.0.0">
+                      <modelVersion>4.0.0</modelVersion>
+                      <parent><groupId>demo</groupId><artifactId>root</artifactId><version>1</version></parent>
+                      <artifactId>core</artifactId>
+                    </project>
+                    """);
+
+            ProjectMetadata metadata = new ProjectAnalyzer(ContextRequest.builder()
+                    .projectRoot(project)
+                    .sourceSet("all")
+                    .skipBuild(true)
+                    .build()).analyze();
+
+            assertTrue(metadata.getSourceRoots().contains(
+                    project.resolve("core/src").toAbsolutePath().normalize()));
+            assertTrue(metadata.getTestSourceRoots().contains(
+                    project.resolve("core/test").toAbsolutePath().normalize()));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void discoversBuiltMavenOutputsFromProfileModules() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-maven-profile-output-");
+        try {
+            Path module = project.resolve("profile-module");
+            Files.createDirectories(module.resolve("target/classes/demo"));
+            Files.writeString(module.resolve("pom.xml"), "<project/>\n");
+            Files.write(module.resolve("target/classes/demo/App.class"), new byte[] {1, 2, 3});
+
+            assertEquals(List.of(module.resolve("target/classes").toAbsolutePath().normalize()),
+                    ProjectAnalyzer.builtMavenClassOutputs(project, false));
+            assertEquals(List.of(), ProjectAnalyzer.builtMavenClassOutputs(project, true));
         } finally {
             deleteRecursively(project);
         }
@@ -369,6 +527,36 @@ public class ProjectAnalyzerTest {
                                     && sourceSet.sources().contains(project.resolve("app/src/main/java").toAbsolutePath().normalize())
                                     && sourceSet.outputs().stream().anyMatch(path ->
                                             path.endsWith(Path.of("app/build/classes/java/main")))));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void gradleModelIsSkippedAfterFailedProjectBuild() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-gradle-failed-build-");
+        try {
+            Files.writeString(project.resolve("settings.gradle"), "rootProject.name = 'failed'\n");
+            Files.writeString(project.resolve("build.gradle"), "plugins { id 'java' }\n");
+            Files.createDirectories(project.resolve("gradle/wrapper"));
+            Files.writeString(project.resolve("gradle/wrapper/gradle-wrapper.properties"),
+                    "distributionUrl=https://services.gradle.org/distributions/gradle-8.10-bin.zip\n");
+            Files.write(project.resolve("gradle/wrapper/gradle-wrapper.jar"), new byte[] {0});
+            Path wrapper = project.resolve("gradlew");
+            Files.writeString(wrapper, "#!/bin/sh\nexit 1\n");
+            assertTrue(wrapper.toFile().setExecutable(true));
+
+            ProjectMetadata metadata = new GradleProjectAdapter(project).toMetadata(ContextRequest.builder()
+                    .projectRoot(project)
+                    .sourceSet("main")
+                    .allowUnsandboxedBuild()
+                    .build());
+
+            assertTrue(metadata.isBuildAttempted());
+            assertFalse(metadata.isBuildSucceeded());
+            assertFalse(metadata.getGradleModelReport().attempted());
+            assertTrue(metadata.getGradleModelReport().diagnostics().stream()
+                    .anyMatch(message -> message.contains("build did not succeed")));
         } finally {
             deleteRecursively(project);
         }
@@ -454,6 +642,8 @@ public class ProjectAnalyzerTest {
             assertEquals("preexisting", metadata.getBytecodeOrigin());
             assertFalse("Failed attempted builds must not proceed with stale bytecode by default",
                     metadata.isAnalysisCanProceed());
+            assertTrue("Failed builds should retain a diagnostic output tail",
+                    metadata.getBuildOutputTail().contains("Broken.java"));
         } finally {
             deleteRecursively(project);
         }
@@ -488,6 +678,33 @@ public class ProjectAnalyzerTest {
     }
 
     @Test
+    public void discoversConventionalAndroidSourcesAndCompiledOutputs() throws IOException {
+        Path project = Files.createTempDirectory("cocomut-android-layout-");
+        try {
+            Files.writeString(project.resolve("settings.gradle"), "include ':library'\n");
+            Files.createDirectories(project.resolve("library/src/main/java/example"));
+            Files.writeString(project.resolve("library/src/main/java/example/Library.java"),
+                    "package example; class Library {}\n");
+            Path classes = Files.createDirectories(project.resolve(
+                    "library/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/example"));
+            Files.write(classes.resolve("Library.class"), new byte[] {0, 0, 0, 0});
+
+            ProjectMetadata metadata = new ProjectAnalyzer(ContextRequest.builder()
+                    .projectRoot(project)
+                    .skipBuild(true)
+                    .build()).analyze();
+
+            assertTrue(metadata.getSourceRoots().contains(
+                    project.resolve("library/src/main/java").toAbsolutePath().normalize()));
+            assertTrue(metadata.getMainClassOutputs().stream().anyMatch(path ->
+                    path.endsWith(Path.of(
+                            "library/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes"))));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void projectJarPathIsRemovedFromDependencyClasspath() throws IOException {
         Path project = Files.createTempDirectory("cocomut-disjoint-artifacts-");
         try {
@@ -508,27 +725,238 @@ public class ProjectAnalyzerTest {
     }
 
     @Test
-    public void failedManifestHasMissingJsonlDiagnosticsAndCurrentSchemaVersion() throws Exception {
+    public void failedManifestWithoutJsonlDoesNotAddProvenanceFailure() throws Exception {
         Path project = Files.createTempDirectory("cocomut-failed-manifest-");
         Path output = Files.createTempDirectory("cocomut-failed-manifest-out-");
         try {
             java.util.Map<String, Object> report = new java.util.LinkedHashMap<>();
-            report.put("status", "ERROR");
+            report.put("status", "FAILED");
+            report.put("failure_codes", List.of("BUILD_FAILED"));
             Path manifest = ExtractionManifest.write(output, manifestMetadata(project, project),
                     null, java.util.Map.of(), "3".repeat(64), null, report);
 
             JsonNode root = new ObjectMapper().readTree(manifest.toFile());
-            assertEquals("0.3.0", root.path("schema_version").asText());
+            assertEquals("0.4.0", root.path("schema_version").asText());
             JsonNode emitted = root.path("hashes").path("emitted_jsonl");
-            assertEquals("missing", emitted.path("status").asText());
-            assertTrue("Missing JSONL hash entries must include an explanatory error",
-                    emitted.path("errors").size() > 0);
-            assertTrue("Manifest hash failures must be reflected into the execution report",
-                    root.path("execution").path("provenance_hash_failures").size() > 0);
+            assertEquals("empty", emitted.path("status").asText());
+            assertEquals(0, emitted.path("errors").size());
+            assertEquals(0, root.path("execution").path("provenance_hash_failures").size());
+            assertFalse(root.path("execution").path("failure_codes").toString().contains("PROVENANCE_FAILED"));
             assertValidExtractionManifest(manifest);
         } finally {
             deleteRecursively(project);
             deleteRecursively(output);
+        }
+    }
+
+    @Test
+    public void vendorConstrainedMavenToolchainDoesNotUseSynthesizedVersionOnlyInventory() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-vendor-toolchain-");
+        try {
+            Files.writeString(project.resolve("pom.xml"), """
+                    <project><modelVersion>4.0.0</modelVersion>
+                      <groupId>p</groupId><artifactId>a</artifactId><version>1</version>
+                      <build><plugins><plugin><artifactId>maven-compiler-plugin</artifactId>
+                        <configuration><jdkToolchain><version>17</version><vendor>temurin</vendor></jdkToolchain></configuration>
+                      </plugin></plugins></build>
+                    </project>
+                    """);
+
+            assertTrue(ProjectAnalyzer.requiresNonVersionToolchainTokens(Files.readString(project.resolve("pom.xml"))));
+            assertEquals(null, new ProjectAnalyzer(project).isolatedMavenToolchainsFile());
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void moduleVendorConstraintPreventsVersionOnlyReactorToolchain() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-module-vendor-toolchain-");
+        try {
+            Files.createDirectories(project.resolve("module"));
+            Files.writeString(project.resolve("pom.xml"), """
+                    <project><modelVersion>4.0.0</modelVersion>
+                      <groupId>p</groupId><artifactId>root</artifactId><version>1</version>
+                      <packaging>pom</packaging><modules><module>module</module></modules>
+                      <build><plugins><plugin><artifactId>maven-toolchains-plugin</artifactId></plugin></plugins></build>
+                    </project>
+                    """);
+            Files.writeString(project.resolve("module/pom.xml"), """
+                    <project><modelVersion>4.0.0</modelVersion>
+                      <parent><groupId>p</groupId><artifactId>root</artifactId><version>1</version></parent>
+                      <artifactId>module</artifactId>
+                      <build><plugins><plugin><artifactId>maven-compiler-plugin</artifactId>
+                        <configuration><jdkToolchain><version>17</version><vendor>temurin</vendor></jdkToolchain></configuration>
+                      </plugin></plugins></build>
+                    </project>
+                    """);
+
+            assertEquals(null, new ProjectAnalyzer(project).isolatedMavenToolchainsFile());
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void repositoryMavenToolchainsFileRemainsAuthoritative() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-project-toolchains-");
+        try {
+            Files.writeString(project.resolve("pom.xml"), """
+                    <project><modelVersion>4.0.0</modelVersion>
+                      <groupId>p</groupId><artifactId>a</artifactId><version>1</version>
+                      <build><plugins><plugin><artifactId>maven-toolchains-plugin</artifactId></plugin></plugins></build>
+                    </project>
+                    """);
+            Path toolchains = project.resolve(".mvn/toolchains.xml");
+            Files.createDirectories(toolchains.getParent());
+            Files.writeString(toolchains, "<toolchains/>\n");
+
+            assertEquals(toolchains.toAbsolutePath().normalize(),
+                    new ProjectAnalyzer(project).isolatedMavenToolchainsFile());
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void failedMavenBuildDoesNotRetryClasspathModelAndDiscardMetadata() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-missing-maven-");
+        try {
+            Files.createDirectories(project.resolve(".mvn/wrapper"));
+            Files.writeString(project.resolve(".mvn/wrapper/maven-wrapper.properties"), "distributionUrl=unused\n");
+            Path wrapper = project.resolve("mvnw");
+            Files.writeString(wrapper, "#!/definitely/missing/interpreter\n");
+            assertTrue(wrapper.toFile().setExecutable(true));
+            Files.writeString(project.resolve("pom.xml"), """
+                    <project><modelVersion>4.0.0</modelVersion>
+                      <groupId>p</groupId><artifactId>a</artifactId><version>1</version>
+                    </project>
+                    """);
+
+            ProjectMetadata metadata = new ProjectAnalyzer(ContextRequest.builder()
+                    .projectRoot(project).allowUnsandboxedBuild().build()).analyze();
+
+            assertTrue(metadata.isBuildAttempted());
+            assertFalse(metadata.isBuildSucceeded());
+            assertEquals("NOT_ATTEMPTED", metadata.getMavenDependencyClasspathStatus());
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void terminalFailureAfterLargeProcessOutputRemainsClassifiable() throws Exception {
+        org.junit.Assume.assumeFalse(System.getProperty("os.name", "").toLowerCase().contains("win"));
+        Path project = Files.createTempDirectory("cocomut-large-build-log-");
+        try {
+            Files.createDirectories(project.resolve(".mvn/wrapper"));
+            Files.writeString(project.resolve(".mvn/wrapper/maven-wrapper.properties"), "distributionUrl=unused\n");
+            Path wrapper = project.resolve("mvnw");
+            Files.writeString(wrapper, """
+                    #!/bin/sh
+                    head -c 1100000 /dev/zero | tr '\\000' x
+                    printf '\\nerror: cannot find symbol\\n'
+                    exit 1
+                    """);
+            assertTrue(wrapper.toFile().setExecutable(true));
+            Files.writeString(project.resolve("pom.xml"), """
+                    <project><modelVersion>4.0.0</modelVersion>
+                      <groupId>p</groupId><artifactId>a</artifactId><version>1</version>
+                    </project>
+                    """);
+
+            ProjectMetadata metadata = new ProjectAnalyzer(ContextRequest.builder()
+                    .projectRoot(project).allowUnsandboxedBuild().build()).analyze();
+
+            assertEquals(BuildFailureReason.BUILD_FAILED_PROJECT_COMPILATION_ERROR,
+                    metadata.getBuildFailureReason());
+            assertTrue(metadata.getBuildOutputTail().contains("cannot find symbol"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void interruptedBuildTerminatesWrapperAndRestoresInterrupt() throws Exception {
+        org.junit.Assume.assumeFalse(System.getProperty("os.name", "").toLowerCase().contains("win"));
+        Path project = Files.createTempDirectory("cocomut-build-interrupt-");
+        java.util.concurrent.atomic.AtomicReference<ProjectMetadata> result =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<Throwable> failure =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicBoolean interruptRestored =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+        try {
+            Files.createDirectories(project.resolve(".mvn/wrapper"));
+            Files.writeString(project.resolve(".mvn/wrapper/maven-wrapper.properties"), "distributionUrl=unused\n");
+            Path pidFile = project.resolve("wrapper.pid");
+            Path childPidFile = project.resolve("child.pid");
+            Path wrapper = project.resolve("mvnw");
+            Files.writeString(wrapper, """
+                    #!/bin/sh
+                    echo $$ > wrapper.pid
+                    sleep 60 &
+                    echo $! > child.pid
+                    wait
+                    """);
+            assertTrue(wrapper.toFile().setExecutable(true));
+            Files.writeString(project.resolve("pom.xml"), """
+                    <project><modelVersion>4.0.0</modelVersion>
+                      <groupId>p</groupId><artifactId>a</artifactId><version>1</version>
+                    </project>
+                    """);
+
+            ProjectAnalyzer analyzer = new ProjectAnalyzer(ContextRequest.builder()
+                    .projectRoot(project).allowUnsandboxedBuild().build());
+            Thread worker = new Thread(() -> {
+                try {
+                    result.set(analyzer.analyze());
+                } catch (Throwable throwable) {
+                    failure.set(throwable);
+                } finally {
+                    interruptRestored.set(Thread.currentThread().isInterrupted());
+                }
+            }, "cocomut-interrupted-build-test");
+            worker.start();
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+            while ((!Files.isRegularFile(pidFile) || !Files.isRegularFile(childPidFile))
+                    && System.nanoTime() < deadline) {
+                Thread.sleep(25);
+            }
+            assertTrue("Maven wrapper must start before cancellation", Files.isRegularFile(pidFile));
+            assertTrue("Wrapper child must start before cancellation", Files.isRegularFile(childPidFile));
+            long pid = Long.parseLong(Files.readString(pidFile).trim());
+            long childPid = Long.parseLong(Files.readString(childPidFile).trim());
+
+            worker.interrupt();
+            worker.join(10_000);
+
+            assertFalse("Interrupted analysis must return after cleanup", worker.isAlive());
+            assertEquals("Interrupted analysis should return structured metadata", null, failure.get());
+            assertTrue("Interrupted status must be restored", interruptRestored.get());
+            assertEquals(BuildFailureReason.BUILD_FAILED_INTERRUPTED, result.get().getBuildFailureReason());
+            assertEquals(1, result.get().getBuildAttempts().size());
+            assertEquals(BuildFailureReason.BUILD_FAILED_INTERRUPTED,
+                    result.get().getBuildAttempts().get(0).failureReason());
+            assertFalse("Build wrapper must be gone before analysis returns",
+                    ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false));
+            assertFalse("Build descendants must be gone before analysis returns",
+                    ProcessHandle.of(childPid).map(ProcessHandle::isAlive).orElse(false));
+            assertFalse("Build output drainer must be gone before analysis returns",
+                    Thread.getAllStackTraces().keySet().stream().anyMatch(thread ->
+                            thread.isAlive() && "cocomut-build-output-drainer".equals(thread.getName())));
+        } finally {
+            for (String pidName : List.of("wrapper.pid", "child.pid")) {
+                if (Files.isRegularFile(project.resolve(pidName))) {
+                    try {
+                        long pid = Long.parseLong(Files.readString(project.resolve(pidName)).trim());
+                        ProcessHandle.of(pid).filter(ProcessHandle::isAlive).ifPresent(ProcessHandle::destroyForcibly);
+                    } catch (Exception ignored) {
+                        // Best-effort cleanup for a failed assertion.
+                    }
+                }
+            }
+            deleteRecursively(project);
         }
     }
 

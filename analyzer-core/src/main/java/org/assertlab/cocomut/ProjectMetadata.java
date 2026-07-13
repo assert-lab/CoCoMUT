@@ -13,6 +13,8 @@ import java.util.Objects;
 public class ProjectMetadata {
     private final String projectName;
     private final Path projectPath;
+    private final Path buildRoot;
+    private final List<Path> buildRootCandidates;
     private final String buildSystem;  // "maven" or "gradle"
     private final String javaVersion;
     private final Path sourceRoot;
@@ -29,6 +31,13 @@ public class ProjectMetadata {
     private final int buildExitCode;
     private final boolean buildSucceeded;
     private final boolean buildTimedOut;
+    private final boolean buildBlocked;
+    private final String buildOutputTail;
+    private final BuildFailureReason buildFailureReason;
+    private final String buildJavaHome;
+    private final String buildJavaVersion;
+    private final String buildJavaEvidence;
+    private final List<BuildAttempt> buildAttempts;
     private final boolean buildSkipped;
     private final boolean buildSandboxed;
     private final ContextRequest.BuildPolicy buildPolicy;
@@ -49,6 +58,8 @@ public class ProjectMetadata {
     private ProjectMetadata(Builder builder) {
         this.projectName = Objects.requireNonNull(builder.projectName, "projectName cannot be null");
         this.projectPath = Objects.requireNonNull(builder.projectPath, "projectPath cannot be null");
+        this.buildRoot = builder.buildRoot == null ? this.projectPath : builder.buildRoot;
+        this.buildRootCandidates = Collections.unmodifiableList(safeList(builder.buildRootCandidates));
         this.buildSystem = Objects.requireNonNull(builder.buildSystem, "buildSystem cannot be null");
         this.javaVersion = Objects.requireNonNull(builder.javaVersion, "javaVersion cannot be null");
         this.sourceRoot = Objects.requireNonNull(builder.sourceRoot, "sourceRoot cannot be null");
@@ -65,6 +76,16 @@ public class ProjectMetadata {
         this.buildExitCode = builder.buildExitCode;
         this.buildSucceeded = builder.buildSucceeded;
         this.buildTimedOut = builder.buildTimedOut;
+        this.buildBlocked = builder.buildBlocked;
+        this.buildOutputTail = builder.buildOutputTail == null ? "" : builder.buildOutputTail;
+        this.buildFailureReason = builder.buildFailureReason == null
+                ? BuildFailureReason.BUILD_FAILED_UNKNOWN_ERROR : builder.buildFailureReason;
+        this.buildJavaHome = builder.buildJavaHome == null ? "" : builder.buildJavaHome;
+        this.buildJavaVersion = builder.buildJavaVersion == null ? "inherited" : builder.buildJavaVersion;
+        this.buildJavaEvidence = builder.buildJavaEvidence == null ? "inherited_environment" : builder.buildJavaEvidence;
+        this.buildAttempts = Collections.unmodifiableList(builder.buildAttempts == null
+                ? List.of()
+                : List.copyOf(builder.buildAttempts));
         this.buildSkipped = builder.buildSkipped;
         this.buildSandboxed = builder.buildSandboxed;
         this.buildPolicy = builder.buildPolicy;
@@ -100,6 +121,14 @@ public class ProjectMetadata {
 
     public Path getProjectPath() {
         return projectPath;
+    }
+
+    public Path getBuildRoot() {
+        return buildRoot;
+    }
+
+    public List<Path> getBuildRootCandidates() {
+        return buildRootCandidates;
     }
 
     public String getBuildSystem() {
@@ -164,6 +193,43 @@ public class ProjectMetadata {
 
     public boolean isBuildTimedOut() {
         return buildTimedOut;
+    }
+
+    public boolean isBuildBlocked() {
+        return buildBlocked;
+    }
+
+    public String getBuildOutputTail() {
+        return buildOutputTail;
+    }
+
+    public BuildFailureReason getBuildFailureReason() {
+        return buildFailureReason;
+    }
+
+    public String getBuildJavaHome() {
+        return buildJavaHome;
+    }
+
+    public String getBuildJavaVersion() {
+        return buildJavaVersion;
+    }
+
+    public String getBuildJavaEvidence() {
+        return buildJavaEvidence;
+    }
+
+    public List<BuildAttempt> getBuildAttempts() {
+        return buildAttempts;
+    }
+
+    public String getMavenDependencyClasspathStatus() {
+        List<BuildAttempt> attempts = buildAttempts.stream()
+                .filter(attempt -> "maven_dependency_classpath".equals(attempt.action()))
+                .toList();
+        if (attempts.isEmpty()) return "NOT_ATTEMPTED";
+        BuildAttempt terminal = attempts.get(attempts.size() - 1);
+        return terminal.exitCode() == 0 && !terminal.timedOut() ? "SUCCESS" : "PARTIAL";
     }
 
     public boolean isBuildSkipped() {
@@ -249,6 +315,7 @@ public class ProjectMetadata {
                 ", compileStatus='" + compileStatus + '\'' +
                 ", buildAttempted=" + buildAttempted +
                 ", buildSkipped=" + buildSkipped +
+                ", buildOutputTailChars=" + buildOutputTail.length() +
                 ", explicitClassOutputDirs=" + explicitClassOutputDirs.size() +
                 ", explicitTestClassOutputDirs=" + explicitTestClassOutputDirs.size() +
                 ", explicitProjectJars=" + explicitProjectJars.size() +
@@ -262,6 +329,8 @@ public class ProjectMetadata {
     public static class Builder {
         private String projectName;
         private Path projectPath;
+        private Path buildRoot;
+        private List<Path> buildRootCandidates = Collections.emptyList();
         private String buildSystem;
         private String javaVersion;
         private Path sourceRoot;
@@ -278,6 +347,13 @@ public class ProjectMetadata {
         private int buildExitCode = -1;
         private boolean buildSucceeded = false;
         private boolean buildTimedOut = false;
+        private boolean buildBlocked = false;
+        private String buildOutputTail = "";
+        private BuildFailureReason buildFailureReason = BuildFailureReason.NONE;
+        private String buildJavaHome = "";
+        private String buildJavaVersion = "inherited";
+        private String buildJavaEvidence = "inherited_environment";
+        private List<BuildAttempt> buildAttempts = Collections.emptyList();
         private boolean buildSkipped = false;
         private boolean buildSandboxed = false;
         private ContextRequest.BuildPolicy buildPolicy = ContextRequest.BuildPolicy.DENY_BUILD;
@@ -304,6 +380,8 @@ public class ProjectMetadata {
             return new Builder()
                     .projectName(src.projectName)
                     .projectPath(src.projectPath)
+                    .buildRoot(src.buildRoot)
+                    .buildRootCandidates(src.buildRootCandidates)
                     .buildSystem(src.buildSystem)
                     .javaVersion(src.javaVersion)
                     .sourceRoot(src.sourceRoot)
@@ -320,6 +398,13 @@ public class ProjectMetadata {
                     .buildExitCode(src.buildExitCode)
                     .buildSucceeded(src.buildSucceeded)
                     .buildTimedOut(src.buildTimedOut)
+                    .buildBlocked(src.buildBlocked)
+                    .buildOutputTail(src.buildOutputTail)
+                    .buildFailureReason(src.buildFailureReason)
+                    .buildJavaHome(src.buildJavaHome)
+                    .buildJavaVersion(src.buildJavaVersion)
+                    .buildJavaEvidence(src.buildJavaEvidence)
+                    .buildAttempts(src.buildAttempts)
                     .buildSkipped(src.buildSkipped)
                     .buildSandboxed(src.buildSandboxed)
                     .buildPolicy(src.buildPolicy)
@@ -345,6 +430,17 @@ public class ProjectMetadata {
 
         public Builder projectPath(Path projectPath) {
             this.projectPath = projectPath;
+            return this;
+        }
+
+        public Builder buildRoot(Path buildRoot) {
+            this.buildRoot = buildRoot;
+            return this;
+        }
+
+        public Builder buildRootCandidates(List<Path> buildRootCandidates) {
+            this.buildRootCandidates = buildRootCandidates == null
+                    ? Collections.emptyList() : List.copyOf(buildRootCandidates);
             return this;
         }
 
@@ -425,6 +521,42 @@ public class ProjectMetadata {
 
         public Builder buildTimedOut(boolean buildTimedOut) {
             this.buildTimedOut = buildTimedOut;
+            return this;
+        }
+
+        public Builder buildBlocked(boolean buildBlocked) {
+            this.buildBlocked = buildBlocked;
+            return this;
+        }
+
+        public Builder buildOutputTail(String buildOutputTail) {
+            this.buildOutputTail = buildOutputTail == null ? "" : buildOutputTail;
+            return this;
+        }
+
+        public Builder buildFailureReason(BuildFailureReason buildFailureReason) {
+            this.buildFailureReason = buildFailureReason == null
+                    ? BuildFailureReason.BUILD_FAILED_UNKNOWN_ERROR : buildFailureReason;
+            return this;
+        }
+
+        public Builder buildJavaHome(String buildJavaHome) {
+            this.buildJavaHome = buildJavaHome == null ? "" : buildJavaHome;
+            return this;
+        }
+
+        public Builder buildJavaVersion(String buildJavaVersion) {
+            this.buildJavaVersion = buildJavaVersion == null ? "inherited" : buildJavaVersion;
+            return this;
+        }
+
+        public Builder buildJavaEvidence(String buildJavaEvidence) {
+            this.buildJavaEvidence = buildJavaEvidence == null ? "inherited_environment" : buildJavaEvidence;
+            return this;
+        }
+
+        public Builder buildAttempts(List<BuildAttempt> buildAttempts) {
+            this.buildAttempts = buildAttempts == null ? Collections.emptyList() : List.copyOf(buildAttempts);
             return this;
         }
 

@@ -1,9 +1,12 @@
 package org.assertlab.cocomut.adapter;
 
+import org.assertlab.cocomut.BuildToolExecutable;
 import org.assertlab.cocomut.ContextRequest;
 import org.assertlab.cocomut.GradleModelReport;
 import org.assertlab.cocomut.ModuleSourceSet;
 import org.assertlab.cocomut.ProjectAnalyzer;
+import org.assertlab.cocomut.BuildJavaSelection;
+import org.assertlab.cocomut.BoundedDiagnosticBuffer;
 import org.assertlab.cocomut.ProjectMetadata;
 
 import java.io.IOException;
@@ -73,15 +76,33 @@ public class GradleProjectAdapter implements ProjectAdapter {
     }
 
     private ProjectMetadata enrichWithGradleModel(ProjectMetadata base, ContextRequest request) {
+        if (!"gradle".equals(base.getBuildSystem())) {
+            return base;
+        }
+        if (base.isBuildBlocked()) {
+            System.out.println("[GradleProjectAdapter] build preflight blocked; Gradle metadata task not executed");
+            return ProjectMetadata.Builder.from(base)
+                    .gradleModelReport(GradleModelReport.skipped("build preflight blocked"))
+                    .build();
+        }
         if (request.skipBuild()) {
             System.out.println("[GradleProjectAdapter] --skip-build active; Gradle metadata task not executed");
             return ProjectMetadata.Builder.from(base)
                     .gradleModelReport(GradleModelReport.skipped("--skip-build"))
                     .build();
         }
+        if (base.isBuildAttempted() && !base.isBuildSucceeded()) {
+            System.out.println("[GradleProjectAdapter] project build failed; Gradle metadata task not executed");
+            return ProjectMetadata.Builder.from(base)
+                    .gradleModelReport(GradleModelReport.skipped("project build did not succeed"))
+                    .build();
+        }
 
         boolean includeTests = includeTests(request);
-        GradleModel nativeModel = resolveGradleModel(includeTests);
+        BuildJavaSelection buildJava = new BuildJavaSelection(
+                base.getBuildJavaHome().isBlank() ? null : Path.of(base.getBuildJavaHome()),
+                base.getBuildJavaVersion(), base.getBuildJavaEvidence());
+        GradleModel nativeModel = resolveGradleModel(includeTests, buildJava);
         if (!nativeModel.report().succeeded()) {
             System.out.println("[GradleProjectAdapter] native classpath resolution "
                     + "unavailable — using base metadata");
@@ -100,7 +121,11 @@ public class GradleProjectAdapter implements ProjectAdapter {
         Set<Path> sourceRoots = new LinkedHashSet<>(nativeModel.sourceRoots());
         Set<Path> testSourceRoots = new LinkedHashSet<>(nativeModel.testSourceRoots());
         Set<Path> mainOutputs = new LinkedHashSet<>(nativeModel.mainOutputs());
+        mainOutputs.addAll(base.getMainClassOutputs());
         Set<Path> testOutputs = new LinkedHashSet<>(nativeModel.testOutputs());
+        testOutputs.addAll(base.getTestClassOutputs());
+        sourceRoots.addAll(sourceRootsForOutputs(mainOutputs, false));
+        testSourceRoots.addAll(sourceRootsForOutputs(testOutputs, true));
         Set<Path> dependencies = new LinkedHashSet<>(base.getDependencyClasspath());
         Set<Path> projectOutputs = new LinkedHashSet<>();
         projectOutputs.addAll(mainOutputs);
@@ -140,6 +165,33 @@ public class GradleProjectAdapter implements ProjectAdapter {
                 .build();
     }
 
+    static List<Path> sourceRootsForOutputs(Iterable<Path> outputs, boolean tests) {
+        Set<Path> roots = new LinkedHashSet<>();
+        for (Path output : outputs) {
+            if (output == null) continue;
+            Path current = output.toAbsolutePath().normalize();
+            while (current != null && current.getFileName() != null
+                    && !"build".equals(current.getFileName().toString())) {
+                current = current.getParent();
+            }
+            Path module = current == null ? null : current.getParent();
+            if (module == null) continue;
+            Path sourceRoot = module.resolve(tests ? "src/test/java" : "src/main/java");
+            if (Files.isDirectory(sourceRoot) && containsJavaSource(sourceRoot)) {
+                roots.add(sourceRoot.toAbsolutePath().normalize());
+            }
+        }
+        return new ArrayList<>(roots);
+    }
+
+    private static boolean containsJavaSource(Path root) {
+        try (var walk = Files.walk(root)) {
+            return walk.anyMatch(path -> Files.isRegularFile(path) && path.toString().endsWith(".java"));
+        } catch (IOException ignored) {
+            return false;
+        }
+    }
+
     private static java.util.Map<String, String> artifactOrigins(ProjectMetadata base,
                                                                   Set<Path> mainOutputs,
                                                                   Set<Path> testOutputs,
@@ -161,6 +213,9 @@ public class GradleProjectAdapter implements ProjectAdapter {
     }
 
     private static boolean canTrustBytecodeForAnalysis(ProjectMetadata base) {
+        if (base.isBuildBlocked()) {
+            return false;
+        }
         if (!base.isBuildAttempted()) {
             return true;
         }
@@ -171,6 +226,9 @@ public class GradleProjectAdapter implements ProjectAdapter {
     }
 
     private static String compileStatus(ProjectMetadata base, boolean bytecodeAvailable) {
+        if (base.isBuildBlocked()) {
+            return base.getCompileStatus();
+        }
         if (!base.isBuildAttempted()) {
             return bytecodeAvailable ? base.getCompileStatus().replace("; NO PROJECT BYTECODE", "; PROJECT BYTECODE AVAILABLE")
                     : base.getCompileStatus();
@@ -199,12 +257,14 @@ public class GradleProjectAdapter implements ProjectAdapter {
      * Run Gradle with an init script to print the compile classpath.
      * Returns an empty list on any failure (Gradle missing, offline, timeout, etc.).
      */
-    private GradleModel resolveGradleModel(boolean includeTests) {
+    private GradleModel resolveGradleModel(boolean includeTests, BuildJavaSelection buildJava) {
         Path initScript = null;
+        Process process = null;
         try {
             initScript = writeInitScript(includeTests);
             List<String> cmd = new ArrayList<>();
             cmd.add(gradleExecutable());
+            cmd.add("--no-daemon");
             cmd.add("--init-script");
             cmd.add(initScript.toString());
             cmd.add("analyzerPrintClasspath");
@@ -214,12 +274,31 @@ public class GradleProjectAdapter implements ProjectAdapter {
             ProcessBuilder pb = new ProcessBuilder(cmd);
             pb.directory(projectPath.toFile());
             pb.redirectErrorStream(true);
-            Process p = pb.start();
+            buildJava.apply(pb);
+            process = pb.start();
+            Process running = process;
 
-            StringBuilder output = new StringBuilder();
+            BoundedDiagnosticBuffer diagnosticOutput = new BoundedDiagnosticBuffer(1_000_000, 128_000);
+            StringBuilder modelRecords = new StringBuilder();
+            java.util.concurrent.atomic.AtomicBoolean modelRecordsTruncated =
+                    new java.util.concurrent.atomic.AtomicBoolean(false);
             Thread drainer = new Thread(() -> {
-                try (var input = p.getInputStream()) {
-                    output.append(new String(input.readAllBytes(), StandardCharsets.UTF_8));
+                try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(
+                        running.getInputStream(), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (line.startsWith("ANALYZER_")) {
+                            synchronized (modelRecords) {
+                                if (modelRecords.length() < 16_000_000) {
+                                    modelRecords.append(line).append('\n');
+                                } else {
+                                    modelRecordsTruncated.set(true);
+                                }
+                            }
+                        } else {
+                            diagnosticOutput.appendLine(line);
+                        }
+                    }
                 } catch (IOException ignored) {
                     // Gradle output is diagnostic only.
                 }
@@ -227,14 +306,14 @@ public class GradleProjectAdapter implements ProjectAdapter {
             drainer.setDaemon(true);
             drainer.start();
 
-            if (!p.waitFor(GRADLE_TIMEOUT_MIN, TimeUnit.MINUTES)) {
-                p.destroyForcibly();
-                drainer.join(1000);
+            if (!process.waitFor(GRADLE_TIMEOUT_MIN, TimeUnit.MINUTES)) {
+                terminateAndWait(process);
+                drainer.join();
                 return GradleModel.failed(true, "Gradle model task timed out");
             }
-            drainer.join(1000);
-            if (p.exitValue() != 0) {
-                return GradleModel.failed(false, firstLines(output.toString()));
+            drainer.join();
+            if (process.exitValue() != 0) {
+                return GradleModel.failed(false, firstLines(diagnosticOutput.transcript()));
             }
 
             List<Path> classpath = new ArrayList<>();
@@ -244,9 +323,12 @@ public class GradleProjectAdapter implements ProjectAdapter {
             List<Path> testOutputs = new ArrayList<>();
             String javaVersion = "unknown";
             List<String> diagnostics = new ArrayList<>();
+            if (modelRecordsTruncated.get()) {
+                diagnostics.add("model output exceeded the 16 MB bounded record limit");
+            }
             Map<String, ModuleSourceSetBuilder> sourceSetBuilders = new LinkedHashMap<>();
             int resolvedProjects = 0;
-            for (String line : output.toString().split("\\R")) {
+            for (String line : modelRecords.toString().split("\\R")) {
                 if (line.startsWith(CP_PREFIX)) {
                     Path jar = Path.of(line.substring(CP_PREFIX.length()).trim());
                     if (Files.exists(jar)) {
@@ -294,12 +376,33 @@ public class GradleProjectAdapter implements ProjectAdapter {
             }
             return new GradleModel(unique(sourceRoots), unique(testSourceRoots), unique(mainOutputs),
                     unique(testOutputs), unique(classpath), javaVersion, report, sourceSets);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return GradleModel.failed(false, "Gradle model task interrupted");
         } catch (Exception e) {
             return GradleModel.failed(false, e.getClass().getSimpleName());
         } finally {
+            terminateAndWait(process);
             if (initScript != null) {
                 try { Files.deleteIfExists(initScript); } catch (IOException ignored) { }
             }
+        }
+    }
+
+    private static void terminateAndWait(Process process) {
+        if (process == null || !process.isAlive()) return;
+        process.descendants().forEach(ProcessHandle::destroy);
+        process.destroy();
+        try {
+            if (!process.waitFor(5, TimeUnit.SECONDS)) {
+                process.descendants().forEach(ProcessHandle::destroyForcibly);
+                process.destroyForcibly();
+                process.waitFor(5, TimeUnit.SECONDS);
+            }
+        } catch (InterruptedException e) {
+            process.descendants().forEach(ProcessHandle::destroyForcibly);
+            process.destroyForcibly();
+            Thread.currentThread().interrupt();
         }
     }
 
@@ -342,11 +445,7 @@ public class GradleProjectAdapter implements ProjectAdapter {
      */
     private String gradleExecutable() {
         boolean win = System.getProperty("os.name", "").toLowerCase().contains("win");
-        Path wrapper = projectPath.resolve(win ? "gradlew.bat" : "gradlew");
-        if (Files.exists(wrapper)) {
-            return wrapper.toAbsolutePath().toString();
-        }
-        return win ? "gradle.bat" : "gradle";
+        return BuildToolExecutable.resolve(projectPath, "gradle", win);
     }
 
     /**
@@ -392,6 +491,19 @@ public class GradleProjectAdapter implements ProjectAdapter {
                 "                                try { ssCp.addAll(ss.compileClasspath.files) } catch (Throwable e) { println '" + DIAGNOSTIC_PREFIX + "sourceSetClasspath:' + p.path + ':' + ss.name + ':compile:' + e.class.simpleName }\n" +
                 "                                try { ssCp.addAll(ss.runtimeClasspath.files) } catch (Throwable e) { println '" + DIAGNOSTIC_PREFIX + "sourceSetClasspath:' + p.path + ':' + ss.name + ':runtime:' + e.class.simpleName }\n" +
                 "                                ssCp.each { f -> if (f.exists()) println '" + SOURCESET_CP_PREFIX + "' + p.path + '\\t' + ss.name + '\\t' + f.absolutePath }\n" +
+                "                            }\n" +
+                "                        }\n" +
+                "                    } catch (Throwable ignored) { }\n" +
+                "                }\n" +
+                "                def androidExt = p.extensions.findByName('android')\n" +
+                "                if (androidExt != null) {\n" +
+                "                    try {\n" +
+                "                        androidExt.sourceSets.each { ss ->\n" +
+                "                            if (sourceSetNames.contains(ss.name)) {\n" +
+                "                                def javaDirs = [] as LinkedHashSet\n" +
+                "                                try { javaDirs.addAll(ss.java.srcDirs) } catch (Throwable ignored) { }\n" +
+                "                                javaDirs.each { d -> if (d.exists()) println((ss.name == 'test' ? '" + TEST_SOURCE_PREFIX + "' : '" + SOURCE_PREFIX + "') + d.absolutePath) }\n" +
+                "                                javaDirs.each { d -> if (d.exists()) println '" + SOURCESET_SOURCE_PREFIX + "' + p.path + '\\t' + ss.name + '\\t' + d.absolutePath }\n" +
                 "                            }\n" +
                 "                        }\n" +
                 "                    } catch (Throwable ignored) { }\n" +

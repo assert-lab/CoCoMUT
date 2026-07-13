@@ -13,6 +13,8 @@ import java.nio.file.FileSystems;
 import java.nio.file.PathMatcher;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.*;
 
 /**
@@ -69,6 +71,7 @@ final class Orchestrator {
     private Map<String, MethodContext> methodContexts;
     private Map<String, String> contextExtractionFailures = new LinkedHashMap<>();
     private final Set<FailureCode> failureCodes = new LinkedHashSet<>();
+    private boolean partialWithoutFailure;
     private ExtractionManifest.GitInfo gitAtStart;
 
     Orchestrator(Path projectPath) {
@@ -181,16 +184,22 @@ final class Orchestrator {
                 : ExtractionManifest.captureGitInfo(projectPath);
 
         boolean success = false;
+        int currentPhase = 0;
         try {
+            currentPhase = 1;
             if (!executePhase1()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 1); return false; }
             configureSourceFileLimit();
+            currentPhase = 2;
             openSourceSession();
             if (!executePhase2()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 2); return false; }
+            currentPhase = 3;
             if (!executePhase3()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 3); return false; }
+            currentPhase = 4;
             if (!executePhase4()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 4); return false; }
+            currentPhase = 5;
             if (!executePhase5()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 5); return false; }
 
-            if (failureCodes.isEmpty()) {
+            if (failureCodes.isEmpty() && !partialWithoutFailure) {
                 executionReport.put("status", "SUCCESS");
                 success = true;
             } else {
@@ -199,9 +208,8 @@ final class Orchestrator {
             executionReport.put("completed_phases", 5);
             return success;
 
-        } catch (Exception e) {
-            executionReport.put("status", "ERROR");
-            executionReport.put("error_message", e.getMessage());
+        } catch (Throwable t) {
+            recordUnhandledFailure(currentPhase, t);
             return false;
         } finally {
             long endTime = System.currentTimeMillis();
@@ -219,6 +227,49 @@ final class Orchestrator {
             closeSourceSession();
             restoreSourceFileLimit();
         }
+    }
+
+    private void recordUnhandledFailure(int phase, Throwable failure) {
+        executionReport.put("status", "ERROR");
+        if (phase > 0) {
+            executionReport.put("failed_at_phase", phase);
+            executionReport.put("phase_" + phase + "_error", throwableSummary(failure));
+        }
+        executionReport.put("error_type", failure.getClass().getName());
+        executionReport.put("error_message", throwableSummary(failure));
+        executionReport.put("error_stacktrace", stackTracePrefix(failure, 80));
+        failureCodes.add(failureCodeForUnhandledFailure(phase));
+    }
+
+    static FailureCode failureCodeForUnhandledFailureForTest(int phase) {
+        return failureCodeForUnhandledFailure(phase);
+    }
+
+    private static FailureCode failureCodeForUnhandledFailure(int phase) {
+        return switch (phase) {
+            case 1 -> FailureCode.METADATA_RESOLUTION_FAILED;
+            case 2 -> FailureCode.SOURCE_ANALYSIS_FAILED;
+            case 3 -> FailureCode.CALL_GRAPH_UNAVAILABLE;
+            case 4 -> FailureCode.CONTEXT_EXTRACTION_FAILED;
+            case 5 -> FailureCode.JSON_GENERATION_FAILED;
+            default -> FailureCode.ERROR;
+        };
+    }
+
+    private static String throwableSummary(Throwable failure) {
+        String message = failure.getMessage();
+        if (message == null || message.isBlank()) {
+            return failure.getClass().getName();
+        }
+        return failure.getClass().getName() + ": " + message;
+    }
+
+    private static String stackTracePrefix(Throwable failure, int maxLines) {
+        StringWriter out = new StringWriter();
+        failure.printStackTrace(new PrintWriter(out));
+        String[] lines = out.toString().split("\\R", -1);
+        int limit = Math.min(maxLines, lines.length);
+        return String.join(System.lineSeparator(), Arrays.copyOf(lines, limit));
     }
 
     private boolean executePhase1() {
@@ -239,6 +290,9 @@ final class Orchestrator {
             }
 
             executionReport.put("phase_1_project", projectMetadata.getProjectName());
+            executionReport.put("phase_1_build_root", projectMetadata.getBuildRoot().toString());
+            executionReport.put("phase_1_build_root_candidates",
+                    projectMetadata.getBuildRootCandidates().stream().map(Path::toString).toList());
             executionReport.put("phase_1_build_system", projectMetadata.getBuildSystem());
             executionReport.put("phase_1_java_version", projectMetadata.getJavaVersion());
             executionReport.put("phase_1_compiles", projectMetadata.isCompiles());
@@ -247,6 +301,22 @@ final class Orchestrator {
             executionReport.put("phase_1_build_exit_code", projectMetadata.getBuildExitCode());
             executionReport.put("phase_1_build_succeeded", projectMetadata.isBuildSucceeded());
             executionReport.put("phase_1_build_timed_out", projectMetadata.isBuildTimedOut());
+            executionReport.put("phase_1_build_blocked", projectMetadata.isBuildBlocked());
+            executionReport.put("phase_1_build_output_tail", projectMetadata.getBuildOutputTail());
+            executionReport.put("phase_1_build_failure_reason", projectMetadata.getBuildFailureReason().toString());
+            executionReport.put("phase_1_build_java_home", projectMetadata.getBuildJavaHome());
+            executionReport.put("phase_1_build_java_version", projectMetadata.getBuildJavaVersion());
+            executionReport.put("phase_1_build_java_evidence", projectMetadata.getBuildJavaEvidence());
+            executionReport.put("phase_1_build_attempts", projectMetadata.getBuildAttempts());
+            projectMetadata.getBuildAttempts().stream()
+                    .filter(attempt -> "build".equals(attempt.action()))
+                    .reduce((first, second) -> second)
+                    .ifPresent(attempt -> executionReport.put("phase_1_build_command", attempt.command()));
+            executionReport.put("phase_1_maven_dependency_classpath_status",
+                    projectMetadata.getMavenDependencyClasspathStatus());
+            if ("PARTIAL".equals(projectMetadata.getMavenDependencyClasspathStatus())) {
+                failureCodes.add(FailureCode.MODEL_RESOLUTION_PARTIAL);
+            }
             executionReport.put("phase_1_build_skipped", projectMetadata.isBuildSkipped());
             executionReport.put("phase_1_build_sandboxed", projectMetadata.isBuildSandboxed());
             executionReport.put("phase_1_gradle_model", projectMetadata.getGradleModelReport());
@@ -268,6 +338,16 @@ final class Orchestrator {
             executionReport.put("phase_1_test_class_outputs", projectMetadata.getTestClassOutputs().size());
             executionReport.put("phase_1_project_artifact_jars", projectMetadata.getProjectArtifactJars().size());
             executionReport.put("phase_1_project_bytecode_locations", projectBytecodeLocations().size());
+            int maximumClassfileMajor = BytecodeVersionInspector.maximumMajor(projectBytecodeLocations());
+            executionReport.put("phase_1_max_classfile_major", maximumClassfileMajor);
+            executionReport.put("phase_1_max_supported_classfile_major", BytecodeVersionInspector.MAX_SUPPORTED_MAJOR);
+            executionReport.put("phase_1_bytecode_version_supported",
+                    maximumClassfileMajor < 0 || maximumClassfileMajor <= BytecodeVersionInspector.MAX_SUPPORTED_MAJOR);
+            if (maximumClassfileMajor > BytecodeVersionInspector.MAX_SUPPORTED_MAJOR) {
+                partialWithoutFailure = true;
+                executionReport.put("phase_1_bytecode_warning", "Project class-file major " + maximumClassfileMajor
+                        + " exceeds parser support through " + BytecodeVersionInspector.MAX_SUPPORTED_MAJOR + ".");
+            }
             executionReport.put("phase_1_dependency_locations", projectMetadata.getDependencyClasspath().size());
             executionReport.put("phase_1_dependency_jars", projectModel.dependencyJars().size());
             executionReport.put("phase_1_explicit_class_outputs", projectMetadata.getExplicitClassOutputDirs().size());
@@ -278,7 +358,20 @@ final class Orchestrator {
             executionReport.put("phase_1_explicit_classpath_files", projectMetadata.getExplicitClasspathFiles().size());
 
             if (!projectMetadata.isAnalysisCanProceed()) {
-                failureCodes.add(FailureCode.BUILD_FAILED);
+                if (projectMetadata.isBuildBlocked()) {
+                    failureCodes.add(FailureCode.BUILD_PREFLIGHT_BLOCKED);
+                } else if (projectMetadata.isBuildSucceeded() && !projectMetadata.isBytecodeAvailable()) {
+                    failureCodes.add(FailureCode.PROJECT_BYTECODE_UNAVAILABLE);
+                } else if (!projectMetadata.isBuildAttempted()
+                        && !Set.of("maven", "gradle", "none").contains(projectMetadata.getBuildSystem())) {
+                    failureCodes.add(FailureCode.BUILD_SYSTEM_UNSUPPORTED);
+                } else if (!projectMetadata.isBuildAttempted() && "none".equals(projectMetadata.getBuildSystem())) {
+                    failureCodes.add(projectMetadata.getBuildRootCandidates().size() > 1
+                            ? FailureCode.BUILD_ROOT_AMBIGUOUS
+                            : FailureCode.PROJECT_BYTECODE_UNAVAILABLE);
+                } else {
+                    failureCodes.add(FailureCode.BUILD_FAILED);
+                }
                 executionReport.put("phase_1_error", projectMetadata.getCompileStatus());
                 return false;
             }
@@ -292,6 +385,7 @@ final class Orchestrator {
             return true;
         } catch (Exception e) {
             executionReport.put("phase_1_error", e.getMessage());
+            failureCodes.add(FailureCode.METADATA_RESOLUTION_FAILED);
             return false;
         }
     }
@@ -346,17 +440,20 @@ final class Orchestrator {
             callGraphGenerator = new CallGraphGenerator(projectMetadata, effectiveAlgorithm);
             if (!callGraphGenerator.initialize()) {
                 callGraphResults = new HashMap<>();
-                failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
+                callGraphGenerator = null;
+                partialWithoutFailure = true;
                 executionReport.put("phase_3_available", false);
+                executionReport.put("phase_3_degraded", true);
                 executionReport.put("phase_3_algorithm", callGraphAlgorithm.toString());
                 executionReport.put("phase_3_effective_algorithm", effectiveAlgorithm.toString());
-                executionReport.put("phase_3_error",
-                        "Static bytecode analysis could not be initialized.");
+                executionReport.put("phase_3_warning",
+                        "Static bytecode analysis could not be initialized; "
+                                + "records will be emitted without caller/callee context.");
                 executionReport.put("phase_3_call_graph_artifact_exists", false);
                 executionReport.put("phase_3_call_graphs_generated", 0);
                 executionReport.put("phase_3_non_empty_call_graphs", 0);
                 executionReport.put("phase_3_call_edges_generated", 0);
-                return false;
+                return true;
             }
 
             callGraphResults = callGraphGenerator.generateForMethods(analysisUniverseMethods, methodInfos);
@@ -392,18 +489,44 @@ final class Orchestrator {
             executionReport.put("phase_3_focal_methods_matched_to_bytecode", matchedToBytecode);
             executionReport.put("phase_3_non_empty_call_graphs", nonEmptyCallGraphResults);
             executionReport.put("phase_3_call_edges_generated", callGraphEdgeCount);
+            if (requiresPartialForBytecodeMatching(matchedToBytecode, methodInfos.size())) {
+                partialWithoutFailure = true;
+                executionReport.put("phase_3_warning",
+                        "Call graph initialized, but no selected source method matched project bytecode. "
+                                + "The emitted records do not contain usable method-level call context; "
+                                + "verify the selected bytecode version and project artifacts.");
+            }
             if (callGraphResults.size() != methodInfos.size() || matchedToBytecode != methodInfos.size()) {
                 long unmatchedFocalMethods = Math.max(0L, methodInfos.size() - matchedToBytecode);
-                executionReport.put("phase_3_warning",
-                        "Call graph generated; " + unmatchedFocalMethods
-                                + " selected method(s) did not receive matched bytecode call graph results.");
+                if (matchedToBytecode > 0) {
+                    executionReport.put("phase_3_warning",
+                            "Call graph generated; " + unmatchedFocalMethods
+                                    + " selected method(s) did not receive matched bytecode call graph results.");
+                }
             }
             return true;
         } catch (Exception e) {
-            executionReport.put("phase_3_error", e.getMessage());
-            failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
-            return false;
+            callGraphGenerator = null;
+            callGraphResults = new HashMap<>();
+            partialWithoutFailure = true;
+            executionReport.put("phase_3_available", false);
+            executionReport.put("phase_3_degraded", true);
+            executionReport.put("phase_3_algorithm", callGraphAlgorithm.toString());
+            executionReport.put("phase_3_effective_algorithm", callGraphAlgorithm.toString());
+            executionReport.put("phase_3_warning",
+                    "Static bytecode analysis failed: " + e.getMessage()
+                            + "; records will be emitted without caller/callee context.");
+            executionReport.put("phase_3_call_graph_artifact_exists", false);
+            executionReport.put("phase_3_call_graphs_generated", 0);
+            executionReport.put("phase_3_focal_methods_matched_to_bytecode", 0);
+            executionReport.put("phase_3_non_empty_call_graphs", 0);
+            executionReport.put("phase_3_call_edges_generated", 0);
+            return true;
         }
+    }
+
+    static boolean requiresPartialForBytecodeMatching(long matchedMethods, long selectedMethods) {
+        return selectedMethods > 0 && matchedMethods == 0;
     }
 
     /**
@@ -721,8 +844,9 @@ final class Orchestrator {
                     executionReport.put("status", "PARTIAL");
                 }
             }
-        } catch (Exception e) {
-            executionReport.put("extraction_manifest_error", e.getMessage());
+        } catch (Throwable e) {
+            executionReport.put("extraction_manifest_error_type", e.getClass().getName());
+            executionReport.put("extraction_manifest_error", throwableSummary(e));
             failureCodes.add(FailureCode.PROVENANCE_FAILED);
             if ("SUCCESS".equals(executionReport.get("status"))) {
                 executionReport.put("status", "PARTIAL");

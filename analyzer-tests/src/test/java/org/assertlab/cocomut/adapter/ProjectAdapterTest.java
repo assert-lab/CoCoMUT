@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.List;
 
 import static org.junit.Assert.*;
 
@@ -73,6 +74,34 @@ public class ProjectAdapterTest {
     }
 
     @Test
+    public void uniqueNestedGradleRootSelectsGradleAdapterOnNormalDispatch() throws IOException {
+        Path nested = tempDir.resolve("service");
+        Files.createDirectories(nested);
+        Files.writeString(nested.resolve("settings.gradle"), "rootProject.name = 'service'\n");
+        Files.writeString(nested.resolve("build.gradle"), "plugins { id 'java' }\n");
+
+        ProjectAdapter adapter = ProjectAdapter.of(tempDir);
+
+        assertTrue("A unique nested Gradle build must retain Gradle model enrichment",
+                adapter instanceof GradleProjectAdapter);
+    }
+
+    @Test
+    public void authoritativeAntRootDoesNotDispatchToIncidentalNestedGradleBuild() throws IOException {
+        Files.writeString(tempDir.resolve("build.xml"), "<project/>\n");
+        Path nested = tempDir.resolve("tools/helper");
+        Files.createDirectories(nested);
+        Files.writeString(nested.resolve("settings.gradle"), "rootProject.name = 'helper'\n");
+        Files.writeString(nested.resolve("build.gradle"), "plugins { id 'java' }\n");
+
+        ProjectAdapter adapter = ProjectAdapter.of(tempDir);
+
+        assertTrue("An authoritative unsupported root must retain generic dispatch",
+                adapter instanceof GenericJavaAdapter);
+        assertEquals(tempDir, org.assertlab.cocomut.ProjectAnalyzer.preferredAdapterRoot(tempDir));
+    }
+
+    @Test
     public void plainDirectoryFallsBackToGenericAdapter() {
         // tempDir has no build descriptor → fallback
         ProjectAdapter adapter = ProjectAdapter.of(tempDir);
@@ -83,11 +112,23 @@ public class ProjectAdapterTest {
     @Test
     public void mavenTakesPrecedenceOverGenericFallback() throws IOException {
         // Both a pom.xml and the (always-matching) generic fallback could apply;
-        // Maven must win because it is registered first.
+        // Maven must win when no Gradle descriptor is present.
         Files.writeString(tempDir.resolve("pom.xml"), "<project/>");
         ProjectAdapter adapter = ProjectAdapter.of(tempDir);
         assertTrue("Maven must take precedence over generic fallback",
                 adapter instanceof MavenProjectAdapter);
+    }
+
+    @Test
+    public void gradleDescriptorsTakePrecedenceOverPom() throws IOException {
+        Files.writeString(tempDir.resolve("pom.xml"), "<project/>");
+        Files.writeString(tempDir.resolve("settings.gradle"), "include 'lib'");
+        Files.writeString(tempDir.resolve("build.gradle"), "plugins { id 'java' }\n");
+
+        ProjectAdapter adapter = ProjectAdapter.of(tempDir);
+
+        assertTrue("Gradle root descriptors should take precedence over a root pom.xml",
+                adapter instanceof GradleProjectAdapter);
     }
 
     @Test
@@ -97,5 +138,19 @@ public class ProjectAdapterTest {
         assertFalse(new GradleProjectAdapter(tempDir).canHandle(tempDir));
         assertTrue("Generic adapter always matches",
                 new GenericJavaAdapter(tempDir).canHandle(tempDir));
+    }
+
+    @Test
+    public void gradleSourceRootsCanBeRecoveredFromBuiltModuleOutputs() throws IOException {
+        Path module = tempDir.resolve("modules/library");
+        Path sourceRoot = module.resolve("src/main/java/example");
+        Path output = module.resolve("build/classes/java/main");
+        Files.createDirectories(sourceRoot);
+        Files.createDirectories(output);
+        Files.writeString(sourceRoot.resolve("Library.java"), "package example; class Library {}\n");
+
+        assertEquals(List.of(module.resolve("src/main/java").toAbsolutePath().normalize()),
+                GradleProjectAdapter.sourceRootsForOutputs(List.of(output), false));
+        assertEquals(List.of(), GradleProjectAdapter.sourceRootsForOutputs(List.of(output), true));
     }
 }

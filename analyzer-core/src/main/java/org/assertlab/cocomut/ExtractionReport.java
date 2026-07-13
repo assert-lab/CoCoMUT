@@ -29,6 +29,16 @@ public final class ExtractionReport {
         return "SUCCESS".equals(status());
     }
 
+    /** Whether the pipeline completed with a documented degradation. */
+    public boolean partial() {
+        return "PARTIAL".equals(status());
+    }
+
+    /** Whether phase 5 emitted JSONL records, including in a partial run. */
+    public boolean usableRecordsEmitted() {
+        return jsonlRows() > 0 && jsonFilesGenerated() > 0;
+    }
+
     public Integer failedAtPhase() {
         return intValue("failed_at_phase");
     }

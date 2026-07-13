@@ -107,7 +107,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         CtType<?> owner = executable.getParent(CtType.class);
         String methodBody = sourceSlice(executable);
         String javadoc = docComment(executable);
-        String rawJavadoc = rawDocComment(executable).orElse(javadoc);
+        String rawJavadoc = rawDocComment(parsed, executable).orElse(javadoc);
         List<JavadocElement> javadocElements = spoonJavadocElements(executable);
         String classJavadoc = owner != null ? docComment(owner) : "";
         String classHierarchy = owner != null ? classHierarchy(owner) : "";
@@ -223,6 +223,8 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return new ParsedProject(project.projectPath(), methods, methodsByUri, executablesByUri,
                 typesByQualifiedName, methodsByClassName, fieldsByClassName,
                 importsByFile, new java.util.concurrent.ConcurrentHashMap<>(),
+                new java.util.concurrent.ConcurrentHashMap<>(),
+                new java.util.concurrent.ConcurrentHashMap<>(),
                 projectClassLoader(project), parsedModels.mode(), parsedModels.stats());
     }
 
@@ -240,29 +242,34 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         List<Path> roots = allSourceRoots(project);
         List<Path> javaFiles = javaFiles(roots, 0);
         if (roots.isEmpty()) {
-            return new ParsedModels(List.of(buildModel(List.of(), complianceLevel(project.javaVersion()), project)),
-                    "classpath", SourceParseStats.empty());
+            ModelBuild built = buildModel(List.of(), complianceLevel(project.javaVersion()), project);
+            return new ParsedModels(List.of(built.model()), built.mode(), SourceParseStats.empty());
         }
 
         try {
-            return new ParsedModels(List.of(buildModel(roots, complianceLevel(project.javaVersion()), project)),
-                    "classpath", new SourceParseStats(javaFiles.size(), javaFiles.size(), List.of()));
+            ModelBuild built = buildModel(roots, complianceLevel(project.javaVersion()), project);
+            return new ParsedModels(List.of(built.model()), built.mode(),
+                    new SourceParseStats(javaFiles.size(), javaFiles.size(), List.of()));
         } catch (RuntimeException combinedFailure) {
             List<CtModel> models = new ArrayList<>();
+            List<String> modes = new ArrayList<>();
             List<Path> failedFiles = new ArrayList<>();
             for (Path root : roots) {
                 try {
-                    models.add(buildModel(List.of(root), complianceLevel(project.javaVersion()), project));
+                    ModelBuild built = buildModel(List.of(root), complianceLevel(project.javaVersion()), project);
+                    models.add(built.model());
+                    modes.add(built.mode());
                 } catch (RuntimeException rootFailure) {
                     ParsedModels parsedRoot = parseJavaFilesIndividually(root, complianceLevel(project.javaVersion()), project);
                     models.addAll(parsedRoot.models());
+                    modes.add(parsedRoot.mode());
                     failedFiles.addAll(parsedRoot.stats().failedFiles());
                 }
             }
             if (models.isEmpty()) {
                 throw combinedFailure;
             }
-            return new ParsedModels(models, "classpath",
+            return new ParsedModels(models, mergedMode(modes),
                     new SourceParseStats(javaFiles.size(), javaFiles.size() - failedFiles.size(), failedFiles));
         }
     }
@@ -271,23 +278,28 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                                                   ProjectModel project)
             throws IOException {
         if (roots.isEmpty()) {
-            return new ParsedModels(List.of(buildModel(List.of(), complianceLevel, project)),
-                    "classpath_limited", SourceParseStats.empty());
+            ModelBuild built = buildModel(List.of(), complianceLevel, project);
+            return new ParsedModels(List.of(built.model()), built.mode() + "_limited", SourceParseStats.empty());
         }
         List<CtModel> models = new ArrayList<>();
+        List<String> modes = new ArrayList<>();
         List<Path> files = javaFiles(roots, maxSourceFiles);
         List<Path> failedFiles = new ArrayList<>();
         for (Path file : files) {
             try {
-                models.add(buildModel(List.of(file), complianceLevel, project));
+                ModelBuild built = buildModel(List.of(file), complianceLevel, project);
+                models.add(built.model());
+                modes.add(built.mode());
             } catch (RuntimeException ignored) {
                 failedFiles.add(file);
             }
         }
         if (models.isEmpty()) {
-            models = List.of(buildModel(List.of(), complianceLevel, project));
+            ModelBuild built = buildModel(List.of(), complianceLevel, project);
+            models = List.of(built.model());
+            modes.add(built.mode());
         }
-        return new ParsedModels(models, "classpath_limited",
+        return new ParsedModels(models, mergedMode(modes) + "_limited",
                 new SourceParseStats(files.size(), files.size() - failedFiles.size(), failedFiles));
     }
 
@@ -300,16 +312,19 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
 
     private ParsedModels parseJavaFilesIndividually(Path root, int complianceLevel, ProjectModel project) throws IOException {
         List<CtModel> models = new ArrayList<>();
+        List<String> modes = new ArrayList<>();
         List<Path> files = javaFiles(List.of(root), 0);
         List<Path> failedFiles = new ArrayList<>();
         for (Path file : files) {
             try {
-                models.add(buildModel(List.of(file), complianceLevel, project));
+                ModelBuild built = buildModel(List.of(file), complianceLevel, project);
+                models.add(built.model());
+                modes.add(built.mode());
             } catch (RuntimeException ignored) {
                 failedFiles.add(file);
             }
         }
-        return new ParsedModels(models, "classpath", new SourceParseStats(files.size(),
+        return new ParsedModels(models, mergedMode(modes), new SourceParseStats(files.size(),
                 files.size() - failedFiles.size(), failedFiles));
     }
 
@@ -333,37 +348,49 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return files;
     }
 
-    private CtModel buildModel(List<Path> inputs, int complianceLevel, ProjectModel project) {
+    private ModelBuild buildModel(List<Path> inputs, int complianceLevel, ProjectModel project) {
+        Throwable initialFailure;
         try {
-            return launcher(inputs, complianceLevel, project, true).buildModel();
-        } catch (LinkageError classpathFailure) {
-            return buildModelWithoutClasspath(inputs, complianceLevel, project, classpathFailure);
-        } catch (RuntimeException firstFailure) {
-            if (complianceLevel == 17) {
-                throw firstFailure;
-            }
+            return new ModelBuild(launcher(inputs, complianceLevel, project, true).buildModel(), "classpath");
+        } catch (RuntimeException | LinkageError failure) {
+            initialFailure = failure;
+        }
+
+        if (complianceLevel != 17) {
             try {
-                return launcher(inputs, 17, project, true).buildModel();
-            } catch (LinkageError classpathFailure) {
-                return buildModelWithoutClasspath(inputs, 17, project, classpathFailure);
+                return new ModelBuild(launcher(inputs, 17, project, true).buildModel(), "classpath");
+            } catch (RuntimeException | LinkageError ignored) {
+                // Retry without classpath below.
             }
         }
+
+        try {
+            return new ModelBuild(launcher(inputs, complianceLevel, project, false).buildModel(), "no_classpath");
+        } catch (RuntimeException | LinkageError ignored) {
+            // Retry Java 17 no-classpath mode below when the project declares another level.
+        }
+
+        if (complianceLevel != 17) {
+            try {
+                return new ModelBuild(launcher(inputs, 17, project, false).buildModel(), "no_classpath");
+            } catch (RuntimeException | LinkageError ignored) {
+                // Preserve the first failure, which best describes the requested analysis mode.
+            }
+        }
+
+        if (initialFailure instanceof RuntimeException runtimeFailure) {
+            throw runtimeFailure;
+        }
+        throw (LinkageError) initialFailure;
     }
 
-    private CtModel buildModelWithoutClasspath(List<Path> inputs, int complianceLevel, ProjectModel project,
-                                               LinkageError classpathFailure) {
-        try {
-            return launcher(inputs, complianceLevel, project, false).buildModel();
-        } catch (RuntimeException | LinkageError fallbackFailure) {
-            if (complianceLevel == 17) {
-                throw classpathFailure;
-            }
-            try {
-                return launcher(inputs, 17, project, false).buildModel();
-            } catch (RuntimeException | LinkageError ignored) {
-                throw classpathFailure;
-            }
+    static String mergedMode(List<String> modes) {
+        boolean classpath = modes.stream().anyMatch(mode -> mode.startsWith("classpath"));
+        boolean noClasspath = modes.stream().anyMatch(mode -> mode.startsWith("no_classpath"));
+        if (classpath && noClasspath) {
+            return "mixed";
         }
+        return noClasspath ? "no_classpath" : "classpath";
     }
 
     private Launcher launcher(List<Path> inputs, int complianceLevel, ProjectModel project, boolean useClasspath) {
@@ -467,7 +494,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 parameters,
                 annotations(executable),
                 thrownExceptions(executable),
-                sourceSet(project.projectPath(), sourceFile),
+                sourceSet(project, sourceFile),
                 executable instanceof CtConstructor<?>));
     }
 
@@ -490,7 +517,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 modifiers(field),
                 annotations(field),
                 docComment(field),
-                sourceSet(project.projectPath(), sourceFile)));
+                sourceSet(project, sourceFile)));
     }
 
     private static String methodName(CtExecutable<?> executable, CtType<?> owner) {
@@ -610,13 +637,18 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
     }
 
-    private static Optional<String> rawDocComment(CtElement element) {
+    private static Optional<String> rawDocComment(ParsedProject parsed, CtElement element) {
         try {
             SourcePosition position = element.getPosition();
             if (position == null || !position.isValidPosition() || position.getFile() == null) {
                 return Optional.empty();
             }
-            String source = Files.readString(position.getFile().toPath(), StandardCharsets.UTF_8);
+            Path sourceFile = position.getFile().toPath().toAbsolutePath().normalize();
+            String source = parsed.sourceTextByFile().get(sourceFile);
+            if (source == null) {
+                source = Files.readString(sourceFile, StandardCharsets.UTF_8);
+                parsed.sourceTextByFile().put(sourceFile, source);
+            }
             int start = Math.max(0, Math.min(position.getSourceStart(), source.length()));
             int open = source.lastIndexOf("/**", start);
             if (open < 0) {
@@ -690,7 +722,8 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     private static ClassContext classContext(ParsedProject parsed, CtType<?> type, String methodName) {
         String key = type.getQualifiedName() + "#" + methodName;
         return parsed.classContextsByTypeAndMethod().computeIfAbsent(key, ignored -> {
-            Map<String, String> classMethods = classMethods(type);
+            Map<String, String> classMethods = parsed.classMethodsByType().computeIfAbsent(
+                    type.getQualifiedName(), ignoredType -> classMethods(type));
             List<String> siblingMethods = classMethods.keySet().stream().sorted().toList();
             List<String> overloadGroup = siblingMethods.stream()
                     .filter(sig -> sig.startsWith(methodName + "("))
@@ -2877,7 +2910,40 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return element.getPosition().getLine();
     }
 
-    private static String sourceSet(Path projectRoot, Path sourceFile) {
+    static String sourceSet(ProjectModel project, Path sourceFile) {
+        Path normalizedSource = sourceFile.toAbsolutePath().normalize();
+        String modeledSourceSet = project.metadata().getModuleSourceSets().stream()
+                .flatMap(sourceSet -> sourceSet.sources().stream()
+                        .map(root -> Map.entry(root.toAbsolutePath().normalize(), sourceSet.sourceSet())))
+                .filter(entry -> normalizedSource.startsWith(entry.getKey()))
+                .max(Comparator.comparingInt(entry -> entry.getKey().getNameCount()))
+                .map(Map.Entry::getValue)
+                .map(SpoonSourceModelBackend::normalizeSourceSet)
+                .orElse("");
+        if (!modeledSourceSet.isBlank()) {
+            return modeledSourceSet;
+        }
+        if (project.testSourceRoots().stream().anyMatch(normalizedSource::startsWith)) {
+            return "test";
+        }
+        if (project.sourceRoots().stream().anyMatch(normalizedSource::startsWith)) {
+            return "main";
+        }
+        return sourceSetFromPath(project.projectPath(), normalizedSource);
+    }
+
+    private static String normalizeSourceSet(String sourceSet) {
+        String normalized = sourceSet == null ? "" : sourceSet.trim().toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case "main" -> "main";
+            case "test" -> "test";
+            case "integrationtest", "integration-test", "integration_test", "it", "itest" ->
+                    "integration_test";
+            default -> normalized;
+        };
+    }
+
+    private static String sourceSetFromPath(Path projectRoot, Path sourceFile) {
         String relative = projectRoot.toAbsolutePath().normalize()
                 .relativize(sourceFile.toAbsolutePath().normalize())
                 .toString()
@@ -2912,6 +2978,8 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             Map<String, List<SourceField>> fieldsByClassName,
             Map<Path, ImportContext> importsByFile,
             Map<String, ClassContext> classContextsByTypeAndMethod,
+            Map<Path, String> sourceTextByFile,
+            Map<String, Map<String, String>> classMethodsByType,
             ClassLoader projectClassLoader,
             String mode,
             SourceParseStats parseStats) {
@@ -3047,6 +3115,9 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         Optional<RawJavadocReference> reliableReference() {
             return "high".equals(confidence) ? reference : Optional.empty();
         }
+    }
+
+    private record ModelBuild(CtModel model, String mode) {
     }
 
     private record ParsedModels(List<CtModel> models, String mode, SourceParseStats stats) {

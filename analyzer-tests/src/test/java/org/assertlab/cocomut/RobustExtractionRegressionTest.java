@@ -253,6 +253,36 @@ public class RobustExtractionRegressionTest {
         }
     }
 
+    @Test
+    public void java25And26ProjectClassfilesRemainVisibleToCallGraphAnalysis() throws Exception {
+        for (int classfileMajor : List.of(69, 70)) {
+            Path project = Files.createTempDirectory("cocomut-modern-project-bytecode");
+            try {
+                write(project.resolve("src/main/java/demo/ModernProject.java"), """
+                        package demo;
+                        public class ModernProject {
+                            public String value() { return helper(); }
+                            private String helper() { return "ok"; }
+                        }
+                        """);
+                compileProject(project);
+                setClassfileMajor(project.resolve("target/classes/demo/ModernProject.class"), classfileMajor);
+
+                ExtractionReport report = ContextExtractorService.createDefault().extract(ContextRequest.builder()
+                        .projectRoot(project)
+                        .scope(ContextRequest.Scope.ALL)
+                        .build());
+
+                assertCompleted(report);
+                assertEquals(2, report.methodsIdentified());
+                assertTrue("Expected Java " + (classfileMajor - 44) + " project methods to match bytecode",
+                        ((Number) report.asMap().get("phase_3_focal_methods_matched_to_bytecode")).longValue() > 0);
+            } finally {
+                deleteRecursively(project);
+            }
+        }
+    }
+
     private static void write(Path path, String text) throws Exception {
         Files.createDirectories(path.getParent());
         Files.writeString(path, text, StandardCharsets.UTF_8);
@@ -293,9 +323,13 @@ public class RobustExtractionRegressionTest {
     }
 
     private static void makeClassfileTooNew(Path classFile) throws Exception {
+        setClassfileMajor(classFile, 70);
+    }
+
+    private static void setClassfileMajor(Path classFile, int major) throws Exception {
         byte[] bytes = Files.readAllBytes(classFile);
-        bytes[6] = 0;
-        bytes[7] = 70;
+        bytes[6] = (byte) (major >>> 8);
+        bytes[7] = (byte) major;
         Files.write(classFile, bytes);
     }
 

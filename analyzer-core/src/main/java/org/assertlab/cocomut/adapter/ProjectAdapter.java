@@ -1,6 +1,7 @@
 package org.assertlab.cocomut.adapter;
 
 import org.assertlab.cocomut.ContextRequest;
+import org.assertlab.cocomut.ProjectAnalyzer;
 import org.assertlab.cocomut.ProjectMetadata;
 
 import java.io.IOException;
@@ -24,8 +25,8 @@ import java.util.List;
  *
  * <h2>Auto-detection order</h2>
  * <pre>
- *   pom.xml present          → MavenProjectAdapter
  *   Gradle build/settings    → GradleProjectAdapter
+ *   pom.xml present          → MavenProjectAdapter
  *   fallback                 → GenericJavaAdapter
  * </pre>
  */
@@ -59,13 +60,14 @@ public interface ProjectAdapter {
      * @return the most specific adapter that {@linkplain #canHandle handles} the path
      */
     static ProjectAdapter of(Path projectPath) {
+        Path adapterRoot = ProjectAnalyzer.preferredAdapterRoot(projectPath);
         List<ProjectAdapter> candidates = List.of(
-                new MavenProjectAdapter(projectPath),
-                new GradleProjectAdapter(projectPath),
-                new GenericJavaAdapter(projectPath)   // always matches — keep last
+                new GradleProjectAdapter(adapterRoot),
+                new MavenProjectAdapter(adapterRoot),
+                new GenericJavaAdapter(adapterRoot)   // always matches — keep last
         );
         return candidates.stream()
-                .filter(a -> a.canHandle(projectPath))
+                .filter(a -> a.canHandle(adapterRoot))
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException(
                         "No ProjectAdapter matched: " + projectPath));

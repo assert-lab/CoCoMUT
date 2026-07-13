@@ -22,6 +22,9 @@ jobs:
       - name: Test
         run: ./mvnw -q test
 
+      - name: Test field-test harness
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+
       - name: Package
         run: ./mvnw -q -DskipTests package
 

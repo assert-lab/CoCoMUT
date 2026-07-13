@@ -145,7 +145,7 @@ Every extraction also writes `extraction_manifest.json` beside the JSONL file.
 This is run-level metadata, not method-level context. The manifest records:
 
 ```text
-schema_version                  Manifest schema version, currently 0.3.0
+schema_version                  Manifest schema version, currently 0.4.0
 generated_at                    Timestamp for the extraction run
 tool / tool_version             CoCoMUT release identity
 tool_git                        Git identity of the CoCoMUT checkout/build
@@ -160,6 +160,12 @@ build.attempted                 Whether CoCoMUT executed Maven/Gradle
 build.exit_code                 Build-process exit code, or -1 when not attempted
 build.succeeded                 Whether the attempted build command succeeded
 build.timed_out                 Whether the attempted build timed out
+build.blocked                   Whether a preflight requirement blocked execution
+build.output_tail               Bounded tail of Maven/Gradle output for diagnostics
+build.attempts                  Structured build and SDK-provisioning actions: command,
+                                components, JDK, exit code, timeout, change flag, reason
+build.maven_dependency_classpath_status
+                                NOT_ATTEMPTED, SUCCESS, or PARTIAL model resolution
 build.skipped                   Whether build execution was denied
 build.sandboxed                 Whether caller claims external sandboxing
 build.policy                    DENY_BUILD, ALLOW_UNSANDBOXED_BUILD,
@@ -180,8 +186,20 @@ hashes.combined_project_bytecode
 hashes.dependency_classpath     Ordered hash over dependency JARs/directories
 hashes.dependency_classpath_content_set
                                 Order-insensitive hash over the same entries
-hashes.emitted_jsonl            Hash over generated JSONL when present
+hashes.emitted_jsonl            Hash over generated JSONL, or empty when the
+                                run failed before JSONL was expected
 ```
+
+The current schema is [extraction-manifest.schema.json](extraction-manifest.schema.json).
+Its canonical `$id` includes the schema version, while the unversioned filename
+is the repository alias for the current contract.
+
+**Project decision.** CoCoMUT keeps schema maintenance deliberately small: each
+release ships and tests one current schema. Incompatible output changes
+increment `schema_version`; compatible additions should be optional when
+practical. Historical schemas and examples remain available from Git history
+and archived release artifacts instead of being copied into every later
+checkout.
 
 The manifest is intentionally separate from the JSONL rows. Dataset rows remain
 method-centric, while repository revision, build policy, and artifact hashes are

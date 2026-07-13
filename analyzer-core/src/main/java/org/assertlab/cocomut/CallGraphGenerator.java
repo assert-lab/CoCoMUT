@@ -33,6 +33,9 @@ import sootup.callgraph.RapidTypeAnalysisAlgorithm;
  * - Exposes raw call graph text for human-readable {@code Output_CallGraph_<ALGORITHM>.txt}
  */
 public class CallGraphGenerator {
+    private static final int MAX_CALL_GRAPH_TEXT_EDGES = 20_000;
+    private static final int MAX_CALL_GRAPH_TEXT_CHARS = 4 * 1024 * 1024;
+
     private final ProjectMetadata projectMetadata;
     private final Algorithm algorithm;
     private final Map<String, CallGraphResult> cache;
@@ -46,6 +49,8 @@ public class CallGraphGenerator {
     // Reverse lookup: SootUp signature string → project methodUri
     private Map<String, String> signatureToMethodUri;
     private Map<SourceMethodKey, List<MethodInfo>> sourceMethodsByKey;
+    private Map<SourceMethodShapeKey, List<MethodInfo>> sourceMethodsByShape;
+    private Map<SourceMethodNameKey, List<MethodInfo>> sourceMethodsByName;
     private Set<String> projectSourceClasses;
     private Map<String, List<MethodInfo>> sourceMethodsByClass;
     private Map<String, SourceClassSummary> sourceClassSummaries;
@@ -98,6 +103,8 @@ public class CallGraphGenerator {
         this.cache = new HashMap<>();
         this.signatureToMethodUri = new HashMap<>();
         this.sourceMethodsByKey = new HashMap<>();
+        this.sourceMethodsByShape = new HashMap<>();
+        this.sourceMethodsByName = new HashMap<>();
         this.projectSourceClasses = new HashSet<>();
         this.sourceMethodsByClass = new HashMap<>();
         this.sourceClassSummaries = new HashMap<>();
@@ -258,6 +265,8 @@ public class CallGraphGenerator {
 
     private void indexMethodSignatures(List<MethodInfo> methods) {
         sourceMethodsByKey = new HashMap<>();
+        sourceMethodsByShape = new HashMap<>();
+        sourceMethodsByName = new HashMap<>();
         projectSourceClasses = new HashSet<>();
         sourceMethodsByClass = new HashMap<>();
         sourceClassSummaries = new HashMap<>();
@@ -266,6 +275,10 @@ public class CallGraphGenerator {
             sourceMethodsByClass.computeIfAbsent(method.getClassname(), ignored -> new ArrayList<>()).add(method);
             SourceMethodKey key = SourceMethodKey.from(method);
             sourceMethodsByKey.computeIfAbsent(key, ignored -> new ArrayList<>()).add(method);
+            sourceMethodsByShape.computeIfAbsent(SourceMethodShapeKey.from(key), ignored -> new ArrayList<>())
+                    .add(method);
+            sourceMethodsByName.computeIfAbsent(SourceMethodNameKey.from(key), ignored -> new ArrayList<>())
+                    .add(method);
         }
         sourceMethodsByClass.replaceAll((key, value) -> value.stream()
                 .sorted(Comparator.comparing(MethodInfo::getMethodUri))
@@ -273,8 +286,24 @@ public class CallGraphGenerator {
         sourceMethodsByKey.replaceAll((key, value) -> value.stream()
                 .sorted(Comparator.comparing(MethodInfo::getMethodUri))
                 .toList());
-        for (Map.Entry<String, List<MethodInfo>> entry : sourceMethodsByClass.entrySet()) {
-            sourceClassSummaries.put(entry.getKey(), SourceClassSummary.from(entry.getValue()));
+        sourceMethodsByShape.replaceAll((key, value) -> value.stream()
+                .sorted(Comparator.comparing(MethodInfo::getMethodUri))
+                .toList());
+        sourceMethodsByName.replaceAll((key, value) -> value.stream()
+                .sorted(Comparator.comparing(MethodInfo::getMethodUri))
+                .toList());
+        List<Map.Entry<String, List<MethodInfo>>> classesBySourceFile = sourceMethodsByClass.entrySet().stream()
+                .sorted(Comparator.comparing(entry -> sourceFileSortKey(entry.getValue())))
+                .toList();
+        Path currentSourceFile = null;
+        String currentSource = null;
+        for (Map.Entry<String, List<MethodInfo>> entry : classesBySourceFile) {
+            Path sourceFile = firstSourceFile(entry.getValue());
+            if (!Objects.equals(currentSourceFile, sourceFile)) {
+                currentSourceFile = sourceFile;
+                currentSource = readSourceFile(sourceFile);
+            }
+            sourceClassSummaries.put(entry.getKey(), SourceClassSummary.from(entry.getValue(), currentSource));
         }
 
         for (MethodInfo method : methods) {
@@ -282,6 +311,26 @@ public class CallGraphGenerator {
             if (sig != null) {
                 signatureToMethodUri.put(sig.toString(), method.getMethodUri());
             }
+        }
+    }
+
+    private static Path firstSourceFile(List<MethodInfo> methods) {
+        return methods == null || methods.isEmpty() ? null : methods.get(0).getSourceFile();
+    }
+
+    private static String sourceFileSortKey(List<MethodInfo> methods) {
+        Path sourceFile = firstSourceFile(methods);
+        return sourceFile == null ? "" : sourceFile.toAbsolutePath().normalize().toString();
+    }
+
+    private static String readSourceFile(Path sourceFile) {
+        if (sourceFile == null || !Files.isRegularFile(sourceFile)) {
+            return null;
+        }
+        try {
+            return Files.readString(sourceFile);
+        } catch (Exception ignored) {
+            return null;
         }
     }
 
@@ -322,11 +371,8 @@ public class CallGraphGenerator {
                     methodUris(exactCandidates), "multiple_source_methods_match_normalized_exact_signature"));
         }
 
-        List<MethodInfo> returnAgnosticCandidates = sourceMethodsByKey.entrySet().stream()
-                .filter(entry -> entry.getKey().sameClassNameParams(returnAgnosticKey))
-                .flatMap(entry -> entry.getValue().stream())
-                .sorted(Comparator.comparing(MethodInfo::getMethodUri))
-                .toList();
+        List<MethodInfo> returnAgnosticCandidates = sourceMethodsByShape
+                .getOrDefault(SourceMethodShapeKey.from(returnAgnosticKey), List.of());
         if (returnAgnosticCandidates.size() == 1) {
             MethodInfo method = returnAgnosticCandidates.get(0);
             signatureToMethodUri.put(raw, method.getMethodUri());
@@ -338,11 +384,8 @@ public class CallGraphGenerator {
                     methodUris(returnAgnosticCandidates), "multiple_source_methods_match_name_and_parameters"));
         }
 
-        List<MethodInfo> sameNameCandidates = sourceMethodsByKey.entrySet().stream()
-                .filter(entry -> entry.getKey().sameClassName(returnAgnosticKey))
-                .flatMap(entry -> entry.getValue().stream())
-                .sorted(Comparator.comparing(MethodInfo::getMethodUri))
-                .toList();
+        List<MethodInfo> sameNameCandidates = sourceMethodsByName
+                .getOrDefault(SourceMethodNameKey.from(returnAgnosticKey), List.of());
         if (sameNameCandidates.size() == 1 && parametersCompatibleForSingleCandidate(sig, sameNameCandidates.get(0))) {
             MethodInfo method = sameNameCandidates.get(0);
             signatureToMethodUri.put(raw, method.getMethodUri());
@@ -560,7 +603,31 @@ public class CallGraphGenerator {
 
     public String getCallGraphText() {
         if (!initialized || cg == null) return "";
-        return cg.toString();
+        StringBuilder text = new StringBuilder();
+        int emittedEdges = 0;
+        boolean truncated = false;
+
+        outer:
+        for (MethodSignature source : cg.getMethodSignatures()) {
+            for (CallGraph.Call call : cg.callsFrom(source)) {
+                String line = call.getSourceMethodSignature() + " -> "
+                        + call.getTargetMethodSignature() + System.lineSeparator();
+                if (emittedEdges >= MAX_CALL_GRAPH_TEXT_EDGES
+                        || text.length() + line.length() > MAX_CALL_GRAPH_TEXT_CHARS) {
+                    truncated = true;
+                    break outer;
+                }
+                text.append(line);
+                emittedEdges++;
+            }
+        }
+        if (truncated) {
+            text.append("[CoCoMUT truncated the human-readable call-graph artifact after ")
+                    .append(emittedEdges)
+                    .append(" edges; method-context JSONL records retain their own caller/callee entries.]")
+                    .append(System.lineSeparator());
+        }
+        return text.toString();
     }
 
     // ---- Method matching ----
@@ -710,6 +777,30 @@ public class CallGraphGenerator {
         }
     }
 
+    private record SourceMethodShapeKey(String className, String methodName, List<String> parameterTypes) {
+        private SourceMethodShapeKey {
+            parameterTypes = parameterTypes == null ? List.of() : List.copyOf(parameterTypes);
+        }
+
+        private static SourceMethodShapeKey from(SourceMethodKey key) {
+            return new SourceMethodShapeKey(key.className(), key.methodName(), key.parameterTypes());
+        }
+
+        private static SourceMethodShapeKey from(BytecodeMethodKey key) {
+            return new SourceMethodShapeKey(key.className(), key.methodName(), key.parameterTypes());
+        }
+    }
+
+    private record SourceMethodNameKey(String className, String methodName) {
+        private static SourceMethodNameKey from(SourceMethodKey key) {
+            return new SourceMethodNameKey(key.className(), key.methodName());
+        }
+
+        private static SourceMethodNameKey from(BytecodeMethodKey key) {
+            return new SourceMethodNameKey(key.className(), key.methodName());
+        }
+    }
+
     private record BytecodeMethodKey(String className, String methodName,
                                      List<String> parameterTypes, String returnType) {
         private BytecodeMethodKey {
@@ -734,15 +825,17 @@ public class CallGraphGenerator {
 
     private record SourceClassSummary(SourceClassKind kind, Set<String> recordComponents) {
         private static SourceClassSummary from(List<MethodInfo> methods) {
+            return from(methods, readSourceFile(firstSourceFile(methods)));
+        }
+
+        private static SourceClassSummary from(List<MethodInfo> methods, String source) {
             if (methods == null || methods.isEmpty()) {
                 return new SourceClassSummary(SourceClassKind.UNKNOWN, Set.of());
             }
-            Path sourceFile = methods.get(0).getSourceFile();
-            if (sourceFile == null || !Files.isRegularFile(sourceFile)) {
+            if (source == null) {
                 return new SourceClassSummary(SourceClassKind.UNKNOWN, Set.of());
             }
             try {
-                String source = Files.readString(sourceFile);
                 String simpleName = simpleClassName(methods.get(0).getClassname());
                 SourceClassKind kind = inferSourceClassKind(source, simpleName);
                 Set<String> components = kind == SourceClassKind.RECORD
@@ -768,22 +861,31 @@ public class CallGraphGenerator {
                 return SourceClassKind.UNKNOWN;
             }
             String name = java.util.regex.Pattern.quote(simpleName);
-            if (source.matches("(?s).*\\b@interface\\s+" + name + "\\b.*")) {
+            if (containsDeclaration(source, "@interface", name, "\\b")) {
                 return SourceClassKind.ANNOTATION;
             }
-            if (source.matches("(?s).*\\benum\\s+" + name + "\\b.*")) {
+            if (containsDeclaration(source, "enum", name, "\\b")) {
                 return SourceClassKind.ENUM;
             }
-            if (source.matches("(?s).*\\brecord\\s+" + name + "\\s*\\(.*")) {
+            if (containsDeclaration(source, "record", name, "\\s*\\(")) {
                 return SourceClassKind.RECORD;
             }
-            if (source.matches("(?s).*\\binterface\\s+" + name + "\\b.*")) {
+            if (containsDeclaration(source, "interface", name, "\\b")) {
                 return SourceClassKind.INTERFACE;
             }
-            if (source.matches("(?s).*\\bclass\\s+" + name + "\\b.*")) {
+            if (containsDeclaration(source, "class", name, "\\b")) {
                 return SourceClassKind.CLASS;
             }
             return SourceClassKind.UNKNOWN;
+        }
+
+        private static boolean containsDeclaration(String source, String keyword, String quotedName,
+                                                   String suffix) {
+            String prefix = keyword.startsWith("@") ? "" : "\\b";
+            return java.util.regex.Pattern.compile(
+                            prefix + java.util.regex.Pattern.quote(keyword) + "\\s+" + quotedName + suffix)
+                    .matcher(source)
+                    .find();
         }
 
         private static Set<String> inferRecordComponents(String source, String simpleName) {

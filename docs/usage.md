@@ -158,6 +158,15 @@ Useful options:
                                 or path-separated
 ```
 
+For Maven and Gradle projects, `--project` must identify the intended build
+root: the directory containing the root `pom.xml`, `build.gradle`,
+`build.gradle.kts`, or settings file. CoCoMUT does not guess between multiple
+nested builds in a monorepo. It reports `BUILD_ROOT_AMBIGUOUS` together with
+`phase_1_build_root_candidates`; absence of both a build and usable project
+bytecode is reported as `PROJECT_BYTECODE_UNAVAILABLE`, not `BUILD_FAILED`.
+Ant, Bazel, Buck, and sbt root descriptors are identified explicitly as
+`BUILD_SYSTEM_UNSUPPORTED`; CoCoMUT does not guess an alternative nested build.
+
 CoCoMUT performs static bytecode analysis. The analyzed checkout must provide
 usable project bytecode through project class directories or project JARs. By
 default CoCoMUT does not execute Maven or Gradle; this avoids running
@@ -176,8 +185,28 @@ requirement by themselves.
 
 If an attempted build fails, CoCoMUT fails the extraction even when stale
 bytecode is present. Pre-existing bytecode is accepted only when no build was
-attempted, for example denied-build analysis over already compiled project
-outputs or explicit `--class-output` / `--project-jar` inputs.
+attempted and no preflight requirement blocked execution, for example
+denied-build analysis over already compiled project outputs or explicit
+`--class-output` / `--project-jar` inputs.
+
+The extraction report records `phase_1_build_command`,
+`phase_1_build_attempts`, the selected build JDK and its evidence, a concise
+build-output tail, and `phase_1_build_failure_reason`. Each attempt includes its
+action, command, declared Android components when applicable, JDK, exit code,
+timeout state, environment-change flag, and classified reason so retries can be
+audited without reconstructing them from console output.
+Maven dependency-classpath resolution is recorded as the distinct
+`maven_dependency_classpath` action. Its run-level status is exposed as
+`phase_1_maven_dependency_classpath_status`; a failed invocation yields
+`MODEL_RESOLUTION_PARTIAL` without rewriting a successful compilation as a
+build failure.
+
+CoCoMUT generates a version-only isolated Maven toolchain inventory only when
+every POM in the declared reactor requests version matching alone. If any
+module requests vendor, purpose, or another token, Maven's existing project/user
+toolchain configuration is retained rather than replaced with weaker synthesized
+metadata.
+
 
 Build execution runs the subject repository's Maven or Gradle build logic. For
 untrusted public repositories, keep the default denied-build policy and provide
@@ -186,6 +215,22 @@ unprivileged user, scrubbed environment, isolated writable build/cache
 directories, and CPU, memory, process, wall-clock, and network limits. Use
 `--externally-sandboxed-build` only when that external protection is actually in
 place; CoCoMUT records the policy but does not provide a container itself.
+
+Android SDK provisioning is disabled by default. If CoCoMUT detects explicitly
+declared missing Android components, it reports
+`BUILD_FAILED_ANDROID_SDK_UNAVAILABLE` before invoking Gradle. Set
+`COCOMUT_ALLOW_ANDROID_SDK_PROVISIONING=true` only inside an externally
+controlled disposable environment to allow `sdkmanager` to install those exact
+declared components. This action is recorded in `phase_1_build_attempts` and in
+the manifest.
+Detection requires an explicit Android Gradle plugin declaration. Text in
+comments, dependencies, or strings is not preflight evidence. When SDK
+components are computed dynamically, CoCoMUT does not guess them and lets
+Gradle report the requirement.
+
+When provisioning is disabled or unavailable, no process is reported as
+executed: `phase_1_build_attempted=false` and `phase_1_build_blocked=true`.
+CoCoMUT does not trust stale project bytecode in that preflight-blocked state.
 
 If the project was already compiled elsewhere, or if build execution is not
 acceptable, use the explicit artifact path:
@@ -218,6 +263,12 @@ When a call graph is generated but some selected source methods cannot be
 matched to bytecode call-graph projections, CoCoMUT reports a phase-3 warning
 and keeps the available caller/callee edges. This is not a call-graph failure:
 it means per-method bytecode matching is incomplete for the selected focal set.
+If zero selected methods match project bytecode, CoCoMUT reports `PARTIAL`
+instead: the source records remain usable, but method-level call context is not.
+The CLI exits with status `2` for `PARTIAL`, `0` for `SUCCESS`, and `1` for a
+terminal failure. API callers can use `ExtractionReport.partial()` and
+`ExtractionReport.usableRecordsEmitted()` instead of inferring usability from
+string status fields.
 
 For documentation datasets, prefer a precise source-set and scope:
 

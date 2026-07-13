@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://assert-lab.github.io/cocomut/schemas/extraction-manifest.schema.json",
+  "$id": "https://assert-lab.github.io/cocomut/schemas/extraction-manifest-v0.4.0.schema.json",
   "title": "CoCoMUT Extraction Manifest",
   "type": "object",
   "additionalProperties": false,
@@ -19,7 +19,7 @@
     "execution"
   ],
   "properties": {
-    "schema_version": { "const": "0.3.0" },
+    "schema_version": { "const": "0.4.0" },
     "generated_at": { "type": "string", "format": "date-time" },
     "tool": { "const": "CoCoMUT" },
     "tool_version": { "type": "string" },
@@ -69,6 +69,9 @@
         "exit_code",
         "succeeded",
         "timed_out",
+        "blocked",
+        "attempts",
+        "maven_dependency_classpath_status",
         "skipped",
         "sandboxed",
         "status",
@@ -83,6 +86,33 @@
         "exit_code": { "type": "integer" },
         "succeeded": { "type": "boolean" },
         "timed_out": { "type": "boolean" },
+        "blocked": { "type": "boolean" },
+        "output_tail": { "type": "string" },
+        "java_home": { "type": "string" },
+        "java_version": { "type": "string" },
+        "java_evidence": { "type": "string" },
+        "attempts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["action", "command", "components", "javaHome", "javaVersion", "javaEvidence", "exitCode", "timedOut", "changedEnvironment", "failureReason"],
+            "properties": {
+              "action": { "type": "string" },
+              "command": { "type": "array", "items": { "type": "string" } },
+              "components": { "type": "array", "items": { "type": "string" } },
+              "javaHome": { "type": "string" },
+              "javaVersion": { "type": "string" },
+              "javaEvidence": { "type": "string" },
+              "exitCode": { "type": "integer" },
+              "timedOut": { "type": "boolean" },
+              "changedEnvironment": { "type": "boolean" },
+              "failureReason": { "type": "string" }
+            }
+          }
+        },
+        "maven_dependency_classpath_status": {
+          "enum": ["NOT_ATTEMPTED", "SUCCESS", "PARTIAL"]
+        },
         "skipped": { "type": "boolean" },
         "sandboxed": { "type": "boolean" },
         "status": { "type": "string" },

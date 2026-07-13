@@ -102,6 +102,16 @@ public class OrchestratorTest {
     }
 
     @Test
+    public void phaseOneExceptionHasSpecificFailureCode() {
+        Orchestrator invalid = new Orchestrator(Path.of("/nonexistent/cocomut-project"));
+
+        assertFalse(invalid.execute());
+
+        assertTrue(String.valueOf(invalid.getExecutionReport().get("failure_codes"))
+                .contains("METADATA_RESOLUTION_FAILED"));
+    }
+
+    @Test
     public void testExecutionReportPrint() {
         orchestrator.execute();
 
@@ -170,8 +180,121 @@ public class OrchestratorTest {
             assertEquals(1, report.get("failed_at_phase"));
             assertEquals(false, report.get("phase_1_compiles"));
             assertEquals(true, report.get("phase_1_source_available"));
+            assertTrue(String.valueOf(report.get("failure_codes"))
+                    .contains("PROJECT_BYTECODE_UNAVAILABLE"));
             assertTrue(String.valueOf(report.get("phase_1_error")).contains("NO PROJECT BYTECODE"));
             assertTrue(Files.isRegularFile(Path.of(String.valueOf(report.get("extraction_report_file")))));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void degradedCallGraphStillEmitsJsonlAndReportsPartial() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-degraded-call-graph-");
+        try {
+            Path sourceRoot = project.resolve("src/main/java/example");
+            Path classOutput = project.resolve("classes");
+            Files.createDirectories(sourceRoot);
+            Files.createDirectories(classOutput);
+            Files.writeString(sourceRoot.resolve("Sample.java"), """
+                    package example;
+                    /** Sample documentation. */
+                    public class Sample { public String value() { return "ok"; } }
+                    """);
+            Files.write(classOutput.resolve("Broken.class"), new byte[] {0, 1, 2, 3});
+
+            ContextRequest request = ContextRequest.builder()
+                    .projectRoot(project)
+                    .sourceSets(java.util.Set.of("main"))
+                    .outputDirectory(project.resolve("output"))
+                    .build();
+            ProjectMetadata metadata = new ProjectMetadata.Builder()
+                    .projectName("degraded-call-graph")
+                    .projectPath(project)
+                    .buildSystem("none")
+                    .javaVersion("17")
+                    .sourceRoot(project.resolve("src/main/java"))
+                    .sourceRoots(java.util.List.of(project.resolve("src/main/java")))
+                    .classpath(java.util.List.of(classOutput))
+                    .mainClassOutputs(java.util.List.of(classOutput))
+                    .compiles(true)
+                    .compileStatus("PRECOMPILED BYTECODE")
+                    .bytecodeAvailable(true)
+                    .analysisCanProceed(true)
+                    .build();
+
+            Orchestrator degraded = new Orchestrator(request, metadata);
+            assertFalse("A usable degraded extraction retains PARTIAL status", degraded.execute());
+
+            ExtractionReport report = new ExtractionReport(degraded.getExecutionReport());
+            assertTrue(report.partial());
+            assertTrue(report.usableRecordsEmitted());
+            assertEquals(Boolean.TRUE, report.asMap().get("phase_3_degraded"));
+            assertTrue(Files.isRegularFile(report.jsonlFile()));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void preflightBlockedBuildDoesNotClaimProcessExecutionOrTrustStaleBytecode() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-preflight-blocked-");
+        try {
+            Path sourceRoot = project.resolve("src/main/java");
+            Path classOutput = project.resolve("build/classes/java/main");
+            Files.createDirectories(sourceRoot);
+            Files.createDirectories(classOutput);
+            ProjectMetadata metadata = new ProjectMetadata.Builder()
+                    .projectName("blocked")
+                    .projectPath(project)
+                    .buildSystem("gradle")
+                    .javaVersion("17")
+                    .sourceRoot(sourceRoot)
+                    .sourceRoots(java.util.List.of(sourceRoot))
+                    .mainClassOutputs(java.util.List.of(classOutput))
+                    .classpath(java.util.List.of(classOutput))
+                    .compileStatus("BUILD BLOCKED: ANDROID SDK UNAVAILABLE")
+                    .buildAttempted(false)
+                    .buildBlocked(true)
+                    .buildFailureReason(BuildFailureReason.BUILD_FAILED_ANDROID_SDK_UNAVAILABLE)
+                    .bytecodeAvailable(true)
+                    .bytecodeOrigin("preexisting")
+                    .analysisCanProceed(false)
+                    .build();
+            Orchestrator blocked = new Orchestrator(ContextRequest.builder().projectRoot(project).build(), metadata);
+
+            assertFalse(blocked.execute());
+
+            Map<String, Object> report = blocked.getExecutionReport();
+            assertEquals(Boolean.FALSE, report.get("phase_1_build_attempted"));
+            assertEquals(Boolean.TRUE, report.get("phase_1_build_blocked"));
+            assertTrue(String.valueOf(report.get("failure_codes")).contains("BUILD_PREFLIGHT_BLOCKED"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void successfulEmptyBuildReportsUnavailableProjectBytecode() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-empty-maven-");
+        try {
+            write(project.resolve("pom.xml"), """
+                    <project><modelVersion>4.0.0</modelVersion>
+                      <groupId>demo</groupId><artifactId>empty</artifactId><version>1</version>
+                    </project>
+                    """);
+            Orchestrator empty = new Orchestrator(ContextRequest.builder()
+                    .projectRoot(project)
+                    .allowUnsandboxedBuild()
+                    .build());
+
+            assertFalse(empty.execute());
+            Map<String, Object> report = empty.getExecutionReport();
+            assertEquals(true, report.get("phase_1_build_succeeded"));
+            assertTrue(String.valueOf(report.get("failure_codes"))
+                    .contains("PROJECT_BYTECODE_UNAVAILABLE"));
+            assertFalse(String.valueOf(report.get("failure_codes")).contains("BUILD_FAILED"));
         } finally {
             deleteRecursively(project);
         }
@@ -218,6 +341,16 @@ public class OrchestratorTest {
 
             assertTrue(String.valueOf(testOnly.getExecutionReport()), testOnly.execute());
             assertEquals("SUCCESS", testOnly.getExecutionReport().get("status"));
+            assertTrue(testOnly.getExecutionReport().get("phase_1_build_attempts") instanceof java.util.List<?>);
+            assertFalse(((java.util.List<?>) testOnly.getExecutionReport().get("phase_1_build_attempts")).isEmpty());
+            assertTrue(((java.util.List<?>) testOnly.getExecutionReport().get("phase_1_build_attempts")).stream()
+                    .map(String::valueOf)
+                    .anyMatch(value -> value.contains("maven_dependency_classpath")));
+            assertEquals("SUCCESS", testOnly.getExecutionReport()
+                    .get("phase_1_maven_dependency_classpath_status"));
+            assertTrue(testOnly.getExecutionReport().get("phase_1_build_command") instanceof java.util.List<?>);
+            assertTrue(((java.util.List<?>) testOnly.getExecutionReport().get("phase_1_build_command"))
+                    .contains("test-compile"));
             assertTrue(testOnly.getMethodInfos().stream()
                     .anyMatch(method -> "test".equals(method.getSourceSet())
                             && "testHelper".equals(method.getMethodName())));
@@ -240,6 +373,22 @@ public class OrchestratorTest {
         assertEquals("FAILED", report.get("status"));
         assertEquals(2, report.get("failed_at_phase"));
         assertTrue(String.valueOf(report.get("failure_codes")).contains("EMPTY_SELECTION"));
+    }
+
+    @Test
+    public void unhandledPhaseFailureCodesAreSpecific() {
+        assertEquals(FailureCode.METADATA_RESOLUTION_FAILED,
+                Orchestrator.failureCodeForUnhandledFailureForTest(1));
+        assertEquals(FailureCode.SOURCE_ANALYSIS_FAILED,
+                Orchestrator.failureCodeForUnhandledFailureForTest(2));
+        assertEquals(FailureCode.CALL_GRAPH_UNAVAILABLE,
+                Orchestrator.failureCodeForUnhandledFailureForTest(3));
+        assertEquals(FailureCode.CONTEXT_EXTRACTION_FAILED,
+                Orchestrator.failureCodeForUnhandledFailureForTest(4));
+        assertEquals(FailureCode.JSON_GENERATION_FAILED,
+                Orchestrator.failureCodeForUnhandledFailureForTest(5));
+        assertEquals(FailureCode.ERROR,
+                Orchestrator.failureCodeForUnhandledFailureForTest(0));
     }
 
     @Test
@@ -276,19 +425,27 @@ public class OrchestratorTest {
                     .classOutputDir(classOutput)
                     .build());
 
-            assertTrue(String.valueOf(partial.getExecutionReport()), partial.execute());
+            assertTrue(partial.execute());
             Map<String, Object> report = partial.getExecutionReport();
             assertEquals("SUCCESS", report.get("status"));
             assertEquals(java.util.List.of("NONE"), report.get("failure_codes"));
             assertEquals(Boolean.TRUE, report.get("phase_3_call_graph_artifact_exists"));
-            assertTrue("Fixture should include unmatched source methods",
-                    ((Number) report.get("phase_3_focal_methods_matched_to_bytecode")).longValue()
-                            < ((Number) report.get("phase_2_methods_identified")).longValue());
+            long matched = ((Number) report.get("phase_3_focal_methods_matched_to_bytecode")).longValue();
+            long selected = ((Number) report.get("phase_2_methods_identified")).longValue();
+            assertTrue("Fixture should contain both matched and unmatched source methods",
+                    matched > 0 && matched < selected);
             assertTrue(String.valueOf(report.get("phase_3_warning"))
                     .contains("did not receive matched bytecode call graph results"));
         } finally {
             deleteRecursively(project);
         }
+    }
+
+    @Test
+    public void zeroFocalBytecodeMatchesRequirePartialStatus() {
+        assertTrue(Orchestrator.requiresPartialForBytecodeMatching(0, 5));
+        assertFalse(Orchestrator.requiresPartialForBytecodeMatching(1, 5));
+        assertFalse(Orchestrator.requiresPartialForBytecodeMatching(0, 0));
     }
 
     private static void deleteRecursively(Path root) throws Exception {

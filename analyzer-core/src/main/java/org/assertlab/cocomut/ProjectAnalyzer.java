@@ -6,12 +6,20 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import javax.xml.parsers.DocumentBuilderFactory;
+
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 
 /**
  * Phase 1 of the method context extraction pipeline.
@@ -27,8 +35,14 @@ import java.util.regex.Pattern;
  * downstream components (MethodIdentifier, CallGraphGenerator, etc.)
  */
 public class ProjectAnalyzer {
+
+    private static final String NO_ROOT_BUILD_DESCRIPTOR =
+            "NO MAVEN OR GRADLE BUILD DESCRIPTOR AT PROJECT ROOT";
     private static final long DEFAULT_COMPILE_TIMEOUT_SECONDS = 120;
+    private static final int BUILD_OUTPUT_TAIL_CHARS = 12_000;
+    private static final Pattern ANSI_ESCAPE = Pattern.compile("\\u001B\\[[;\\d]*[ -/]*[@-~]");
     private final Path projectPath;
+    private Path effectiveBuildRoot;
     private final boolean autoDetectJavaVersion;
     private final String buildSystem;
     private final boolean includeTests;
@@ -41,6 +55,9 @@ public class ProjectAnalyzer {
     private final List<Path> explicitSourceRoots;
     private final List<Path> explicitTestSourceRoots;
     private BuildResult lastBuildResult = BuildResult.notAttempted("BUILD DENIED");
+    private BuildJavaSelection buildJavaSelection = new BuildJavaSelection(null, "inherited", "inherited_environment");
+    private final List<BuildAttempt> buildAttempts = new ArrayList<>();
+    private List<Path> buildRootCandidates = List.of();
 
     /**
      * Create a ProjectAnalyzer for the given project path
@@ -117,6 +134,7 @@ public class ProjectAnalyzer {
         this.explicitClasspathFiles = explicitClasspathFiles == null ? List.of() : List.copyOf(explicitClasspathFiles);
         this.explicitSourceRoots = explicitSourceRoots == null ? List.of() : List.copyOf(explicitSourceRoots);
         this.explicitTestSourceRoots = explicitTestSourceRoots == null ? List.of() : List.copyOf(explicitTestSourceRoots);
+        this.effectiveBuildRoot = this.projectPath;
 
         if (!Files.isDirectory(projectPath)) {
             throw new IllegalArgumentException("Project path must be a directory: " + projectPath);
@@ -131,6 +149,8 @@ public class ProjectAnalyzer {
     public ProjectMetadata analyze() throws IOException {
         String detectedBuildSystem = detectBuildSystem();
         String javaVersion = detectJavaVersion(detectedBuildSystem);
+        buildJavaSelection = BuildJavaSelection.select(
+                effectiveBuildRoot, projectPath, detectedBuildSystem, javaVersion, System.getenv());
         List<Path> sourceRoots = !explicitSourceRoots.isEmpty()
                 ? existingDirs(explicitSourceRoots)
                 : findSourceRoots();
@@ -143,6 +163,15 @@ public class ProjectAnalyzer {
                 || !explicitTestClassOutputDirs.isEmpty()
                 || !explicitProjectJars.isEmpty();
         BuildResult buildResult = runBuildIfAllowed(detectedBuildSystem);
+        if (buildResult.succeeded()) {
+            if ("maven".equals(detectedBuildSystem)) {
+                sourceRoots = mergePaths(sourceRoots, findBuiltMavenSourceRoots(false));
+                if (includeTests) testSourceRoots = mergePaths(testSourceRoots, findBuiltMavenSourceRoots(true));
+            }
+            sourceRoots = mergePaths(sourceRoots, findGeneratedSourceRoots(false));
+            if (includeTests) testSourceRoots = mergePaths(testSourceRoots, findGeneratedSourceRoots(true));
+            sourceRoot = !sourceRoots.isEmpty() ? sourceRoots.get(0) : sourceRoot;
+        }
         List<Path> discoveredMainOutputs = explicitMode(explicitProjectBytecode)
                 ? List.of()
                 : existingMainClassOutputDirs(detectedBuildSystem);
@@ -179,6 +208,8 @@ public class ProjectAnalyzer {
         return new ProjectMetadata.Builder()
                 .projectName(projectName)
                 .projectPath(projectPath)
+                .buildRoot(effectiveBuildRoot)
+                .buildRootCandidates(buildRootCandidates)
                 .buildSystem(detectedBuildSystem)
                 .javaVersion(javaVersion)
                 .sourceRoot(sourceRoot)
@@ -195,6 +226,13 @@ public class ProjectAnalyzer {
                 .buildExitCode(buildResult.exitCode())
                 .buildSucceeded(buildResult.succeeded())
                 .buildTimedOut(buildResult.timedOut())
+                .buildBlocked(buildResult.blocked())
+                .buildOutputTail(buildResult.outputTail())
+                .buildFailureReason(buildResult.failureReason())
+                .buildJavaHome(buildJavaSelection.javaHome() == null ? "" : buildJavaSelection.javaHome().toString())
+                .buildJavaVersion(buildJavaSelection.version())
+                .buildJavaEvidence(buildJavaSelection.evidence())
+                .buildAttempts(buildAttempts)
                 .buildSkipped(buildPolicy == ContextRequest.BuildPolicy.DENY_BUILD)
                 .buildSandboxed(buildPolicy == ContextRequest.BuildPolicy.EXTERNALLY_SANDBOXED_BUILD)
                 .buildPolicy(buildPolicy)
@@ -217,6 +255,9 @@ public class ProjectAnalyzer {
     }
 
     private boolean canTrustBytecodeForAnalysis(BuildResult buildResult) {
+        if (buildResult.blocked()) {
+            return false;
+        }
         if (!buildResult.attempted()) {
             return true;
         }
@@ -233,6 +274,10 @@ public class ProjectAnalyzer {
     }
 
     private String compileStatus(BuildResult buildResult, boolean bytecodeAvailable) {
+        if (buildResult.blocked()) {
+            return bytecodeAvailable ? buildResult.status() + "; PREEXISTING PROJECT BYTECODE NOT TRUSTED"
+                    : buildResult.status() + "; NO PROJECT BYTECODE";
+        }
         if (!buildResult.attempted()) {
             return bytecodeAvailable ? buildResult.status() + "; PROJECT BYTECODE AVAILABLE"
                     : buildResult.status() + "; NO PROJECT BYTECODE";
@@ -325,21 +370,110 @@ public class ProjectAnalyzer {
             return "gradle";
         }
 
-        // Auto-detect: check for pom.xml first, then build.gradle
-        if (Files.exists(projectPath.resolve("pom.xml"))) {
-            return "maven";
-        }
         if (Files.exists(projectPath.resolve("build.gradle")) ||
             Files.exists(projectPath.resolve("build.gradle.kts")) ||
             Files.exists(projectPath.resolve("settings.gradle")) ||
             Files.exists(projectPath.resolve("settings.gradle.kts"))) {
             return "gradle";
         }
+        if (Files.exists(projectPath.resolve("pom.xml"))) {
+            return "maven";
+        }
+
+        String unsupportedBuildSystem = unsupportedRootBuildSystem();
+        if (unsupportedBuildSystem != null) {
+            buildRootCandidates = List.of(projectPath);
+            return unsupportedBuildSystem;
+        }
+
+        List<Path> nestedRoots = nestedBuildRoots(projectPath);
+        buildRootCandidates = nestedRoots;
+        if (nestedRoots.size() == 1) {
+            effectiveBuildRoot = nestedRoots.get(0);
+            return Files.isRegularFile(effectiveBuildRoot.resolve("pom.xml")) ? "maven" : "gradle";
+        }
 
         // No recognized build descriptor: a plain Java directory or pre-compiled
         // project. Return "none" so conventional source and bytecode layouts can
         // still be analyzed.
         return "none";
+    }
+
+    private String unsupportedRootBuildSystem() {
+        if (Files.isRegularFile(projectPath.resolve("build.xml"))) return "ant";
+        if (Files.isRegularFile(projectPath.resolve("MODULE.bazel"))
+                || Files.isRegularFile(projectPath.resolve("WORKSPACE"))
+                || Files.isRegularFile(projectPath.resolve("WORKSPACE.bazel"))) return "bazel";
+        if (Files.isRegularFile(projectPath.resolve("BUCK"))) return "buck";
+        if (Files.isRegularFile(projectPath.resolve("build.sbt"))) return "sbt";
+        return null;
+    }
+
+    /**
+     * Return the only nested Maven or Gradle root when the requested directory
+     * has no root build descriptor. Ambiguous layouts deliberately return the
+     * requested path so callers retain generic-project behavior.
+     */
+    public static Path preferredAdapterRoot(Path projectPath) {
+        if (hasBuildDescriptor(projectPath) || hasAuthoritativeUnsupportedBuildDescriptor(projectPath)) {
+            return projectPath;
+        }
+        List<Path> roots = nestedBuildRoots(projectPath);
+        return roots.size() == 1 ? roots.get(0) : projectPath;
+    }
+
+    private static boolean hasBuildDescriptor(Path root) {
+        return Files.isRegularFile(root.resolve("pom.xml"))
+                || Files.isRegularFile(root.resolve("build.gradle"))
+                || Files.isRegularFile(root.resolve("build.gradle.kts"))
+                || Files.isRegularFile(root.resolve("settings.gradle"))
+                || Files.isRegularFile(root.resolve("settings.gradle.kts"));
+    }
+
+    static boolean hasAuthoritativeUnsupportedBuildDescriptor(Path root) {
+        return Files.isRegularFile(root.resolve("build.xml"))
+                || Files.isRegularFile(root.resolve("MODULE.bazel"))
+                || Files.isRegularFile(root.resolve("WORKSPACE"))
+                || Files.isRegularFile(root.resolve("WORKSPACE.bazel"))
+                || Files.isRegularFile(root.resolve("BUCK"))
+                || Files.isRegularFile(root.resolve("build.sbt"));
+    }
+
+    private static List<Path> nestedBuildRoots(Path projectPath) {
+        Set<Path> roots = new LinkedHashSet<>();
+        try (var walk = Files.walk(projectPath, 3)) {
+            for (Path file : walk.filter(Files::isRegularFile).toList()) {
+                String name = file.getFileName().toString();
+                if (name.equals("pom.xml") || name.equals("settings.gradle") || name.equals("settings.gradle.kts")
+                        || name.equals("build.gradle") || name.equals("build.gradle.kts")) {
+                    Path parent = file.getParent();
+                    String relative = projectPath.relativize(parent).toString().replace('\\', '/');
+                    if (!relative.contains("build/") && !relative.contains("target/")) roots.add(parent);
+                }
+            }
+        } catch (IOException ignored) {
+            return List.of();
+        }
+        List<Path> topLevelRoots = roots.stream()
+                .filter(root -> roots.stream().noneMatch(other -> !other.equals(root) && root.startsWith(other)))
+                .toList();
+        List<Path> productionRoots = topLevelRoots.stream()
+                .filter(root -> !isAuxiliaryBuildRoot(projectPath, root))
+                .toList();
+        return productionRoots.isEmpty() ? topLevelRoots : productionRoots;
+    }
+
+    private static boolean isAuxiliaryBuildRoot(Path projectPath, Path root) {
+        Set<String> auxiliarySegments = Set.of(
+                "example", "examples", "demo", "demos", "sample", "samples",
+                "benchmark", "benchmarks");
+        Path relative = projectPath.relativize(root);
+        for (Path segment : relative) {
+            if (auxiliarySegments.contains(segment.toString().toLowerCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -366,7 +500,7 @@ public class ProjectAnalyzer {
      * Looks for common compiler properties and direct compiler-plugin settings.
      */
     private String detectJavaVersionFromMaven() throws IOException {
-        Path pomPath = projectPath.resolve("pom.xml");
+        Path pomPath = effectiveBuildRoot.resolve("pom.xml");
         if (!Files.exists(pomPath)) {
             return "unknown";
         }
@@ -420,9 +554,9 @@ public class ProjectAnalyzer {
      * Extract Java version from Gradle build.gradle or build.gradle.kts
      */
     private String detectJavaVersionFromGradle() throws IOException {
-        Path buildGradle = projectPath.resolve("build.gradle");
+        Path buildGradle = effectiveBuildRoot.resolve("build.gradle");
         if (!Files.exists(buildGradle)) {
-            buildGradle = projectPath.resolve("build.gradle.kts");
+            buildGradle = effectiveBuildRoot.resolve("build.gradle.kts");
         }
 
         if (!Files.exists(buildGradle)) {
@@ -470,7 +604,7 @@ public class ProjectAnalyzer {
         }
 
         // Check for multi-module Maven structure
-        Path pomXml = projectPath.resolve("pom.xml");
+        Path pomXml = effectiveBuildRoot.resolve("pom.xml");
         if (Files.exists(pomXml)) {
             // Look for modules with src/main/java directories
             try (var stream = Files.list(projectPath)) {
@@ -504,9 +638,10 @@ public class ProjectAnalyzer {
     private List<Path> findSourceRoots() throws IOException {
         LinkedHashSet<Path> roots = new LinkedHashSet<>();
         addIfDirectory(roots, projectPath.resolve("src/main/java"));
-        for (Path module : collectMavenModuleDirs(projectPath)) {
+        for (Path module : collectMavenModuleDirs(effectiveBuildRoot)) {
             addIfDirectory(roots, module.resolve("src/main/java"));
         }
+        addDeclaredMavenSourceRoots(roots, false);
         if (roots.isEmpty()) {
             addConventionSourceRoots(roots, "src/main/java");
         }
@@ -519,13 +654,105 @@ public class ProjectAnalyzer {
     private List<Path> findTestSourceRoots() throws IOException {
         LinkedHashSet<Path> roots = new LinkedHashSet<>();
         addIfDirectory(roots, projectPath.resolve("src/test/java"));
-        for (Path module : collectMavenModuleDirs(projectPath)) {
+        for (Path module : collectMavenModuleDirs(effectiveBuildRoot)) {
             addIfDirectory(roots, module.resolve("src/test/java"));
         }
+        addDeclaredMavenSourceRoots(roots, true);
         if (roots.isEmpty()) {
             addConventionSourceRoots(roots, "src/test/java");
         }
         return new ArrayList<>(roots);
+    }
+
+    private void addDeclaredMavenSourceRoots(Set<Path> roots, boolean tests) {
+        if (!Files.isRegularFile(effectiveBuildRoot.resolve("pom.xml"))) return;
+        String element = tests ? "testSourceDirectory" : "sourceDirectory";
+        for (Path module : mergePaths(List.of(effectiveBuildRoot), collectMavenModuleDirs(effectiveBuildRoot))) {
+            String configured = inheritedMavenBuildPath(module, element);
+            Path resolved = resolveMavenProjectPath(module, configured);
+            addIfDirectory(roots, resolved);
+        }
+    }
+
+    private String inheritedMavenBuildPath(Path module, String element) {
+        Path root = effectiveBuildRoot.toAbsolutePath().normalize();
+        Path current = module.toAbsolutePath().normalize();
+        while (current.startsWith(root)) {
+            String value = directMavenBuildPath(current.resolve("pom.xml"), element);
+            if (value != null && !value.isBlank()) return value;
+            if (current.equals(root)) break;
+            current = current.getParent();
+        }
+        return null;
+    }
+
+    private static String directMavenBuildPath(Path pom, String elementName) {
+        if (!Files.isRegularFile(pom)) return null;
+        try {
+            Element project = parseXml(pom);
+            for (Node child = project.getFirstChild(); child != null; child = child.getNextSibling()) {
+                if (!(child instanceof Element build) || !"build".equals(elementName(build))) continue;
+                for (Node entry = build.getFirstChild(); entry != null; entry = entry.getNextSibling()) {
+                    if (entry instanceof Element value && elementName.equals(elementName(value))) {
+                        return value.getTextContent().trim();
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            // Invalid POMs are classified by the build itself.
+        }
+        return null;
+    }
+
+    private static Path resolveMavenProjectPath(Path module, String configured) {
+        if (configured == null || configured.isBlank()) return null;
+        String resolved = configured
+                .replace("${project.basedir}", module.toAbsolutePath().normalize().toString())
+                .replace("${basedir}", module.toAbsolutePath().normalize().toString());
+        if (resolved.contains("${")) return null;
+        Path path = Path.of(resolved);
+        return (path.isAbsolute() ? path : module.resolve(path)).toAbsolutePath().normalize();
+    }
+
+    private List<Path> findGeneratedSourceRoots(boolean tests) {
+        Set<Path> roots = new LinkedHashSet<>();
+        try (var walk = Files.walk(projectPath, 10)) {
+            for (Path dir : walk.filter(Files::isDirectory).toList()) {
+                String normalized = projectPath.relativize(dir).toString().replace('\\', '/');
+                boolean generated = normalized.contains("/target/generated-")
+                        || normalized.contains("/build/generated/sources/")
+                        || normalized.startsWith("target/generated-")
+                        || normalized.startsWith("build/generated/sources/");
+                boolean testRoot = normalized.contains("generated-test-sources")
+                        || normalized.contains("/test/") || normalized.endsWith("/test");
+                if (generated && testRoot == tests && containsJavaFiles(dir)) roots.add(dir);
+            }
+        } catch (IOException ignored) {
+            // Generated sources are optional enrichment.
+        }
+        return new ArrayList<>(roots);
+    }
+
+    private List<Path> findBuiltMavenSourceRoots(boolean tests) {
+        Set<Path> roots = new LinkedHashSet<>();
+        for (Path output : builtMavenClassOutputs(effectiveBuildRoot, tests)) {
+            Path target = output.getParent();
+            Path module = target == null ? null : target.getParent();
+            if (module == null || !Files.isRegularFile(module.resolve("pom.xml"))) continue;
+            String element = tests ? "testSourceDirectory" : "sourceDirectory";
+            Path configured = resolveMavenProjectPath(module, inheritedMavenBuildPath(module, element));
+            Path conventional = module.resolve(tests ? "src/test/java" : "src/main/java");
+            addIfDirectory(roots, configured != null ? configured : conventional);
+        }
+        return new ArrayList<>(roots);
+    }
+
+    private static boolean containsJavaFiles(Path dir) {
+        try (var files = Files.walk(dir, 5)) {
+            return files.anyMatch(path -> Files.isRegularFile(path) && path.toString().endsWith(".java"));
+        } catch (IOException ignored) {
+            return false;
+        }
     }
 
     private void addConventionSourceRoots(Set<Path> roots, String suffix) {
@@ -561,7 +788,7 @@ public class ProjectAnalyzer {
         // projects (e.g. when running pipeline tests from a workspace that contains
         // multiple sibling projects on disk).
         if ("maven".equals(buildSystem)) {
-            for (Path module : collectMavenModuleDirs(projectPath)) {
+            for (Path module : collectMavenModuleDirs(effectiveBuildRoot)) {
                 Path moduleClasses = module.resolve("target/classes");
                 if (Files.exists(moduleClasses)) {
                     classpath.add(moduleClasses);
@@ -593,6 +820,11 @@ public class ProjectAnalyzer {
             return plainProjectDependencyClasspath();
         }
         if (buildPolicy == ContextRequest.BuildPolicy.DENY_BUILD) {
+            return List.of();
+        }
+        if (lastBuildResult != null
+                && (lastBuildResult.blocked()
+                || (lastBuildResult.attempted() && !lastBuildResult.succeeded()))) {
             return List.of();
         }
         if ("maven".equals(buildSystem)) {
@@ -637,15 +869,21 @@ public class ProjectAnalyzer {
     private List<Path> buildMavenClasspath() throws IOException {
         boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
         String mvn = executableWithWrapper("mvn", isWindows);
+        List<String> command;
         Path output = Files.createTempFile("cocomut-maven-classpath", ".txt");
         try {
             CommandResult result;
+            command = List.of(mvn, "-q", "-DincludeScope=" + (includeTests ? "test" : "compile"),
+                    "-Dmdep.outputFile=" + output.toAbsolutePath(),
+                    "dependency:build-classpath");
             try {
-                result = runCommand(List.of(mvn, "-q", "-DincludeScope=" + (includeTests ? "test" : "compile"),
-                        "-Dmdep.outputFile=" + output.toAbsolutePath(),
-                        "dependency:build-classpath"));
+                result = runCommand(command, true, "maven_dependency_classpath");
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                return List.of();
+            } catch (IOException e) {
+                recordBuildAttempt("maven_dependency_classpath", command,
+                        new CommandResult(-1, "process start failed: " + e.getMessage(), false));
                 return List.of();
             }
             if (result.exitCode() != 0 || !Files.isRegularFile(output)) {
@@ -677,7 +915,9 @@ public class ProjectAnalyzer {
         }
 
         if (!"maven".equals(buildSystem) && !"gradle".equals(buildSystem)) {
-            lastBuildResult = BuildResult.notAttempted("NO BUILD TOOL");
+            lastBuildResult = BuildResult.notAttempted("none".equals(buildSystem)
+                    ? NO_ROOT_BUILD_DESCRIPTOR
+                    : "UNSUPPORTED BUILD SYSTEM: " + buildSystem.toUpperCase(Locale.ROOT));
             return lastBuildResult;
         }
 
@@ -686,62 +926,442 @@ public class ProjectAnalyzer {
                     .toLowerCase()
                     .contains("win");
             List<String> command;
-
-            if ("maven".equals(buildSystem)) {
-                String mvn = executableWithWrapper("mvn", isWindows);
-                command = List.of(mvn, "-q", "-DskipTests", includeTests ? "test-compile" : "compile");
-            } else if ("gradle".equals(buildSystem)) {
-                String gradle = executableWithWrapper("gradle", isWindows);
-                command = List.of(gradle, "--no-daemon", includeTests ? "testClasses" : "classes",
-                        "-x", "test", "--build-cache", "-q");
-            } else {
-                lastBuildResult = BuildResult.notAttempted("NO BUILD TOOL");
+            AndroidSdkSupport.Preparation androidPreparation = "gradle".equals(buildSystem)
+                    ? AndroidSdkSupport.prepare(effectiveBuildRoot) : AndroidSdkSupport.Preparation.notAndroid();
+            if (androidPreparation.attempted()) {
+                recordAndroidSdkPreparation(androidPreparation);
+            }
+            if (androidPreparation.androidProject() && !androidPreparation.succeeded()) {
+                lastBuildResult = BuildResult.preflightBlocked(
+                        "BUILD BLOCKED: ANDROID SDK UNAVAILABLE",
+                        androidPreparation.diagnostic(),
+                        BuildFailureReason.BUILD_FAILED_ANDROID_SDK_UNAVAILABLE);
                 return lastBuildResult;
             }
 
-            CommandResult result = runCommand(command);
+            if ("maven".equals(buildSystem)) {
+                String mvn = executableWithWrapper("mvn", isWindows);
+                List<String> mavenCommand = new ArrayList<>(List.of(mvn, "-q", "-DskipTests"));
+                Path toolchains = isolatedMavenToolchainsFile();
+                if (toolchains != null) {
+                    mavenCommand.add("-t");
+                    mavenCommand.add(toolchains.toString());
+                }
+                mavenCommand.add(includeTests ? "test-compile" : "compile");
+                command = mavenCommand;
+            } else if ("gradle".equals(buildSystem)) {
+                String gradle = executableWithWrapper("gradle", isWindows);
+                command = List.of(gradle, "--no-daemon",
+                        gradleBuildTask(androidPreparation.androidProject(), includeTests),
+                        "-x", "test", "--build-cache", "-q");
+            } else {
+                lastBuildResult = BuildResult.notAttempted(NO_ROOT_BUILD_DESCRIPTOR);
+                return lastBuildResult;
+            }
+
+            CommandResult result = runWithTransientRetries(command);
+            result = retryForRequestedJava(command, result);
+            if ("maven".equals(buildSystem) && result.exitCode() != 0 && !result.timedOut()
+                    && missingSameReactorArtifacts(result.terminalOutput())) {
+                List<String> packageCommand = new ArrayList<>(command);
+                packageCommand.set(packageCommand.size() - 1, "package");
+                CommandResult packaged = retryForRequestedJava(packageCommand,
+                        runWithTransientRetries(packageCommand));
+                result = new CommandResult(packaged.exitCode(),
+                        result.output() + "\n[CoCoMUT retried Maven package because only declared reactor artifacts were missing]\n"
+                                + packaged.output(), packaged.timedOut(), packaged.terminalOutput());
+            }
+            if ("gradle".equals(buildSystem) && !includeTests && result.exitCode() != 0
+                    && !result.timedOut() && result.terminalOutput().contains("Task 'classes' not found")) {
+                List<String> assembleCommand = new ArrayList<>(command);
+                assembleCommand.set(assembleCommand.indexOf("classes"), "assemble");
+                CommandResult assembled = retryForRequestedJava(assembleCommand,
+                        runWithTransientRetries(assembleCommand));
+                result = new CommandResult(assembled.exitCode(),
+                        result.output()
+                                + "\n[CoCoMUT retried Gradle assemble because the aggregator has no classes task]\n"
+                                + assembled.output(),
+                        assembled.timedOut(), assembled.terminalOutput());
+            }
             lastBuildResult = new BuildResult(true, result.exitCode(), result.exitCode() == 0,
-                    result.timedOut(), result.timedOut() ? "BUILD TIMED OUT" : (result.exitCode() == 0 ? "BUILD SUCCESS" : "BUILD FAILED"));
+                    result.timedOut(), result.timedOut() ? "BUILD TIMED OUT" : (result.exitCode() == 0 ? "BUILD SUCCESS" : "BUILD FAILED"),
+                    diagnosticTail(result.output()),
+                    classifiedBuildFailure(result), false);
+            return lastBuildResult;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            lastBuildResult = new BuildResult(true, -1, false, false,
+                    "BUILD INTERRUPTED", "Build execution was interrupted by the caller.",
+                    BuildFailureReason.BUILD_FAILED_INTERRUPTED, false);
             return lastBuildResult;
         } catch (Exception e) {
-            lastBuildResult = new BuildResult(true, -1, false, false, "BUILD FAILED: " + e.getClass().getSimpleName());
+            lastBuildResult = new BuildResult(true, -1, false, false,
+                    "BUILD FAILED: " + e.getClass().getSimpleName(), e.getMessage() == null ? "" : e.getMessage(),
+                    BuildFailureReason.BUILD_FAILED_UNKNOWN_ERROR, false);
             return lastBuildResult;
+        }
+    }
+
+    private CommandResult retryForRequestedJava(List<String> command, CommandResult initial)
+            throws IOException, InterruptedException {
+        if ("COCOMUT_BUILD_JAVA_HOME".equals(buildJavaSelection.evidence())) return initial;
+        CommandResult result = initial;
+        StringBuilder attempts = new StringBuilder(result.output());
+        Set<Path> attemptedJavaHomes = new HashSet<>();
+        if (buildJavaSelection.javaHome() != null) {
+            attemptedJavaHomes.add(buildJavaSelection.javaHome().toAbsolutePath().normalize());
+        }
+        for (int retryCount = 0; retryCount < 4 && result.exitCode() != 0 && !result.timedOut(); retryCount++) {
+            int requiredVersion = requiredJavaVersion(result.terminalOutput());
+            BuildJavaSelection retrySelection = BuildJavaSelection.forRequiredVersion(requiredVersion,
+                    "compiler requested Java " + requiredVersion + " after build failure");
+            Path retryHome = retrySelection == null || retrySelection.javaHome() == null
+                    ? null : retrySelection.javaHome().toAbsolutePath().normalize();
+            boolean exactRequirement = exactJavaVersionRequired(result.terminalOutput());
+            boolean downgradeRequired = obsoleteJavaSourceLevel(result.terminalOutput());
+            if (retrySelection == null
+                    || retrySelection.javaHome().equals(buildJavaSelection.javaHome())
+                    || attemptedJavaHomes.contains(retryHome)
+                    || (!exactRequirement && !downgradeRequired && buildJavaSelection.majorVersion() > 0
+                            && retrySelection.majorVersion() <= buildJavaSelection.majorVersion())) {
+                break;
+            }
+            BuildJavaSelection previousSelection = buildJavaSelection;
+            buildJavaSelection = retrySelection;
+            attemptedJavaHomes.add(retryHome);
+            System.err.println("[ProjectAnalyzer] Retrying build with JDK " + retrySelection.version()
+                    + " because the compiler requested Java " + requiredVersion);
+            result = runWithTransientRetries(command);
+            attempts.append("\n[CoCoMUT retried after ")
+                    .append(previousSelection.evidence())
+                    .append(" using ")
+                    .append(retrySelection.javaHome())
+                    .append("]\n")
+                    .append(result.output());
+        }
+        return new CommandResult(result.exitCode(), attempts.toString(), result.timedOut(), result.terminalOutput());
+    }
+
+    static String gradleBuildTask(boolean androidProject, boolean includeTests) {
+        if (includeTests) return "testClasses";
+        return androidProject ? "assemble" : "classes";
+    }
+
+    private static String diagnosticTail(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "";
+        }
+        String normalized = ANSI_ESCAPE.matcher(raw)
+                .replaceAll("")
+                .replace("\r\n", "\n")
+                .replace('\r', '\n')
+                .stripTrailing();
+        if (normalized.length() <= BUILD_OUTPUT_TAIL_CHARS) {
+            return normalized;
+        }
+        return "[CoCoMUT kept the last " + BUILD_OUTPUT_TAIL_CHARS + " characters of build output]\n"
+                + normalized.substring(normalized.length() - BUILD_OUTPUT_TAIL_CHARS);
+    }
+
+    private BuildFailureReason classifiedBuildFailure(CommandResult result) {
+        return finalBuildFailureReason(result.output(), result.terminalOutput(),
+                result.timedOut(), result.exitCode() == 0,
+                missingSameReactorArtifacts(result.terminalOutput()));
+    }
+
+    /** Classify the complete, final diagnostic returned after all bounded retries. */
+    static BuildFailureReason finalBuildFailureReason(String transcript, String finalOutput,
+                                                      boolean timedOut, boolean succeeded,
+                                                      boolean sameReactorArtifacts) {
+        String diagnostic = finalOutput == null ? "" : finalOutput;
+        BuildFailureReason reason = BuildFailureReason.classify(diagnostic, timedOut, succeeded);
+        if (reason == BuildFailureReason.BUILD_FAILED_REACTOR_ARTIFACT_MISSING
+                && (transcript == null ? diagnostic : transcript).contains("Could not find artifact")
+                && !sameReactorArtifacts) {
+            return BuildFailureReason.BUILD_FAILED_DEPENDENCY_UNAVAILABLE;
+        }
+        return reason;
+    }
+
+    static int requiredJavaVersion(String output) {
+        if (output == null || output.isBlank()) {
+            return -1;
+        }
+        if (Pattern.compile("invalid flag:\\s*--release", Pattern.CASE_INSENSITIVE).matcher(output).find()) {
+            return 11;
+        }
+        if (Pattern.compile("unrecognized option:\\s*--add-(?:opens|exports)", Pattern.CASE_INSENSITIVE)
+                .matcher(output).find()) {
+            return 11;
+        }
+        Matcher classVersion = Pattern.compile(
+                "compiled by a more recent version of the java runtime.*?class file version\\s+(\\d+)(?:\\.\\d+)?",
+                Pattern.CASE_INSENSITIVE | Pattern.DOTALL).matcher(output);
+        boolean classVersionFound = classVersion.find();
+        if (!classVersionFound) {
+            classVersion = Pattern.compile("class file has wrong version\\s+(\\d+)(?:\\.\\d+)?",
+                    Pattern.CASE_INSENSITIVE).matcher(output);
+            classVersionFound = classVersion.find();
+        }
+        if (classVersionFound) {
+            int major = Integer.parseInt(classVersion.group(1));
+            if (major >= 45) {
+                return major - 44;
+            }
+        }
+        for (Pattern pattern : List.of(
+                Pattern.compile("languageVersion=(\\d+)", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("(?:release version|invalid target release:)\\s*(\\d+)\\s*(?:not supported)?", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("invalid source release:\\s*(\\d+)", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("requires at least jvm runtime version\\s*(\\d+)", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("requires at least jdk\\s*(\\d+)", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("only compatible with jvm runtime version\\s*(\\d+)\\s+or newer",
+                        Pattern.CASE_INSENSITIVE),
+                Pattern.compile("(?:this )?build requires java\\s*(\\d+)(?:\\s+or\\s+\\d+)?",
+                        Pattern.CASE_INSENSITIVE),
+                Pattern.compile("build requires jdk\\s*(\\d+)\\s+or\\s+later", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("jdk\\s*(\\d+)\\+?\\s+is required", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("jdk\\s*(\\d+)\\s*(?:\\([^)]*\\)\\s*)?is required",
+                        Pattern.CASE_INSENSITIVE),
+                Pattern.compile("java\\s+(?:1\\.)?(\\d+)\\s+is required", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("only builds on jdk\\s*(\\d+)\\s+or higher", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("built with java\\s*(\\d+)\\s+or (?:above|higher|later)", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("requires (?:a )?jvm\\s*(\\d+)\\s*(?:or later|\\+)", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("not in the allowed range\\s*\\[(\\d+)\\s*,", Pattern.CASE_INSENSITIVE),
+                Pattern.compile("(?:source|target) option\\s+(\\d+)\\s+is no longer supported", Pattern.CASE_INSENSITIVE))) {
+            Matcher matcher = pattern.matcher(output);
+            if (matcher.find()) {
+                return Integer.parseInt(matcher.group(1));
+            }
+        }
+        return -1;
+    }
+
+    static boolean exactJavaVersionRequired(String output) {
+        if (output == null || output.isBlank()) {
+            return false;
+        }
+        return Pattern.compile("java\\s+(?:1\\.)?\\d+\\s+is required", Pattern.CASE_INSENSITIVE)
+                .matcher(output)
+                .find();
+    }
+
+    static boolean obsoleteJavaSourceLevel(String output) {
+        if (output == null || output.isBlank()) return false;
+        return Pattern.compile("(?:source|target) option\\s+\\d+\\s+is no longer supported",
+                Pattern.CASE_INSENSITIVE).matcher(output).find();
+    }
+
+    private CommandResult runWithTransientRetries(List<String> command) throws IOException, InterruptedException {
+        CommandResult result = runCommand(command, true);
+        StringBuilder attempts = new StringBuilder(result.output());
+        for (int retry = 1; retry <= 2 && result.exitCode() != 0 && !result.timedOut()
+                && BuildFailureReason.isTransientNetworkFailure(result.terminalOutput()); retry++) {
+            Thread.sleep(500L * retry);
+            result = runCommand(command, true);
+            attempts.append("\n[CoCoMUT transient network retry ").append(retry).append("/2]\n")
+                    .append(result.output());
+        }
+        return new CommandResult(result.exitCode(), attempts.toString(), result.timedOut(), result.terminalOutput());
+    }
+
+    boolean missingSameReactorArtifacts(String output) {
+        if (output == null) return false;
+        String lower = output.toLowerCase(Locale.ROOT);
+        if (lower.contains("artifact has not been packaged yet")
+                && lower.contains("when used on reactor artifact")) return true;
+        if (!lower.contains("plugin descriptor for")
+                && !lower.contains(" (absent)")
+                && !lower.contains("could not find artifact")) {
+            return false;
+        }
+        Set<MavenCoordinate> reactorArtifacts = new HashSet<>();
+        for (Path dir : mergePaths(List.of(effectiveBuildRoot), collectMavenModuleDirs(effectiveBuildRoot))) {
+            MavenCoordinate coordinate = readMavenCoordinate(dir.resolve("pom.xml"));
+            if (coordinate != null) reactorArtifacts.add(coordinate);
+        }
+        Matcher pluginDescriptor = Pattern.compile(
+                "plugin descriptor for\\s+([^\\s]+)\\s+\\(([^)]+)\\).*?no plugin descriptor found",
+                Pattern.CASE_INSENSITIVE | Pattern.DOTALL).matcher(output);
+        if (pluginDescriptor.find()) {
+            String[] parts = pluginDescriptor.group(1).split(":");
+            Path pluginPath;
+            try {
+                pluginPath = Path.of(pluginDescriptor.group(2)).toAbsolutePath().normalize();
+            } catch (Exception ignored) {
+                return false;
+            }
+            return parts.length == 3
+                    && pluginPath.startsWith(effectiveBuildRoot.toAbsolutePath().normalize())
+                    && reactorArtifacts.contains(new MavenCoordinate(parts[0], parts[1], parts[2]));
+        }
+        Matcher absentArtifact = Pattern.compile(
+                "([A-Za-z0-9_.-]+):([A-Za-z0-9_.-]+):[^:\\s]+(?::[^:\\s]+)?:([A-Za-z0-9_.${}-]+)\\s+\\(absent\\)",
+                Pattern.CASE_INSENSITIVE).matcher(output);
+        boolean absentFound = false;
+        while (absentArtifact.find()) {
+            absentFound = true;
+            if (!reactorArtifacts.contains(new MavenCoordinate(
+                    absentArtifact.group(1), absentArtifact.group(2), absentArtifact.group(3)))) {
+                return false;
+            }
+        }
+        if (absentFound) return true;
+        if (!output.contains("Could not find artifact")) return false;
+        Matcher missing = Pattern.compile("Could not find artifact\\s+([^\\s]+)", Pattern.CASE_INSENSITIVE)
+                .matcher(output);
+        boolean found = false;
+        while (missing.find()) {
+            found = true;
+            String[] parts = missing.group(1).replaceAll("[.,;]+$", "").split(":");
+            if (parts.length < 4
+                    || !reactorArtifacts.contains(new MavenCoordinate(parts[0], parts[1], parts[parts.length - 1]))) {
+                return false;
+            }
+        }
+        return found;
+    }
+
+    private static MavenCoordinate readMavenCoordinate(Path pom) {
+        if (!Files.isRegularFile(pom)) return null;
+        try {
+            Element project = parseXml(pom);
+            Map<String, String> properties = new java.util.LinkedHashMap<>();
+            Element propertiesElement = directChild(project, "properties");
+            if (propertiesElement != null) {
+                for (Node child = propertiesElement.getFirstChild(); child != null; child = child.getNextSibling()) {
+                    if (child instanceof Element element) {
+                        properties.put(elementName(element), element.getTextContent().trim());
+                    }
+                }
+            }
+            Element parent = directChild(project, "parent");
+            String groupId = directChildText(project, "groupId");
+            String artifactId = directChildText(project, "artifactId");
+            String version = directChildText(project, "version");
+            if (groupId.isBlank() && parent != null) groupId = directChildText(parent, "groupId");
+            if (version.isBlank() && parent != null) version = directChildText(parent, "version");
+            properties.putIfAbsent("project.groupId", groupId);
+            properties.putIfAbsent("project.artifactId", artifactId);
+            properties.putIfAbsent("project.version", version);
+            properties.putIfAbsent("pom.groupId", groupId);
+            properties.putIfAbsent("pom.artifactId", artifactId);
+            properties.putIfAbsent("pom.version", version);
+            groupId = resolveMavenProperties(groupId, properties);
+            artifactId = resolveMavenProperties(artifactId, properties);
+            version = resolveMavenProperties(version, properties);
+            if (groupId.isBlank() || artifactId.isBlank() || version.isBlank()
+                    || groupId.contains("${") || artifactId.contains("${") || version.contains("${")) return null;
+            return new MavenCoordinate(groupId, artifactId, version);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static String resolveMavenProperties(String value, Map<String, String> properties) {
+        String resolved = value == null ? "" : value.trim();
+        for (int pass = 0; pass < 5; pass++) {
+            Matcher matcher = Pattern.compile("\\$\\{([^}]+)}").matcher(resolved);
+            StringBuffer next = new StringBuffer();
+            boolean changed = false;
+            while (matcher.find()) {
+                String replacement = properties.get(matcher.group(1));
+                if (replacement == null) continue;
+                matcher.appendReplacement(next, Matcher.quoteReplacement(replacement));
+                changed = true;
+            }
+            matcher.appendTail(next);
+            resolved = next.toString();
+            if (!changed) break;
+        }
+        return resolved;
+    }
+
+    private record MavenCoordinate(String groupId, String artifactId, String version) {}
+
+    private static String readQuietly(Path path) {
+        try {
+            return Files.isRegularFile(path) ? Files.readString(path) : "";
+        } catch (IOException ignored) {
+            return "";
         }
     }
 
     private String executableWithWrapper(String tool, boolean isWindows) {
-        String wrapperName = switch (tool) {
-            case "mvn" -> isWindows ? "mvnw.cmd" : "mvnw";
-            case "gradle" -> isWindows ? "gradlew.bat" : "gradlew";
-            default -> tool;
-        };
-        Path wrapper = projectPath.resolve(wrapperName);
-        if (Files.isRegularFile(wrapper) && Files.isExecutable(wrapper)) {
-            return wrapper.toAbsolutePath().toString();
-        }
-        return isWindows ? tool + ".cmd" : tool;
+        return BuildToolExecutable.resolve(effectiveBuildRoot, tool, isWindows);
     }
 
-    private CommandResult runCommand(List<String> command) throws IOException, InterruptedException {
+    Path isolatedMavenToolchainsFile() throws IOException {
+        Path projectToolchains = effectiveBuildRoot.resolve(".mvn/toolchains.xml");
+        if (Files.isRegularFile(projectToolchains)) {
+            return projectToolchains.toAbsolutePath().normalize();
+        }
+
+        boolean toolchainRequested = false;
+        for (Path reactorDir : mergePaths(
+                List.of(effectiveBuildRoot), collectMavenModuleDirs(effectiveBuildRoot))) {
+            String pom = readQuietly(reactorDir.resolve("pom.xml"));
+            toolchainRequested |= pom.contains("maven-toolchains-plugin") || pom.contains("jdkToolchain");
+            if (requiresNonVersionToolchainTokens(pom)) {
+                // A version-only inventory would weaken a vendor, purpose, or custom
+                // token requested anywhere in the reactor.
+                return null;
+            }
+        }
+        if (!toolchainRequested) return null;
+        Map<Integer, Path> homes = BuildJavaSelection.installedJdkHomes();
+        if (homes.isEmpty()) return null;
+        StringBuilder xml = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<toolchains>\n");
+        for (Map.Entry<Integer, Path> entry : homes.entrySet()) {
+            xml.append("  <toolchain><type>jdk</type><provides><version>")
+                    .append(entry.getKey()).append("</version></provides><configuration><jdkHome>")
+                    .append(escapeXml(entry.getValue().toString()))
+                    .append("</jdkHome></configuration></toolchain>\n");
+        }
+        xml.append("</toolchains>\n");
+        Path file = Files.createTempFile("cocomut-maven-toolchains-", ".xml");
+        Files.writeString(file, xml.toString());
+        file.toFile().deleteOnExit();
+        return file;
+    }
+
+    static boolean requiresNonVersionToolchainTokens(String pom) {
+        if (pom == null || pom.isBlank()) return false;
+        Matcher block = Pattern.compile("(?s)<(jdkToolchain|jdk|provides)\\b[^>]*>(.*?)</\\1>")
+                .matcher(pom);
+        while (block.find()) {
+            Matcher token = Pattern.compile("<([A-Za-z_][A-Za-z0-9_.-]*)\\b").matcher(block.group(2));
+            while (token.find()) {
+                if (!"version".equals(token.group(1))) return true;
+            }
+        }
+        return false;
+    }
+
+    private static String escapeXml(String value) {
+        return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                .replace("\"", "&quot;").replace("'", "&apos;");
+    }
+
+    private CommandResult runCommand(List<String> command, boolean recordAttempt)
+            throws IOException, InterruptedException {
+        return runCommand(command, recordAttempt, "build");
+    }
+
+    private CommandResult runCommand(List<String> command, boolean recordAttempt, String action)
+            throws IOException, InterruptedException {
         ProcessBuilder pb = new ProcessBuilder(command);
-        pb.directory(projectPath.toFile());
+        pb.directory(effectiveBuildRoot.toFile());
         pb.redirectErrorStream(true);
+        buildJavaSelection.apply(pb);
         Process process = pb.start();
-        StringBuilder output = new StringBuilder();
+        BoundedDiagnosticBuffer output = new BoundedDiagnosticBuffer(1_000_000, 128_000);
         Thread drainer = new Thread(() -> {
             try (var input = process.getInputStream()) {
                 byte[] buffer = new byte[8192];
                 int read;
-                int remaining = 1_000_000;
                 while ((read = input.read(buffer)) >= 0) {
-                    if (remaining > 0) {
-                        int keep = Math.min(read, remaining);
-                        output.append(new String(buffer, 0, keep, StandardCharsets.UTF_8));
-                        remaining -= keep;
-                        if (remaining == 0) {
-                            output.append("\n[CoCoMUT build log truncated after 1000000 bytes]\n");
-                        }
-                    }
+                    output.append(buffer, 0, read);
                 }
             } catch (IOException ignored) {
                 // Build output is diagnostic only.
@@ -749,14 +1369,140 @@ public class ProjectAnalyzer {
         }, "cocomut-build-output-drainer");
         drainer.setDaemon(true);
         drainer.start();
-        boolean completed = process.waitFor(compileTimeoutSeconds(), java.util.concurrent.TimeUnit.SECONDS);
-        if (!completed) {
-            process.destroyForcibly();
-            drainer.join(1000);
-            return new CommandResult(-1, output.toString(), true);
+        boolean interrupted = false;
+        try {
+            boolean completed = process.waitFor(compileTimeoutSeconds(), java.util.concurrent.TimeUnit.SECONDS);
+            if (!completed) {
+                interrupted |= terminateProcess(process);
+                finishDraining(process, drainer);
+                CommandResult result = new CommandResult(-1, output.transcript(), true, output.tailText());
+                if (recordAttempt) recordBuildAttempt(action, command, result);
+                return result;
+            }
+            finishDraining(process, drainer);
+            CommandResult result = new CommandResult(
+                    process.exitValue(), output.transcript(), false, output.tailText());
+            if (recordAttempt) recordBuildAttempt(action, command, result);
+            return result;
+        } catch (InterruptedException e) {
+            interrupted = true;
+            if (recordAttempt) {
+                String marker = "[CoCoMUT build interrupted by caller]";
+                recordBuildAttempt(action, command,
+                        new CommandResult(-1, output.transcript() + "\n" + marker, false, marker));
+            }
+            throw e;
+        } finally {
+            interrupted |= cleanupProcessAndDrainer(process, drainer);
+            if (interrupted) Thread.currentThread().interrupt();
         }
-        drainer.join(1000);
-        return new CommandResult(process.exitValue(), output.toString(), false);
+    }
+
+    private static void finishDraining(Process process, Thread drainer) throws InterruptedException, IOException {
+        drainer.join(10_000);
+        if (drainer.isAlive()) {
+            process.getInputStream().close();
+            drainer.join(1_000);
+        }
+    }
+
+    private static boolean cleanupProcessAndDrainer(Process process, Thread drainer) {
+        boolean interrupted = false;
+        if (process.isAlive()) {
+            interrupted |= terminateProcess(process);
+        }
+        if (drainer.isAlive()) {
+            try {
+                process.getInputStream().close();
+            } catch (IOException ignored) {
+                // Closing the stream is only needed to release the diagnostic drainer.
+            }
+            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+            while (drainer.isAlive() && System.nanoTime() < deadline) {
+                try {
+                    drainer.join(250);
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                }
+            }
+        }
+        return interrupted;
+    }
+
+    private static boolean terminateProcess(Process process) {
+        boolean interrupted = false;
+        List<ProcessHandle> descendants = process.descendants().toList();
+        descendants.forEach(ProcessHandle::destroy);
+        process.destroy();
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+        while (process.isAlive() && System.nanoTime() < deadline) {
+            try {
+                process.waitFor(250, java.util.concurrent.TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                interrupted = true;
+            }
+        }
+        if (process.isAlive()) {
+            descendants.stream().filter(ProcessHandle::isAlive).forEach(ProcessHandle::destroyForcibly);
+            process.destroyForcibly();
+            deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+            while (process.isAlive() && System.nanoTime() < deadline) {
+                try {
+                    process.waitFor(250, java.util.concurrent.TimeUnit.MILLISECONDS);
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                }
+            }
+        }
+        descendants.stream().filter(ProcessHandle::isAlive).forEach(ProcessHandle::destroyForcibly);
+        interrupted |= waitForProcessHandles(descendants, 5);
+        return interrupted;
+    }
+
+    private static boolean waitForProcessHandles(List<ProcessHandle> handles, int seconds) {
+        boolean interrupted = false;
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(seconds);
+        while (handles.stream().anyMatch(ProcessHandle::isAlive) && System.nanoTime() < deadline) {
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                interrupted = true;
+            }
+        }
+        return interrupted;
+    }
+
+    private void recordBuildAttempt(List<String> command, CommandResult result) {
+        recordBuildAttempt("build", command, result);
+    }
+
+    private void recordBuildAttempt(String action, List<String> command, CommandResult result) {
+        buildAttempts.add(new BuildAttempt(
+                action,
+                command,
+                List.of(),
+                buildJavaSelection.javaHome() == null ? "" : buildJavaSelection.javaHome().toString(),
+                buildJavaSelection.version(),
+                buildJavaSelection.evidence(),
+                result.exitCode(),
+                result.timedOut(),
+                false,
+                BuildFailureReason.classify(result.output(), result.timedOut(), result.exitCode() == 0)));
+    }
+
+    private void recordAndroidSdkPreparation(AndroidSdkSupport.Preparation preparation) {
+        buildAttempts.add(new BuildAttempt(
+                "android_sdk_provisioning",
+                preparation.command(),
+                new ArrayList<>(preparation.components()),
+                buildJavaSelection.javaHome() == null ? "" : buildJavaSelection.javaHome().toString(),
+                buildJavaSelection.version(),
+                buildJavaSelection.evidence(),
+                preparation.exitCode(),
+                preparation.timedOut(),
+                preparation.changed(),
+                preparation.succeeded() ? BuildFailureReason.NONE
+                        : BuildFailureReason.BUILD_FAILED_ANDROID_SDK_UNAVAILABLE));
     }
 
     private static List<Path> parsePathList(String raw) {
@@ -775,11 +1521,27 @@ public class ProjectAnalyzer {
         return paths;
     }
 
-    private record CommandResult(int exitCode, String output, boolean timedOut) {}
+    private record CommandResult(int exitCode, String output, boolean timedOut, String terminalOutput) {
+        private CommandResult(int exitCode, String output, boolean timedOut) {
+            this(exitCode, output, timedOut, output);
+        }
 
-    private record BuildResult(boolean attempted, int exitCode, boolean succeeded, boolean timedOut, String status) {
+        private CommandResult {
+            output = output == null ? "" : output;
+            terminalOutput = terminalOutput == null ? "" : terminalOutput;
+        }
+    }
+
+    private record BuildResult(boolean attempted, int exitCode, boolean succeeded, boolean timedOut,
+                               String status, String outputTail, BuildFailureReason failureReason,
+                               boolean blocked) {
         static BuildResult notAttempted(String status) {
-            return new BuildResult(false, -1, false, false, status);
+            return new BuildResult(false, -1, false, false, status, "", BuildFailureReason.NONE, false);
+        }
+
+        static BuildResult preflightBlocked(String status, String diagnostic, BuildFailureReason reason) {
+            return new BuildResult(false, -1, false, false,
+                    status, diagnostic, reason, true);
         }
     }
 
@@ -831,8 +1593,11 @@ public class ProjectAnalyzer {
         List<Path> dirs = new ArrayList<>();
         if ("maven".equals(buildSystem)) {
             addClassDir(dirs, projectPath.resolve("target/classes"));
-            for (Path module : collectMavenModuleDirs(projectPath)) {
+            for (Path module : collectMavenModuleDirs(effectiveBuildRoot)) {
                 addClassDir(dirs, module.resolve("target/classes"));
+            }
+            if (lastBuildResult != null && lastBuildResult.succeeded()) {
+                dirs.addAll(builtMavenClassOutputs(effectiveBuildRoot, false));
             }
             return new ArrayList<>(new LinkedHashSet<>(dirs));
         } else if ("gradle".equals(buildSystem)) {
@@ -859,8 +1624,11 @@ public class ProjectAnalyzer {
         List<Path> dirs = new ArrayList<>();
         if ("maven".equals(buildSystem)) {
             addClassDir(dirs, projectPath.resolve("target/test-classes"));
-            for (Path module : collectMavenModuleDirs(projectPath)) {
+            for (Path module : collectMavenModuleDirs(effectiveBuildRoot)) {
                 addClassDir(dirs, module.resolve("target/test-classes"));
+            }
+            if (lastBuildResult != null && lastBuildResult.succeeded()) {
+                dirs.addAll(builtMavenClassOutputs(effectiveBuildRoot, true));
             }
         } else if ("gradle".equals(buildSystem)) {
             for (Path candidate : List.of(
@@ -873,11 +1641,32 @@ public class ProjectAnalyzer {
         return new ArrayList<>(new LinkedHashSet<>(dirs));
     }
 
+    static List<Path> builtMavenClassOutputs(Path root, boolean tests) {
+        if (root == null || !Files.isDirectory(root)) return List.of();
+        Path suffix = Path.of("target", tests ? "test-classes" : "classes");
+        List<Path> outputs = new ArrayList<>();
+        try (var walk = Files.walk(root, 12)) {
+            for (Path dir : walk.filter(Files::isDirectory)
+                    .filter(path -> path.endsWith(suffix))
+                    .toList()) {
+                Path target = dir.getParent();
+                Path module = target == null ? null : target.getParent();
+                if (module != null && Files.isRegularFile(module.resolve("pom.xml"))
+                        && containsClassFile(dir)) {
+                    outputs.add(dir.toAbsolutePath().normalize());
+                }
+            }
+        } catch (IOException ignored) {
+            // Conventional and explicitly supplied outputs remain available.
+        }
+        return new ArrayList<>(new LinkedHashSet<>(outputs));
+    }
+
     private List<Path> existingProjectArtifactJars(String buildSystem) throws IOException {
         List<Path> jars = new ArrayList<>();
         if ("maven".equals(buildSystem)) {
             addJarsFromDirectory(jars, projectPath.resolve("target"));
-            for (Path module : collectMavenModuleDirs(projectPath)) {
+            for (Path module : collectMavenModuleDirs(effectiveBuildRoot)) {
                 addJarsFromDirectory(jars, module.resolve("target"));
             }
         } else if ("gradle".equals(buildSystem)) {
@@ -900,16 +1689,27 @@ public class ProjectAnalyzer {
     }
 
     private void addGradleOutputDirs(List<Path> dirs, String sourceSet) {
-        try (var walk = Files.walk(projectPath, 6)) {
+        try (var walk = Files.walk(projectPath, 10)) {
             for (Path dir : walk.filter(Files::isDirectory)
                     .filter(path -> path.endsWith(Path.of("build/classes/java/" + sourceSet))
-                            || path.endsWith(Path.of("build/classes/kotlin/" + sourceSet)))
+                            || path.endsWith(Path.of("build/classes/kotlin/" + sourceSet))
+                            || isAndroidClassOutput(path, sourceSet))
                     .toList()) {
                 addClassDir(dirs, dir);
             }
         } catch (IOException ignored) {
             // Missing output dirs are reported through phase-1 bytecode counts.
         }
+    }
+
+    private static boolean isAndroidClassOutput(Path path, String sourceSet) {
+        String normalized = path.toString().replace('\\', '/');
+        boolean testOutput = normalized.contains("/androidTest/") || normalized.contains("/test/")
+                || normalized.contains("/testDebug/") || normalized.contains("/testRelease/");
+        if ("test".equals(sourceSet) != testOutput) return false;
+        return (normalized.contains("/build/intermediates/javac/") && normalized.endsWith("/classes"))
+                || normalized.contains("/build/tmp/kotlin-classes/")
+                || normalized.contains("/build/intermediates/classes/");
     }
 
     private void addClassDir(List<Path> dirs, Path dir) {
@@ -931,7 +1731,7 @@ public class ProjectAnalyzer {
         }
     }
 
-    private boolean containsClassFile(Path dir) {
+    private static boolean containsClassFile(Path dir) {
         try (java.util.stream.Stream<Path> stream = Files.walk(dir)) {
             return stream.anyMatch(p -> p.toString().endsWith(".class"));
         } catch (IOException e) {
@@ -1054,21 +1854,13 @@ public class ProjectAnalyzer {
         java.util.ArrayDeque<Path> queue = new java.util.ArrayDeque<>();
         java.util.Set<Path> seen = new java.util.HashSet<>();
         queue.add(root);
-        Pattern modulePattern = Pattern.compile("<module>\\s*([^<]+?)\\s*</module>");
         while (!queue.isEmpty()) {
             Path dir = queue.poll().toAbsolutePath().normalize();
             if (!seen.add(dir)) continue;
             Path pom = dir.resolve("pom.xml");
             if (!Files.isRegularFile(pom)) continue;
-            String content;
-            try {
-                content = Files.readString(pom, StandardCharsets.UTF_8);
-            } catch (IOException e) {
-                continue;
-            }
-            Matcher m = modulePattern.matcher(content);
-            while (m.find()) {
-                Path child = dir.resolve(m.group(1)).normalize();
+            for (String module : directMavenModules(pom)) {
+                Path child = dir.resolve(module).normalize();
                 if (Files.isDirectory(child)) {
                     modules.add(child);
                     queue.add(child);
@@ -1076,6 +1868,55 @@ public class ProjectAnalyzer {
             }
         }
         return modules;
+    }
+
+    private static List<String> directMavenModules(Path pom) {
+        try {
+            Element project = parseXml(pom);
+            for (Node child = project.getFirstChild(); child != null; child = child.getNextSibling()) {
+                if (!(child instanceof Element element) || !"modules".equals(elementName(element))) {
+                    continue;
+                }
+                List<String> modules = new ArrayList<>();
+                for (Node module = element.getFirstChild(); module != null; module = module.getNextSibling()) {
+                    if (module instanceof Element moduleElement && "module".equals(elementName(moduleElement))) {
+                        String value = moduleElement.getTextContent().trim();
+                        if (!value.isBlank()) {
+                            modules.add(value);
+                        }
+                    }
+                }
+                return modules;
+            }
+        } catch (Exception ignored) {
+            // Malformed or unsupported POMs are handled as projects without declared modules.
+        }
+        return List.of();
+    }
+
+    private static Element parseXml(Path path) throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(true);
+        factory.setXIncludeAware(false);
+        factory.setExpandEntityReferences(false);
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        return factory.newDocumentBuilder().parse(path.toFile()).getDocumentElement();
+    }
+
+    private static Element directChild(Element parent, String name) {
+        for (Node child = parent.getFirstChild(); child != null; child = child.getNextSibling()) {
+            if (child instanceof Element element && name.equals(elementName(element))) return element;
+        }
+        return null;
+    }
+
+    private static String directChildText(Element parent, String name) {
+        Element child = directChild(parent, name);
+        return child == null ? "" : child.getTextContent().trim();
+    }
+
+    private static String elementName(Element element) {
+        return element.getLocalName() != null ? element.getLocalName() : element.getTagName();
     }
 
     /**
