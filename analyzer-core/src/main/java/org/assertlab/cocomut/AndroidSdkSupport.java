@@ -40,19 +40,17 @@ final class AndroidSdkSupport {
         boolean androidProject = isAndroidProject(projectRoot);
         if (!androidProject) return Preparation.notAndroid();
         Set<String> components = declaredComponents(projectRoot);
+        if (components.isEmpty()) {
+            return new Preparation(true, false, true, false, false, List.of(), Set.of(), 0,
+                    "Android plugin declared; SDK components are dynamic or not statically declared. "
+                            + "Gradle will classify the build requirements.");
+        }
         env = env == null ? Map.of() : Map.copyOf(env);
         String rootText = !env.getOrDefault("ANDROID_SDK_ROOT", "").isBlank()
                 ? env.get("ANDROID_SDK_ROOT") : env.getOrDefault("ANDROID_HOME", "");
         if (rootText == null || rootText.isBlank()) {
             return new Preparation(true, false, false, false, false, List.of(), components, -1,
-                    components.isEmpty()
-                            ? "Android project detected, but SDK components are not statically declared and "
-                                    + "ANDROID_SDK_ROOT/ANDROID_HOME is unset."
-                            : "Android SDK components are declared but ANDROID_SDK_ROOT/ANDROID_HOME is unset.");
-        }
-        if (components.isEmpty()) {
-            return new Preparation(true, false, true, false, false, List.of(), Set.of(), 0,
-                    "Android project detected; no statically declared SDK components require provisioning.");
+                    "Android SDK components are declared but ANDROID_SDK_ROOT/ANDROID_HOME is unset.");
         }
         Path sdkRoot = Path.of(rootText).toAbsolutePath().normalize();
         Set<String> missing = missingComponents(sdkRoot, components);
@@ -75,30 +73,51 @@ final class AndroidSdkSupport {
         command.add(sdkManager.toString());
         command.add("--sdk_root=" + sdkRoot);
         command.addAll(missing);
+        Path log = null;
+        Process process = null;
+        boolean completed = false;
+        boolean timedOut = false;
+        boolean interrupted = false;
+        int exit = -1;
+        String output = "";
+        String failure = "";
         try {
-            Path log = Files.createTempFile("cocomut-sdkmanager-", ".log");
+            log = Files.createTempFile("cocomut-sdkmanager-", ".log");
             ProcessBuilder pb = new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(log.toFile());
-            Process process = pb.start();
+            process = pb.start();
             process.getOutputStream().close();
-            boolean completed = process.waitFor(5, TimeUnit.MINUTES);
-            if (!completed) process.destroyForcibly();
-            int exit = completed ? process.exitValue() : -1;
-            String output = Files.readString(log);
-            Files.deleteIfExists(log);
-            if (output.length() > 20_000) output = output.substring(output.length() - 20_000);
-            Set<String> remaining = missingComponents(sdkRoot, missing);
-            boolean changed = remaining.size() < missing.size();
-            boolean succeeded = remaining.isEmpty();
-            return new Preparation(true, true, succeeded, !completed,
-                    changed, command, missing, exit,
-                    "sdkmanager components=" + missing + " remaining=" + remaining + " exit=" + exit + "\n"
-                            + output);
-        } catch (Exception e) {
-            Set<String> remaining = missingComponents(sdkRoot, missing);
-            return new Preparation(true, true, remaining.isEmpty(), false,
-                    remaining.size() < missing.size(), command, missing, -1,
-                    "sdkmanager failed: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            completed = process.waitFor(5, TimeUnit.MINUTES);
+            timedOut = !completed;
+            if (completed) exit = process.exitValue();
+        } catch (InterruptedException e) {
+            interrupted = true;
+            failure = "sdkmanager interrupted";
+        } catch (IOException e) {
+            failure = "sdkmanager failed: " + e.getClass().getSimpleName() + ": " + e.getMessage();
+        } finally {
+            terminateAndWait(process);
+            if (log != null) {
+                try {
+                    output = Files.readString(log);
+                } catch (IOException ignored) {
+                    // Process status and filesystem verification remain authoritative.
+                }
+                try {
+                    Files.deleteIfExists(log);
+                } catch (IOException ignored) {
+                    // Temporary diagnostic cleanup is best effort.
+                }
+            }
+            if (interrupted) Thread.currentThread().interrupt();
         }
+        if (output.length() > 20_000) output = output.substring(output.length() - 20_000);
+        Set<String> remaining = missingComponents(sdkRoot, missing);
+        boolean changed = remaining.size() < missing.size();
+        boolean succeeded = remaining.isEmpty();
+        String diagnostic = "sdkmanager components=" + missing + " remaining=" + remaining
+                + " exit=" + exit + (failure.isBlank() ? "" : " " + failure) + "\n" + output;
+        return new Preparation(true, true, succeeded, timedOut,
+                changed, command, missing, exit, diagnostic);
     }
 
     static Set<String> declaredComponents(Path root) {
@@ -107,8 +126,8 @@ final class AndroidSdkSupport {
             for (Path file : walk.filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().matches("build\\.gradle(?:\\.kts)?"))
                     .toList()) {
-                String text = Files.readString(file);
-                if (!text.contains("com.android.") && !text.contains("android {")) continue;
+                String text = stripComments(Files.readString(file));
+                if (!hasAndroidPlugin(text)) continue;
                 Matcher sdk = Pattern.compile("compileSdk(?:Version)?\\s*(?:=|\\s)\\s*[\"']?(\\d+)").matcher(text);
                 if (sdk.find()) components.add("platforms;android-" + sdk.group(1));
                 Matcher tools = Pattern.compile("buildToolsVersion\\s*(?:=|\\s)\\s*[\"']([^\"']+)").matcher(text);
@@ -125,8 +144,7 @@ final class AndroidSdkSupport {
             for (Path file : walk.filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().matches("build\\.gradle(?:\\.kts)?"))
                     .toList()) {
-                String text = Files.readString(file);
-                if (text.contains("com.android.") || text.contains("android {")) return true;
+                if (hasAndroidPlugin(stripComments(Files.readString(file)))) return true;
             }
         } catch (IOException ignored) {
             return false;
@@ -150,5 +168,34 @@ final class AndroidSdkSupport {
             if (Files.isExecutable(path)) return path;
         }
         return null;
+    }
+
+    private static boolean hasAndroidPlugin(String text) {
+        return Pattern.compile("(?m)\\bid\\s*(?:\\(|\\s+)['\"]com\\.android\\.(?:application|library|test|dynamic-feature)['\"]")
+                .matcher(text).find()
+                || Pattern.compile("(?m)\\bapply\\s*(?:\\(|\\s+)plugin\\s*(?:=|:)\\s*['\"]com\\.android\\.(?:application|library|test|dynamic-feature)['\"]")
+                .matcher(text).find();
+    }
+
+    private static String stripComments(String text) {
+        return text.replaceAll("(?s)/\\*.*?\\*/", "")
+                .replaceAll("(?m)//.*$", "");
+    }
+
+    private static void terminateAndWait(Process process) {
+        if (process == null || !process.isAlive()) return;
+        process.descendants().forEach(ProcessHandle::destroy);
+        process.destroy();
+        try {
+            if (!process.waitFor(5, TimeUnit.SECONDS)) {
+                process.descendants().forEach(ProcessHandle::destroyForcibly);
+                process.destroyForcibly();
+                process.waitFor(5, TimeUnit.SECONDS);
+            }
+        } catch (InterruptedException e) {
+            process.descendants().forEach(ProcessHandle::destroyForcibly);
+            process.destroyForcibly();
+            Thread.currentThread().interrupt();
+        }
     }
 }

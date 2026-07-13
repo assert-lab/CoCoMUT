@@ -6,6 +6,7 @@ import org.assertlab.cocomut.GradleModelReport;
 import org.assertlab.cocomut.ModuleSourceSet;
 import org.assertlab.cocomut.ProjectAnalyzer;
 import org.assertlab.cocomut.BuildJavaSelection;
+import org.assertlab.cocomut.BoundedDiagnosticBuffer;
 import org.assertlab.cocomut.ProjectMetadata;
 
 import java.io.IOException;
@@ -77,6 +78,12 @@ public class GradleProjectAdapter implements ProjectAdapter {
     private ProjectMetadata enrichWithGradleModel(ProjectMetadata base, ContextRequest request) {
         if (!"gradle".equals(base.getBuildSystem())) {
             return base;
+        }
+        if (base.isBuildBlocked()) {
+            System.out.println("[GradleProjectAdapter] build preflight blocked; Gradle metadata task not executed");
+            return ProjectMetadata.Builder.from(base)
+                    .gradleModelReport(GradleModelReport.skipped("build preflight blocked"))
+                    .build();
         }
         if (request.skipBuild()) {
             System.out.println("[GradleProjectAdapter] --skip-build active; Gradle metadata task not executed");
@@ -206,6 +213,9 @@ public class GradleProjectAdapter implements ProjectAdapter {
     }
 
     private static boolean canTrustBytecodeForAnalysis(ProjectMetadata base) {
+        if (base.isBuildBlocked()) {
+            return false;
+        }
         if (!base.isBuildAttempted()) {
             return true;
         }
@@ -216,6 +226,9 @@ public class GradleProjectAdapter implements ProjectAdapter {
     }
 
     private static String compileStatus(ProjectMetadata base, boolean bytecodeAvailable) {
+        if (base.isBuildBlocked()) {
+            return base.getCompileStatus();
+        }
         if (!base.isBuildAttempted()) {
             return bytecodeAvailable ? base.getCompileStatus().replace("; NO PROJECT BYTECODE", "; PROJECT BYTECODE AVAILABLE")
                     : base.getCompileStatus();
@@ -246,6 +259,7 @@ public class GradleProjectAdapter implements ProjectAdapter {
      */
     private GradleModel resolveGradleModel(boolean includeTests, BuildJavaSelection buildJava) {
         Path initScript = null;
+        Process process = null;
         try {
             initScript = writeInitScript(includeTests);
             List<String> cmd = new ArrayList<>();
@@ -261,12 +275,30 @@ public class GradleProjectAdapter implements ProjectAdapter {
             pb.directory(projectPath.toFile());
             pb.redirectErrorStream(true);
             buildJava.apply(pb);
-            Process p = pb.start();
+            process = pb.start();
+            Process running = process;
 
-            StringBuilder output = new StringBuilder();
+            BoundedDiagnosticBuffer diagnosticOutput = new BoundedDiagnosticBuffer(1_000_000, 128_000);
+            StringBuilder modelRecords = new StringBuilder();
+            java.util.concurrent.atomic.AtomicBoolean modelRecordsTruncated =
+                    new java.util.concurrent.atomic.AtomicBoolean(false);
             Thread drainer = new Thread(() -> {
-                try (var input = p.getInputStream()) {
-                    output.append(new String(input.readAllBytes(), StandardCharsets.UTF_8));
+                try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(
+                        running.getInputStream(), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (line.startsWith("ANALYZER_")) {
+                            synchronized (modelRecords) {
+                                if (modelRecords.length() < 16_000_000) {
+                                    modelRecords.append(line).append('\n');
+                                } else {
+                                    modelRecordsTruncated.set(true);
+                                }
+                            }
+                        } else {
+                            diagnosticOutput.appendLine(line);
+                        }
+                    }
                 } catch (IOException ignored) {
                     // Gradle output is diagnostic only.
                 }
@@ -274,14 +306,14 @@ public class GradleProjectAdapter implements ProjectAdapter {
             drainer.setDaemon(true);
             drainer.start();
 
-            if (!p.waitFor(GRADLE_TIMEOUT_MIN, TimeUnit.MINUTES)) {
-                p.destroyForcibly();
-                drainer.join(1000);
+            if (!process.waitFor(GRADLE_TIMEOUT_MIN, TimeUnit.MINUTES)) {
+                terminateAndWait(process);
+                drainer.join();
                 return GradleModel.failed(true, "Gradle model task timed out");
             }
-            drainer.join(1000);
-            if (p.exitValue() != 0) {
-                return GradleModel.failed(false, firstLines(output.toString()));
+            drainer.join();
+            if (process.exitValue() != 0) {
+                return GradleModel.failed(false, firstLines(diagnosticOutput.transcript()));
             }
 
             List<Path> classpath = new ArrayList<>();
@@ -291,9 +323,12 @@ public class GradleProjectAdapter implements ProjectAdapter {
             List<Path> testOutputs = new ArrayList<>();
             String javaVersion = "unknown";
             List<String> diagnostics = new ArrayList<>();
+            if (modelRecordsTruncated.get()) {
+                diagnostics.add("model output exceeded the 16 MB bounded record limit");
+            }
             Map<String, ModuleSourceSetBuilder> sourceSetBuilders = new LinkedHashMap<>();
             int resolvedProjects = 0;
-            for (String line : output.toString().split("\\R")) {
+            for (String line : modelRecords.toString().split("\\R")) {
                 if (line.startsWith(CP_PREFIX)) {
                     Path jar = Path.of(line.substring(CP_PREFIX.length()).trim());
                     if (Files.exists(jar)) {
@@ -341,12 +376,33 @@ public class GradleProjectAdapter implements ProjectAdapter {
             }
             return new GradleModel(unique(sourceRoots), unique(testSourceRoots), unique(mainOutputs),
                     unique(testOutputs), unique(classpath), javaVersion, report, sourceSets);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return GradleModel.failed(false, "Gradle model task interrupted");
         } catch (Exception e) {
             return GradleModel.failed(false, e.getClass().getSimpleName());
         } finally {
+            terminateAndWait(process);
             if (initScript != null) {
                 try { Files.deleteIfExists(initScript); } catch (IOException ignored) { }
             }
+        }
+    }
+
+    private static void terminateAndWait(Process process) {
+        if (process == null || !process.isAlive()) return;
+        process.descendants().forEach(ProcessHandle::destroy);
+        process.destroy();
+        try {
+            if (!process.waitFor(5, TimeUnit.SECONDS)) {
+                process.descendants().forEach(ProcessHandle::destroyForcibly);
+                process.destroyForcibly();
+                process.waitFor(5, TimeUnit.SECONDS);
+            }
+        } catch (InterruptedException e) {
+            process.descendants().forEach(ProcessHandle::destroyForcibly);
+            process.destroyForcibly();
+            Thread.currentThread().interrupt();
         }
     }
 

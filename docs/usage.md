@@ -201,6 +201,11 @@ Maven dependency-classpath resolution is recorded as the distinct
 `MODEL_RESOLUTION_PARTIAL` without rewriting a successful compilation as a
 build failure.
 
+CoCoMUT generates a version-only isolated Maven toolchain inventory only when
+the project requests version matching alone. If the request includes vendor,
+purpose, or another token, Maven's existing project/user toolchain configuration
+is retained rather than replaced with weaker synthesized metadata.
+
 
 Build execution runs the subject repository's Maven or Gradle build logic. For
 untrusted public repositories, keep the default denied-build policy and provide
@@ -217,6 +222,10 @@ declared missing Android components, it reports
 controlled disposable environment to allow `sdkmanager` to install those exact
 declared components. This action is recorded in `phase_1_build_attempts` and in
 the manifest.
+Detection requires an explicit Android Gradle plugin declaration. Text in
+comments, dependencies, or strings is not preflight evidence. When SDK
+components are computed dynamically, CoCoMUT does not guess them and lets
+Gradle report the requirement.
 
 When provisioning is disabled or unavailable, no process is reported as
 executed: `phase_1_build_attempted=false` and `phase_1_build_blocked=true`.

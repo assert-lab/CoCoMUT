@@ -18,6 +18,9 @@
   record shape remains documented.
 - Bumped the extraction-manifest schema to `0.4.0` for structured build actions
   and retained the previous `0.3.0` schema for archived manifests.
+- Assigned version-specific manifest schema identifiers, preserved terminal
+  diagnostics in bounded logs, tightened Android preflight/process cleanup, and
+  made field-test resume validate cohort, tool, and runtime identity.
 - Added public-repository field-test evidence for 541 filtered Java repositories.
 - Moved Java packages to `org.assertlab.cocomut`.
 - Added Maven wrapper, GitHub Actions CI, contributor docs, and citation metadata.

@@ -189,6 +189,79 @@ public class AnalyzerFacadeTest {
         }
     }
 
+    @Test
+    public void publicApiPreservesBlockedAndroidStateDespitePreexistingBytecode() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-blocked-android");
+        try {
+            Files.writeString(project.resolve("settings.gradle"), "rootProject.name = 'blocked'\n");
+            Files.writeString(project.resolve("build.gradle"), """
+                    plugins { id 'com.android.library' }
+                    android { compileSdk 999 }
+                    """);
+            Path source = project.resolve("src/main/java/p/C.java");
+            Files.createDirectories(source.getParent());
+            Files.writeString(source, "package p; public class C {}\n");
+            Path staleClass = project.resolve("build/classes/java/main/p/C.class");
+            Files.createDirectories(staleClass.getParent());
+            Files.write(staleClass, new byte[] {
+                    (byte) 0xca, (byte) 0xfe, (byte) 0xba, (byte) 0xbe,
+                    0, 0, 0, 61
+            });
+
+            ExtractionReport report = ContextExtractorService.createDefault().extract(ContextRequest.builder()
+                    .projectRoot(project)
+                    .allowUnsandboxedBuild()
+                    .outputDirectory(project.resolve("output"))
+                    .build());
+
+            assertEquals(Boolean.TRUE, report.asMap().get("phase_1_build_blocked"));
+            assertEquals(Boolean.FALSE, report.asMap().get("phase_1_build_attempted"));
+            assertEquals(Boolean.FALSE, report.asMap().get("phase_1_analysis_can_proceed"));
+            assertTrue(String.valueOf(report.asMap().get("phase_1_gradle_model"))
+                    .contains("build preflight blocked"));
+        } finally {
+            try (var paths = Files.walk(project)) {
+                for (Path path : paths.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                    Files.deleteIfExists(path);
+                }
+            }
+        }
+    }
+
+    @Test
+    public void publicApiPreservesStructuredFailureWhenMavenCannotStart() throws Exception {
+        org.junit.Assume.assumeFalse(System.getProperty("os.name", "").toLowerCase().contains("win"));
+        Path project = Files.createTempDirectory("cocomut-maven-start-failure");
+        try {
+            Files.createDirectories(project.resolve(".mvn/wrapper"));
+            Files.writeString(project.resolve(".mvn/wrapper/maven-wrapper.properties"), "distributionUrl=unused\n");
+            Path wrapper = project.resolve("mvnw");
+            Files.writeString(wrapper, "#!/definitely/missing/interpreter\n");
+            assertTrue(wrapper.toFile().setExecutable(true));
+            Files.writeString(project.resolve("pom.xml"), """
+                    <project><modelVersion>4.0.0</modelVersion>
+                      <groupId>p</groupId><artifactId>a</artifactId><version>1</version>
+                    </project>
+                    """);
+
+            ExtractionReport report = ContextExtractorService.createDefault().extract(ContextRequest.builder()
+                    .projectRoot(project)
+                    .allowUnsandboxedBuild()
+                    .outputDirectory(project.resolve("output"))
+                    .build());
+
+            assertTrue(String.valueOf(report.failureCodes()).contains("BUILD_FAILED"));
+            assertFalse(String.valueOf(report.failureCodes()).contains("METADATA_RESOLUTION_FAILED"));
+            assertEquals("NOT_ATTEMPTED", report.asMap().get("phase_1_maven_dependency_classpath_status"));
+        } finally {
+            try (var paths = Files.walk(project)) {
+                for (Path path : paths.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                    Files.deleteIfExists(path);
+                }
+            }
+        }
+    }
+
     private JsonNode findJsonlRowForMethod(Path jsonl, String methodName) throws Exception {
         assertTrue("Expected JSONL output at " + jsonl, Files.exists(jsonl));
         ObjectMapper mapper = new ObjectMapper();

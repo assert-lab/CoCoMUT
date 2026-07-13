@@ -155,6 +155,10 @@ declarations such as `.java-version`, `.sdkmanrc`, and the Gradle wrapper. Known
 JDK homes can be supplied as `COCOMUT_JAVA_HOME_<major>` for Java 8 through
 26. Exact installed versions are preferred for Maven and Gradle toolchains;
 otherwise, a compatible newer compiler may be used for release-target builds.
+For Maven, CoCoMUT synthesizes an isolated toolchain inventory only for
+version-only requirements. Vendor, purpose, and custom-token constraints keep
+Maven's caller/project toolchain configuration authoritative; a repository-local
+`.mvn/toolchains.xml` is used directly when present.
 If a compiler, build-tool toolchain, or Maven Enforcer rule explicitly
 requests a newer Java release, CoCoMUT performs bounded, monotonic retries with
 compatible installed JDKs. This supports multi-module builds whose later
@@ -185,6 +189,10 @@ components, timeout, exit code, and whether it changed the SDK installation.
 If provisioning is disabled or cannot start, the build is marked as preflight
 blocked: `build.attempted=false`, `build.blocked=true`, and pre-existing bytecode
 is not trusted for analysis.
+Android preflight requires an explicit Android Gradle plugin declaration and a
+statically declared SDK component. Comments, dependency coordinates, and
+arbitrary strings do not trigger provisioning; dynamic SDK declarations are
+left to Gradle to classify.
 
 When no build descriptor exists at the requested root, CoCoMUT uses one unique
 nested Maven or Gradle root. Multiple independent nested builds remain

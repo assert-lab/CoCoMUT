@@ -161,8 +161,10 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
             return new VersionEvidence(normalize(javaVersion), evidencePrefix + ".java-version");
         }
 
-        String sdkman = firstLine(root.resolve(".sdkmanrc"));
-        java.util.regex.Matcher sdkmanJava = java.util.regex.Pattern.compile("(?:^|\\s)java=([^\\s]+)").matcher(sdkman);
+        String sdkman = read(root.resolve(".sdkmanrc"));
+        java.util.regex.Matcher sdkmanJava = java.util.regex.Pattern
+                .compile("(?m)^\\s*java\\s*=\\s*([^#\\s]+)\\s*(?:#.*)?$")
+                .matcher(sdkman);
         if (sdkmanJava.find()) {
             return new VersionEvidence(normalize(sdkmanJava.group(1)), evidencePrefix + ".sdkmanrc");
         }

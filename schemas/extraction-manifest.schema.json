@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://assert-lab.github.io/cocomut/schemas/extraction-manifest.schema.json",
+  "$id": "https://assert-lab.github.io/cocomut/schemas/extraction-manifest-v0.4.0.schema.json",
   "title": "CoCoMUT Extraction Manifest",
   "type": "object",
   "additionalProperties": false,

@@ -79,6 +79,33 @@ public class BuildJavaSelectionTest {
     }
 
     @Test
+    public void readsJavaAssignmentAfterCommentsInSdkmanrc() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-sdkman-java");
+        Path fakeJdk = Files.createTempDirectory("cocomut-sdkman-jdk");
+        try {
+            Files.writeString(project.resolve(".sdkmanrc"), """
+                    # Project SDKs
+                    kotlin=2.1.0
+                    java=17.0.12-tem # required by the build
+                    """);
+            Files.createDirectories(fakeJdk.resolve("bin"));
+            Files.writeString(fakeJdk.resolve("release"), "JAVA_VERSION=\"17.0.12\"\n");
+
+            BuildJavaSelection selection = BuildJavaSelection.select(project, "maven", "unknown",
+                    java.util.Map.of("JAVA_HOME", fakeJdk.toString()));
+
+            assertEquals(".sdkmanrc", selection.evidence());
+            assertEquals("17", selection.version());
+        } finally {
+            Files.deleteIfExists(project.resolve(".sdkmanrc"));
+            Files.deleteIfExists(project);
+            Files.deleteIfExists(fakeJdk.resolve("release"));
+            Files.deleteIfExists(fakeJdk.resolve("bin"));
+            Files.deleteIfExists(fakeJdk);
+        }
+    }
+
+    @Test
     public void nestedBuildFallsBackToRepositoryRootJavaDeclaration() throws Exception {
         Path repository = Files.createTempDirectory("cocomut-repository-java");
         Path nested = repository.resolve("service");

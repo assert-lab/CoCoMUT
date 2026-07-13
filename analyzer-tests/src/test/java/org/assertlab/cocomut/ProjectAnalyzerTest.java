@@ -754,7 +754,7 @@ public class ProjectAnalyzerTest {
         Path repository = Paths.get(System.getProperty("user.dir")).getParent();
         ObjectMapper mapper = new ObjectMapper();
         JsonNode manifest = mapper.readTree(repository.resolve(
-                "examples/sample-output/minimal-extraction-manifest.json").toFile());
+                "examples/sample-output/minimal-extraction-manifest-v0.3.0.json").toFile());
         JsonNode schemaNode = mapper.readTree(repository.resolve(
                 "schemas/extraction-manifest-v0.3.0.schema.json").toFile());
         JsonSchema schema = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012)
@@ -763,6 +763,128 @@ public class ProjectAnalyzerTest {
         assertEquals("0.3.0", manifest.path("schema_version").asText());
         assertTrue("Archived 0.3.0 manifest must retain a validating schema: " + schema.validate(manifest),
                 schema.validate(manifest).isEmpty());
+    }
+
+    @Test
+    public void manifestSchemaVersionsHaveDistinctCanonicalIdentities() throws Exception {
+        Path repository = Paths.get(System.getProperty("user.dir")).getParent();
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode oldSchemaNode = mapper.readTree(repository.resolve(
+                "schemas/extraction-manifest-v0.3.0.schema.json").toFile());
+        JsonNode currentSchemaNode = mapper.readTree(repository.resolve(
+                "schemas/extraction-manifest.schema.json").toFile());
+        JsonNode oldManifest = mapper.readTree(repository.resolve(
+                "examples/sample-output/minimal-extraction-manifest-v0.3.0.json").toFile());
+        JsonNode currentManifest = mapper.readTree(repository.resolve(
+                "examples/sample-output/minimal-extraction-manifest.json").toFile());
+        java.net.URI oldId = java.net.URI.create(oldSchemaNode.path("$id").asText());
+        java.net.URI currentId = java.net.URI.create(currentSchemaNode.path("$id").asText());
+        JsonSchemaFactory factory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
+
+        assertNotEquals(oldId, currentId);
+        JsonSchema oldSchema = factory.getSchema(oldId, oldSchemaNode);
+        JsonSchema currentSchema = factory.getSchema(currentId, currentSchemaNode);
+        assertTrue(oldSchema.validate(oldManifest).isEmpty());
+        assertTrue(currentSchema.validate(currentManifest).isEmpty());
+    }
+
+    @Test
+    public void vendorConstrainedMavenToolchainDoesNotUseSynthesizedVersionOnlyInventory() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-vendor-toolchain-");
+        try {
+            Files.writeString(project.resolve("pom.xml"), """
+                    <project><modelVersion>4.0.0</modelVersion>
+                      <groupId>p</groupId><artifactId>a</artifactId><version>1</version>
+                      <build><plugins><plugin><artifactId>maven-compiler-plugin</artifactId>
+                        <configuration><jdkToolchain><version>17</version><vendor>temurin</vendor></jdkToolchain></configuration>
+                      </plugin></plugins></build>
+                    </project>
+                    """);
+
+            assertTrue(ProjectAnalyzer.requiresNonVersionToolchainTokens(Files.readString(project.resolve("pom.xml"))));
+            assertEquals(null, new ProjectAnalyzer(project).isolatedMavenToolchainsFile());
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void repositoryMavenToolchainsFileRemainsAuthoritative() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-project-toolchains-");
+        try {
+            Files.writeString(project.resolve("pom.xml"), """
+                    <project><modelVersion>4.0.0</modelVersion>
+                      <groupId>p</groupId><artifactId>a</artifactId><version>1</version>
+                      <build><plugins><plugin><artifactId>maven-toolchains-plugin</artifactId></plugin></plugins></build>
+                    </project>
+                    """);
+            Path toolchains = project.resolve(".mvn/toolchains.xml");
+            Files.createDirectories(toolchains.getParent());
+            Files.writeString(toolchains, "<toolchains/>\n");
+
+            assertEquals(toolchains.toAbsolutePath().normalize(),
+                    new ProjectAnalyzer(project).isolatedMavenToolchainsFile());
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void failedMavenBuildDoesNotRetryClasspathModelAndDiscardMetadata() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-missing-maven-");
+        try {
+            Files.createDirectories(project.resolve(".mvn/wrapper"));
+            Files.writeString(project.resolve(".mvn/wrapper/maven-wrapper.properties"), "distributionUrl=unused\n");
+            Path wrapper = project.resolve("mvnw");
+            Files.writeString(wrapper, "#!/definitely/missing/interpreter\n");
+            assertTrue(wrapper.toFile().setExecutable(true));
+            Files.writeString(project.resolve("pom.xml"), """
+                    <project><modelVersion>4.0.0</modelVersion>
+                      <groupId>p</groupId><artifactId>a</artifactId><version>1</version>
+                    </project>
+                    """);
+
+            ProjectMetadata metadata = new ProjectAnalyzer(ContextRequest.builder()
+                    .projectRoot(project).allowUnsandboxedBuild().build()).analyze();
+
+            assertTrue(metadata.isBuildAttempted());
+            assertFalse(metadata.isBuildSucceeded());
+            assertEquals("NOT_ATTEMPTED", metadata.getMavenDependencyClasspathStatus());
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void terminalFailureAfterLargeProcessOutputRemainsClassifiable() throws Exception {
+        org.junit.Assume.assumeFalse(System.getProperty("os.name", "").toLowerCase().contains("win"));
+        Path project = Files.createTempDirectory("cocomut-large-build-log-");
+        try {
+            Files.createDirectories(project.resolve(".mvn/wrapper"));
+            Files.writeString(project.resolve(".mvn/wrapper/maven-wrapper.properties"), "distributionUrl=unused\n");
+            Path wrapper = project.resolve("mvnw");
+            Files.writeString(wrapper, """
+                    #!/bin/sh
+                    head -c 1100000 /dev/zero | tr '\\000' x
+                    printf '\\nerror: cannot find symbol\\n'
+                    exit 1
+                    """);
+            assertTrue(wrapper.toFile().setExecutable(true));
+            Files.writeString(project.resolve("pom.xml"), """
+                    <project><modelVersion>4.0.0</modelVersion>
+                      <groupId>p</groupId><artifactId>a</artifactId><version>1</version>
+                    </project>
+                    """);
+
+            ProjectMetadata metadata = new ProjectAnalyzer(ContextRequest.builder()
+                    .projectRoot(project).allowUnsandboxedBuild().build()).analyze();
+
+            assertEquals(BuildFailureReason.BUILD_FAILED_PROJECT_COMPILATION_ERROR,
+                    metadata.getBuildFailureReason());
+            assertTrue(metadata.getBuildOutputTail().contains("cannot find symbol"));
+        } finally {
+            deleteRecursively(project);
+        }
     }
 
     @Test

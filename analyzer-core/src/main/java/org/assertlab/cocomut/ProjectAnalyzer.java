@@ -822,6 +822,11 @@ public class ProjectAnalyzer {
         if (buildPolicy == ContextRequest.BuildPolicy.DENY_BUILD) {
             return List.of();
         }
+        if (lastBuildResult != null
+                && (lastBuildResult.blocked()
+                || (lastBuildResult.attempted() && !lastBuildResult.succeeded()))) {
+            return List.of();
+        }
         if ("maven".equals(buildSystem)) {
             return buildMavenClasspath();
         }
@@ -864,15 +869,21 @@ public class ProjectAnalyzer {
     private List<Path> buildMavenClasspath() throws IOException {
         boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
         String mvn = executableWithWrapper("mvn", isWindows);
+        List<String> command;
         Path output = Files.createTempFile("cocomut-maven-classpath", ".txt");
         try {
             CommandResult result;
+            command = List.of(mvn, "-q", "-DincludeScope=" + (includeTests ? "test" : "compile"),
+                    "-Dmdep.outputFile=" + output.toAbsolutePath(),
+                    "dependency:build-classpath");
             try {
-                result = runCommand(List.of(mvn, "-q", "-DincludeScope=" + (includeTests ? "test" : "compile"),
-                        "-Dmdep.outputFile=" + output.toAbsolutePath(),
-                        "dependency:build-classpath"), true, "maven_dependency_classpath");
+                result = runCommand(command, true, "maven_dependency_classpath");
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+                return List.of();
+            } catch (IOException e) {
+                recordBuildAttempt("maven_dependency_classpath", command,
+                        new CommandResult(-1, "process start failed: " + e.getMessage(), false));
                 return List.of();
             }
             if (result.exitCode() != 0 || !Files.isRegularFile(output)) {
@@ -951,7 +962,7 @@ public class ProjectAnalyzer {
             CommandResult result = runWithTransientRetries(command);
             result = retryForRequestedJava(command, result);
             if ("maven".equals(buildSystem) && result.exitCode() != 0 && !result.timedOut()
-                    && missingSameReactorArtifacts(result.output())) {
+                    && missingSameReactorArtifacts(result.terminalOutput())) {
                 List<String> packageCommand = new ArrayList<>(command);
                 packageCommand.set(packageCommand.size() - 1, "package");
                 CommandResult packaged = retryForRequestedJava(packageCommand,
@@ -961,7 +972,7 @@ public class ProjectAnalyzer {
                                 + packaged.output(), packaged.timedOut(), packaged.terminalOutput());
             }
             if ("gradle".equals(buildSystem) && !includeTests && result.exitCode() != 0
-                    && !result.timedOut() && result.output().contains("Task 'classes' not found")) {
+                    && !result.timedOut() && result.terminalOutput().contains("Task 'classes' not found")) {
                 List<String> assembleCommand = new ArrayList<>(command);
                 assembleCommand.set(assembleCommand.indexOf("classes"), "assemble");
                 CommandResult assembled = retryForRequestedJava(assembleCommand,
@@ -995,13 +1006,13 @@ public class ProjectAnalyzer {
             attemptedJavaHomes.add(buildJavaSelection.javaHome().toAbsolutePath().normalize());
         }
         for (int retryCount = 0; retryCount < 4 && result.exitCode() != 0 && !result.timedOut(); retryCount++) {
-            int requiredVersion = requiredJavaVersion(result.output());
+            int requiredVersion = requiredJavaVersion(result.terminalOutput());
             BuildJavaSelection retrySelection = BuildJavaSelection.forRequiredVersion(requiredVersion,
                     "compiler requested Java " + requiredVersion + " after build failure");
             Path retryHome = retrySelection == null || retrySelection.javaHome() == null
                     ? null : retrySelection.javaHome().toAbsolutePath().normalize();
-            boolean exactRequirement = exactJavaVersionRequired(result.output());
-            boolean downgradeRequired = obsoleteJavaSourceLevel(result.output());
+            boolean exactRequirement = exactJavaVersionRequired(result.terminalOutput());
+            boolean downgradeRequired = obsoleteJavaSourceLevel(result.terminalOutput());
             if (retrySelection == null
                     || retrySelection.javaHome().equals(buildJavaSelection.javaHome())
                     || attemptedJavaHomes.contains(retryHome)
@@ -1049,7 +1060,7 @@ public class ProjectAnalyzer {
     private BuildFailureReason classifiedBuildFailure(CommandResult result) {
         return finalBuildFailureReason(result.output(), result.terminalOutput(),
                 result.timedOut(), result.exitCode() == 0,
-                missingSameReactorArtifacts(result.output()));
+                missingSameReactorArtifacts(result.terminalOutput()));
     }
 
     /** Classify the complete, final diagnostic returned after all bounded retries. */
@@ -1139,7 +1150,7 @@ public class ProjectAnalyzer {
         CommandResult result = runCommand(command, true);
         StringBuilder attempts = new StringBuilder(result.output());
         for (int retry = 1; retry <= 2 && result.exitCode() != 0 && !result.timedOut()
-                && BuildFailureReason.isTransientNetworkFailure(result.output()); retry++) {
+                && BuildFailureReason.isTransientNetworkFailure(result.terminalOutput()); retry++) {
             Thread.sleep(500L * retry);
             result = runCommand(command, true);
             attempts.append("\n[CoCoMUT transient network retry ").append(retry).append("/2]\n")
@@ -1153,6 +1164,11 @@ public class ProjectAnalyzer {
         String lower = output.toLowerCase(Locale.ROOT);
         if (lower.contains("artifact has not been packaged yet")
                 && lower.contains("when used on reactor artifact")) return true;
+        if (!lower.contains("plugin descriptor for")
+                && !lower.contains(" (absent)")
+                && !lower.contains("could not find artifact")) {
+            return false;
+        }
         Set<MavenCoordinate> reactorArtifacts = new HashSet<>();
         for (Path dir : mergePaths(List.of(effectiveBuildRoot), collectMavenModuleDirs(effectiveBuildRoot))) {
             MavenCoordinate coordinate = readMavenCoordinate(dir.resolve("pom.xml"));
@@ -1269,10 +1285,19 @@ public class ProjectAnalyzer {
         return BuildToolExecutable.resolve(effectiveBuildRoot, tool, isWindows);
     }
 
-    private Path isolatedMavenToolchainsFile() throws IOException {
+    Path isolatedMavenToolchainsFile() throws IOException {
         String poms = readQuietly(effectiveBuildRoot.resolve("pom.xml"));
         if (!poms.contains("maven-toolchains-plugin") && !poms.contains("jdkToolchain")
                 && !Files.isRegularFile(effectiveBuildRoot.resolve(".mvn/toolchains.xml"))) return null;
+        Path projectToolchains = effectiveBuildRoot.resolve(".mvn/toolchains.xml");
+        if (Files.isRegularFile(projectToolchains)) {
+            return projectToolchains.toAbsolutePath().normalize();
+        }
+        if (requiresNonVersionToolchainTokens(poms)) {
+            // Do not replace Maven's normal user toolchains file with a synthesized
+            // version-only inventory that cannot satisfy vendor/purpose constraints.
+            return null;
+        }
         Map<Integer, Path> homes = BuildJavaSelection.installedJdkHomes();
         if (homes.isEmpty()) return null;
         StringBuilder xml = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<toolchains>\n");
@@ -1287,6 +1312,19 @@ public class ProjectAnalyzer {
         Files.writeString(file, xml.toString());
         file.toFile().deleteOnExit();
         return file;
+    }
+
+    static boolean requiresNonVersionToolchainTokens(String pom) {
+        if (pom == null || pom.isBlank()) return false;
+        Matcher block = Pattern.compile("(?s)<(jdkToolchain|jdk|provides)\\b[^>]*>(.*?)</\\1>")
+                .matcher(pom);
+        while (block.find()) {
+            Matcher token = Pattern.compile("<([A-Za-z_][A-Za-z0-9_.-]*)\\b").matcher(block.group(2));
+            while (token.find()) {
+                if (!"version".equals(token.group(1))) return true;
+            }
+        }
+        return false;
     }
 
     private static String escapeXml(String value) {
@@ -1306,21 +1344,13 @@ public class ProjectAnalyzer {
         pb.redirectErrorStream(true);
         buildJavaSelection.apply(pb);
         Process process = pb.start();
-        StringBuilder output = new StringBuilder();
+        BoundedDiagnosticBuffer output = new BoundedDiagnosticBuffer(1_000_000, 128_000);
         Thread drainer = new Thread(() -> {
             try (var input = process.getInputStream()) {
                 byte[] buffer = new byte[8192];
                 int read;
-                int remaining = 1_000_000;
                 while ((read = input.read(buffer)) >= 0) {
-                    if (remaining > 0) {
-                        int keep = Math.min(read, remaining);
-                        output.append(new String(buffer, 0, keep, StandardCharsets.UTF_8));
-                        remaining -= keep;
-                        if (remaining == 0) {
-                            output.append("\n[CoCoMUT build log truncated after 1000000 bytes]\n");
-                        }
-                    }
+                    output.append(buffer, 0, read);
                 }
             } catch (IOException ignored) {
                 // Build output is diagnostic only.
@@ -1330,16 +1360,27 @@ public class ProjectAnalyzer {
         drainer.start();
         boolean completed = process.waitFor(compileTimeoutSeconds(), java.util.concurrent.TimeUnit.SECONDS);
         if (!completed) {
+            process.descendants().forEach(ProcessHandle::destroyForcibly);
             process.destroyForcibly();
-            drainer.join(1000);
-            CommandResult result = new CommandResult(-1, output.toString(), true);
+            process.waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
+            finishDraining(process, drainer);
+            CommandResult result = new CommandResult(-1, output.transcript(), true, output.tailText());
             if (recordAttempt) recordBuildAttempt(action, command, result);
             return result;
         }
-        drainer.join(1000);
-        CommandResult result = new CommandResult(process.exitValue(), output.toString(), false);
+        finishDraining(process, drainer);
+        CommandResult result = new CommandResult(
+                process.exitValue(), output.transcript(), false, output.tailText());
         if (recordAttempt) recordBuildAttempt(action, command, result);
         return result;
+    }
+
+    private static void finishDraining(Process process, Thread drainer) throws InterruptedException, IOException {
+        drainer.join(10_000);
+        if (drainer.isAlive()) {
+            process.getInputStream().close();
+            drainer.join(1_000);
+        }
     }
 
     private void recordBuildAttempt(List<String> command, CommandResult result) {

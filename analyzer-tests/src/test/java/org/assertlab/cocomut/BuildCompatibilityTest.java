@@ -122,6 +122,20 @@ public class BuildCompatibilityTest {
     }
 
     @Test
+    public void boundedDiagnosticsRetainTheActualTerminalFailure() {
+        BoundedDiagnosticBuffer output = new BoundedDiagnosticBuffer(1_000_000, 128_000);
+        byte[] noise = new byte[1_100_000];
+        java.util.Arrays.fill(noise, (byte) 'x');
+        output.append(noise, 0, noise.length);
+        output.appendLine("error: cannot find symbol");
+
+        assertTrue(output.transcript().contains("diagnostic truncated"));
+        assertTrue(output.tailText().contains("cannot find symbol"));
+        assertEquals(BuildFailureReason.BUILD_FAILED_PROJECT_COMPILATION_ERROR,
+                BuildFailureReason.classify(output.tailText(), false, false));
+    }
+
+    @Test
     public void androidProvisioningUsesOnlyDeclaredComponents() throws Exception {
         Path project = Files.createTempDirectory("cocomut-android-components");
         try {
@@ -198,6 +212,47 @@ public class BuildCompatibilityTest {
     }
 
     @Test
+    public void interruptedAndroidProvisioningTerminatesSdkManager() throws Exception {
+        org.junit.Assume.assumeFalse(System.getProperty("os.name", "").toLowerCase().contains("win"));
+        Path project = Files.createTempDirectory("cocomut-android-interrupt");
+        Path sdk = Files.createTempDirectory("cocomut-android-sdk-interrupt");
+        try {
+            Files.writeString(project.resolve("build.gradle"), """
+                    plugins { id 'com.android.library' }
+                    android { compileSdk 35 }
+                    """);
+            Path pidFile = sdk.resolve("sdkmanager.pid");
+            Path manager = sdk.resolve("cmdline-tools/latest/bin/sdkmanager");
+            Files.createDirectories(manager.getParent());
+            Files.writeString(manager, "#!/bin/sh\necho $$ > '" + pidFile + "'\nsleep 60\n");
+            assertTrue(manager.toFile().setExecutable(true));
+            java.util.concurrent.atomic.AtomicBoolean interruptRestored =
+                    new java.util.concurrent.atomic.AtomicBoolean(false);
+            Thread worker = new Thread(() -> {
+                AndroidSdkSupport.prepare(project, java.util.Map.of(
+                        "ANDROID_SDK_ROOT", sdk.toString(),
+                        AndroidSdkSupport.ALLOW_PROVISIONING_ENV, "true"));
+                interruptRestored.set(Thread.currentThread().isInterrupted());
+            });
+            worker.start();
+            for (int i = 0; i < 100 && !Files.isRegularFile(pidFile); i++) Thread.sleep(20);
+            assertTrue("sdkmanager must start before cancellation", Files.isRegularFile(pidFile));
+            long pid = Long.parseLong(Files.readString(pidFile).trim());
+
+            worker.interrupt();
+            worker.join(10_000);
+
+            assertFalse("Provisioning thread must terminate", worker.isAlive());
+            assertTrue("Interrupted status must be restored", interruptRestored.get());
+            assertFalse("sdkmanager must be reaped before prepare returns",
+                    ProcessHandle.of(pid).map(ProcessHandle::isAlive).orElse(false));
+        } finally {
+            delete(project);
+            delete(sdk);
+        }
+    }
+
+    @Test
     public void detectsAndroidPluginWhenSdkVersionComesFromBuildMetadata() throws Exception {
         Path project = Files.createTempDirectory("cocomut-android-catalog");
         try {
@@ -207,6 +262,45 @@ public class BuildCompatibilityTest {
                     """);
             assertTrue(AndroidSdkSupport.isAndroidProject(project));
             assertTrue(AndroidSdkSupport.declaredComponents(project).isEmpty());
+        } finally {
+            delete(project);
+        }
+    }
+
+    @Test
+    public void dynamicAndroidComponentsDoNotRequireSdkPreflight() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-android-dynamic");
+        try {
+            Files.writeString(project.resolve("build.gradle.kts"), """
+                    plugins { id("com.android.library") }
+                    android { compileSdk = libs.versions.compileSdk.get().toInt() }
+                    """);
+
+            AndroidSdkSupport.Preparation preparation = AndroidSdkSupport.prepare(project, java.util.Map.of());
+
+            assertTrue(preparation.androidProject());
+            assertTrue(preparation.succeeded());
+            assertFalse(preparation.attempted());
+        } finally {
+            delete(project);
+        }
+    }
+
+    @Test
+    public void commentsAndDependencyCoordinatesDoNotTriggerAndroidPreflight() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-not-android");
+        try {
+            Files.writeString(project.resolve("build.gradle.kts"), """
+                    plugins { java }
+                    // plugins { id("com.android.application") }
+                    /* android { compileSdk = 35 } */
+                    dependencies { implementation("com.android.tools:common:31.0.0") }
+                    val text = "com.android.library"
+                    """);
+
+            assertFalse(AndroidSdkSupport.isAndroidProject(project));
+            assertTrue(AndroidSdkSupport.declaredComponents(project).isEmpty());
+            assertFalse(AndroidSdkSupport.prepare(project, java.util.Map.of()).androidProject());
         } finally {
             delete(project);
         }

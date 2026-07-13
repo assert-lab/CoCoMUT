@@ -6,12 +6,17 @@ repo lists such as DocuMine's cleaned_mined_repos.csv, which may not contain
 pinned commits or build-system labels. Each repository is cloned from its
 current default branch, analyzed once, summarized, and then bulky outputs are
 removed.
+
+Existing result roots require an explicit --resume or --force decision. Resume
+is accepted only when the ordered repository cohort, CoCoMUT identity, runtime
+tools, heap, and timeout configuration match the recorded environment.
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import shlex
@@ -99,6 +104,9 @@ def main() -> int:
     args = parse_args()
     if args.force and args.resume:
         raise SystemExit("--force and --resume are mutually exclusive")
+    if args.output_root.exists() and any(args.output_root.iterdir()) and not (args.resume or args.force):
+        raise SystemExit(
+            f"Refusing to append to non-empty output root {args.output_root}; use --resume or --force")
     if args.force and args.output_root.exists():
         shutil.rmtree(args.output_root)
     args.output_root.mkdir(parents=True, exist_ok=True)
@@ -469,10 +477,15 @@ def prune_repo_outputs(args: argparse.Namespace, repo: str) -> None:
 
 
 def environment_record(args: argparse.Namespace, rows: list[dict[str, str]]) -> dict[str, Any]:
+    repositories = [row.get("repo", "").strip() for row in rows]
     return {
         "repo_count": len(rows),
+        "repo_sequence_sha256": hashlib.sha256(
+            json.dumps(repositories, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        ).hexdigest(),
         "repos_csv": str(args.repos_csv.resolve()),
         "cocomut_command": args.cocomut_command,
+        "cocomut_tool": cocomut_tool_identity(args.cocomut_command),
         "timeout": args.timeout,
         "compile_timeout": args.compile_timeout,
         "heap_gb": args.heap_gb,
@@ -490,7 +503,11 @@ def ensure_environment(args: argparse.Namespace, rows: list[dict[str, str]]) -> 
         if not path.exists():
             raise SystemExit(f"Cannot --resume without existing environment metadata: {path}")
         previous = json.loads(path.read_text(encoding="utf-8"))
-        immutable = ("repo_count", "repos_csv", "cocomut_command", "timeout", "compile_timeout", "heap_gb")
+        immutable = (
+            "repo_count", "repo_sequence_sha256", "repos_csv", "cocomut_command",
+            "cocomut_tool", "timeout", "compile_timeout", "heap_gb",
+            "python", "java", "maven", "gradle",
+        )
         changed = {
             key: {"previous": previous.get(key), "requested": current.get(key)}
             for key in immutable if previous.get(key) != current.get(key)
@@ -502,6 +519,38 @@ def ensure_environment(args: argparse.Namespace, rows: list[dict[str, str]]) -> 
             raise SystemExit("Refusing to mix resumed rows from different field-test environments: " + detail)
         return
     path.write_text(json.dumps(current, indent=2) + "\n", encoding="utf-8")
+
+
+def cocomut_tool_identity(command: str) -> dict[str, Any]:
+    parts = shlex.split(command)
+    if not parts:
+        return {"executable": "", "sha256": "", "git_commit": "", "git_diff_sha256": ""}
+    candidate = Path(parts[0]).expanduser()
+    if not candidate.is_absolute():
+        resolved = shutil.which(parts[0])
+        candidate = Path(resolved) if resolved else (Path.cwd() / candidate)
+    candidate = candidate.resolve()
+    git_root = command_text(["git", "-C", str(candidate.parent), "rev-parse", "--show-toplevel"]).strip()
+    git_commit = ""
+    git_diff_hash = ""
+    if git_root and Path(git_root).is_dir():
+        git_commit = command_text(["git", "-C", git_root, "rev-parse", "HEAD"]).strip()
+        diff = command_text(["git", "-C", git_root, "diff", "--binary", "HEAD", "--", "."])
+        git_diff_hash = hashlib.sha256(diff.encode("utf-8")).hexdigest() if diff else "clean"
+    return {
+        "executable": str(candidate),
+        "sha256": sha256_file(candidate) if candidate.is_file() else "",
+        "git_commit": git_commit,
+        "git_diff_sha256": git_diff_hash,
+    }
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def write_summary(output_root: Path) -> None:
