@@ -58,7 +58,6 @@ public class ProjectAnalyzer {
     private BuildJavaSelection buildJavaSelection = new BuildJavaSelection(null, "inherited", "inherited_environment");
     private final List<BuildAttempt> buildAttempts = new ArrayList<>();
     private List<Path> buildRootCandidates = List.of();
-    private String finalBuildOutput = "";
 
     /**
      * Create a ProjectAnalyzer for the given project path
@@ -150,7 +149,7 @@ public class ProjectAnalyzer {
     public ProjectMetadata analyze() throws IOException {
         String detectedBuildSystem = detectBuildSystem();
         String javaVersion = detectJavaVersion(detectedBuildSystem);
-        buildJavaSelection = BuildJavaSelection.select(projectPath, detectedBuildSystem, javaVersion);
+        buildJavaSelection = BuildJavaSelection.select(effectiveBuildRoot, detectedBuildSystem, javaVersion);
         List<Path> sourceRoots = !explicitSourceRoots.isEmpty()
                 ? existingDirs(explicitSourceRoots)
                 : findSourceRoots();
@@ -378,7 +377,7 @@ public class ProjectAnalyzer {
             return unsupportedBuildSystem;
         }
 
-        List<Path> nestedRoots = nestedBuildRoots();
+        List<Path> nestedRoots = nestedBuildRoots(projectPath);
         buildRootCandidates = nestedRoots;
         if (nestedRoots.size() == 1) {
             effectiveBuildRoot = nestedRoots.get(0);
@@ -401,7 +400,28 @@ public class ProjectAnalyzer {
         return null;
     }
 
-    private List<Path> nestedBuildRoots() {
+    /**
+     * Return the only nested Maven or Gradle root when the requested directory
+     * has no root build descriptor. Ambiguous layouts deliberately return the
+     * requested path so callers retain generic-project behavior.
+     */
+    public static Path preferredAdapterRoot(Path projectPath) {
+        if (hasBuildDescriptor(projectPath)) {
+            return projectPath;
+        }
+        List<Path> roots = nestedBuildRoots(projectPath);
+        return roots.size() == 1 ? roots.get(0) : projectPath;
+    }
+
+    private static boolean hasBuildDescriptor(Path root) {
+        return Files.isRegularFile(root.resolve("pom.xml"))
+                || Files.isRegularFile(root.resolve("build.gradle"))
+                || Files.isRegularFile(root.resolve("build.gradle.kts"))
+                || Files.isRegularFile(root.resolve("settings.gradle"))
+                || Files.isRegularFile(root.resolve("settings.gradle.kts"));
+    }
+
+    private static List<Path> nestedBuildRoots(Path projectPath) {
         Set<Path> roots = new LinkedHashSet<>();
         try (var walk = Files.walk(projectPath, 3)) {
             for (Path file : walk.filter(Files::isRegularFile).toList()) {
@@ -420,12 +440,12 @@ public class ProjectAnalyzer {
                 .filter(root -> roots.stream().noneMatch(other -> !other.equals(root) && root.startsWith(other)))
                 .toList();
         List<Path> productionRoots = topLevelRoots.stream()
-                .filter(root -> !isAuxiliaryBuildRoot(root))
+                .filter(root -> !isAuxiliaryBuildRoot(projectPath, root))
                 .toList();
         return productionRoots.isEmpty() ? topLevelRoots : productionRoots;
     }
 
-    private boolean isAuxiliaryBuildRoot(Path root) {
+    private static boolean isAuxiliaryBuildRoot(Path projectPath, Path root) {
         Set<String> auxiliarySegments = Set.of(
                 "example", "examples", "demo", "demos", "sample", "samples",
                 "benchmark", "benchmarks");
@@ -879,6 +899,16 @@ public class ProjectAnalyzer {
             List<String> command;
             AndroidSdkSupport.Preparation androidPreparation = "gradle".equals(buildSystem)
                     ? AndroidSdkSupport.prepare(effectiveBuildRoot) : AndroidSdkSupport.Preparation.notAndroid();
+            if (androidPreparation.attempted()) {
+                recordAndroidSdkPreparation(androidPreparation);
+            }
+            if (androidPreparation.androidProject() && !androidPreparation.succeeded()) {
+                lastBuildResult = new BuildResult(true, androidPreparation.exitCode(), false,
+                        androidPreparation.timedOut(), "BUILD FAILED: ANDROID SDK UNAVAILABLE",
+                        diagnosticTail(androidPreparation.diagnostic()),
+                        BuildFailureReason.BUILD_FAILED_ANDROID_SDK_UNAVAILABLE);
+                return lastBuildResult;
+            }
 
             if ("maven".equals(buildSystem)) {
                 String mvn = executableWithWrapper("mvn", isWindows);
@@ -901,11 +931,6 @@ public class ProjectAnalyzer {
             }
 
             CommandResult result = runWithTransientRetries(command);
-            if (androidPreparation.androidProject() && !androidPreparation.diagnostic().isBlank()) {
-                result = new CommandResult(result.exitCode(),
-                        "[CoCoMUT Android SDK preparation]\n" + androidPreparation.diagnostic() + "\n"
-                                + result.output(), result.timedOut());
-            }
             result = retryForRequestedJava(command, result);
             if ("maven".equals(buildSystem) && result.exitCode() != 0 && !result.timedOut()
                     && missingSameReactorArtifacts(result.output())) {
@@ -1004,11 +1029,18 @@ public class ProjectAnalyzer {
     }
 
     private BuildFailureReason classifiedBuildFailure(CommandResult result) {
-        BuildFailureReason reason = BuildFailureReason.classify(
-                finalBuildOutput, result.timedOut(), result.exitCode() == 0);
+        return finalBuildFailureReason(result.output(), result.timedOut(), result.exitCode() == 0,
+                missingSameReactorArtifacts(result.output()));
+    }
+
+    /** Classify the complete, final diagnostic returned after all bounded retries. */
+    static BuildFailureReason finalBuildFailureReason(String finalOutput, boolean timedOut, boolean succeeded,
+                                                      boolean sameReactorArtifacts) {
+        String diagnostic = finalOutput == null ? "" : finalOutput;
+        BuildFailureReason reason = BuildFailureReason.classify(diagnostic, timedOut, succeeded);
         if (reason == BuildFailureReason.BUILD_FAILED_REACTOR_ARTIFACT_MISSING
-                && finalBuildOutput.contains("Could not find artifact")
-                && !missingSameReactorArtifacts(finalBuildOutput)) {
+                && diagnostic.contains("Could not find artifact")
+                && !sameReactorArtifacts) {
             return BuildFailureReason.BUILD_FAILED_DEPENDENCY_UNAVAILABLE;
         }
         return reason;
@@ -1286,7 +1318,6 @@ public class ProjectAnalyzer {
     }
 
     private void recordBuildAttempt(List<String> command, CommandResult result) {
-        finalBuildOutput = result.output();
         buildAttempts.add(new BuildAttempt(
                 command,
                 buildJavaSelection.javaHome() == null ? "" : buildJavaSelection.javaHome().toString(),
@@ -1295,6 +1326,21 @@ public class ProjectAnalyzer {
                 result.exitCode(),
                 result.timedOut(),
                 BuildFailureReason.classify(result.output(), result.timedOut(), result.exitCode() == 0)));
+    }
+
+    private void recordAndroidSdkPreparation(AndroidSdkSupport.Preparation preparation) {
+        buildAttempts.add(new BuildAttempt(
+                "android_sdk_provisioning",
+                preparation.command(),
+                new ArrayList<>(preparation.components()),
+                buildJavaSelection.javaHome() == null ? "" : buildJavaSelection.javaHome().toString(),
+                buildJavaSelection.version(),
+                buildJavaSelection.evidence(),
+                preparation.exitCode(),
+                preparation.timedOut(),
+                preparation.changed(),
+                preparation.succeeded() ? BuildFailureReason.NONE
+                        : BuildFailureReason.BUILD_FAILED_ANDROID_SDK_UNAVAILABLE));
     }
 
     private static List<Path> parsePathList(String raw) {

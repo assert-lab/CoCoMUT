@@ -180,6 +180,54 @@ public class OrchestratorTest {
     }
 
     @Test
+    public void degradedCallGraphStillEmitsJsonlAndReportsPartial() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-degraded-call-graph-");
+        try {
+            Path sourceRoot = project.resolve("src/main/java/example");
+            Path classOutput = project.resolve("classes");
+            Files.createDirectories(sourceRoot);
+            Files.createDirectories(classOutput);
+            Files.writeString(sourceRoot.resolve("Sample.java"), """
+                    package example;
+                    /** Sample documentation. */
+                    public class Sample { public String value() { return "ok"; } }
+                    """);
+            Files.write(classOutput.resolve("Broken.class"), new byte[] {0, 1, 2, 3});
+
+            ContextRequest request = ContextRequest.builder()
+                    .projectRoot(project)
+                    .sourceSets(java.util.Set.of("main"))
+                    .outputDirectory(project.resolve("output"))
+                    .build();
+            ProjectMetadata metadata = new ProjectMetadata.Builder()
+                    .projectName("degraded-call-graph")
+                    .projectPath(project)
+                    .buildSystem("none")
+                    .javaVersion("17")
+                    .sourceRoot(project.resolve("src/main/java"))
+                    .sourceRoots(java.util.List.of(project.resolve("src/main/java")))
+                    .classpath(java.util.List.of(classOutput))
+                    .mainClassOutputs(java.util.List.of(classOutput))
+                    .compiles(true)
+                    .compileStatus("PRECOMPILED BYTECODE")
+                    .bytecodeAvailable(true)
+                    .analysisCanProceed(true)
+                    .build();
+
+            Orchestrator degraded = new Orchestrator(request, metadata);
+            assertFalse("A usable degraded extraction retains PARTIAL status", degraded.execute());
+
+            ExtractionReport report = new ExtractionReport(degraded.getExecutionReport());
+            assertTrue(report.partial());
+            assertTrue(report.usableRecordsEmitted());
+            assertEquals(Boolean.TRUE, report.asMap().get("phase_3_degraded"));
+            assertTrue(Files.isRegularFile(report.jsonlFile()));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void successfulEmptyBuildReportsUnavailableProjectBytecode() throws Exception {
         Path project = Files.createTempDirectory("cocomut-empty-maven-");
         try {

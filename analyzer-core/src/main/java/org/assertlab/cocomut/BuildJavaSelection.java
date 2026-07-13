@@ -18,7 +18,18 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
     }
 
     public static BuildJavaSelection select(Path projectRoot, String buildSystem, String declaredJavaVersion) {
-        Map<String, String> env = System.getenv();
+        return select(projectRoot, buildSystem, declaredJavaVersion, System.getenv());
+    }
+
+    /**
+     * Select a build JDK using the supplied environment.
+     *
+     * <p>The overload keeps selection deterministic in tests and lets callers
+     * model CI environments without relying on the host process environment.
+     */
+    static BuildJavaSelection select(Path projectRoot, String buildSystem, String declaredJavaVersion,
+                                     Map<String, String> env) {
+        env = env == null ? Map.of() : Map.copyOf(env);
         String explicit = env.getOrDefault("COCOMUT_BUILD_JAVA_HOME", "").trim();
         if (!explicit.isEmpty()) {
             Path home = Path.of(explicit).toAbsolutePath().normalize();
@@ -70,9 +81,13 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
     }
 
     static Map<Integer, Path> installedJdkHomes() {
+        return installedJdkHomes(System.getenv());
+    }
+
+    static Map<Integer, Path> installedJdkHomes(Map<String, String> env) {
         Map<Integer, Path> homes = new java.util.LinkedHashMap<>();
         for (int version : SUPPORTED_VERSIONS) {
-            Path home = resolveHome(version, System.getenv());
+            Path home = resolveHome(version, env);
             if (home != null) homes.put(version, home);
         }
         return homes;
@@ -138,15 +153,19 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
                 ? List.of(version, compatibleVersion) : List.of(compatibleVersion);
         for (int availableVersion : candidates) {
             if (!SUPPORTED_VERSIONS.contains(availableVersion)) continue;
+            Path inherited = inheritedJavaHome(env);
+            if (isJavaHomeForVersion(inherited, availableVersion)) {
+                return inherited;
+            }
             String configured = env.getOrDefault("COCOMUT_JAVA_HOME_" + availableVersion, "").trim();
             if (!configured.isEmpty()) {
                 Path path = Path.of(configured).toAbsolutePath().normalize();
-                if (Files.isDirectory(path.resolve("bin"))) return path;
+                if (isJavaHomeForVersion(path, availableVersion)) return path;
             }
             for (Path candidate : List.of(
                     Path.of("/usr/lib/jvm/java-" + availableVersion + "-openjdk"),
                     Path.of("/usr/lib/jvm/java-" + availableVersion + "-openjdk-amd64"))) {
-                if (Files.isDirectory(candidate.resolve("bin"))) return candidate;
+                if (isJavaHomeForVersion(candidate, availableVersion)) return candidate;
             }
         }
         return null;
@@ -193,9 +212,34 @@ public record BuildJavaSelection(Path javaHome, String version, String evidence)
         return matcher.find() ? Integer.parseInt(matcher.group(2)) : -1;
     }
 
+    private static boolean isJavaHomeForVersion(Path home, int expectedVersion) {
+        return home != null && Files.isDirectory(home.resolve("bin"))
+                && javaHomeMajorVersion(home) == expectedVersion;
+    }
+
     private static String versionFromHome(Path home) {
-        int version = home == null ? -1 : normalize(home.toString());
+        int version = javaHomeMajorVersion(home);
         return version > 0 ? Integer.toString(version) : "inherited";
+    }
+
+    private static int javaHomeMajorVersion(Path home) {
+        if (home == null || !Files.isDirectory(home.resolve("bin"))) {
+            return -1;
+        }
+        Path normalized = home.toAbsolutePath().normalize();
+        Path runtimeHome = Path.of(System.getProperty("java.home")).toAbsolutePath().normalize();
+        if (normalized.equals(runtimeHome)) {
+            return Runtime.version().feature();
+        }
+        String release = read(normalized.resolve("release"));
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("(?m)^JAVA_VERSION=\\\"?([^\\\"\\r\\n]+)")
+                .matcher(release);
+        if (matcher.find()) {
+            int version = normalize(matcher.group(1));
+            if (version > 0) return version;
+        }
+        return normalize(normalized.toString());
     }
 
     private static String firstLine(Path path) {

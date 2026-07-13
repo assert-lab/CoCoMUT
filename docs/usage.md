@@ -191,7 +191,8 @@ outputs or explicit `--class-output` / `--project-jar` inputs.
 The extraction report records `phase_1_build_command`,
 `phase_1_build_attempts`, the selected build JDK and its evidence, a concise
 build-output tail, and `phase_1_build_failure_reason`. Each attempt includes its
-command, JDK, exit code, timeout state, and classified reason so retries can be
+action, command, declared Android components when applicable, JDK, exit code,
+timeout state, environment-change flag, and classified reason so retries can be
 audited without reconstructing them from console output.
 
 Build execution runs the subject repository's Maven or Gradle build logic. For
@@ -201,6 +202,14 @@ unprivileged user, scrubbed environment, isolated writable build/cache
 directories, and CPU, memory, process, wall-clock, and network limits. Use
 `--externally-sandboxed-build` only when that external protection is actually in
 place; CoCoMUT records the policy but does not provide a container itself.
+
+Android SDK provisioning is disabled by default. If CoCoMUT detects explicitly
+declared missing Android components, it reports
+`BUILD_FAILED_ANDROID_SDK_UNAVAILABLE` before invoking Gradle. Set
+`COCOMUT_ALLOW_ANDROID_SDK_PROVISIONING=true` only inside an externally
+controlled disposable environment to allow `sdkmanager` to install those exact
+declared components. This action is recorded in `phase_1_build_attempts` and in
+the manifest.
 
 If the project was already compiled elsewhere, or if build execution is not
 acceptable, use the explicit artifact path:
@@ -235,6 +244,10 @@ and keeps the available caller/callee edges. This is not a call-graph failure:
 it means per-method bytecode matching is incomplete for the selected focal set.
 If zero selected methods match project bytecode, CoCoMUT reports `PARTIAL`
 instead: the source records remain usable, but method-level call context is not.
+The CLI exits with status `2` for `PARTIAL`, `0` for `SUCCESS`, and `1` for a
+terminal failure. API callers can use `ExtractionReport.partial()` and
+`ExtractionReport.usableRecordsEmitted()` instead of inferring usability from
+string status fields.
 
 For documentation datasets, prefer a precise source-set and scope:
 

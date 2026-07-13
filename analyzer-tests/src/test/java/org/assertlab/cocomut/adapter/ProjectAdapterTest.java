@@ -74,6 +74,19 @@ public class ProjectAdapterTest {
     }
 
     @Test
+    public void uniqueNestedGradleRootSelectsGradleAdapterOnNormalDispatch() throws IOException {
+        Path nested = tempDir.resolve("service");
+        Files.createDirectories(nested);
+        Files.writeString(nested.resolve("settings.gradle"), "rootProject.name = 'service'\n");
+        Files.writeString(nested.resolve("build.gradle"), "plugins { id 'java' }\n");
+
+        ProjectAdapter adapter = ProjectAdapter.of(tempDir);
+
+        assertTrue("A unique nested Gradle build must retain Gradle model enrichment",
+                adapter instanceof GradleProjectAdapter);
+    }
+
+    @Test
     public void plainDirectoryFallsBackToGenericAdapter() {
         // tempDir has no build descriptor → fallback
         ProjectAdapter adapter = ProjectAdapter.of(tempDir);

@@ -166,8 +166,7 @@ invocation. If the requested JDK is unavailable, CoCoMUT
 uses the inherited build environment and reports that fallback explicitly.
 
 Build recovery is bounded and evidence-driven. CoCoMUT retries transient network
-failures at most twice, provisions only explicitly declared Android SDK
-components when `sdkmanager` is already available, and retries Maven `package`
+failures at most twice, and retries Maven `package`
 only when every missing artifact belongs to the declared reactor. It does not
 edit subject repositories or guess credentials, dependency versions, SDK
 levels, or custom setup commands. Reports retain `BUILD_FAILED` as the primary
@@ -175,6 +174,14 @@ code and add a stable `phase_1_build_failure_reason`, such as
 `BUILD_FAILED_JDK_UNAVAILABLE`, `BUILD_FAILED_DEPENDENCY_UNAVAILABLE`, or
 `BUILD_FAILED_VCS_HISTORY_UNAVAILABLE`. Unrecognized failures remain
 `BUILD_FAILED_UNKNOWN_ERROR`.
+
+Android SDK provisioning is disabled by default because it mutates the SDK
+installation used by the caller. For an Android project with explicitly declared
+missing components, CoCoMUT reports `BUILD_FAILED_ANDROID_SDK_UNAVAILABLE`
+before starting Gradle. In an externally controlled disposable environment, set
+`COCOMUT_ALLOW_ANDROID_SDK_PROVISIONING=true` to permit `sdkmanager` to install
+only those declared components. The manifest records the provisioning command,
+components, timeout, exit code, and whether it changed the SDK installation.
 
 When no build descriptor exists at the requested root, CoCoMUT uses one unique
 nested Maven or Gradle root. Multiple independent nested builds remain

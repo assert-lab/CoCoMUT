@@ -113,6 +113,15 @@ public class BuildCompatibilityTest {
     }
 
     @Test
+    public void classifiesTheCompleteFinalDiagnosticAfterFallbacks() {
+        String combined = "initial attempt: JDK 21 is required to build this project\n"
+                + "[CoCoMUT fallback]\nfinal attempt: ordinary compilation failure";
+
+        assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
+                ProjectAnalyzer.finalBuildFailureReason(combined, false, false, false));
+    }
+
+    @Test
     public void androidProvisioningUsesOnlyDeclaredComponents() throws Exception {
         Path project = Files.createTempDirectory("cocomut-android-components");
         try {
@@ -131,6 +140,30 @@ public class BuildCompatibilityTest {
             assertEquals("testClasses", ProjectAnalyzer.gradleBuildTask(true, true));
         } finally {
             delete(project);
+        }
+    }
+
+    @Test
+    public void androidProvisioningRequiresExplicitOptIn() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-android-provision-policy");
+        Path sdk = Files.createTempDirectory("cocomut-android-sdk-policy");
+        try {
+            Files.writeString(project.resolve("build.gradle.kts"), """
+                    plugins { id("com.android.library") }
+                    android { compileSdk = 35 }
+                    """);
+
+            AndroidSdkSupport.Preparation preparation = AndroidSdkSupport.prepare(project,
+                    java.util.Map.of("ANDROID_SDK_ROOT", sdk.toString()));
+
+            assertTrue(preparation.androidProject());
+            assertFalse(preparation.attempted());
+            assertFalse(preparation.succeeded());
+            assertFalse(preparation.changed());
+            assertTrue(preparation.diagnostic().contains(AndroidSdkSupport.ALLOW_PROVISIONING_ENV));
+        } finally {
+            delete(project);
+            delete(sdk);
         }
     }
 

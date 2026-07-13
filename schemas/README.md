@@ -161,6 +161,8 @@ build.exit_code                 Build-process exit code, or -1 when not attempte
 build.succeeded                 Whether the attempted build command succeeded
 build.timed_out                 Whether the attempted build timed out
 build.output_tail               Bounded tail of Maven/Gradle output for diagnostics
+build.attempts                  Structured build and SDK-provisioning actions: command,
+                                components, JDK, exit code, timeout, change flag, reason
 build.skipped                   Whether build execution was denied
 build.sandboxed                 Whether caller claims external sandboxing
 build.policy                    DENY_BUILD, ALLOW_UNSANDBOXED_BUILD,

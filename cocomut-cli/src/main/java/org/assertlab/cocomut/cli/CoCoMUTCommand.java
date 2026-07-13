@@ -155,7 +155,15 @@ public final class CoCoMUTCommand implements Callable<Integer> {
 
         ExtractionReport report = ContextExtractorService.createDefault().extract(request);
         report.asMap().forEach((key, value) -> System.out.printf("%s=%s%n", key, value));
-        return report.successful() ? 0 : 1;
+        return exitCodeFor(report);
+    }
+
+    /**
+     * CLI status contract: 0 is complete success, 2 is partial extraction with
+     * potentially usable records, and 1 is a terminal extraction failure.
+     */
+    public static int exitCodeFor(ExtractionReport report) {
+        return report.successful() ? 0 : (report.partial() ? 2 : 1);
     }
 
     private ContextRequest.BuildPolicy buildPolicy() {

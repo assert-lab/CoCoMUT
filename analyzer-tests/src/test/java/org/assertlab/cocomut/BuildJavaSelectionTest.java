@@ -14,10 +14,13 @@ public class BuildJavaSelectionTest {
         Path project = Files.createTempDirectory("cocomut-build-java");
         try {
             Files.writeString(project.resolve(".java-version"), "17\n");
-            BuildJavaSelection selection = BuildJavaSelection.select(project, "maven", "8");
-            assertEquals("17", selection.version());
+            int runtimeVersion = Runtime.version().feature();
+            Files.writeString(project.resolve(".java-version"), runtimeVersion + "\n");
+            BuildJavaSelection selection = BuildJavaSelection.select(project, "maven", "8",
+                    java.util.Map.of("JAVA_HOME", System.getProperty("java.home")));
+            assertEquals(Integer.toString(runtimeVersion), selection.version());
             assertEquals(".java-version", selection.evidence());
-            assertTrue(selection.javaHome() == null || Files.isDirectory(selection.javaHome().resolve("bin")));
+            assertEquals(Path.of(System.getProperty("java.home")).toAbsolutePath().normalize(), selection.javaHome());
         } finally {
             Files.deleteIfExists(project.resolve(".java-version"));
             Files.deleteIfExists(project);

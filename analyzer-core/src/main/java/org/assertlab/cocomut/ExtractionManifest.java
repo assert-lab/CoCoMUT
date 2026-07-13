@@ -112,6 +112,7 @@ final class ExtractionManifest {
         build.put("java_home", metadata != null ? metadata.getBuildJavaHome() : "");
         build.put("java_version", metadata != null ? metadata.getBuildJavaVersion() : "inherited");
         build.put("java_evidence", metadata != null ? metadata.getBuildJavaEvidence() : "inherited_environment");
+        build.set("attempts", MAPPER.valueToTree(metadata != null ? metadata.getBuildAttempts() : List.of()));
         build.put("skipped", metadata != null && metadata.isBuildSkipped());
         build.put("sandboxed", metadata != null && metadata.isBuildSandboxed());
         build.put("status", metadata != null ? metadata.getCompileStatus() : "NOT_ANALYZED");

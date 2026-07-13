@@ -12,41 +12,63 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/** Detects and installs only explicitly declared Android SDK components. */
+/** Detects Android SDK requirements and optionally provisions explicit components. */
 final class AndroidSdkSupport {
+    static final String ALLOW_PROVISIONING_ENV = "COCOMUT_ALLOW_ANDROID_SDK_PROVISIONING";
+
     private AndroidSdkSupport() {}
 
-    record Preparation(boolean androidProject, boolean attempted, boolean succeeded, String diagnostic) {
-        static Preparation notAndroid() { return new Preparation(false, false, true, ""); }
+    record Preparation(boolean androidProject, boolean attempted, boolean succeeded, boolean timedOut,
+                       boolean changed, List<String> command, Set<String> components, int exitCode,
+                       String diagnostic) {
+        Preparation {
+            command = command == null ? List.of() : List.copyOf(command);
+            components = components == null ? Set.of() : Set.copyOf(components);
+            diagnostic = diagnostic == null ? "" : diagnostic;
+        }
+
+        static Preparation notAndroid() {
+            return new Preparation(false, false, true, false, false, List.of(), Set.of(), 0, "");
+        }
     }
 
     static Preparation prepare(Path projectRoot) {
+        return prepare(projectRoot, System.getenv());
+    }
+
+    static Preparation prepare(Path projectRoot, Map<String, String> env) {
         boolean androidProject = isAndroidProject(projectRoot);
         if (!androidProject) return Preparation.notAndroid();
         Set<String> components = declaredComponents(projectRoot);
-        Map<String, String> env = System.getenv();
+        env = env == null ? Map.of() : Map.copyOf(env);
         String rootText = !env.getOrDefault("ANDROID_SDK_ROOT", "").isBlank()
                 ? env.get("ANDROID_SDK_ROOT") : env.getOrDefault("ANDROID_HOME", "");
         if (rootText == null || rootText.isBlank()) {
-            return new Preparation(true, false, false,
+            return new Preparation(true, false, false, false, false, List.of(), components, -1,
                     components.isEmpty()
                             ? "Android project detected, but SDK components are not statically declared and "
                                     + "ANDROID_SDK_ROOT/ANDROID_HOME is unset."
                             : "Android SDK components are declared but ANDROID_SDK_ROOT/ANDROID_HOME is unset.");
         }
         if (components.isEmpty()) {
-            return new Preparation(true, false, true,
+            return new Preparation(true, false, true, false, false, List.of(), Set.of(), 0,
                     "Android project detected; no statically declared SDK components require provisioning.");
         }
         Path sdkRoot = Path.of(rootText).toAbsolutePath().normalize();
         Set<String> missing = missingComponents(sdkRoot, components);
         if (missing.isEmpty()) {
-            return new Preparation(true, false, true,
+            return new Preparation(true, false, true, false, false, List.of(), components, 0,
                     "Declared Android SDK components are already installed: " + components);
+        }
+        if (!Boolean.parseBoolean(env.getOrDefault(ALLOW_PROVISIONING_ENV, "false"))) {
+            return new Preparation(true, false, false, false, false, List.of(), missing, -1,
+                    "Declared Android SDK components are missing: " + missing + ". Provisioning is disabled; "
+                            + "set " + ALLOW_PROVISIONING_ENV + "=true in an externally controlled environment "
+                            + "to allow sdkmanager to install them.");
         }
         Path sdkManager = findSdkManager(sdkRoot);
         if (sdkManager == null) {
-            return new Preparation(true, false, false,
+            return new Preparation(true, false, false, false, false, List.of(), missing, -1,
                     "Android SDK components are declared but sdkmanager is unavailable under " + sdkRoot);
         }
         try {
@@ -64,11 +86,12 @@ final class AndroidSdkSupport {
             String output = Files.readString(log);
             Files.deleteIfExists(log);
             if (output.length() > 20_000) output = output.substring(output.length() - 20_000);
-            return new Preparation(true, true, completed && exit == 0,
+            return new Preparation(true, true, completed && exit == 0, !completed,
+                    completed && exit == 0, command, missing, exit,
                     "sdkmanager components=" + missing + " exit=" + exit + "\n"
                             + output);
         } catch (Exception e) {
-            return new Preparation(true, true, false,
+            return new Preparation(true, true, false, false, false, List.of(), missing, -1,
                     "sdkmanager failed: " + e.getClass().getSimpleName() + ": " + e.getMessage());
         }
     }

@@ -69,6 +69,7 @@
         "exit_code",
         "succeeded",
         "timed_out",
+        "attempts",
         "skipped",
         "sandboxed",
         "status",
@@ -87,6 +88,25 @@
         "java_home": { "type": "string" },
         "java_version": { "type": "string" },
         "java_evidence": { "type": "string" },
+        "attempts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["action", "command", "components", "javaHome", "javaVersion", "javaEvidence", "exitCode", "timedOut", "changedEnvironment", "failureReason"],
+            "properties": {
+              "action": { "type": "string" },
+              "command": { "type": "array", "items": { "type": "string" } },
+              "components": { "type": "array", "items": { "type": "string" } },
+              "javaHome": { "type": "string" },
+              "javaVersion": { "type": "string" },
+              "javaEvidence": { "type": "string" },
+              "exitCode": { "type": "integer" },
+              "timedOut": { "type": "boolean" },
+              "changedEnvironment": { "type": "boolean" },
+              "failureReason": { "type": "string" }
+            }
+          }
+        },
         "skipped": { "type": "boolean" },
         "sandboxed": { "type": "boolean" },
         "status": { "type": "string" },
