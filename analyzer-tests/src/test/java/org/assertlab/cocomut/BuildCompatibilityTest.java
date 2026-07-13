@@ -28,6 +28,10 @@ public class BuildCompatibilityTest {
                         "AuditListener has been compiled by a more recent version of the Java Runtime "
                                 + "(class file version 55.0)", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
+                BuildFailureReason.classify(
+                        "bad class file: dependency.class class file has wrong version 55.0, should be 52.0",
+                        false, false));
+        assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
                 BuildFailureReason.classify("Unrecognized option: --add-opens=java.base/java.lang", false, false));
         assertEquals(BuildFailureReason.BUILD_FAILED_JDK_UNAVAILABLE,
                 BuildFailureReason.classify("Java 1.8 is required for amd64. Detected version 17", false, false));

@@ -46,6 +46,8 @@ public enum BuildFailureReason {
         if (text.contains("compiled by a more recent version of the java runtime")
                 && text.contains("class file version"))
             return BUILD_FAILED_JDK_UNAVAILABLE;
+        if (text.contains("class file has wrong version"))
+            return BUILD_FAILED_JDK_UNAVAILABLE;
         if (containsAny(text, "unrecognized option: --add-opens", "unrecognized option: --add-exports"))
             return BUILD_FAILED_JDK_UNAVAILABLE;
         if (text.contains("jdk ") && text.contains(" is required to build"))
