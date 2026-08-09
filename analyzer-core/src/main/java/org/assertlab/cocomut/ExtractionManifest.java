@@ -84,7 +84,7 @@ final class ExtractionManifest {
                 : new java.util.LinkedHashMap<>(executionReport);
 
         ObjectNode root = MAPPER.createObjectNode();
-        root.put("schema_version", "0.4.0");
+        root.put("schema_version", "0.5.0");
         root.put("generated_at", Instant.now().toString());
         root.put("tool", "CoCoMUT");
         root.put("tool_version", toolVersion());

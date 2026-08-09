@@ -102,11 +102,15 @@ They use conservative project-root containment checks and include
 `parser=cocomut-file-regex`, `parse_confidence=low`, and a `source_form` marker
 describing the recognized textual form.
 
-`{@inheritDoc}` is represented as an inheritance candidate relation. CoCoMUT
-reports whether an inherited candidate exists and includes bounded inherited
-Javadoc snippets, but it does not silently expand inherited `@param`, `@return`,
-or `@throws` text into the child method's `structured_tags`. Rows that use
-inheritDoc therefore carry `inheritdoc_policy=candidate_only`.
+Inherited method documentation has separate declared, candidate, and effective
+views. CoCoMUT preserves local tags in `declared_structured_tags` (and the
+compatibility alias `structured_tags`), emits ordered structured ancestor
+evidence in `inherited_javadoc_candidates`, and computes item-level inherited
+descriptions, parameters, return text, and applicable throws text in
+`effective_structured_tags`. This applies both to explicit `{@inheritDoc}` and
+to items inherited by omission. See
+[Inherited Javadoc Resolution](inherited-javadoc-resolution.md) for search
+order, provenance, uncertainty, and status invariants.
 
 ## Resolution Policy
 

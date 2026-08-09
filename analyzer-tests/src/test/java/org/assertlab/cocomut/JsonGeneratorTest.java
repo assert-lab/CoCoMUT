@@ -2,14 +2,20 @@ package org.assertlab.cocomut;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.networknt.schema.JsonSchema;
+import com.networknt.schema.JsonSchemaFactory;
+import com.networknt.schema.SpecVersion;
+import com.networknt.schema.ValidationMessage;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -81,6 +87,28 @@ public class JsonGeneratorTest {
         assertEquals("Test method", root.path("MUT").path("javadoc").asText());
         assertTrue("Method code should include annotations/body", root.path("MUT").path("code").asText().contains("@Override"));
         assertTrue("Method code should include body", root.path("MUT").path("code").asText().contains("testMethod()"));
+    }
+
+    @Test
+    public void methodContextJsonlValidatesAgainstCurrentSchema() throws Exception {
+        Path repositoryRoot = Paths.get(System.getProperty("user.dir")).getParent();
+        String externalJsonl = System.getProperty("cocomut.methodContextJsonl");
+        Path jsonl = externalJsonl == null || externalJsonl.isBlank()
+                ? repositoryRoot.resolve("examples/sample-output/minimal-method-context.jsonl")
+                : Paths.get(externalJsonl);
+        Path schemaPath = repositoryRoot.resolve("schemas/method-context.schema.json");
+
+        JsonNode schemaNode = MAPPER.readTree(schemaPath.toFile());
+        JsonSchema schema = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012)
+                .getSchema(schemaNode);
+        for (String line : Files.readAllLines(jsonl)) {
+            if (line.isBlank()) {
+                continue;
+            }
+            Set<ValidationMessage> errors = schema.validate(MAPPER.readTree(line));
+            assertTrue("Method-context JSONL should validate against the current schema: " + errors,
+                    errors.isEmpty());
+        }
     }
 
     @Test

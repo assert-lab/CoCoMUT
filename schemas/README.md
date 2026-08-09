@@ -68,12 +68,21 @@ inline_links              Targets from final merged javadoc_references entries t
 javadoc_references        Resolved reference objects for @see/link/linkplain targets
 file_references           Referenced doc-files/images/html/text/sample-source paths when present
                           plus parser, parse_confidence, and source_form
-structured_tags           Parsed param/return/throws/since/apiNote/implSpec/implNote/deprecated text
-                          plus parser and parse_confidence
-inheritdoc_policy         not_applicable|candidate_only
-inheritdoc_resolution     not_used|resolved_candidate|unresolved
+structured_tags           Compatibility alias for declared_structured_tags
+declared_structured_tags  Parser-derived tags written on the focal declaration
+effective_structured_tags Item-level effective description/type-param/param/
+                          return/throws documentation with provenance
+inheritdoc_policy         not_applicable|item_level
+inheritdoc_resolution     not_applicable|resolved_candidate|no_documentation|
+                          indeterminate|unresolved
 inherited_javadoc_candidates
-                          Candidate inherited Javadoc snippets for {@inheritDoc}
+                          Ordered structured ancestor and availability evidence
+inheritdoc_candidate_count
+                          Number of candidate/evidence entries
+inheritdoc_documented_candidate_count
+                          Number of entries with source Javadoc present
+inheritdoc_candidates_truncated
+                          Whether the bounded hierarchy traversal was truncated
 ```
 
 `javadoc_references` entries are best-effort source-level resolutions:
@@ -129,10 +138,12 @@ Javadoc reference and structured-tag parsing uses Spoon's official
 that Spoon cannot represent; fallback-derived objects are marked with
 `parser=cocomut-fallback`, `parse_confidence=low`, and a fallback reason.
 
-`{@inheritDoc}` is reported as a candidate relation rather than silently
-expanded into child structured tags. When present, `inheritdoc_policy` is
-`candidate_only`, and inherited source Javadocs are exposed through
-`inherited_javadoc_candidates` for downstream inspection.
+Method-documentation inheritance is resolved item by item. Local tags are never
+overwritten: `declared_structured_tags` and its `structured_tags` alias remain
+source-faithful, while `effective_structured_tags` reports explicit and implicit
+inheritance with provenance. `inherited_javadoc_candidates` contains structured
+ancestor evidence, including source-availability states. See
+[Inherited Javadoc Resolution](../docs/inherited-javadoc-resolution.md).
 
 External references are intentionally symbol-level only in the current schema.
 CoCoMUT does not fetch JDK/dependency source jars or generated Javadoc pages for
@@ -145,7 +156,7 @@ Every extraction also writes `extraction_manifest.json` beside the JSONL file.
 This is run-level metadata, not method-level context. The manifest records:
 
 ```text
-schema_version                  Manifest schema version, currently 0.4.0
+schema_version                  Output schema version, currently 0.5.0
 generated_at                    Timestamp for the extraction run
 tool / tool_version             CoCoMUT release identity
 tool_git                        Git identity of the CoCoMUT checkout/build

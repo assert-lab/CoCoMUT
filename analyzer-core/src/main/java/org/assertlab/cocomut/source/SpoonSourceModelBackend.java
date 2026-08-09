@@ -67,6 +67,10 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern BLOCK_TAG = Pattern.compile(
             "(?ms)(?:^|\\R)\\s*\\*?\\s*@(param|return|throws|exception|since|deprecated|see|apiNote|implSpec|implNote)\\s*(.*?)(?=\\R\\s*\\*?\\s*@|\\z)");
+    private static final Pattern INHERIT_DOC_TAG = Pattern.compile(
+            "\\{@inheritDoc(?:\\s+[^\\s}]+)?\\s*}", Pattern.CASE_INSENSITIVE);
+    private static final Pattern EXPLICIT_INHERIT_DOC_TARGET = Pattern.compile(
+            "\\{@inheritDoc\\s+[^\\s}]+\\s*}", Pattern.CASE_INSENSITIVE);
     private static final Pattern JAVADOC_FILE_REFERENCE = Pattern.compile(
             "(?:\\{@docRoot\\}/)?(?:[\\w.$-]+/)*(?:doc-files/)?[\\w.$-]+\\.(?:png|svg|gif|jpg|jpeg|html|htm|txt|java)",
             Pattern.CASE_INSENSITIVE);
@@ -106,8 +110,14 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
 
         CtType<?> owner = executable.getParent(CtType.class);
         String methodBody = sourceSlice(executable);
-        String javadoc = docComment(executable);
-        String rawJavadoc = rawDocComment(parsed, executable).orElse(javadoc);
+        String parsedJavadoc = docComment(executable);
+        String rawJavadoc = rawDocComment(parsed, executable).orElse(parsedJavadoc);
+        // Raw source is a lossless fallback when Spoon can model the method but
+        // cannot expose its comment through the typed Javadoc representation.
+        // Spoon 11 also drops the optional supertype from {@inheritDoc Type}.
+        String javadoc = parsedJavadoc.isBlank() || hasExplicitInheritDocTarget(rawJavadoc)
+                ? rawJavadoc
+                : parsedJavadoc;
         List<JavadocElement> javadocElements = spoonJavadocElements(executable);
         String classJavadoc = owner != null ? docComment(owner) : "";
         String classHierarchy = owner != null ? classHierarchy(owner) : "";
@@ -843,7 +853,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         metrics.put("mentions_examples", mentionsExample(normalized));
         metrics.put("uses_inheritdoc", !elements.isEmpty()
                 ? usesInheritDoc(elements)
-                : normalized.contains("{@inheritDoc}") || normalized.contains("@inheritDoc"));
+                : containsInheritDoc(normalized));
         metrics.put("has_since_tag", !structuredList(structuredTags, "since").isEmpty());
         metrics.put("has_see_tag", hasBlockTag(elements, StandardJavadocTagType.SEE)
                 || !matches(SEE_TAG, normalized, 1).isEmpty());
@@ -860,7 +870,26 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         List<Map<String, Object>> references = javadocReferences(parsed, owner, elements, normalized);
         boolean usesInheritDoc = !elements.isEmpty()
                 ? usesInheritDoc(elements)
-                : normalized.contains("{@inheritDoc}") || normalized.contains("@inheritDoc");
+                : containsInheritDoc(normalized);
+        boolean preserveExplicitTarget = hasExplicitInheritDocTarget(rawJavadoc);
+        List<JavadocElement> inheritanceElements = preserveExplicitTarget ? List.of() : elements;
+        String inheritanceText = preserveExplicitTarget ? rawJavadoc.strip() : normalized;
+        Map<String, Object> declaredStructuredTags = structuredTags(inheritanceElements, inheritanceText);
+        InheritedJavadocResolver.Documentation declaredDocumentation = new InheritedJavadocResolver.Documentation(
+                normalized.isBlank()
+                        ? InheritedJavadocResolver.Availability.ABSENT
+                        : InheritedJavadocResolver.Availability.PRESENT,
+                method.methodUri(),
+                rawJavadoc,
+                mainDescription(inheritanceElements, inheritanceText),
+                declaredStructuredTags,
+                stringValue(declaredStructuredTags.get("parser")),
+                stringValue(declaredStructuredTags.get("parse_confidence")),
+                "");
+        InheritedJavadocResolver.Resolution inherited = executable instanceof CtMethod<?> ctMethod
+                ? InheritedJavadocResolver.resolve(ctMethod, usesInheritDoc, declaredDocumentation,
+                candidate -> inheritedDocumentation(parsed, candidate))
+                : InheritedJavadocResolver.Resolution.notApplicable(declaredDocumentation);
         metadata.put("since", !elements.isEmpty()
                 ? blockTagTexts(elements, StandardJavadocTagType.SINCE)
                 : matches(SINCE_TAG, normalized, 1));
@@ -868,14 +897,108 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         metadata.put("inline_links", inlineReferenceTargets(references));
         metadata.put("javadoc_references", references);
         metadata.put("file_references", fileReferences(parsed.projectRoot(), method, rawJavadoc));
-        metadata.put("structured_tags", structuredTags(elements, normalized));
+        // structured_tags remains the declared-only compatibility view. Effective
+        // Javadoc inheritance is exposed separately and never overwrites source text.
+        metadata.put("structured_tags", declaredStructuredTags);
+        metadata.put("declared_structured_tags", declaredStructuredTags);
+        metadata.put("effective_structured_tags", inherited.effectiveStructuredTags());
         metadata.put("uses_inheritdoc", usesInheritDoc);
-        metadata.put("inheritdoc_policy", usesInheritDoc ? "candidate_only" : "not_applicable");
+        metadata.put("inheritdoc_policy", inherited.hasInheritanceEvidence() ? "item_level" : "not_applicable");
         metadata.put("deprecated", isDeprecated(executable, normalized));
         metadata.put("deprecation_text", deprecationText(normalized));
-        metadata.put("inheritdoc_resolution", inheritdocResolution(executable, normalized));
-        metadata.put("inherited_javadoc_candidates", inheritedJavadocCandidates(executable));
+        metadata.put("inheritdoc_resolution", inherited.resolution());
+        metadata.put("inherited_javadoc_candidates", inherited.candidates());
+        metadata.put("inheritdoc_candidate_count", inherited.candidateCount());
+        metadata.put("inheritdoc_documented_candidate_count", inherited.documentedCandidateCount());
+        metadata.put("inheritdoc_candidates_truncated", inherited.truncated());
         return metadata;
+    }
+
+    private static InheritedJavadocResolver.Documentation inheritedDocumentation(
+            ParsedProject parsed, CtMethod<?> method) {
+        String normalized = docComment(method).strip();
+        Optional<String> raw = rawDocComment(parsed, method);
+        String rawJavadoc = raw.orElse(normalized);
+        boolean preserveExplicitTarget = hasExplicitInheritDocTarget(rawJavadoc);
+        String parseText = normalized.isBlank() || preserveExplicitTarget ? rawJavadoc : normalized;
+        boolean sourceAvailable = sourceFile(method).isPresent() && !method.isShadow();
+        if (normalized.isBlank() && rawJavadoc.isBlank()) {
+            return new InheritedJavadocResolver.Documentation(
+                    sourceAvailable
+                            ? InheritedJavadocResolver.Availability.ABSENT
+                            : InheritedJavadocResolver.Availability.SOURCE_UNAVAILABLE,
+                    sourceMethodUri(parsed, method), "", "", emptyStructuredTags(), "", "none",
+                    sourceAvailable ? "source_declaration_has_no_javadoc" : "source_declaration_unavailable");
+        }
+
+        List<JavadocElement> elements = preserveExplicitTarget ? List.of() : spoonJavadocElements(method);
+        Map<String, Object> tags = structuredTags(elements, parseText);
+        String diagnostic = elements.isEmpty() && !parseText.isBlank()
+                ? "spoon_javadoc_parse_unavailable_fallback_used"
+                : "";
+        return new InheritedJavadocResolver.Documentation(
+                InheritedJavadocResolver.Availability.PRESENT,
+                sourceMethodUri(parsed, method),
+                rawJavadoc,
+                mainDescription(elements, parseText),
+                tags,
+                stringValue(tags.get("parser")),
+                stringValue(tags.get("parse_confidence")),
+                diagnostic);
+    }
+
+    private static String sourceMethodUri(ParsedProject parsed, CtMethod<?> method) {
+        CtType<?> owner = method != null ? method.getDeclaringType() : null;
+        Optional<Path> source = sourceFile(method);
+        if (owner == null || source.isEmpty()) {
+            return "";
+        }
+        List<SourceParameter> parameters = parameters(method);
+        String sourceReturnType = returnType(method);
+        String signature = identitySignature(method.getSimpleName(), parameters,
+                erasedReturnType(method, sourceReturnType));
+        return methodUri(parsed.projectRoot(), source.get(), owner.getQualifiedName(), signature);
+    }
+
+    private static Map<String, Object> emptyStructuredTags() {
+        Map<String, Object> tags = new LinkedHashMap<>();
+        tags.put("parser", "");
+        tags.put("parse_confidence", "none");
+        tags.put("params", List.of());
+        tags.put("return", List.of());
+        tags.put("throws", List.of());
+        tags.put("since", List.of());
+        tags.put("api_notes", List.of());
+        tags.put("impl_specs", List.of());
+        tags.put("impl_notes", List.of());
+        tags.put("deprecated", List.of());
+        return tags;
+    }
+
+    private static String mainDescription(List<JavadocElement> elements, String javadoc) {
+        if (elements != null && !elements.isEmpty()) {
+            List<JavadocElement> description = new ArrayList<>();
+            for (JavadocElement element : elements) {
+                if (element instanceof JavadocBlockTag) {
+                    break;
+                }
+                description.add(element);
+            }
+            return elementsText(description);
+        }
+        String value = javadoc == null ? "" : javadoc;
+        Matcher firstTag = BLOCK_TAG.matcher(value);
+        return (firstTag.find() ? value.substring(0, firstTag.start()) : value)
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
+
+    private static boolean containsInheritDoc(String javadoc) {
+        return javadoc != null && INHERIT_DOC_TAG.matcher(javadoc).find();
+    }
+
+    private static boolean hasExplicitInheritDocTarget(String javadoc) {
+        return javadoc != null && EXPLICIT_INHERIT_DOC_TARGET.matcher(javadoc).find();
     }
 
     private static List<Map<String, Object>> fileReferences(Path projectRoot, SourceMethod method, String javadoc) {
@@ -2678,42 +2801,6 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return matcher.group(1).replaceAll("\\s+", " ").trim();
         }
         return "";
-    }
-
-    private static String inheritdocResolution(CtExecutable<?> executable, String javadoc) {
-        if (!(javadoc.contains("{@inheritDoc}") || javadoc.contains("@inheritDoc"))) {
-            return "not_used";
-        }
-        try {
-            if (executable instanceof CtMethod<?> method && method.getTopDefinitions() != null
-                    && !method.getTopDefinitions().isEmpty()) {
-                return "resolved_candidate";
-            }
-        } catch (Exception | StackOverflowError ignored) {
-            return "unresolved";
-        }
-        return "unresolved";
-    }
-
-    private static List<String> inheritedJavadocCandidates(CtExecutable<?> executable) {
-        if (!(executable instanceof CtMethod<?> method)) {
-            return List.of();
-        }
-        List<String> candidates = new ArrayList<>();
-        try {
-            for (CtMethod<?> definition : method.getTopDefinitions()) {
-                String doc = docComment(definition);
-                if (!doc.isBlank()) {
-                    candidates.add(doc);
-                }
-                if (candidates.size() >= 3) {
-                    break;
-                }
-            }
-        } catch (Exception | StackOverflowError ignored) {
-            return List.of();
-        }
-        return candidates;
     }
 
     private static Integer maxSourceFiles() {

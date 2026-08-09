@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://assert-lab.github.io/cocomut/schemas/extraction-manifest-v0.4.0.schema.json",
+  "$id": "https://assert-lab.github.io/cocomut/schemas/extraction-manifest-v0.5.0.schema.json",
   "title": "CoCoMUT Extraction Manifest",
   "type": "object",
   "additionalProperties": false,
@@ -19,7 +19,7 @@
     "execution"
   ],
   "properties": {
-    "schema_version": { "const": "0.4.0" },
+    "schema_version": { "const": "0.5.0" },
     "generated_at": { "type": "string", "format": "date-time" },
     "tool": { "const": "CoCoMUT" },
     "tool_version": { "type": "string" },
