@@ -1224,6 +1224,231 @@ public class SourceModelEdgeCaseTest {
     }
 
     @Test
+    public void explicitSupertypeCanNameAnIntermediateInterface() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-intermediate-target");
+        try {
+            write(project.resolve("src/main/java/demo/Root.java"), """
+                    package demo;
+                    public interface Root { /** Root documentation. */ String value(); }
+                    """);
+            write(project.resolve("src/main/java/demo/Mid.java"), """
+                    package demo;
+                    public interface Mid extends Root {}
+                    """);
+            write(project.resolve("src/main/java/demo/Child.java"), """
+                    package demo;
+                    public class Child implements Mid {
+                        /** {@inheritDoc Mid} */
+                        @Override public String value() { return ""; }
+                    }
+                    """);
+
+            compileProject(project);
+            String effective = contextFor(project, "demo.Child", "value")
+                    .javadocMetadata().get("effective_structured_tags").toString();
+            assertTrue(effective, effective.contains("Root documentation"));
+            assertFalse(effective.contains("inheritdoc_target_not_overridden"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void qualifiedExplicitSupertypeIsNeverRepairedBySimpleName() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-qualified-target");
+        try {
+            write(project.resolve("src/main/java/demo/Contract.java"), """
+                    package demo;
+                    public interface Contract { /** Contract documentation. */ String value(); }
+                    """);
+            write(project.resolve("src/main/java/demo/Child.java"), """
+                    package demo;
+                    public class Child implements Contract {
+                        /** {@inheritDoc wrong.Contract} */
+                        @Override public String value() { return ""; }
+                    }
+                    """);
+
+            compileProject(project);
+            String effective = contextFor(project, "demo.Child", "value")
+                    .javadocMetadata().get("effective_structured_tags").toString();
+            assertTrue(effective.contains("resolution=invalid"));
+            assertTrue(effective.contains("inheritdoc_target_not_overridden"));
+            assertFalse(effective.contains("Contract documentation"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void inlineReturnIsStructuredAndSupportsInheritance() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inline-return");
+        try {
+            write(project.resolve("src/main/java/demo/Parent.java"), """
+                    package demo;
+                    public interface Parent { /** {@return the parent result} */ String value(); }
+                    """);
+            write(project.resolve("src/main/java/demo/ImplicitChild.java"), """
+                    package demo;
+                    public class ImplicitChild implements Parent {
+                        /** Local implementation note. */
+                        @Override public String value() { return ""; }
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/ExplicitChild.java"), """
+                    package demo;
+                    public class ExplicitChild implements Parent {
+                        /** {@return {@inheritDoc Parent}} */
+                        @Override public String value() { return ""; }
+                    }
+                    """);
+
+            compileProject(project);
+            SourceContext parent = contextFor(project, "demo.Parent", "value");
+            assertTrue(parent.javadocMetadata().get("structured_tags").toString()
+                    .contains("the parent result"));
+            for (String child : List.of("demo.ImplicitChild", "demo.ExplicitChild")) {
+                String effective = contextFor(project, child, "value")
+                        .javadocMetadata().get("effective_structured_tags").toString();
+                assertTrue(effective.contains("the parent result"));
+                assertTrue(effective.contains("return="));
+            }
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void codeAndLiteralNeverTriggerInheritance() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-literal");
+        try {
+            write(project.resolve("src/main/java/demo/Parent.java"), """
+                    package demo;
+                    public interface Parent {
+                        /** Parent description.
+                         * @param value parent parameter
+                         * @return parent return
+                         * @throws java.lang.IllegalStateException parent failure
+                         */
+                        String value(String value) throws IllegalStateException;
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/Child.java"), """
+                    package demo;
+                    public class Child implements Parent {
+                        /** Literal {@code {@inheritDoc}} and {@literal {@inheritDoc}}.
+                         * @param value {@code {@inheritDoc}}
+                         * @return {@literal {@inheritDoc}}
+                         * @throws java.lang.IllegalStateException {@code {@inheritDoc}}
+                         */
+                        @Override public String value(String value) throws IllegalStateException { return value; }
+                    }
+                    """);
+
+            compileProject(project);
+            String effective = contextFor(project, "demo.Child", "value")
+                    .javadocMetadata().get("effective_structured_tags").toString();
+            assertTrue(effective.contains("{@inheritDoc}"));
+            assertFalse(effective.contains("Parent description"));
+            assertFalse(effective.contains("parent parameter"));
+            assertFalse(effective.contains("parent return"));
+            assertFalse(effective, effective.contains("parent failure"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void thrownMethodTypeVariablesMatchByPosition() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-thrown-type-variable");
+        try {
+            write(project.resolve("src/main/java/demo/Parent.java"), """
+                    package demo;
+                    public interface Parent {
+                        /** @throws E when processing fails */
+                        <E extends Exception> void process() throws E;
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/Child.java"), """
+                    package demo;
+                    public class Child implements Parent {
+                        /** Local description. */
+                        @Override public <F extends Exception> void process() throws F {}
+                    }
+                    """);
+
+            compileProject(project);
+            String effective = contextFor(project, "demo.Child", "process")
+                    .javadocMetadata().get("effective_structured_tags").toString();
+            assertTrue(effective.contains("type=F"));
+            assertTrue(effective.contains("when processing fails"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void repeatedInheritDocInsideOneThrowsDescriptionIsInvalid() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-repeated-throws");
+        try {
+            write(project.resolve("src/main/java/demo/Parent.java"), """
+                    package demo;
+                    public interface Parent {
+                        /** @throws java.io.IOException parent failure */
+                        void read() throws java.io.IOException;
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/Child.java"), """
+                    package demo;
+                    public class Child implements Parent {
+                        /** @throws java.io.IOException before {@inheritDoc} and {@inheritDoc} */
+                        @Override public void read() throws java.io.IOException {}
+                    }
+                    """);
+
+            compileProject(project);
+            String effective = contextFor(project, "demo.Child", "read")
+                    .javadocMetadata().get("effective_structured_tags").toString();
+            assertTrue(effective.contains("resolution=invalid"));
+            assertTrue(effective.contains("throws_multiple_inheritdoc"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void candidatesExposeAbstractAndDefaultProvenance() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-candidate-kind");
+        try {
+            write(project.resolve("src/main/java/demo/AbstractBase.java"), """
+                    package demo;
+                    public abstract class AbstractBase {
+                        /** Abstract contract. */ public abstract String value();
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/Child.java"), """
+                    package demo;
+                    public class Child extends AbstractBase {
+                        /** {@inheritDoc} */ @Override public String value() { return ""; }
+                    }
+                    """);
+
+            compileProject(project);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> candidates = (List<Map<String, Object>>) contextFor(
+                    project, "demo.Child", "value").javadocMetadata().get("inherited_javadoc_candidates");
+            Map<String, Object> candidate = candidates.stream()
+                    .filter(value -> "demo.AbstractBase".equals(value.get("declaring_type")))
+                    .findFirst().orElseThrow();
+            assertEquals(true, candidate.get("declaring_type_abstract"));
+            assertEquals(true, candidate.get("method_abstract"));
+            assertEquals(false, candidate.get("method_default"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void duplicateThrowsTagsRemainDistinctEffectiveEntries() throws Exception {
         Path project = Files.createTempDirectory("cocomut-inheritdoc-duplicate-throws");
         try {

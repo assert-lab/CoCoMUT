@@ -143,9 +143,13 @@ that Spoon cannot represent; fallback-derived objects are marked with
 Method-documentation inheritance is resolved item by item. Local tags are never
 overwritten: `declared_structured_tags` and its `structured_tags` alias remain
 source-faithful, while `effective_structured_tags` reports explicit and implicit
-inheritance with ordered segment provenance. Duplicate same-type `@throws`
-entries remain distinct. `inherited_javadoc_candidates` contains structured
-ancestor evidence, including source-availability states. The selected
+inheritance with ordered segment provenance. Block `@return` and inline
+`{@return ...}` forms both populate the return item; `code` and `literal`
+contents do not trigger inheritance. Duplicate same-type `@throws` entries
+remain distinct. Candidate evidence records whether the declaring type is
+abstract and whether the method is abstract or a default interface method.
+`inherited_javadoc_candidates` contains structured ancestor evidence, including
+source-availability states. The selected
 `jdk25-standard-doclet` policy is fixed independently of the host JDK and is
 recorded in each row, the manifest, and the request fingerprint. See
 [Inherited Javadoc Resolution](../docs/inherited-javadoc-resolution.md).

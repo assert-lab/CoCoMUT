@@ -61,6 +61,12 @@ reached, `inheritdoc_candidates_truncated` is `true`, the evidence records
 `partial_resolution` with diagnostic `hierarchy_traversal_limit`, and
 unresolved effective items are marked indeterminate.
 
+The explicit JDK 22+ form `{@inheritDoc S}` may name an intermediate supertype
+that inherits, but does not directly declare, the overridden method. CoCoMUT
+resolves `S` in the focal compilation-unit scope, verifies that it is a real
+supertype, and starts item lookup from the method visible in `S`. A syntactically
+qualified name is never repaired by falling back to an equal simple name.
+
 ## Declared and effective views
 
 The local source remains authoritative for what the developer wrote:
@@ -80,6 +86,11 @@ It covers only items to which method-documentation inheritance applies:
 - formal parameters, matched by position;
 - return documentation for non-void methods;
 - documentation for exceptions declared by the overriding method.
+
+Both block `@return` and inline `{@return ...}` forms populate the declared
+return item. Inline return text also contributes its standard summary form to
+the effective main description. Method type variables used in `throws` clauses
+are matched by formal position, just as method type-parameter documentation is.
 
 Tags such as `@see`, `@since`, `@apiNote`, `@implSpec`, `@implNote`, and
 `@deprecated` are not automatically copied into the effective view.
@@ -115,9 +126,14 @@ Spoon 11 normalizes away the optional target, CoCoMUT preserves and parses the
 raw source spelling for this form.
 
 Known-invalid explicit targets use `resolution=invalid` and a stable
-`diagnostic_code`. Missing source evidence instead uses
+`diagnostic_code`. Multiple `{@inheritDoc}` tags within one `@throws`
+description are also invalid under this policy. Missing source evidence instead uses
 `resolution=indeterminate`; the two states are not conflated. Duplicate
 same-type `@throws` entries are retained as separate effective items.
+
+Inheritance substitution is syntax-aware. Text inside `{@code ...}` and
+`{@literal ...}` remains literal even when it contains the characters
+`{@inheritDoc}`; only actual inheritance-tag nodes invoke the resolver.
 
 `effective_structured_tags.resolution=complete` means that no item is uncertain;
 it does not mean that every possible item has text. A genuinely missing item can
@@ -129,7 +145,9 @@ have `resolution=missing` while the overall resolution remains complete.
 comment strings. Every entry identifies the declaration or unresolved ancestor
 evidence and records:
 
-- declaring type and whether it is a class or interface;
+- declaring type, whether it is a class or interface, and whether the type is
+  abstract;
+- whether the declaring method is abstract or a default interface method;
 - superclass/superinterface relationship;
 - method URI and signature when source identity is available;
 - hierarchy distance and search order;
@@ -223,3 +241,9 @@ Javadoc.
 The normative behavior is based on the JDK 25
 [Documentation Comment Specification for the Standard Doclet](https://docs.oracle.com/en/java/javase/25/docs/specs/javadoc/doc-comment-spec.html),
 especially "Method Documentation" and "Automatic Supertype Search."
+
+The current conformance scope is JDK 25 inheritance semantics for traditional
+`/** ... */` Javadoc comments parsed by the Spoon backend. CoCoMUT emits a
+source-level projection rather than standard-doclet HTML. JDK 25 `///` Markdown
+documentation comments are not yet part of this policy's validated parser
+scope.

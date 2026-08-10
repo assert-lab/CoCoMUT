@@ -37,6 +37,7 @@ import java.util.regex.Pattern;
  */
 final class InheritedJavadocResolver {
     private static final int MAX_VISITED_TYPES = 256;
+    static final char PROTECTED_OPEN_BRACE = '\uE000';
     private static final Pattern INHERIT_DOC = Pattern.compile("\\{@inheritDoc(?:\\s+([^\\s}]+))?\\s*}",
             Pattern.CASE_INSENSITIVE);
 
@@ -109,10 +110,10 @@ final class InheritedJavadocResolver {
         List<Map<String, Object>> throwsTags = new ArrayList<>();
         boolean[] incomplete = {false};
 
-        effective.put("description", effectiveItems(null, null, declared.description(),
+        effective.put("description", effectiveItems(null, null, declared.resolutionDescription(),
                 "description", 0, focal, declared, context, incomplete, false).get(0));
 
-        Map<String, String> declaredParams = namedTags(declared.structuredTags(), "params", "name");
+        Map<String, String> declaredParams = namedTags(declared.resolutionStructuredTags(), "params", "name");
         for (int index = 0; index < focal.getParameters().size(); index++) {
             String name = focal.getParameters().get(index).getSimpleName();
             params.add(effectiveItems("name", name, declaredParams.get(name), "param", index,
@@ -129,22 +130,24 @@ final class InheritedJavadocResolver {
         }
 
         if (!"void".equals(normalizedTypeName(focal.getType()))) {
-            returns.add(effectiveItems(null, null, firstText(declared.structuredTags(), "return"),
+            returns.add(effectiveItems(null, null, firstText(declared.resolutionStructuredTags(), "return"),
                     "return", 0, focal, declared, context, incomplete, false).get(0));
         }
 
         Set<String> representedThrows = new LinkedHashSet<>();
-        for (Map<String, String> tag : tagMaps(declared.structuredTags(), "throws")) {
+        for (Map<String, String> tag : tagMaps(declared.resolutionStructuredTags(), "throws")) {
             String rawType = tag.getOrDefault("type", "");
             String type = canonicalThrownType(focal, rawType);
             representedThrows.add(type);
-            throwsTags.addAll(effectiveItems("type", type, tag.get("text"), "throws", 0,
+            throwsTags.addAll(effectiveItems("type", type, tag.get("text"), "throws",
+                    methodTypeParameterIndex(focal, type),
                     focal, declared, context, incomplete, true));
         }
         for (CtTypeReference<?> thrown : focal.getThrownTypes()) {
             String type = normalizedTypeName(thrown);
             if (representedThrows.add(type)) {
-                throwsTags.addAll(effectiveItems("type", type, null, "throws", 0,
+                throwsTags.addAll(effectiveItems("type", type, null, "throws",
+                        methodTypeParameterIndex(focal, type),
                         focal, declared, context, incomplete, true));
             }
         }
@@ -171,7 +174,11 @@ final class InheritedJavadocResolver {
         String localText = local == null ? "" : local.trim();
         List<ResolvedText> resolved;
         String inheritanceMode;
-        if (!localText.isBlank() && !containsInheritDoc(localText)) {
+        if ("throws".equals(kind) && inheritDocCount(localText) > 1) {
+            resolved = List.of(ResolvedText.invalid(
+                    JavadocResolutionDiagnostic.THROWS_MULTIPLE_INHERITDOC.id()));
+            inheritanceMode = "explicit_inheritdoc";
+        } else if (!localText.isBlank() && !containsInheritDoc(localText)) {
             resolved = List.of(ResolvedText.declared(localText,
                     Segment.declared(localText, declared.methodUri(), declaringType(focal))));
             inheritanceMode = "declared";
@@ -262,31 +269,36 @@ final class InheritedJavadocResolver {
             int baseDistance,
             boolean strict) {
         if (method == null || depth >= MAX_VISITED_TYPES) {
-            return List.of(ResolvedText.indeterminate("hierarchy_resolution_limit"));
+            return List.of(ResolvedText.indeterminate(
+                    JavadocResolutionDiagnostic.HIERARCHY_RESOLUTION_LIMIT.id()));
         }
 
         Evidence evidence = context.evidence(method);
-        SelectedEvidence selected = selectEvidence(evidence, method, requiredSupertype);
+        SelectedEvidence selected = selectEvidence(evidence, method, requiredSupertype, context);
         if (selected.resolution() == ItemResolution.INVALID) {
             return List.of(ResolvedText.invalid(selected.diagnostic()));
         }
         if (selected.unresolved() != null || selected.resolution() == ItemResolution.INDETERMINATE) {
             return List.of(ResolvedText.indeterminate(selected.diagnostic().isBlank()
-                    ? "source_evidence_unavailable" : selected.diagnostic()));
+                    ? JavadocResolutionDiagnostic.SOURCE_EVIDENCE_UNAVAILABLE.id()
+                    : selected.diagnostic()));
         }
         Candidate candidate = selected.candidate();
         if (candidate == null) {
             if (evidence.truncated()) {
-                return List.of(ResolvedText.indeterminate("hierarchy_truncated"));
+                return List.of(ResolvedText.indeterminate(
+                        JavadocResolutionDiagnostic.HIERARCHY_TRUNCATED.id()));
             }
             return List.of(strict
-                    ? ResolvedText.invalid("inheritdoc_corresponding_item_missing")
+                    ? ResolvedText.invalid(
+                    JavadocResolutionDiagnostic.INHERITDOC_CORRESPONDING_ITEM_MISSING.id())
                     : ResolvedText.missing());
         }
 
         Documentation documentation = candidate.documentation();
         if (documentation.availability().isIndeterminate()) {
-            return List.of(ResolvedText.indeterminate("source_documentation_unavailable"));
+            return List.of(ResolvedText.indeterminate(
+                    JavadocResolutionDiagnostic.SOURCE_DOCUMENTATION_UNAVAILABLE.id()));
         }
         List<String> texts = documentation.availability() == Availability.PRESENT
                 ? candidateTexts(candidate, kind, position, name)
@@ -299,7 +311,10 @@ final class InheritedJavadocResolver {
         List<ResolvedText> values = new ArrayList<>();
         int sourceDistance = baseDistance + candidate.distance();
         for (String text : texts) {
-            if (containsInheritDoc(text)) {
+            if ("throws".equals(kind) && inheritDocCount(text) > 1) {
+                values.add(ResolvedText.invalid(
+                        JavadocResolutionDiagnostic.THROWS_MULTIPLE_INHERITDOC.id()));
+            } else if (containsInheritDoc(text)) {
                 values.addAll(resolveInlineText(kind, position, name, candidate.method(), text,
                         documentation.methodUri(), candidate.declaringType(), sourceDistance,
                         context, depth + 1, true));
@@ -378,7 +393,8 @@ final class InheritedJavadocResolver {
 
     private static SelectedEvidence selectEvidence(Evidence evidence,
                                                     CtMethod<?> method,
-                                                    String requiredSupertype) {
+                                                    String requiredSupertype,
+                                                    ResolutionContext context) {
         String canonicalTarget = "";
         if (!requiredSupertype.isBlank()) {
             ExplicitTarget target = resolveExplicitTarget(method, requiredSupertype, evidence);
@@ -386,6 +402,28 @@ final class InheritedJavadocResolver {
                 return new SelectedEvidence(null, null, target.resolution(), target.diagnostic());
             }
             canonicalTarget = target.canonicalName();
+            final String explicitTargetName = canonicalTarget;
+            SupertypeEvidence supertype = evidence.supertypes().stream()
+                    .filter(value -> normalizeTagType(value.canonicalName()).equals(explicitTargetName))
+                    .findFirst().orElse(null);
+            if (supertype == null) {
+                return new SelectedEvidence(null, null, ItemResolution.INVALID,
+                        JavadocResolutionDiagnostic.INHERITDOC_TARGET_NOT_OVERRIDDEN.id());
+            }
+            Evidence explicit = context.explicitEvidence(method, supertype);
+            Candidate explicitCandidate = explicit.candidates().stream().findFirst().orElse(null);
+            UnresolvedAncestor explicitUnresolved = explicit.unresolved().stream().findFirst().orElse(null);
+            if (explicitCandidate != null
+                    && (explicitUnresolved == null
+                    || explicitCandidate.searchOrder() < explicitUnresolved.searchOrder())) {
+                return new SelectedEvidence(explicitCandidate, null, ItemResolution.RESOLVED, "");
+            }
+            if (explicitUnresolved != null) {
+                return new SelectedEvidence(null, explicitUnresolved, ItemResolution.INDETERMINATE,
+                        explicitUnresolved.diagnostic());
+            }
+            return new SelectedEvidence(null, null, ItemResolution.INVALID,
+                    JavadocResolutionDiagnostic.INHERITDOC_TARGET_NOT_OVERRIDDEN.id());
         }
         final String selectedTarget = canonicalTarget;
         Candidate selectedCandidate = evidence.candidates().stream()
@@ -415,20 +453,28 @@ final class InheritedJavadocResolver {
                                                         Evidence evidence) {
         String target = normalizeTagType(stripModulePrefix(rawTarget));
         Set<String> available = new LinkedHashSet<>();
-        evidence.candidates().stream().map(Candidate::declaringType)
-                .map(InheritedJavadocResolver::normalizeTagType).forEach(available::add);
-        evidence.unresolved().stream().map(UnresolvedAncestor::declaringType)
+        evidence.supertypes().stream().map(SupertypeEvidence::canonicalName)
                 .map(InheritedJavadocResolver::normalizeTagType).forEach(available::add);
         if (available.contains(target)) {
             return ExplicitTarget.resolved(target);
         }
 
         String simple = simpleTypeName(target);
+        if (target.contains(".")) {
+            Set<String> scopedQualified = scopedQualifiedTypeMatches(method, target, available);
+            if (scopedQualified.size() == 1) {
+                return ExplicitTarget.resolved(scopedQualified.iterator().next());
+            }
+            return ExplicitTarget.invalid(scopedQualified.size() > 1
+                    ? JavadocResolutionDiagnostic.INHERITDOC_TARGET_AMBIGUOUS.id()
+                    : JavadocResolutionDiagnostic.INHERITDOC_TARGET_NOT_OVERRIDDEN.id());
+        }
         Set<String> simpleMatches = available.stream()
                 .filter(candidate -> simpleTypeName(candidate).equals(simple))
                 .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
         if (simpleMatches.isEmpty()) {
-            return ExplicitTarget.invalid("inheritdoc_target_not_overridden");
+            return ExplicitTarget.invalid(
+                    JavadocResolutionDiagnostic.INHERITDOC_TARGET_NOT_OVERRIDDEN.id());
         }
         Set<String> scoped = scopedTypeMatches(method, simple, simpleMatches);
         if (scoped.size() == 1) {
@@ -437,7 +483,41 @@ final class InheritedJavadocResolver {
         if (scoped.isEmpty() && simpleMatches.size() == 1) {
             return ExplicitTarget.resolved(simpleMatches.iterator().next());
         }
-        return ExplicitTarget.invalid("inheritdoc_target_ambiguous");
+        return ExplicitTarget.invalid(JavadocResolutionDiagnostic.INHERITDOC_TARGET_AMBIGUOUS.id());
+    }
+
+    private static Set<String> scopedQualifiedTypeMatches(CtMethod<?> method,
+                                                          String target,
+                                                          Set<String> candidates) {
+        Set<String> matches = new LinkedHashSet<>();
+        CtType<?> owner = method == null ? null : method.getDeclaringType();
+        String ownerPackage = owner == null || owner.getPackage() == null
+                ? "" : owner.getPackage().getQualifiedName();
+        String samePackage = ownerPackage.isBlank() ? target : ownerPackage + "." + target;
+        if (candidates.contains(samePackage)) {
+            matches.add(samePackage);
+        }
+        int separator = target.indexOf('.');
+        String leadingType = separator < 0 ? target : target.substring(0, separator);
+        String suffix = separator < 0 ? "" : target.substring(separator);
+        try {
+            if (method != null && method.getPosition().isValidPosition()) {
+                method.getPosition().getCompilationUnit().getImports().forEach(importValue -> {
+                    String imported = importValue.toString()
+                            .replaceFirst("^import\\s+(?:static\\s+)?", "")
+                            .replace(";", "").trim();
+                    if (!imported.endsWith(".*") && simpleTypeName(imported).equals(leadingType)) {
+                        String candidate = normalizeTagType(imported + suffix);
+                        if (candidates.contains(candidate)) {
+                            matches.add(candidate);
+                        }
+                    }
+                });
+            }
+        } catch (RuntimeException ignored) {
+            // Incomplete import metadata cannot justify repairing a qualified spelling.
+        }
+        return matches;
     }
 
     private static Set<String> scopedTypeMatches(CtMethod<?> method,
@@ -484,15 +564,15 @@ final class InheritedJavadocResolver {
                                                String requestedName) {
         Documentation documentation = candidate.documentation();
         return switch (kind) {
-            case "description" -> documentation.description().isBlank()
-                    ? List.of() : List.of(documentation.description());
+            case "description" -> documentation.resolutionDescription().isBlank()
+                    ? List.of() : List.of(documentation.resolutionDescription());
             case "param" -> singleText(parameterText(
-                    candidate.method(), documentation.structuredTags(), position, false));
+                    candidate.method(), documentation.resolutionStructuredTags(), position, false));
             case "type_param" -> singleText(parameterText(
-                    candidate.method(), documentation.structuredTags(), position, true));
-            case "return" -> singleText(firstText(documentation.structuredTags(), "return"));
+                    candidate.method(), documentation.resolutionStructuredTags(), position, true));
+            case "return" -> singleText(firstText(documentation.resolutionStructuredTags(), "return"));
             case "throws" -> matchingThrowsTexts(candidate.method(),
-                    documentation.structuredTags(), requestedName);
+                    documentation.resolutionStructuredTags(), requestedName, position);
             default -> List.of();
         };
     }
@@ -503,12 +583,33 @@ final class InheritedJavadocResolver {
 
     private static List<String> matchingThrowsTexts(CtMethod<?> method,
                                                     Map<String, Object> tags,
-                                                    String requestedName) {
+                                                    String requestedName,
+                                                    int typeParameterPosition) {
+        if (typeParameterPosition >= 0
+                && typeParameterPosition < method.getFormalCtTypeParameters().size()) {
+            String candidateName = method.getFormalCtTypeParameters()
+                    .get(typeParameterPosition).getSimpleName();
+            return tagMaps(tags, "throws").stream()
+                    .filter(item -> simpleTypeName(item.getOrDefault("type", "")).equals(candidateName))
+                    .map(item -> item.getOrDefault("text", ""))
+                    .toList();
+        }
         String requested = canonicalThrownType(method, requestedName);
         return tagMaps(tags, "throws").stream()
                 .filter(item -> canonicalThrownType(method, item.getOrDefault("type", "")).equals(requested))
                 .map(item -> item.getOrDefault("text", ""))
                 .toList();
+    }
+
+    private static int methodTypeParameterIndex(CtMethod<?> method, String typeName) {
+        String simple = simpleTypeName(typeName);
+        List<CtTypeParameter> parameters = method.getFormalCtTypeParameters();
+        for (int index = 0; index < parameters.size(); index++) {
+            if (parameters.get(index).getSimpleName().equals(simple)) {
+                return index;
+            }
+        }
+        return -1;
     }
 
     private static String parameterText(CtMethod<?> method,
@@ -588,6 +689,15 @@ final class InheritedJavadocResolver {
         return text != null && INHERIT_DOC.matcher(text).find();
     }
 
+    private static int inheritDocCount(String text) {
+        Matcher matcher = INHERIT_DOC.matcher(text == null ? "" : text);
+        int count = 0;
+        while (matcher.find()) {
+            count++;
+        }
+        return count;
+    }
+
     private static String firstNonNull(String first, String second) {
         return first != null ? first : second;
     }
@@ -627,7 +737,11 @@ final class InheritedJavadocResolver {
     }
 
     private static String normalizeRenderedText(String text) {
-        return (text == null ? "" : text).replaceAll("\\s+", " ").trim();
+        return decodeProtectedText(text).replaceAll("\\s+", " ").trim();
+    }
+
+    static String decodeProtectedText(String text) {
+        return (text == null ? "" : text).replace(PROTECTED_OPEN_BRACE, '{');
     }
 
     private static String normalizeTagType(String type) {
@@ -690,6 +804,8 @@ final class InheritedJavadocResolver {
                          String rawJavadoc,
                          String description,
                          Map<String, Object> structuredTags,
+                         String resolutionDescription,
+                         Map<String, Object> resolutionStructuredTags,
                          String parser,
                          String parseConfidence,
                          String diagnostic) {
@@ -699,6 +815,9 @@ final class InheritedJavadocResolver {
             rawJavadoc = rawJavadoc == null ? "" : rawJavadoc;
             description = description == null ? "" : description;
             structuredTags = structuredTags == null ? Map.of() : Map.copyOf(structuredTags);
+            resolutionDescription = resolutionDescription == null ? description : resolutionDescription;
+            resolutionStructuredTags = resolutionStructuredTags == null
+                    ? structuredTags : Map.copyOf(resolutionStructuredTags);
             parser = parser == null ? "" : parser;
             parseConfidence = parseConfidence == null ? "" : parseConfidence;
             diagnostic = diagnostic == null ? "" : diagnostic;
@@ -797,6 +916,9 @@ final class InheritedJavadocResolver {
             CtType<?> owner = method.getDeclaringType();
             value.put("declaring_type", declaringType());
             value.put("declaring_type_kind", owner != null && owner.isInterface() ? "interface" : "class");
+            value.put("declaring_type_abstract", owner != null && owner.isAbstract());
+            value.put("method_abstract", method.isAbstract());
+            value.put("method_default", method.isDefaultMethod());
             value.put("relationship", relationship);
             value.put("method_uri", documentation.methodUri());
             value.put("method_signature", method.getSignature());
@@ -955,6 +1077,7 @@ final class InheritedJavadocResolver {
 
     private record Evidence(List<Candidate> candidates,
                             List<UnresolvedAncestor> unresolved,
+                            List<SupertypeEvidence> supertypes,
                             boolean truncated) {
         boolean hasInheritanceEvidence() {
             return !candidates.isEmpty() || !unresolved.isEmpty();
@@ -980,11 +1103,26 @@ final class InheritedJavadocResolver {
                     .map(ancestor -> new Candidate(ancestor.method(), ancestor.relationship(), ancestor.distance(),
                             ancestor.searchOrder(), documentationExtractor.apply(ancestor.method())))
                     .toList();
-            return new Evidence(candidates, traversal.unresolved(), traversal.truncated());
+            return new Evidence(candidates, traversal.unresolved(), traversal.supertypes(), traversal.truncated());
+        }
+
+        private Evidence explicitEvidence(CtMethod<?> method, SupertypeEvidence supertype) {
+            Traversal traversal = new Traversal(method);
+            traversal.runFrom(supertype.reference(), supertype.distance());
+            List<Candidate> candidates = traversal.methods().stream()
+                    .map(ancestor -> new Candidate(ancestor.method(), ancestor.relationship(), ancestor.distance(),
+                            ancestor.searchOrder(), documentationExtractor.apply(ancestor.method())))
+                    .toList();
+            return new Evidence(candidates, traversal.unresolved(), traversal.supertypes(), traversal.truncated());
         }
     }
 
     private record AncestorMethod(CtMethod<?> method, String relationship, int distance, int searchOrder) {
+    }
+
+    private record SupertypeEvidence(String canonicalName,
+                                     CtTypeReference<?> reference,
+                                     int distance) {
     }
 
     private record UnresolvedAncestor(String declaringType,
@@ -998,6 +1136,9 @@ final class InheritedJavadocResolver {
             Map<String, Object> value = new LinkedHashMap<>();
             value.put("declaring_type", declaringType);
             value.put("declaring_type_kind", "unknown");
+            value.put("declaring_type_abstract", false);
+            value.put("method_abstract", false);
+            value.put("method_default", false);
             value.put("relationship", relationship);
             value.put("method_uri", "");
             value.put("method_signature", methodSignature);
@@ -1019,6 +1160,7 @@ final class InheritedJavadocResolver {
         private final CtMethod<?> focal;
         private final List<AncestorMethod> methods = new ArrayList<>();
         private final List<UnresolvedAncestor> unresolved = new ArrayList<>();
+        private final List<SupertypeEvidence> supertypes = new ArrayList<>();
         private final Set<String> visitedTypes = new LinkedHashSet<>();
         private final Set<String> visitedMethods = new LinkedHashSet<>();
         private CtTypeReference<?> deferredObject;
@@ -1050,6 +1192,13 @@ final class InheritedJavadocResolver {
             }
         }
 
+        void runFrom(CtTypeReference<?> reference, int distance) {
+            visit(reference, distance);
+            if (deferredObject != null && !truncated) {
+                visitResolved(deferredObject, deferredObjectDistance, true);
+            }
+        }
+
         private void visit(CtTypeReference<?> reference, int distance) {
             if (reference == null || truncated) {
                 return;
@@ -1073,10 +1222,12 @@ final class InheritedJavadocResolver {
             if (!visitedTypes.add(name)) {
                 return;
             }
+            supertypes.add(new SupertypeEvidence(name, reference, distance));
             if (visitedTypes.size() > MAX_VISITED_TYPES) {
                 truncated = true;
                 unresolved.add(new UnresolvedAncestor(name, relationship(reference), "", distance, ++searchOrder,
-                        Availability.PARTIAL_RESOLUTION, "hierarchy_traversal_limit"));
+                        Availability.PARTIAL_RESOLUTION,
+                        JavadocResolutionDiagnostic.HIERARCHY_TRAVERSAL_LIMIT.id()));
                 return;
             }
 
@@ -1086,7 +1237,8 @@ final class InheritedJavadocResolver {
                         reference, name, relationship(reference), distance, objectPhase);
                 if (!matched) {
                     unresolved.add(new UnresolvedAncestor(name, relationship(reference), "", distance, ++searchOrder,
-                            Availability.PARTIAL_RESOLUTION, "supertype_declaration_unavailable"));
+                            Availability.PARTIAL_RESOLUTION,
+                            JavadocResolutionDiagnostic.SUPERTYPE_DECLARATION_UNAVAILABLE.id()));
                 }
                 visit(reference.getSuperclass(), distance + 1);
                 for (CtTypeReference<?> superInterface : reference.getSuperInterfaces()) {
@@ -1107,10 +1259,6 @@ final class InheritedJavadocResolver {
                     methods.add(new AncestorMethod(candidate, relationship, distance, ++searchOrder));
                 }
             }
-            if (!matchedDeclaration) {
-                collectReferenceOnlyMethod(reference, name, relationship, distance, objectPhase);
-            }
-
             visit(declaration.getSuperclass(), distance + 1);
             for (CtTypeReference<?> superInterface : declaration.getSuperInterfaces()) {
                 visit(superInterface, distance + 1);
@@ -1159,7 +1307,8 @@ final class InheritedJavadocResolver {
                     matched = true;
                     unresolved.add(new UnresolvedAncestor(ownerName, relationship,
                             candidate.getSignature(), distance, ++searchOrder,
-                            Availability.SOURCE_UNAVAILABLE, "method_source_unavailable"));
+                            Availability.SOURCE_UNAVAILABLE,
+                            JavadocResolutionDiagnostic.SOURCE_DOCUMENTATION_UNAVAILABLE.id()));
                 }
             } catch (RuntimeException | StackOverflowError ignored) {
                 // The caller records partial type resolution when no method
@@ -1215,6 +1364,10 @@ final class InheritedJavadocResolver {
 
         List<UnresolvedAncestor> unresolved() {
             return List.copyOf(unresolved);
+        }
+
+        List<SupertypeEvidence> supertypes() {
+            return List.copyOf(supertypes);
         }
 
         boolean hasInheritanceEvidence() {
