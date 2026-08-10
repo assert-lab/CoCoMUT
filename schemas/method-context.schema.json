@@ -271,7 +271,7 @@
         "hierarchy_distance": {"type": "integer", "minimum": 1},
         "search_order": {"type": "integer", "minimum": 1},
         "javadoc_availability": {
-          "enum": ["present", "absent", "source_unavailable", "parse_failed", "partial_resolution", "not_analyzed"]
+          "enum": ["present", "absent", "source_unavailable", "parse_failed", "partial_resolution"]
         },
         "raw_javadoc": {"type": "string"},
         "structured_tags": {"type": "object"},

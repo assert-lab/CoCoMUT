@@ -173,12 +173,14 @@ The candidate vocabulary distinguishes:
 | `source_unavailable` | The override is known from a shadow/executable reference, but source Javadoc is unavailable. |
 | `parse_failed` | Source comment extraction failed without a usable fallback. |
 | `partial_resolution` | The ancestor or override relation could not be inspected completely. |
-| `not_analyzed` | The relevant source was outside an explicitly bounded analysis. |
 
 The current Spoon backend emits `present`, `absent`, `source_unavailable`,
-`partial_resolution`, or `not_analyzed`. The `parse_failed` value is reserved
-for an extraction path that can prove that source was available but neither the
-typed parser nor the raw-comment fallback produced usable documentation.
+`parse_failed`, or `partial_resolution`. A bounded source analysis does not
+currently retain enough evidence to distinguish excluded ancestor source from
+other unavailable source, so it does not claim a separate `not_analyzed`
+state. `parse_failed` means source was available but at least one extraction
+path failed and neither the typed parser nor the raw-comment fallback produced
+usable documentation.
 
 An unresolved declaration earlier in search order blocks a later declaration
 from being asserted as the effective source. The later declaration remains in

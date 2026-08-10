@@ -40,8 +40,8 @@ final class InheritedJavadocResolver {
     static final char PROTECTED_AT_SIGN = '\uE000';
     static final char INLINE_RETURN_START = '\uE001';
     static final char INLINE_RETURN_END = '\uE002';
-    private static final Pattern INHERIT_DOC = Pattern.compile("\\{@inheritDoc(?:\\s+([^\\s}]+))?\\s*}",
-            Pattern.CASE_INSENSITIVE);
+    private static final Pattern INHERIT_DOC = Pattern.compile(
+            "\\{@inheritDoc(?:\\s+([^\\s}]+))?\\s*}");
 
     private InheritedJavadocResolver() {
     }
@@ -597,15 +597,40 @@ final class InheritedJavadocResolver {
     private static Set<String> scopedQualifiedTypeMatches(CtMethod<?> method,
                                                           String target,
                                                           Set<String> candidates) {
-        Set<String> matches = new LinkedHashSet<>();
         CtType<?> owner = method == null ? null : method.getDeclaringType();
+        Set<String> lexicalMatches = new LinkedHashSet<>();
+        addEnclosingTypeMatches(owner, target, candidates, lexicalMatches);
+        if (!lexicalMatches.isEmpty()) {
+            return lexicalMatches;
+        }
+
+        Set<String> explicitImportMatches = new LinkedHashSet<>();
+        Set<String> onDemandMatches = new LinkedHashSet<>();
+        addQualifiedImportMatches(method, target, candidates,
+                explicitImportMatches, onDemandMatches);
+        if (!explicitImportMatches.isEmpty()) {
+            return explicitImportMatches;
+        }
+
         String ownerPackage = owner == null || owner.getPackage() == null
                 ? "" : owner.getPackage().getQualifiedName();
         String samePackage = ownerPackage.isBlank() ? target : ownerPackage + "." + target;
         if (candidates.contains(samePackage)) {
-            matches.add(samePackage);
+            return Set.of(samePackage);
         }
-        addEnclosingTypeMatches(owner, target, candidates, matches);
+
+        String javaLang = "java.lang." + target;
+        if (candidates.contains(javaLang)) {
+            onDemandMatches.add(javaLang);
+        }
+        return onDemandMatches;
+    }
+
+    private static void addQualifiedImportMatches(CtMethod<?> method,
+                                                  String target,
+                                                  Set<String> candidates,
+                                                  Set<String> explicitMatches,
+                                                  Set<String> onDemandMatches) {
         int separator = target.indexOf('.');
         String leadingType = separator < 0 ? target : target.substring(0, separator);
         String suffix = separator < 0 ? "" : target.substring(separator);
@@ -619,12 +644,12 @@ final class InheritedJavadocResolver {
                         String candidate = normalizeTagType(
                                 imported.substring(0, imported.length() - 1) + target);
                         if (candidates.contains(candidate)) {
-                            matches.add(candidate);
+                            onDemandMatches.add(candidate);
                         }
                     } else if (simpleTypeName(imported).equals(leadingType)) {
                         String candidate = normalizeTagType(imported + suffix);
                         if (candidates.contains(candidate)) {
-                            matches.add(candidate);
+                            explicitMatches.add(candidate);
                         }
                     }
                 });
@@ -632,21 +657,45 @@ final class InheritedJavadocResolver {
         } catch (RuntimeException ignored) {
             // Incomplete import metadata cannot justify repairing a qualified spelling.
         }
-        return matches;
     }
 
     private static Set<String> scopedTypeMatches(CtMethod<?> method,
                                                  String simple,
                                                  Set<String> candidates) {
-        Set<String> matches = new LinkedHashSet<>();
         CtType<?> owner = method == null ? null : method.getDeclaringType();
+
+        Set<String> lexicalMatches = new LinkedHashSet<>();
+        addEnclosingTypeMatches(owner, simple, candidates, lexicalMatches);
+        if (!lexicalMatches.isEmpty()) {
+            return lexicalMatches;
+        }
+
+        Set<String> explicitImportMatches = new LinkedHashSet<>();
+        Set<String> onDemandMatches = new LinkedHashSet<>();
+        addImportMatches(method, simple, candidates, explicitImportMatches, onDemandMatches);
+        if (!explicitImportMatches.isEmpty()) {
+            return explicitImportMatches;
+        }
+
         String ownerPackage = owner == null || owner.getPackage() == null
                 ? "" : owner.getPackage().getQualifiedName();
         String samePackage = ownerPackage.isBlank() ? simple : ownerPackage + "." + simple;
         if (candidates.contains(samePackage)) {
-            matches.add(samePackage);
+            return Set.of(samePackage);
         }
-        addEnclosingTypeMatches(owner, simple, candidates, matches);
+
+        String javaLang = "java.lang." + simple;
+        if (candidates.contains(javaLang)) {
+            onDemandMatches.add(javaLang);
+        }
+        return onDemandMatches;
+    }
+
+    private static void addImportMatches(CtMethod<?> method,
+                                         String simple,
+                                         Set<String> candidates,
+                                         Set<String> explicitMatches,
+                                         Set<String> onDemandMatches) {
         try {
             if (method != null && method.getPosition().isValidPosition()) {
                 method.getPosition().getCompilationUnit().getImports().forEach(importValue -> {
@@ -656,17 +705,16 @@ final class InheritedJavadocResolver {
                     if (imported.endsWith(".*")) {
                         String candidate = imported.substring(0, imported.length() - 1) + simple;
                         if (candidates.contains(candidate)) {
-                            matches.add(candidate);
+                            onDemandMatches.add(candidate);
                         }
                     } else if (simpleTypeName(imported).equals(simple) && candidates.contains(imported)) {
-                        matches.add(imported);
+                        explicitMatches.add(imported);
                     }
                 });
             }
         } catch (RuntimeException ignored) {
-            // A unique candidate remains resolvable even if import metadata is unavailable.
+            // Incomplete import metadata cannot justify resolving a source spelling.
         }
-        return matches;
     }
 
     private static void addEnclosingTypeMatches(CtType<?> owner,
@@ -920,8 +968,7 @@ final class InheritedJavadocResolver {
         ABSENT("absent"),
         SOURCE_UNAVAILABLE("source_unavailable"),
         PARSE_FAILED("parse_failed"),
-        PARTIAL_RESOLUTION("partial_resolution"),
-        NOT_ANALYZED("not_analyzed");
+        PARTIAL_RESOLUTION("partial_resolution");
 
         private final String jsonValue;
 

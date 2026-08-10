@@ -5,6 +5,7 @@ import org.assertlab.cocomut.source.SourceAnalysisSession;
 import org.assertlab.cocomut.source.SourceBackends;
 import org.assertlab.cocomut.source.SourceContext;
 import org.assertlab.cocomut.source.SourceMethod;
+import org.junit.Assume;
 import org.junit.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -1353,13 +1354,15 @@ public class SourceModelEdgeCaseTest {
                     """);
 
             compileProject(project);
-            String effective = contextFor(project, "demo.Child", "value")
-                    .javadocMetadata().get("effective_structured_tags").toString();
+            SourceContext context = contextFor(project, "demo.Child", "value");
+            String effective = context.javadocMetadata().get("effective_structured_tags").toString();
             assertTrue(effective.contains("{@inheritDoc}"));
             assertFalse(effective.contains("Parent description"));
             assertFalse(effective.contains("parent parameter"));
             assertFalse(effective.contains("parent return"));
             assertFalse(effective, effective.contains("parent failure"));
+            assertEquals(false, context.javadocMetadata().get("uses_inheritdoc"));
+            assertEquals(false, context.documentationMetrics().get("uses_inheritdoc"));
         } finally {
             deleteRecursively(project);
         }
@@ -1479,6 +1482,140 @@ public class SourceModelEdgeCaseTest {
                     contextFor(project, "demo.UnimportedChild", "value"));
             assertEquals("invalid", unimported.get("resolution"));
             assertEquals("inheritdoc_target_not_overridden", unimported.get("diagnostic_code"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void explicitSupertypeUsesJavaTypeNamePrecedence() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-java-scope");
+        try {
+            write(project.resolve("src/main/java/local/Contract.java"), """
+                    package local;
+                    public interface Contract { /** Local contract. */ String value(); }
+                    """);
+            write(project.resolve("src/main/java/external/Contract.java"), """
+                    package external;
+                    public interface Contract { /** External contract. */ String value(); }
+                    """);
+            write(project.resolve("src/main/java/local/SamePackageChild.java"), """
+                    package local;
+                    import external.*;
+                    public class SamePackageChild implements Contract, external.Contract {
+                        /** {@inheritDoc Contract} */
+                        @Override public String value() { return ""; }
+                    }
+                    """);
+            write(project.resolve("src/main/java/imported/Contract.java"), """
+                    package imported;
+                    public interface Contract { /** Explicit contract. */ String value(); }
+                    """);
+            write(project.resolve("src/main/java/consumer/ExplicitImportChild.java"), """
+                    package consumer;
+                    import imported.Contract;
+                    import external.*;
+                    public class ExplicitImportChild implements Contract, external.Contract {
+                        /** {@inheritDoc Contract} */
+                        @Override public String value() { return ""; }
+                    }
+                    """);
+            write(project.resolve("src/main/java/alpha/Contract.java"), """
+                    package alpha;
+                    public interface Contract { /** Alpha contract. */ String value(); }
+                    """);
+            write(project.resolve("src/main/java/beta/Contract.java"), """
+                    package beta;
+                    public interface Contract { /** Beta contract. */ String value(); }
+                    """);
+            write(project.resolve("src/main/java/consumer/AmbiguousChild.java"), """
+                    package consumer;
+                    import alpha.*;
+                    import beta.*;
+                    public class AmbiguousChild implements alpha.Contract, beta.Contract {
+                        /** {@inheritDoc Contract} */
+                        @Override public String value() { return ""; }
+                    }
+                    """);
+            write(project.resolve("src/main/java/consumer/ComparableItem.java"), """
+                    package consumer;
+                    public class ComparableItem implements Comparable<ComparableItem> {
+                        /** {@inheritDoc Comparable} */
+                        @Override public int compareTo(ComparableItem other) { return 0; }
+                    }
+                    """);
+
+            compileProject(project);
+            assertEquals("Local contract.", effectiveDescription(
+                    contextFor(project, "local.SamePackageChild", "value")).get("text"));
+            assertEquals("Explicit contract.", effectiveDescription(
+                    contextFor(project, "consumer.ExplicitImportChild", "value")).get("text"));
+
+            Map<String, Object> ambiguous = effectiveDescription(
+                    contextFor(project, "consumer.AmbiguousChild", "value"));
+            assertEquals("invalid", ambiguous.get("resolution"));
+            assertEquals("inheritdoc_target_ambiguous", ambiguous.get("diagnostic_code"));
+
+            SourceContext comparable = contextFor(project, "consumer.ComparableItem", "compareTo");
+            assertEquals(true, comparable.javadocMetadata().get("uses_inheritdoc"));
+            assertFalse(comparable.javadocMetadata().get("effective_structured_tags").toString()
+                    .contains("inheritdoc_target_not_overridden"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void inlineTagsAreCaseSensitiveExactAndPositionAware() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inline-tag-grammar");
+        try {
+            write(project.resolve("src/main/java/demo/Parent.java"), """
+                    package demo;
+                    public interface Parent {
+                        /** Parent description. */ String value();
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/Child.java"), """
+                    package demo;
+                    public class Child implements Parent {
+                        /** {@inheritdoc Parent} */
+                        public String lowerCaseTag() { return ""; }
+                        /** {@INHERITDOC Parent} */
+                        public String upperCaseTag() { return ""; }
+                        /** Text first. {@return invalid return} */
+                        public String misplacedReturn() { return ""; }
+                        /** {@summary Summary.} {@return invalid return} */
+                        public String afterSummary() { return ""; }
+                        /** {@RETURN upper-case return} */
+                        public String upperCaseReturn() { return ""; }
+                        /** {@returnValue prefixed return} */
+                        public String prefixedReturn() { return ""; }
+                        /** {@return valid return} */
+                        public String validReturn() { return ""; }
+                        /** {@inheritDoc Parent} {@returnValue not a return tag} */
+                        @Override public String value() { return ""; }
+                    }
+                    """);
+
+            compileProject(project);
+            for (String method : List.of("lowerCaseTag", "upperCaseTag")) {
+                SourceContext context = contextFor(project, "demo.Child", method);
+                assertEquals(false, context.javadocMetadata().get("uses_inheritdoc"));
+                assertEquals(false, context.documentationMetrics().get("uses_inheritdoc"));
+            }
+            for (String method : List.of(
+                    "misplacedReturn", "afterSummary", "upperCaseReturn", "prefixedReturn")) {
+                Map<String, Object> missingReturn = firstEffectiveItem(
+                        contextFor(project, "demo.Child", method), "return");
+                assertEquals("missing", missingReturn.get("source"));
+                assertEquals("", missingReturn.get("text"));
+            }
+            assertEquals("valid return", firstEffectiveItem(
+                    contextFor(project, "demo.Child", "validReturn"), "return").get("text"));
+            Map<String, Object> prefixReturn = firstEffectiveItem(
+                    contextFor(project, "demo.Child", "value"), "return");
+            assertEquals("missing", prefixReturn.get("source"));
+            assertEquals("", prefixReturn.get("text"));
         } finally {
             deleteRecursively(project);
         }
@@ -1675,6 +1812,48 @@ public class SourceModelEdgeCaseTest {
             String rendered = Files.readString(docs.resolve("demo/Child.html"));
             assertTrue("standard doclet should select the superclass documentation: " + rendered,
                     rendered.contains("Superclass documentation"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void jdk25OracleSupportsExplicitTargetsAndInlineReturnInheritance() throws Exception {
+        Assume.assumeTrue("requires the JDK 25 standard doclet",
+                Runtime.version().feature() >= 25);
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-jdk25-oracle");
+        try {
+            write(project.resolve("src/main/java/demo/Contract.java"), """
+                    package demo;
+                    public interface Contract {
+                        /** Computes the configured value.
+                         * @return the result contract
+                         */
+                        String value();
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/Child.java"), """
+                    package demo;
+                    public class Child implements Contract {
+                        /** {@return {@inheritDoc Contract}} */
+                        @Override public String value() { return ""; }
+                    }
+                    """);
+
+            compileProject(project);
+            SourceContext context = contextFor(project, "demo.Child", "value");
+            assertEquals("Returns the result contract.", effectiveDescription(context).get("text"));
+            assertEquals("the result contract", firstEffectiveItem(context, "return").get("text"));
+
+            Path docs = project.resolve("javadoc");
+            Process process = new ProcessBuilder(javadoc(), "-quiet", "-d", docs.toString(),
+                    "-sourcepath", project.resolve("src/main/java").toString(), "demo")
+                    .redirectErrorStream(true).start();
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            assertEquals("JDK 25 javadoc failed: " + output, 0, process.waitFor());
+            String rendered = Files.readString(docs.resolve("demo/Child.html"));
+            assertTrue("standard doclet should inherit the return contract: " + rendered,
+                    rendered.contains("the result contract"));
         } finally {
             deleteRecursively(project);
         }

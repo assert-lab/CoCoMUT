@@ -67,10 +67,6 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern BLOCK_TAG = Pattern.compile(
             "(?ms)(?:^|\\R)\\s*\\*?\\s*@(param|return|throws|exception|since|deprecated|see|apiNote|implSpec|implNote)\\s*(.*?)(?=\\R\\s*\\*?\\s*@|\\z)");
-    private static final Pattern INHERIT_DOC_TAG = Pattern.compile(
-            "\\{@inheritDoc(?:\\s+[^\\s}]+)?\\s*}", Pattern.CASE_INSENSITIVE);
-    private static final Pattern EXPLICIT_INHERIT_DOC_TARGET = Pattern.compile(
-            "\\{@inheritDoc\\s+[^\\s}]+\\s*}", Pattern.CASE_INSENSITIVE);
     private static final Pattern JAVADOC_FILE_REFERENCE = Pattern.compile(
             "(?:\\{@docRoot\\}/)?(?:[\\w.$-]+/)*(?:doc-files/)?[\\w.$-]+\\.(?:png|svg|gif|jpg|jpeg|html|htm|txt|java)",
             Pattern.CASE_INSENSITIVE);
@@ -639,19 +635,27 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     }
 
     private static String docComment(CtElement element) {
+        return docCommentAttempt(element).text();
+    }
+
+    private static CommentAttempt docCommentAttempt(CtElement element) {
         try {
             String doc = element.getDocComment();
-            return doc != null ? doc.trim() : "";
+            return new CommentAttempt(doc != null ? doc.trim() : "", false);
         } catch (Exception e) {
-            return "";
+            return new CommentAttempt("", true);
         }
     }
 
     private static Optional<String> rawDocComment(ParsedProject parsed, CtElement element) {
+        return rawDocCommentAttempt(parsed, element).text();
+    }
+
+    private static RawCommentAttempt rawDocCommentAttempt(ParsedProject parsed, CtElement element) {
         try {
             SourcePosition position = element.getPosition();
             if (position == null || !position.isValidPosition() || position.getFile() == null) {
-                return Optional.empty();
+                return new RawCommentAttempt(Optional.empty(), false);
             }
             Path sourceFile = position.getFile().toPath().toAbsolutePath().normalize();
             String source = parsed.sourceTextByFile().get(sourceFile);
@@ -662,19 +666,20 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             int start = Math.max(0, Math.min(position.getSourceStart(), source.length()));
             int open = source.lastIndexOf("/**", start);
             if (open < 0) {
-                return Optional.empty();
+                return new RawCommentAttempt(Optional.empty(), false);
             }
             int close = source.indexOf("*/", open);
             if (close < 0 || close > start) {
-                return Optional.empty();
+                return new RawCommentAttempt(Optional.empty(), false);
             }
             String between = source.substring(close + 2, start);
             if (!between.replaceAll("@\\w+(?:\\([^)]*\\))?", "").trim().isBlank()) {
-                return Optional.empty();
+                return new RawCommentAttempt(Optional.empty(), false);
             }
-            return Optional.of(cleanRawJavadoc(source.substring(open, close + 2)));
+            return new RawCommentAttempt(
+                    Optional.of(cleanRawJavadoc(source.substring(open, close + 2))), false);
         } catch (Exception ignored) {
-            return Optional.empty();
+            return new RawCommentAttempt(Optional.empty(), true);
         }
     }
 
@@ -828,9 +833,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                                                             String javadoc) {
         Map<String, Object> metrics = new LinkedHashMap<>();
         String normalized = javadoc == null ? "" : javadoc.strip();
-        Map<String, Object> structuredTags = !elements.isEmpty()
-                ? structuredTagsFromElements(elements)
-                : fallbackStructuredTags(normalized);
+        Map<String, Object> structuredTags = structuredTags(elements, normalized);
         List<String> paramTags = structuredTagNames(structuredTags, "params");
         @SuppressWarnings("unchecked")
         List<Map<String, String>> throwsTags = (List<Map<String, String>>) structuredTags.getOrDefault("throws", List.of());
@@ -851,9 +854,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         metrics.put("has_throws_tag", !throwsTags.isEmpty());
         metrics.put("mentions_null", normalized.toLowerCase(Locale.ROOT).contains("null"));
         metrics.put("mentions_examples", mentionsExample(normalized));
-        metrics.put("uses_inheritdoc", !elements.isEmpty()
-                ? usesInheritDoc(elements)
-                : containsInheritDoc(normalized));
+        metrics.put("uses_inheritdoc", containsInheritDoc(normalized));
         metrics.put("has_since_tag", !structuredList(structuredTags, "since").isEmpty());
         metrics.put("has_see_tag", hasBlockTag(elements, StandardJavadocTagType.SEE)
                 || !matches(SEE_TAG, normalized, 1).isEmpty());
@@ -868,9 +869,8 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         Map<String, Object> metadata = new LinkedHashMap<>();
         String normalized = javadoc == null ? "" : javadoc.strip();
         List<Map<String, Object>> references = javadocReferences(parsed, owner, elements, normalized);
-        boolean usesInheritDoc = !elements.isEmpty()
-                ? usesInheritDoc(elements)
-                : containsInheritDoc(normalized);
+        boolean usesInheritDoc = containsInheritDoc(
+                rawJavadoc == null || rawJavadoc.isBlank() ? normalized : rawJavadoc);
         boolean preserveExplicitTarget = hasExplicitInheritDocTarget(rawJavadoc);
         List<JavadocElement> inheritanceElements = preserveExplicitTarget ? List.of() : elements;
         String inheritanceText = preserveExplicitTarget ? rawJavadoc.strip() : normalized;
@@ -923,20 +923,27 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
 
     private static InheritedJavadocResolver.Documentation inheritedDocumentation(
             ParsedProject parsed, CtMethod<?> method) {
-        String normalized = docComment(method).strip();
-        Optional<String> raw = rawDocComment(parsed, method);
+        CommentAttempt parsedComment = docCommentAttempt(method);
+        RawCommentAttempt rawComment = rawDocCommentAttempt(parsed, method);
+        String normalized = parsedComment.text().strip();
+        Optional<String> raw = rawComment.text();
         String rawJavadoc = raw.orElse(normalized);
         boolean preserveExplicitTarget = hasExplicitInheritDocTarget(rawJavadoc);
         String parseText = normalized.isBlank() || preserveExplicitTarget ? rawJavadoc : normalized;
         boolean sourceAvailable = sourceFile(method).isPresent() && !method.isShadow();
         if (normalized.isBlank() && rawJavadoc.isBlank()) {
+            boolean extractionFailed = parsedComment.failed() || rawComment.failed();
             return new InheritedJavadocResolver.Documentation(
-                    sourceAvailable
-                            ? InheritedJavadocResolver.Availability.ABSENT
+                    sourceAvailable ? extractionFailed
+                            ? InheritedJavadocResolver.Availability.PARSE_FAILED
+                            : InheritedJavadocResolver.Availability.ABSENT
                             : InheritedJavadocResolver.Availability.SOURCE_UNAVAILABLE,
                     sourceMethodUri(parsed, method), "", "", emptyStructuredTags(),
                     "", emptyStructuredTags(), "", "none",
-                    sourceAvailable ? "source_declaration_has_no_javadoc" : "source_declaration_unavailable");
+                    sourceAvailable ? extractionFailed
+                            ? "source_javadoc_extraction_failed"
+                            : "source_declaration_has_no_javadoc"
+                            : "source_declaration_unavailable");
         }
 
         List<JavadocElement> elements = preserveExplicitTarget ? List.of() : spoonJavadocElements(method);
@@ -956,6 +963,12 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 stringValue(tags.get("parser")),
                 stringValue(tags.get("parse_confidence")),
                 diagnostic);
+    }
+
+    private record CommentAttempt(String text, boolean failed) {
+    }
+
+    private record RawCommentAttempt(Optional<String> text, boolean failed) {
     }
 
     private static String sourceMethodUri(ParsedProject parsed, CtMethod<?> method) {
@@ -1006,14 +1019,33 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
 
     private static String mainDescriptionForInheritance(List<JavadocElement> elements, String javadoc) {
         if (elements != null && !elements.isEmpty()) {
-            List<JavadocElement> description = new ArrayList<>();
+            List<String> description = new ArrayList<>();
+            boolean significantContentSeen = false;
+            String rawMain = mainDescription(List.of(), protectLiteralContent(javadoc));
+            boolean exactLeadingInlineReturn = leadingInlineTagBody(rawMain, "return").isPresent();
             for (JavadocElement element : elements) {
                 if (element instanceof JavadocBlockTag) {
                     break;
                 }
-                description.add(element);
+                if (element instanceof JavadocInlineTag inline
+                        && StandardJavadocTagType.RETURN.equals(inline.getTagType())) {
+                    String content = elementsText(inline.getElements(), true);
+                    if (!significantContentSeen && exactLeadingInlineReturn) {
+                        description.add(InheritedJavadocResolver.INLINE_RETURN_START + content
+                                + InheritedJavadocResolver.INLINE_RETURN_END);
+                    } else {
+                        description.add(protectJavadocTagMarkers(content));
+                    }
+                    significantContentSeen = true;
+                    continue;
+                }
+                String text = elementText(element, true);
+                if (!text.isBlank()) {
+                    description.add(text);
+                    significantContentSeen = true;
+                }
             }
-            return elementsText(description, true);
+            return String.join(" ", description).replaceAll("\\s+", " ").trim();
         }
         String value = protectLiteralContent(javadoc == null ? "" : javadoc);
         Matcher firstTag = BLOCK_TAG.matcher(value);
@@ -1026,29 +1058,18 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         StringBuilder protectedText = new StringBuilder(value.length());
         int cursor = 0;
         while (cursor < value.length()) {
-            int code = indexOfIgnoreCase(value, "{@code", cursor);
-            int literal = indexOfIgnoreCase(value, "{@literal", cursor);
-            int start = nearest(code, literal);
-            if (start < 0) {
+            InlineTag tag = nextInlineTag(value, cursor);
+            if (tag == null) {
                 protectedText.append(value, cursor, value.length());
                 break;
             }
-            protectedText.append(value, cursor, start);
-            int end = inlineTagEnd(value, start);
-            if (end < 0) {
-                protectedText.append(value, start, value.length());
-                break;
-            }
-            int tagNameEnd = start + (code == start ? "{@code".length() : "{@literal".length());
-            int bodyStart = firstWhitespace(value, tagNameEnd, end);
-            if (bodyStart < 0 || bodyStart >= end) {
-                protectedText.append(value, start, end + 1);
-            } else {
-                protectedText.append(value, start, bodyStart + 1);
-                protectedText.append(protectJavadocTagMarkers(value.substring(bodyStart + 1, end)));
-                protectedText.append('}');
-            }
-            cursor = end + 1;
+            protectedText.append(value, cursor, tag.nameEnd());
+            String body = value.substring(tag.nameEnd(), tag.end());
+            protectedText.append("code".equals(tag.name()) || "literal".equals(tag.name())
+                    ? protectJavadocTagMarkers(body)
+                    : protectLiteralContent(body));
+            protectedText.append('}');
+            cursor = tag.end() + 1;
         }
         return protectedText.toString();
     }
@@ -1057,86 +1078,22 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return (text == null ? "" : text).replace('@', InheritedJavadocResolver.PROTECTED_AT_SIGN);
     }
 
-    private static List<String> inlineTagBodies(String text, String tag) {
-        String value = text == null ? "" : text;
-        String marker = "{@" + tag;
-        List<String> bodies = new ArrayList<>();
-        int cursor = 0;
-        while (cursor < value.length()) {
-            int start = indexOfIgnoreCase(value, marker, cursor);
-            if (start < 0) {
-                break;
-            }
-            int nameEnd = start + marker.length();
-            if (nameEnd < value.length() && !Character.isWhitespace(value.charAt(nameEnd))
-                    && value.charAt(nameEnd) != '}') {
-                cursor = nameEnd;
-                continue;
-            }
-            int end = inlineTagEnd(value, start);
-            if (end < 0) {
-                break;
-            }
-            bodies.add(value.substring(nameEnd, end).trim());
-            cursor = end + 1;
-        }
-        return bodies;
-    }
-
-    private static String renderInlineReturns(String text) {
-        String value = text == null ? "" : text;
-        String marker = "{@return";
-        StringBuilder rendered = new StringBuilder(value.length());
-        int cursor = 0;
-        while (cursor < value.length()) {
-            int start = indexOfIgnoreCase(value, marker, cursor);
-            if (start < 0) {
-                rendered.append(value, cursor, value.length());
-                break;
-            }
-            int end = inlineTagEnd(value, start);
-            if (end < 0) {
-                rendered.append(value, cursor, value.length());
-                break;
-            }
-            rendered.append(value, cursor, start);
-            rendered.append(returnSummary(value.substring(start + marker.length(), end).trim()));
-            cursor = end + 1;
-        }
-        return rendered.toString();
-    }
-
     private static String markInlineReturns(String text) {
         String value = text == null ? "" : text;
-        String marker = "{@return";
-        StringBuilder marked = new StringBuilder(value.length());
-        int cursor = 0;
-        while (cursor < value.length()) {
-            int start = indexOfIgnoreCase(value, marker, cursor);
-            if (start < 0) {
-                marked.append(value, cursor, value.length());
-                break;
-            }
-            int end = inlineTagEnd(value, start);
-            if (end < 0) {
-                marked.append(value, cursor, value.length());
-                break;
-            }
-            marked.append(value, cursor, start);
-            marked.append(InheritedJavadocResolver.INLINE_RETURN_START);
-            marked.append(value.substring(start + marker.length(), end).trim());
-            marked.append(InheritedJavadocResolver.INLINE_RETURN_END);
-            cursor = end + 1;
+        int firstSignificant = 0;
+        while (firstSignificant < value.length()
+                && Character.isWhitespace(value.charAt(firstSignificant))) {
+            firstSignificant++;
         }
-        return marked.toString();
-    }
-
-    private static String returnSummary(String content) {
-        String normalized = content == null ? "" : content.trim();
-        if (normalized.isBlank()) {
-            return "Returns.";
+        InlineTag tag = nextInlineTag(value, firstSignificant);
+        if (tag == null || tag.start() != firstSignificant || !"return".equals(tag.name())) {
+            return value;
         }
-        return "Returns " + normalized + (normalized.matches(".*[.!?]$") ? "" : ".");
+        return value.substring(0, tag.start())
+                + InheritedJavadocResolver.INLINE_RETURN_START
+                + tag.body()
+                + InheritedJavadocResolver.INLINE_RETURN_END
+                + value.substring(tag.end() + 1);
     }
 
     private static int inlineTagEnd(String text, int start) {
@@ -1152,37 +1109,64 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return -1;
     }
 
-    private static int indexOfIgnoreCase(String text, String token, int fromIndex) {
-        String lower = text.toLowerCase(Locale.ROOT);
-        return lower.indexOf(token.toLowerCase(Locale.ROOT), fromIndex);
-    }
-
-    private static int firstWhitespace(String text, int start, int end) {
-        for (int index = start; index < end; index++) {
-            if (Character.isWhitespace(text.charAt(index))) {
-                return index;
+    private static InlineTag nextInlineTag(String text, int fromIndex) {
+        String value = text == null ? "" : text;
+        int cursor = Math.max(0, fromIndex);
+        while (cursor < value.length()) {
+            int start = value.indexOf("{@", cursor);
+            if (start < 0 || start + 2 >= value.length()) {
+                return null;
             }
+            int nameStart = start + 2;
+            if (!Character.isJavaIdentifierStart(value.charAt(nameStart))) {
+                cursor = nameStart + 1;
+                continue;
+            }
+            int nameEnd = nameStart + 1;
+            while (nameEnd < value.length()
+                    && Character.isJavaIdentifierPart(value.charAt(nameEnd))) {
+                nameEnd++;
+            }
+            int end = inlineTagEnd(value, start);
+            if (end < 0) {
+                return null;
+            }
+            return new InlineTag(start, end, nameEnd,
+                    value.substring(nameStart, nameEnd),
+                    value.substring(nameEnd, end).trim());
         }
-        return -1;
-    }
-
-    private static int nearest(int first, int second) {
-        if (first < 0) {
-            return second;
-        }
-        if (second < 0) {
-            return first;
-        }
-        return Math.min(first, second);
+        return null;
     }
 
     private static boolean containsInheritDoc(String javadoc) {
-        return javadoc != null && INHERIT_DOC_TAG.matcher(protectLiteralContent(javadoc)).find();
+        return containsInlineTag(protectLiteralContent(javadoc), "inheritDoc", false);
     }
 
     private static boolean hasExplicitInheritDocTarget(String javadoc) {
-        return javadoc != null
-                && EXPLICIT_INHERIT_DOC_TARGET.matcher(protectLiteralContent(javadoc)).find();
+        return containsInlineTag(protectLiteralContent(javadoc), "inheritDoc", true);
+    }
+
+    private static boolean containsInlineTag(String text, String name, boolean requireBody) {
+        String value = text == null ? "" : text;
+        int cursor = 0;
+        while (cursor < value.length()) {
+            InlineTag tag = nextInlineTag(value, cursor);
+            if (tag == null) {
+                return false;
+            }
+            if (name.equals(tag.name()) && (!requireBody || !tag.body().isBlank())) {
+                return true;
+            }
+            if (!"code".equals(tag.name()) && !"literal".equals(tag.name())
+                    && containsInlineTag(tag.body(), name, requireBody)) {
+                return true;
+            }
+            cursor = tag.end() + 1;
+        }
+        return false;
+    }
+
+    private record InlineTag(int start, int end, int nameEnd, String name, String body) {
     }
 
     private static List<Map<String, Object>> fileReferences(Path projectRoot, SourceMethod method, String javadoc) {
@@ -1330,10 +1314,11 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     }
 
     private static Map<String, Object> structuredTags(List<JavadocElement> elements, String javadoc) {
-        if (!elements.isEmpty()) {
-            return structuredTagsFromElements(elements, false);
-        }
-        return fallbackStructuredTags(javadoc, false);
+        Map<String, Object> tags = !elements.isEmpty()
+                ? structuredTagsFromElements(elements, false)
+                : fallbackStructuredTags(javadoc, false);
+        addLeadingInlineReturn(tags, javadoc, false);
+        return tags;
     }
 
     private static Map<String, Object> structuredTagsForInheritance(
@@ -1341,19 +1326,16 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         if (literalContentContainsInheritDoc(javadoc)) {
             return fallbackStructuredTags(protectLiteralContent(javadoc), true);
         }
-        if (!elements.isEmpty()) {
-            return structuredTagsFromElements(elements, true);
-        }
-        return fallbackStructuredTags(protectLiteralContent(javadoc), true);
+        Map<String, Object> tags = !elements.isEmpty()
+                ? structuredTagsFromElements(elements, true)
+                : fallbackStructuredTags(protectLiteralContent(javadoc), true);
+        addLeadingInlineReturn(tags, protectLiteralContent(javadoc), true);
+        return tags;
     }
 
     private static boolean literalContentContainsInheritDoc(String javadoc) {
         String value = javadoc == null ? "" : javadoc;
         return !value.equals(protectLiteralContent(value));
-    }
-
-    private static Map<String, Object> structuredTagsFromElements(List<JavadocElement> elements) {
-        return structuredTagsFromElements(elements, false);
     }
 
     private static Map<String, Object> structuredTagsFromElements(
@@ -1386,16 +1368,6 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 }
             }
         }
-        for (JavadocElement element : elements) {
-            if (element instanceof JavadocBlockTag) {
-                break;
-            }
-            if (element instanceof JavadocInlineTag inline
-                    && StandardJavadocTagType.RETURN.equals(inline.getTagType())) {
-                returns.add(elementsText(inline.getElements(), inheritanceSafe));
-            }
-        }
-
         tags.put("parser", "spoon-javadoc");
         tags.put("parse_confidence", "high");
         tags.put("params", params);
@@ -1447,11 +1419,6 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 }
             }
         }
-        String main = protectLiteralContent(mainDescription(List.of(), protectedJavadoc));
-        inlineTagBodies(main, "return").stream()
-                .map(body -> inheritanceSafe ? body : InheritedJavadocResolver.decodeProtectedText(body))
-                .forEach(returns::add);
-
         tags.put("parser", "cocomut-fallback");
         tags.put("parse_confidence", "low");
         tags.put("params", params);
@@ -1463,6 +1430,34 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         tags.put("impl_notes", implNotes);
         tags.put("deprecated", deprecated);
         return tags;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void addLeadingInlineReturn(Map<String, Object> tags,
+                                               String javadoc,
+                                               boolean inheritanceSafe) {
+        String protectedJavadoc = protectLiteralContent(javadoc);
+        String main = mainDescription(List.of(), protectedJavadoc);
+        leadingInlineTagBody(main, "return").ifPresent(body -> {
+            List<String> returns = (List<String>) tags.get("return");
+            String value = inheritanceSafe
+                    ? body : InheritedJavadocResolver.decodeProtectedText(body);
+            if (!returns.contains(value)) {
+                returns.add(value);
+            }
+        });
+    }
+
+    private static Optional<String> leadingInlineTagBody(String text, String name) {
+        String value = text == null ? "" : text;
+        int firstSignificant = 0;
+        while (firstSignificant < value.length()
+                && Character.isWhitespace(value.charAt(firstSignificant))) {
+            firstSignificant++;
+        }
+        InlineTag tag = nextInlineTag(value, firstSignificant);
+        return tag != null && tag.start() == firstSignificant && name.equals(tag.name())
+                ? Optional.of(tag.body()) : Optional.empty();
     }
 
     private static List<JavadocBlockTag> blockTags(List<JavadocElement> elements) {
@@ -1542,23 +1537,6 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             summaryElements.add(element);
         }
         return !elementsText(summaryElements).isBlank();
-    }
-
-    private static boolean usesInheritDoc(List<JavadocElement> elements) {
-        if (elements == null || elements.isEmpty()) {
-            return false;
-        }
-        for (JavadocElement element : elements) {
-            if (element instanceof JavadocInlineTag inline) {
-                if (StandardJavadocTagType.INHERIT_DOC.equals(inline.getTagType())
-                        || usesInheritDoc(inline.getElements())) {
-                    return true;
-                }
-            } else if (element instanceof JavadocBlockTag block && usesInheritDoc(block.getElements())) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static boolean hasBlockTag(List<JavadocElement> elements, StandardJavadocTagType tagType) {
