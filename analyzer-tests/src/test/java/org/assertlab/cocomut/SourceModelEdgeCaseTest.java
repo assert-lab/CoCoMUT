@@ -1289,7 +1289,7 @@ public class SourceModelEdgeCaseTest {
     }
 
     @Test
-    public void fixedJdk25PolicyDiffersFromJdk17DocletOrdering() throws Exception {
+    public void fixedJdk25PolicyMatchesStandardDocletSuperclassOrdering() throws Exception {
         Path project = Files.createTempDirectory("cocomut-inheritdoc-version-policy");
         try {
             write(project.resolve("src/main/java/demo/Contract.java"), """
@@ -1322,11 +1322,8 @@ public class SourceModelEdgeCaseTest {
             String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             assertEquals("javadoc failed: " + output, 0, process.waitFor());
             String rendered = Files.readString(docs.resolve("demo/Child.html"));
-            if (Runtime.version().feature() >= 25) {
-                assertTrue(rendered.contains("Superclass documentation"));
-            } else {
-                assertTrue(rendered.contains("Interface documentation"));
-            }
+            assertTrue("standard doclet should select the superclass documentation: " + rendered,
+                    rendered.contains("Superclass documentation"));
         } finally {
             deleteRecursively(project);
         }
