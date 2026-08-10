@@ -1018,7 +1018,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         String value = protectLiteralContent(javadoc == null ? "" : javadoc);
         Matcher firstTag = BLOCK_TAG.matcher(value);
         String description = firstTag.find() ? value.substring(0, firstTag.start()) : value;
-        return renderInlineReturns(description).replaceAll("\\s+", " ").trim();
+        return markInlineReturns(description).replaceAll("\\s+", " ").trim();
     }
 
     private static String protectLiteralContent(String text) {
@@ -1045,7 +1045,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 protectedText.append(value, start, end + 1);
             } else {
                 protectedText.append(value, start, bodyStart + 1);
-                protectedText.append(protectInheritDocToken(value.substring(bodyStart + 1, end)));
+                protectedText.append(protectJavadocTagMarkers(value.substring(bodyStart + 1, end)));
                 protectedText.append('}');
             }
             cursor = end + 1;
@@ -1053,15 +1053,8 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return protectedText.toString();
     }
 
-    private static String protectInheritDocToken(String text) {
-        Matcher matcher = INHERIT_DOC_TAG.matcher(text == null ? "" : text);
-        StringBuilder protectedText = new StringBuilder();
-        while (matcher.find()) {
-            matcher.appendReplacement(protectedText, Matcher.quoteReplacement(
-                    InheritedJavadocResolver.PROTECTED_OPEN_BRACE + matcher.group().substring(1)));
-        }
-        matcher.appendTail(protectedText);
-        return protectedText.toString();
+    private static String protectJavadocTagMarkers(String text) {
+        return (text == null ? "" : text).replace('@', InheritedJavadocResolver.PROTECTED_AT_SIGN);
     }
 
     private static List<String> inlineTagBodies(String text, String tag) {
@@ -1111,6 +1104,31 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             cursor = end + 1;
         }
         return rendered.toString();
+    }
+
+    private static String markInlineReturns(String text) {
+        String value = text == null ? "" : text;
+        String marker = "{@return";
+        StringBuilder marked = new StringBuilder(value.length());
+        int cursor = 0;
+        while (cursor < value.length()) {
+            int start = indexOfIgnoreCase(value, marker, cursor);
+            if (start < 0) {
+                marked.append(value, cursor, value.length());
+                break;
+            }
+            int end = inlineTagEnd(value, start);
+            if (end < 0) {
+                marked.append(value, cursor, value.length());
+                break;
+            }
+            marked.append(value, cursor, start);
+            marked.append(InheritedJavadocResolver.INLINE_RETURN_START);
+            marked.append(value.substring(start + marker.length(), end).trim());
+            marked.append(InheritedJavadocResolver.INLINE_RETURN_END);
+            cursor = end + 1;
+        }
+        return marked.toString();
     }
 
     private static String returnSummary(String content) {
@@ -1407,10 +1425,14 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         List<String> implNotes = new ArrayList<>();
         List<String> deprecated = new ArrayList<>();
 
-        Matcher matcher = BLOCK_TAG.matcher(javadoc == null ? "" : javadoc);
+        String protectedJavadoc = protectLiteralContent(javadoc);
+        Matcher matcher = BLOCK_TAG.matcher(protectedJavadoc);
         while (matcher.find()) {
             String tag = matcher.group(1);
             String body = matcher.group(2).replaceAll("\\s+", " ").trim();
+            if (!inheritanceSafe) {
+                body = InheritedJavadocResolver.decodeProtectedText(body);
+            }
             switch (tag) {
                 case "param" -> params.add(splitNamedText(body, "name"));
                 case "return" -> returns.add(body);
@@ -1425,7 +1447,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 }
             }
         }
-        String main = protectLiteralContent(mainDescription(List.of(), javadoc));
+        String main = protectLiteralContent(mainDescription(List.of(), protectedJavadoc));
         inlineTagBodies(main, "return").stream()
                 .map(body -> inheritanceSafe ? body : InheritedJavadocResolver.decodeProtectedText(body))
                 .forEach(returns::add);
@@ -1579,10 +1601,11 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             String content = elementsText(inline.getElements(), inheritanceSafe);
             if (inheritanceSafe && (StandardJavadocTagType.CODE.equals(inline.getTagType())
                     || StandardJavadocTagType.LITERAL.equals(inline.getTagType()))) {
-                return protectInheritDocToken(content);
+                return protectJavadocTagMarkers(content);
             }
             if (inheritanceSafe && StandardJavadocTagType.RETURN.equals(inline.getTagType())) {
-                return returnSummary(content);
+                return InheritedJavadocResolver.INLINE_RETURN_START + content
+                        + InheritedJavadocResolver.INLINE_RETURN_END;
             }
             return content;
         }

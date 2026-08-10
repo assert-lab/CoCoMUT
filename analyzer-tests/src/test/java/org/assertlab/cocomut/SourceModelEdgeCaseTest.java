@@ -1213,11 +1213,11 @@ public class SourceModelEdgeCaseTest {
             compileProject(project);
             SourceContext imported = contextFor(project, "demo.Imported", "value");
             SourceContext ambiguous = contextFor(project, "demo.Ambiguous", "value");
-            assertTrue(imported.javadocMetadata().get("effective_structured_tags").toString()
-                    .contains("Left contract"));
-            String ambiguousEffective = ambiguous.javadocMetadata().get("effective_structured_tags").toString();
-            assertTrue(ambiguousEffective.contains("resolution=invalid"));
-            assertTrue(ambiguousEffective.contains("inheritdoc_target_ambiguous"));
+            assertEquals("Left contract.", effectiveDescription(imported).get("text"));
+            assertEquals("resolved", effectiveDescription(imported).get("resolution"));
+            assertEquals("invalid", effectiveDescription(ambiguous).get("resolution"));
+            assertEquals("inheritdoc_target_ambiguous",
+                    effectiveDescription(ambiguous).get("diagnostic_code"));
         } finally {
             deleteRecursively(project);
         }
@@ -1286,7 +1286,12 @@ public class SourceModelEdgeCaseTest {
         try {
             write(project.resolve("src/main/java/demo/Parent.java"), """
                     package demo;
-                    public interface Parent { /** {@return the parent result} */ String value(); }
+                    public interface Parent {
+                        /** Computes the configured value.
+                         * @return the result contract
+                         */
+                        String value();
+                    }
                     """);
             write(project.resolve("src/main/java/demo/ImplicitChild.java"), """
                     package demo;
@@ -1305,13 +1310,15 @@ public class SourceModelEdgeCaseTest {
 
             compileProject(project);
             SourceContext parent = contextFor(project, "demo.Parent", "value");
-            assertTrue(parent.javadocMetadata().get("structured_tags").toString()
-                    .contains("the parent result"));
+            assertEquals("the result contract", firstEffectiveItem(parent, "return").get("text"));
             for (String child : List.of("demo.ImplicitChild", "demo.ExplicitChild")) {
-                String effective = contextFor(project, child, "value")
-                        .javadocMetadata().get("effective_structured_tags").toString();
-                assertTrue(effective.contains("the parent result"));
-                assertTrue(effective.contains("return="));
+                SourceContext context = contextFor(project, child, "value");
+                assertEquals("the result contract", firstEffectiveItem(context, "return").get("text"));
+                if ("demo.ExplicitChild".equals(child)) {
+                    assertEquals("Returns the result contract.", effectiveDescription(context).get("text"));
+                    assertFalse(effectiveDescription(context).get("text").toString()
+                            .contains("Computes the configured value"));
+                }
             }
         } finally {
             deleteRecursively(project);
@@ -1353,6 +1360,125 @@ public class SourceModelEdgeCaseTest {
             assertFalse(effective.contains("parent parameter"));
             assertFalse(effective.contains("parent return"));
             assertFalse(effective, effective.contains("parent failure"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void codeAndLiteralProtectMethodTypeParameterDocumentation() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-literal-type-param");
+        try {
+            write(project.resolve("src/main/java/demo/Parent.java"), """
+                    package demo;
+                    public interface Parent {
+                        /** @param <T> inherited type documentation */
+                        <T> void process();
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/Child.java"), """
+                    package demo;
+                    public class Child implements Parent {
+                        /** @param <U> {@code {@inheritDoc}} */
+                        @Override public <U> void process() {}
+                    }
+                    """);
+
+            compileProject(project);
+            Map<String, Object> typeParameter = firstEffectiveItem(
+                    contextFor(project, "demo.Child", "process"), "type_params");
+            assertEquals("U", typeParameter.get("name"));
+            assertTrue(typeParameter.get("text").toString().contains("{@inheritDoc}"));
+            assertFalse(typeParameter.get("text").toString().contains("inherited type documentation"));
+            assertEquals("declared", typeParameter.get("source"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void rawFallbackDoesNotInventReturnTagsInsideLiteralContent() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-literal-return");
+        try {
+            write(project.resolve("src/main/java/demo/Parent.java"), """
+                    package demo;
+                    public interface Parent {
+                        /** Parent description.
+                         * @return actual parent return
+                         */
+                        String value();
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/Child.java"), """
+                    package demo;
+                    public class Child implements Parent {
+                        /** {@inheritDoc Parent}
+                         * Example: {@code {@return fake return}}
+                         */
+                        @Override public String value() { return ""; }
+                    }
+                    """);
+
+            compileProject(project);
+            SourceContext context = contextFor(project, "demo.Child", "value");
+            assertEquals("actual parent return", firstEffectiveItem(context, "return").get("text"));
+            assertEquals(1, ((List<?>) effectiveTags(context).get("return")).size());
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void explicitSupertypeUsesWildcardAndEnclosingTypeScope() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-target-scope");
+        try {
+            write(project.resolve("src/main/java/api/Outer.java"), """
+                    package api;
+                    public class Outer {
+                        public interface Contract {
+                            /** Wildcard contract. */ String value();
+                        }
+                    }
+                    """);
+            write(project.resolve("src/main/java/other/Contract.java"), """
+                    package other;
+                    public interface Contract { /** Other contract. */ String value(); }
+                    """);
+            write(project.resolve("src/main/java/demo/WildcardChild.java"), """
+                    package demo;
+                    import api.*;
+                    public class WildcardChild implements Outer.Contract {
+                        /** {@inheritDoc Outer.Contract} */
+                        @Override public String value() { return ""; }
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/Host.java"), """
+                    package demo;
+                    public class Host {
+                        interface Contract { /** Enclosing contract. */ String value(); }
+                        class Child implements Contract, other.Contract {
+                            /** {@inheritDoc Contract} */
+                            @Override public String value() { return ""; }
+                        }
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/UnimportedChild.java"), """
+                    package demo;
+                    public class UnimportedChild implements api.Outer.Contract {
+                        /** {@inheritDoc Contract} */
+                        @Override public String value() { return ""; }
+                    }
+                    """);
+
+            compileProject(project);
+            assertEquals("Wildcard contract.", effectiveDescription(
+                    contextFor(project, "demo.WildcardChild", "value")).get("text"));
+            assertEquals("Enclosing contract.", effectiveDescription(
+                    contextFor(project, "demo.Host$Child", "value")).get("text"));
+            Map<String, Object> unimported = effectiveDescription(
+                    contextFor(project, "demo.UnimportedChild", "value"));
+            assertEquals("invalid", unimported.get("resolution"));
+            assertEquals("inheritdoc_target_not_overridden", unimported.get("diagnostic_code"));
         } finally {
             deleteRecursively(project);
         }
@@ -1696,6 +1822,23 @@ public class SourceModelEdgeCaseTest {
                 .filter(method -> method.methodName().equals(methodName))
                 .findFirst().orElseThrow();
         return SourceBackends.spoon().extractContext(model, focal.methodUri()).orElseThrow();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> effectiveTags(SourceContext context) {
+        return (Map<String, Object>) context.javadocMetadata().get("effective_structured_tags");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> effectiveDescription(SourceContext context) {
+        return (Map<String, Object>) effectiveTags(context).get("description");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> firstEffectiveItem(SourceContext context, String field) {
+        List<Map<String, Object>> items = (List<Map<String, Object>>) effectiveTags(context).get(field);
+        assertFalse("Expected an effective documentation item for " + field, items.isEmpty());
+        return items.get(0);
     }
 
     private static String javac() {

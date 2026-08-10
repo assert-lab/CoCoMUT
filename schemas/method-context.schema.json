@@ -255,8 +255,7 @@
     "inheritedJavadocCandidate": {
       "type": "object",
       "required": [
-        "declaring_type", "declaring_type_kind", "declaring_type_abstract",
-        "method_abstract", "method_default", "relationship", "method_uri", "method_signature",
+        "declaring_type", "declaring_type_kind", "relationship", "method_uri", "method_signature",
         "hierarchy_distance", "search_order", "javadoc_availability", "raw_javadoc", "structured_tags",
         "parser", "parse_confidence", "resolution_confidence"
       ],

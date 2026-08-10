@@ -37,7 +37,9 @@ import java.util.regex.Pattern;
  */
 final class InheritedJavadocResolver {
     private static final int MAX_VISITED_TYPES = 256;
-    static final char PROTECTED_OPEN_BRACE = '\uE000';
+    static final char PROTECTED_AT_SIGN = '\uE000';
+    static final char INLINE_RETURN_START = '\uE001';
+    static final char INLINE_RETURN_END = '\uE002';
     private static final Pattern INHERIT_DOC = Pattern.compile("\\{@inheritDoc(?:\\s+([^\\s}]+))?\\s*}",
             Pattern.CASE_INSENSITIVE);
 
@@ -120,7 +122,8 @@ final class InheritedJavadocResolver {
                     focal, declared, context, incomplete, false).get(0));
         }
 
-        Map<String, String> declaredTypeParams = namedTags(declared.structuredTags(), "params", "name");
+        Map<String, String> declaredTypeParams = namedTags(
+                declared.resolutionStructuredTags(), "params", "name");
         List<CtTypeParameter> focalTypeParams = focal.getFormalCtTypeParameters();
         for (int index = 0; index < focalTypeParams.size(); index++) {
             String name = focalTypeParams.get(index).getSimpleName();
@@ -178,11 +181,11 @@ final class InheritedJavadocResolver {
             resolved = List.of(ResolvedText.invalid(
                     JavadocResolutionDiagnostic.THROWS_MULTIPLE_INHERITDOC.id()));
             inheritanceMode = "explicit_inheritdoc";
-        } else if (!localText.isBlank() && !containsInheritDoc(localText)) {
+        } else if (!localText.isBlank() && !containsResolutionSyntax(localText)) {
             resolved = List.of(ResolvedText.declared(localText,
                     Segment.declared(localText, declared.methodUri(), declaringType(focal))));
             inheritanceMode = "declared";
-        } else if (containsInheritDoc(localText)) {
+        } else if (containsResolutionSyntax(localText)) {
             resolved = resolveInlineText(kind, position, name == null ? "" : name,
                     focal, localText, declared.methodUri(), declaringType(focal), 0,
                     context, 0, true);
@@ -314,7 +317,7 @@ final class InheritedJavadocResolver {
             if ("throws".equals(kind) && inheritDocCount(text) > 1) {
                 values.add(ResolvedText.invalid(
                         JavadocResolutionDiagnostic.THROWS_MULTIPLE_INHERITDOC.id()));
-            } else if (containsInheritDoc(text)) {
+            } else if (containsResolutionSyntax(text)) {
                 values.addAll(resolveInlineText(kind, position, name, candidate.method(), text,
                         documentation.methodUri(), candidate.declaringType(), sourceDistance,
                         context, depth + 1, true));
@@ -339,6 +342,10 @@ final class InheritedJavadocResolver {
             ResolutionContext context,
             int depth,
             boolean strict) {
+        if ("description".equals(kind) && containsInlineReturn(text)) {
+            return resolveDescriptionText(method, text, sourceMethodUri, sourceType,
+                    sourceDistance, context, depth, strict);
+        }
         List<Composition> compositions = new ArrayList<>();
         compositions.add(new Composition(new StringBuilder(), new ArrayList<>(),
                 ItemResolution.RESOLVED, ""));
@@ -370,6 +377,108 @@ final class InheritedJavadocResolver {
         }
         appendLocalText(compositions, text.substring(cursor), sourceMethodUri, sourceType, sourceDistance);
         return compositions.stream().map(Composition::resolvedText).toList();
+    }
+
+    private static List<ResolvedText> resolveDescriptionText(
+            CtMethod<?> method,
+            String text,
+            String sourceMethodUri,
+            String sourceType,
+            int sourceDistance,
+            ResolutionContext context,
+            int depth,
+            boolean strict) {
+        int start = text.indexOf(INLINE_RETURN_START);
+        if (start < 0) {
+            return resolveInlineText("description", 0, "", method, text,
+                    sourceMethodUri, sourceType, sourceDistance, context, depth, strict);
+        }
+        int end = text.indexOf(INLINE_RETURN_END, start + 1);
+        if (end < 0) {
+            return List.of(ResolvedText.indeterminate(
+                    JavadocResolutionDiagnostic.SOURCE_DOCUMENTATION_UNAVAILABLE.id()));
+        }
+
+        List<ResolvedText> prefix = resolveInlineText("description", 0, "", method,
+                text.substring(0, start), sourceMethodUri, sourceType, sourceDistance,
+                context, depth + 1, strict);
+        String returnText = text.substring(start + 1, end);
+        List<ResolvedText> resolvedReturn = containsResolutionSyntax(returnText)
+                ? resolveInlineText("return", 0, "", method, returnText,
+                        sourceMethodUri, sourceType, sourceDistance, context, depth + 1, strict)
+                : List.of(localResolvedText(returnText, sourceMethodUri, sourceType, sourceDistance));
+        List<ResolvedText> suffix = resolveDescriptionText(method, text.substring(end + 1),
+                sourceMethodUri, sourceType, sourceDistance, context, depth + 1, strict);
+
+        List<ResolvedText> result = new ArrayList<>();
+        for (ResolvedText before : prefix) {
+            for (ResolvedText item : resolvedReturn) {
+                for (ResolvedText after : suffix) {
+                    result.add(composeDescription(before,
+                            renderInlineReturn(item, sourceMethodUri, sourceType, sourceDistance), after));
+                }
+            }
+        }
+        return result;
+    }
+
+    private static ResolvedText localResolvedText(String text,
+                                                  String sourceMethodUri,
+                                                  String sourceType,
+                                                  int sourceDistance) {
+        String normalized = normalizeRenderedText(text);
+        if (normalized.isBlank()) {
+            return ResolvedText.missing();
+        }
+        Segment segment = sourceDistance == 0
+                ? Segment.declared(normalized, sourceMethodUri, sourceType)
+                : Segment.inherited(normalized, sourceMethodUri, sourceType, sourceDistance);
+        return new ResolvedText(normalized, List.of(segment), ItemResolution.RESOLVED, "");
+    }
+
+    private static ResolvedText renderInlineReturn(ResolvedText item,
+                                                   String sourceMethodUri,
+                                                   String sourceType,
+                                                   int sourceDistance) {
+        String itemText = item.text();
+        String suffix = itemText.matches(".*[.!?]$") ? "" : ".";
+        List<Segment> segments = new ArrayList<>();
+        segments.add(sourceDistance == 0
+                ? Segment.declared("Returns", sourceMethodUri, sourceType)
+                : Segment.inherited("Returns", sourceMethodUri, sourceType, sourceDistance));
+        segments.addAll(item.segments());
+        if (!suffix.isEmpty()) {
+            segments.add(sourceDistance == 0
+                    ? Segment.declared(suffix, sourceMethodUri, sourceType)
+                    : Segment.inherited(suffix, sourceMethodUri, sourceType, sourceDistance));
+        }
+        return new ResolvedText(itemText.isBlank() ? "Returns." : "Returns " + itemText + suffix,
+                segments, item.resolution(), item.diagnostic());
+    }
+
+    private static ResolvedText composeDescription(ResolvedText... values) {
+        StringBuilder text = new StringBuilder();
+        List<Segment> segments = new ArrayList<>();
+        ItemResolution resolution = ItemResolution.RESOLVED;
+        String diagnostic = "";
+        for (ResolvedText value : values) {
+            if (!value.text().isBlank()) {
+                if (!text.isEmpty()) {
+                    text.append(' ');
+                }
+                text.append(value.text());
+            }
+            segments.addAll(value.segments());
+            if (value.resolution() == ItemResolution.INVALID
+                    || resolution != ItemResolution.INVALID
+                    && value.resolution() == ItemResolution.INDETERMINATE) {
+                resolution = value.resolution();
+            }
+            if (diagnostic.isBlank() && !value.diagnostic().isBlank()) {
+                diagnostic = value.diagnostic();
+            }
+        }
+        return new ResolvedText(text.toString(), segments, resolution, diagnostic);
     }
 
     private static void appendLocalText(List<Composition> compositions,
@@ -480,10 +589,9 @@ final class InheritedJavadocResolver {
         if (scoped.size() == 1) {
             return ExplicitTarget.resolved(scoped.iterator().next());
         }
-        if (scoped.isEmpty() && simpleMatches.size() == 1) {
-            return ExplicitTarget.resolved(simpleMatches.iterator().next());
-        }
-        return ExplicitTarget.invalid(JavadocResolutionDiagnostic.INHERITDOC_TARGET_AMBIGUOUS.id());
+        return ExplicitTarget.invalid(scoped.isEmpty() && simpleMatches.size() == 1
+                ? JavadocResolutionDiagnostic.INHERITDOC_TARGET_NOT_OVERRIDDEN.id()
+                : JavadocResolutionDiagnostic.INHERITDOC_TARGET_AMBIGUOUS.id());
     }
 
     private static Set<String> scopedQualifiedTypeMatches(CtMethod<?> method,
@@ -497,6 +605,7 @@ final class InheritedJavadocResolver {
         if (candidates.contains(samePackage)) {
             matches.add(samePackage);
         }
+        addEnclosingTypeMatches(owner, target, candidates, matches);
         int separator = target.indexOf('.');
         String leadingType = separator < 0 ? target : target.substring(0, separator);
         String suffix = separator < 0 ? "" : target.substring(separator);
@@ -506,7 +615,13 @@ final class InheritedJavadocResolver {
                     String imported = importValue.toString()
                             .replaceFirst("^import\\s+(?:static\\s+)?", "")
                             .replace(";", "").trim();
-                    if (!imported.endsWith(".*") && simpleTypeName(imported).equals(leadingType)) {
+                    if (imported.endsWith(".*")) {
+                        String candidate = normalizeTagType(
+                                imported.substring(0, imported.length() - 1) + target);
+                        if (candidates.contains(candidate)) {
+                            matches.add(candidate);
+                        }
+                    } else if (simpleTypeName(imported).equals(leadingType)) {
                         String candidate = normalizeTagType(imported + suffix);
                         if (candidates.contains(candidate)) {
                             matches.add(candidate);
@@ -531,6 +646,7 @@ final class InheritedJavadocResolver {
         if (candidates.contains(samePackage)) {
             matches.add(samePackage);
         }
+        addEnclosingTypeMatches(owner, simple, candidates, matches);
         try {
             if (method != null && method.getPosition().isValidPosition()) {
                 method.getPosition().getCompilationUnit().getImports().forEach(importValue -> {
@@ -551,6 +667,20 @@ final class InheritedJavadocResolver {
             // A unique candidate remains resolvable even if import metadata is unavailable.
         }
         return matches;
+    }
+
+    private static void addEnclosingTypeMatches(CtType<?> owner,
+                                                String target,
+                                                Set<String> candidates,
+                                                Set<String> matches) {
+        CtType<?> enclosing = owner;
+        while (enclosing != null) {
+            String candidate = normalizeTagType(enclosing.getQualifiedName() + "." + target);
+            if (candidates.contains(candidate)) {
+                matches.add(candidate);
+            }
+            enclosing = enclosing.getDeclaringType();
+        }
     }
 
     private static String stripModulePrefix(String type) {
@@ -689,6 +819,14 @@ final class InheritedJavadocResolver {
         return text != null && INHERIT_DOC.matcher(text).find();
     }
 
+    private static boolean containsInlineReturn(String text) {
+        return text != null && text.indexOf(INLINE_RETURN_START) >= 0;
+    }
+
+    private static boolean containsResolutionSyntax(String text) {
+        return containsInheritDoc(text) || containsInlineReturn(text);
+    }
+
     private static int inheritDocCount(String text) {
         Matcher matcher = INHERIT_DOC.matcher(text == null ? "" : text);
         int count = 0;
@@ -741,7 +879,8 @@ final class InheritedJavadocResolver {
     }
 
     static String decodeProtectedText(String text) {
-        return (text == null ? "" : text).replace(PROTECTED_OPEN_BRACE, '{');
+        return (text == null ? "" : text)
+                .replace(PROTECTED_AT_SIGN, '@');
     }
 
     private static String normalizeTagType(String type) {
@@ -1136,9 +1275,6 @@ final class InheritedJavadocResolver {
             Map<String, Object> value = new LinkedHashMap<>();
             value.put("declaring_type", declaringType);
             value.put("declaring_type_kind", "unknown");
-            value.put("declaring_type_abstract", false);
-            value.put("method_abstract", false);
-            value.put("method_default", false);
             value.put("relationship", relationship);
             value.put("method_uri", "");
             value.put("method_signature", methodSignature);

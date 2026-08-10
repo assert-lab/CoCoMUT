@@ -145,9 +145,10 @@ have `resolution=missing` while the overall resolution remains complete.
 comment strings. Every entry identifies the declaration or unresolved ancestor
 evidence and records:
 
-- declaring type, whether it is a class or interface, and whether the type is
-  abstract;
-- whether the declaring method is abstract or a default interface method;
+- declaring type and whether it is a class or interface;
+- whether a source-backed declaring type is abstract and whether its method is
+  abstract or a default interface method; these booleans are omitted when the
+  source evidence is unavailable;
 - superclass/superinterface relationship;
 - method URI and signature when source identity is available;
 - hierarchy distance and search order;

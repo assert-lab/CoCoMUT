@@ -149,7 +149,9 @@ contents do not trigger inheritance. Duplicate same-type `@throws` entries
 remain distinct. Candidate evidence records whether the declaring type is
 abstract and whether the method is abstract or a default interface method.
 `inherited_javadoc_candidates` contains structured ancestor evidence, including
-source-availability states. The selected
+source-availability states. Abstract/default booleans are omitted when source
+evidence is unavailable, because those properties are unknown rather than
+false. The selected
 `jdk25-standard-doclet` policy is fixed independently of the host JDK and is
 recorded in each row, the manifest, and the request fingerprint. See
 [Inherited Javadoc Resolution](../docs/inherited-javadoc-resolution.md).
