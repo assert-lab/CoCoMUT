@@ -1,8 +1,8 @@
 # Inherited Javadoc Resolution
 
-CoCoMUT reports both the Javadoc written on a method and the documentation that
-the standard Javadoc inheritance rules make effective for that method. These
-are different views and are never merged destructively.
+CoCoMUT reports both the Javadoc written on a method and a source-level
+effective-documentation projection computed under an explicit inheritance
+policy. These are different views and are never merged destructively.
 
 This document describes the schema introduced in output version `0.5.0` and
 the resolver implemented by
@@ -28,9 +28,16 @@ documentation is on `BasicBuilderParameters.clone()`. CoCoMUT therefore walks
 the hierarchy directly and uses Spoon's override machinery only to decide
 whether method declarations correspond.
 
-## Search order
+## Policy and search order
 
-The resolver follows the standard doclet's automatic supertype search:
+Schema `0.5.0` supports the fixed default policy
+`jdk25-standard-doclet`. The policy is selected through
+`ContextRequest.javadocInheritancePolicy(...)` or the CLI option
+`--javadoc-inheritance-policy`, and is recorded in each method row, the
+extraction manifest, and the request fingerprint. It is never inferred from
+the JDK that happens to run CoCoMUT.
+
+The policy follows the JDK 25 standard doclet's automatic supertype search:
 
 1. Search the direct superclass, excluding `java.lang.Object` from this phase.
 2. Recursively search that superclass's superclass and interfaces.
@@ -50,8 +57,9 @@ This branch-preserving recursion is important when multiple interfaces declare
 the same method but document different items.
 
 The implementation bounds traversal to 256 distinct types. If the bound is
-reached, `inheritdoc_candidates_truncated` is `true` and unresolved effective
-items are marked indeterminate.
+reached, `inheritdoc_candidates_truncated` is `true`, the evidence records
+`partial_resolution` with diagnostic `hierarchy_traversal_limit`, and
+unresolved effective items are marked indeterminate.
 
 ## Declared and effective views
 
@@ -63,9 +71,9 @@ The local source remains authoritative for what the developer wrote:
 - `javadoc_metadata.declared_structured_tags` explicitly names that same local
   view.
 
-`javadoc_metadata.effective_structured_tags` is a separate projection of the
-documentation a user would see after inheritance. It covers only items to
-which the standard method-documentation inheritance rules apply:
+`javadoc_metadata.effective_structured_tags` is a separate, source-level
+projection under the selected policy. It is not standard-doclet HTML output.
+It covers only items to which method-documentation inheritance applies:
 
 - main description;
 - method type parameters, matched by position;
@@ -91,13 +99,25 @@ Each effective item records:
 }
 ```
 
+When effective text combines inherited and locally declared text, `source` is
+`composed`. The ordered `segments` array identifies every contributing text
+fragment and method URI, while `source_chain` gives the distinct contributing
+method URIs. This also preserves provenance through nested inheritance.
+
 `inheritance_mode` distinguishes documentation written locally, explicit
 `{@inheritDoc}`, and inheritance caused by an omitted item. In particular,
 `uses_inheritdoc=false` does not imply that no documentation was inherited.
 The JDK 22+ explicit-supertype form, such as `{@inheritDoc SomeInterface}`, is
-also honored. Because Spoon 11 recognizes that inline tag but normalizes away
-its optional target, CoCoMUT preserves and parses the raw source spelling for
-that form.
+also honored. Every inline occurrence is resolved independently. CoCoMUT uses
+the focal package, imports, enclosing type, and canonical supertype identities
+to resolve a target; it does not choose an arbitrary equal simple name. Because
+Spoon 11 normalizes away the optional target, CoCoMUT preserves and parses the
+raw source spelling for this form.
+
+Known-invalid explicit targets use `resolution=invalid` and a stable
+`diagnostic_code`. Missing source evidence instead uses
+`resolution=indeterminate`; the two states are not conflated. Duplicate
+same-type `@throws` entries are retained as separate effective items.
 
 `effective_structured_tags.resolution=complete` means that no item is uncertain;
 it does not mean that every possible item has text. A genuinely missing item can
@@ -150,9 +170,21 @@ the candidate array for audit, while the affected effective item is marked
 
 `inheritdoc_policy` is:
 
-- `item_level` when an override relation is inspected or the focal comment uses
-  `inheritDoc`;
+- `jdk25-standard-doclet` for methods;
 - `not_applicable` otherwise.
+
+The complete policy metadata is stored under `javadoc_inheritance`:
+
+```json
+{
+  "policy_id": "jdk25-standard-doclet",
+  "specification_version": "25",
+  "implementation_version": "1",
+  "defaulted": true,
+  "granularity": "item_level",
+  "mode": "effective_and_candidates"
+}
+```
 
 `inheritdoc_resolution` summarizes candidate availability:
 

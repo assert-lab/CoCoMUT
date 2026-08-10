@@ -72,7 +72,9 @@ structured_tags           Compatibility alias for declared_structured_tags
 declared_structured_tags  Parser-derived tags written on the focal declaration
 effective_structured_tags Item-level effective description/type-param/param/
                           return/throws documentation with provenance
-inheritdoc_policy         not_applicable|item_level
+inheritdoc_policy         not_applicable|jdk25-standard-doclet
+javadoc_inheritance       Policy ID, specification/implementation versions,
+                          default status, item granularity, and output mode
 inheritdoc_resolution     not_applicable|resolved_candidate|no_documentation|
                           indeterminate|unresolved
 inherited_javadoc_candidates
@@ -141,8 +143,11 @@ that Spoon cannot represent; fallback-derived objects are marked with
 Method-documentation inheritance is resolved item by item. Local tags are never
 overwritten: `declared_structured_tags` and its `structured_tags` alias remain
 source-faithful, while `effective_structured_tags` reports explicit and implicit
-inheritance with provenance. `inherited_javadoc_candidates` contains structured
-ancestor evidence, including source-availability states. See
+inheritance with ordered segment provenance. Duplicate same-type `@throws`
+entries remain distinct. `inherited_javadoc_candidates` contains structured
+ancestor evidence, including source-availability states. The selected
+`jdk25-standard-doclet` policy is fixed independently of the host JDK and is
+recorded in each row, the manifest, and the request fingerprint. See
 [Inherited Javadoc Resolution](../docs/inherited-javadoc-resolution.md).
 
 External references are intentionally symbol-level only in the current schema.
@@ -163,6 +168,7 @@ tool_git                        Git identity of the CoCoMUT checkout/build
 request_hash                    Cached hash of selection, build policy, and
                                 explicit request artifacts
 selection                       Same selection provenance stored in JSONL rows
+javadoc_inheritance             Selected policy and versioned semantics
 project.name/path/build_system  Analyzed project identity
 project.git.remote_url          Git remote when the checkout exposes one
 project.git.commit              Git commit when available

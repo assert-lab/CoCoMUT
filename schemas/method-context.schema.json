@@ -115,7 +115,7 @@
       "type": "object",
       "required": [
         "structured_tags", "declared_structured_tags", "effective_structured_tags",
-        "uses_inheritdoc", "inheritdoc_policy", "inheritdoc_resolution",
+        "uses_inheritdoc", "inheritdoc_policy", "javadoc_inheritance", "inheritdoc_resolution",
         "inherited_javadoc_candidates", "inheritdoc_candidate_count",
         "inheritdoc_documented_candidate_count", "inheritdoc_candidates_truncated"
       ],
@@ -144,8 +144,11 @@
         },
         "uses_inheritdoc": {"type": "boolean"},
         "inheritdoc_policy": {
-          "enum": ["not_applicable", "item_level"],
-          "description": "item_level when overridden declarations are inspected for explicit or implicit Javadoc inheritance."
+          "enum": ["not_applicable", "jdk25-standard-doclet"],
+          "description": "Semantic policy used for effective Javadoc, or not_applicable for executables that cannot inherit method documentation."
+        },
+        "javadoc_inheritance": {
+          "$ref": "#/$defs/javadocInheritancePolicy"
         },
         "inheritdoc_resolution": {
           "enum": ["not_applicable", "resolved_candidate", "no_documentation", "indeterminate", "unresolved"],
@@ -184,6 +187,31 @@
     }
   },
   "$defs": {
+    "javadocInheritancePolicy": {
+      "type": "object",
+      "required": ["policy_id", "specification_version", "implementation_version", "defaulted", "granularity", "mode"],
+      "properties": {
+        "policy_id": {"enum": ["jdk25-standard-doclet"]},
+        "specification_version": {"const": "25"},
+        "implementation_version": {"type": "string", "minLength": 1},
+        "defaulted": {"type": "boolean"},
+        "granularity": {"const": "item_level"},
+        "mode": {"const": "effective_and_candidates"}
+      },
+      "additionalProperties": false
+    },
+    "documentationSourceSegment": {
+      "type": "object",
+      "required": ["kind", "text", "source_method_uri", "declaring_type", "hierarchy_distance"],
+      "properties": {
+        "kind": {"enum": ["declared", "inherited"]},
+        "text": {"type": "string"},
+        "source_method_uri": {"type": "string"},
+        "declaring_type": {"type": "string"},
+        "hierarchy_distance": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
     "effectiveDocumentationItem": {
       "type": "object",
       "required": ["text", "source", "inheritance_mode", "resolution"],
@@ -191,12 +219,22 @@
         "name": {"type": "string"},
         "type": {"type": "string"},
         "text": {"type": "string"},
-        "source": {"enum": ["declared", "inherited", "missing", "indeterminate"]},
+        "source": {"enum": ["declared", "inherited", "composed", "missing", "indeterminate", "invalid"]},
         "inheritance_mode": {"enum": ["declared", "explicit_inheritdoc", "implicit_missing_item"]},
         "inherited_from": {"type": "string"},
         "inherited_method_uri": {"type": "string"},
         "hierarchy_distance": {"type": "integer", "minimum": 1},
-        "resolution": {"enum": ["resolved", "missing", "indeterminate"]}
+        "segments": {"type": "array", "items": {"$ref": "#/$defs/documentationSourceSegment"}},
+        "source_chain": {"type": "array", "items": {"type": "string"}},
+        "diagnostic_code": {
+          "enum": [
+            "hierarchy_resolution_limit", "hierarchy_traversal_limit", "hierarchy_truncated",
+            "supertype_declaration_unavailable", "source_evidence_unavailable",
+            "source_documentation_unavailable", "inheritdoc_target_not_overridden",
+            "inheritdoc_target_ambiguous", "inheritdoc_corresponding_item_missing"
+          ]
+        },
+        "resolution": {"enum": ["resolved", "missing", "indeterminate", "invalid"]}
       },
       "additionalProperties": false
     },

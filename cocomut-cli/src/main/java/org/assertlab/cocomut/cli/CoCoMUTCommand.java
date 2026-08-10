@@ -38,6 +38,10 @@ public final class CoCoMUTCommand implements Callable<Integer> {
             description = "Static bytecode call-graph algorithm: rta or cha.")
     private String callGraph;
 
+    @Option(names = "--javadoc-inheritance-policy",
+            description = "Effective Javadoc policy: jdk25-standard-doclet (fixed default).")
+    private String javadocInheritancePolicy;
+
     @Option(names = "--output-dir", description = "Directory for generated artifacts. Defaults to ./cocomut_output/<project-name>-<path-hash>.")
     private Path outputDir;
 
@@ -151,6 +155,10 @@ public final class CoCoMUTCommand implements Callable<Integer> {
                 .sourceRoots(emptyPathListIfNull(sourceRoots))
                 .testSourceRoots(emptyPathListIfNull(testSourceRoots))
                 .outputDirectory(outputDir);
+        if (javadocInheritancePolicy != null && !javadocInheritancePolicy.isBlank()) {
+            builder.javadocInheritancePolicy(
+                    ContextRequest.JavadocInheritancePolicy.fromId(javadocInheritancePolicy));
+        }
         ContextRequest request = builder.build();
 
         ExtractionReport report = ContextExtractorService.createDefault().extract(request);

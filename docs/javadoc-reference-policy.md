@@ -108,7 +108,9 @@ compatibility alias `structured_tags`), emits ordered structured ancestor
 evidence in `inherited_javadoc_candidates`, and computes item-level inherited
 descriptions, parameters, return text, and applicable throws text in
 `effective_structured_tags`. This applies both to explicit `{@inheritDoc}` and
-to items inherited by omission. See
+to items inherited by omission. The effective projection uses the explicit,
+host-independent `jdk25-standard-doclet` policy; composed text carries ordered
+segment provenance. See
 [Inherited Javadoc Resolution](inherited-javadoc-resolution.md) for search
 order, provenance, uncertainty, and status invariants.
 

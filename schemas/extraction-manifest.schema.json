@@ -12,6 +12,7 @@
     "tool_git",
     "request_hash",
     "selection",
+    "javadoc_inheritance",
     "project",
     "build",
     "artifacts",
@@ -27,6 +28,19 @@
     "request_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "jsonl_file": { "type": ["string", "null"] },
     "selection": { "type": "object" },
+    "javadoc_inheritance": {
+      "type": "object",
+      "required": ["policy_id", "specification_version", "implementation_version", "defaulted", "granularity", "mode"],
+      "properties": {
+        "policy_id": {"const": "jdk25-standard-doclet"},
+        "specification_version": {"const": "25"},
+        "implementation_version": {"type": "string", "minLength": 1},
+        "defaulted": {"type": "boolean"},
+        "granularity": {"const": "item_level"},
+        "mode": {"const": "effective_and_candidates"}
+      },
+      "additionalProperties": false
+    },
     "execution": { "type": "object" },
     "project": {
       "type": "object",

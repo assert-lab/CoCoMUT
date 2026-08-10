@@ -54,6 +54,22 @@ public class ContextRequestTest {
 
         assertEquals(CallGraphGenerator.Algorithm.RTA, request.callGraphAlgorithm());
         assertEquals(ContextRequest.BuildPolicy.DENY_BUILD, request.buildPolicy());
+        assertEquals(ContextRequest.JavadocInheritancePolicy.JDK25_STANDARD_DOCLET,
+                request.javadocInheritancePolicy());
+        assertTrue(request.javadocInheritancePolicyDefaulted());
+    }
+
+    @Test
+    public void javadocPolicyIsAnExplicitVersionedRequestSetting() {
+        ContextRequest request = ContextRequest.builder()
+                .projectRoot(Path.of("."))
+                .javadocInheritancePolicy(ContextRequest.JavadocInheritancePolicy.JDK25_STANDARD_DOCLET)
+                .build();
+
+        assertEquals("jdk25-standard-doclet", request.javadocInheritancePolicy().id());
+        assertEquals("25", request.javadocInheritancePolicy().specificationVersion());
+        assertEquals("1", request.javadocInheritancePolicy().implementationVersion());
+        assertTrue(!request.javadocInheritancePolicyDefaulted());
     }
 
     @Test

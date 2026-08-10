@@ -615,7 +615,7 @@ public class SourceModelEdgeCaseTest {
                     .orElseThrow();
 
             assertEquals(true, context.javadocMetadata().get("uses_inheritdoc"));
-            assertEquals("item_level", context.javadocMetadata().get("inheritdoc_policy"));
+            assertEquals("jdk25-standard-doclet", context.javadocMetadata().get("inheritdoc_policy"));
             assertEquals("resolved_candidate", context.javadocMetadata().get("inheritdoc_resolution"));
             assertTrue(context.javadocMetadata().get("inherited_javadoc_candidates").toString()
                     .contains("input text"));
@@ -634,6 +634,8 @@ public class SourceModelEdgeCaseTest {
             assertTrue(effectiveTags.get("params").toString().contains("input text"));
             assertTrue(effectiveTags.get("return").toString().contains("parsed value"));
             assertEquals("complete", effectiveTags.get("resolution"));
+            assertEquals("jdk25-standard-doclet",
+                    ((Map<?, ?>) context.javadocMetadata().get("javadoc_inheritance")).get("policy_id"));
         } finally {
             deleteRecursively(project);
         }
@@ -836,7 +838,7 @@ public class SourceModelEdgeCaseTest {
             SourceContext context = SourceBackends.spoon().extractContext(model, focal.methodUri()).orElseThrow();
 
             assertEquals(false, context.javadocMetadata().get("uses_inheritdoc"));
-            assertEquals("item_level", context.javadocMetadata().get("inheritdoc_policy"));
+            assertEquals("jdk25-standard-doclet", context.javadocMetadata().get("inheritdoc_policy"));
             @SuppressWarnings("unchecked")
             Map<String, Object> declared = (Map<String, Object>) context.javadocMetadata()
                     .get("declared_structured_tags");
@@ -1002,6 +1004,335 @@ public class SourceModelEdgeCaseTest {
     }
 
     @Test
+    public void inaccessibleAncestorMethodsAreNotInheritanceCandidates() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-access");
+        try {
+            write(project.resolve("src/main/java/parent/Base.java"), """
+                    package parent;
+                    public class Base {
+                        /** Private documentation. */
+                        private void privateMethod(String value) {}
+                        /** Package documentation. */
+                        void packageMethod(String value) {}
+                    }
+                    """);
+            write(project.resolve("src/main/java/child/Child.java"), """
+                    package child;
+                    public class Child extends parent.Base {
+                        /** {@inheritDoc} */
+                        public void privateMethod(String value) {}
+                        /** {@inheritDoc} */
+                        public void packageMethod(String value) {}
+                    }
+                    """);
+
+            compileProject(project);
+            ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
+            for (String methodName : List.of("privateMethod", "packageMethod")) {
+                SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
+                        .filter(method -> method.className().equals("child.Child"))
+                        .filter(method -> method.methodName().equals(methodName))
+                        .findFirst().orElseThrow();
+                SourceContext context = SourceBackends.spoon().extractContext(model, focal.methodUri()).orElseThrow();
+                assertEquals("unresolved", context.javadocMetadata().get("inheritdoc_resolution"));
+                assertEquals(List.of(), context.javadocMetadata().get("inherited_javadoc_candidates"));
+            }
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void accessiblePackageMethodRemainsAnInheritanceCandidate() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-package-access");
+        try {
+            write(project.resolve("src/main/java/demo/Base.java"), """
+                    package demo;
+                    public class Base {
+                        /** Package contract. */
+                        void process(String value) {}
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/Child.java"), """
+                    package demo;
+                    public class Child extends Base {
+                        /** {@inheritDoc} */
+                        @Override void process(String value) {}
+                    }
+                    """);
+
+            compileProject(project);
+            String effective = contextFor(project, "demo.Child", "process")
+                    .javadocMetadata().get("effective_structured_tags").toString();
+            assertTrue(effective.contains("Package contract"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void interfaceDoesNotInheritProtectedObjectMethod() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-object-public");
+        try {
+            write(project.resolve("src/main/java/demo/CloneContract.java"), """
+                    package demo;
+                    public interface CloneContract {
+                        /** {@inheritDoc} */
+                        Object clone();
+                    }
+                    """);
+
+            compileProject(project);
+            ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
+            SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
+                    .filter(method -> method.className().equals("demo.CloneContract"))
+                    .filter(method -> method.methodName().equals("clone"))
+                    .findFirst().orElseThrow();
+            SourceContext context = SourceBackends.spoon().extractContext(model, focal.methodUri()).orElseThrow();
+
+            assertEquals(List.of(), context.javadocMetadata().get("inherited_javadoc_candidates"));
+            @SuppressWarnings("unchecked")
+            Map<String, Object> effective = (Map<String, Object>) context.javadocMetadata()
+                    .get("effective_structured_tags");
+            assertTrue(effective.get("description").toString().contains("resolution=invalid"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void eachExplicitInheritDocTargetIsResolvedIndependently() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-multiple-targets");
+        try {
+            write(project.resolve("src/main/java/demo/Left.java"), """
+                    package demo;
+                    public interface Left { /** Left contract. */ String value(); }
+                    """);
+            write(project.resolve("src/main/java/demo/Right.java"), """
+                    package demo;
+                    public interface Right { /** Right contract. */ String value(); }
+                    """);
+            write(project.resolve("src/main/java/demo/Child.java"), """
+                    package demo;
+                    public class Child implements Left, Right {
+                        /** {@inheritDoc Left} Combined with {@inheritDoc Right}. */
+                        @Override public String value() { return "value"; }
+                    }
+                    """);
+
+            compileProject(project);
+            SourceContext context = contextFor(project, "demo.Child", "value");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> effective = (Map<String, Object>) context.javadocMetadata()
+                    .get("effective_structured_tags");
+            String description = effective.get("description").toString();
+            assertTrue(description.contains("Left contract"));
+            assertTrue(description.contains("Right contract"));
+            assertTrue(description.contains("source=composed"));
+            assertTrue(description.contains("demo.Left"));
+            assertTrue(description.contains("demo.Right"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void nestedInheritancePreservesEveryContributingSegment() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-segment-chain");
+        try {
+            write(project.resolve("src/main/java/demo/Root.java"), """
+                    package demo;
+                    public interface Root { /** Root contract. */ String value(); }
+                    """);
+            write(project.resolve("src/main/java/demo/Parent.java"), """
+                    package demo;
+                    public class Parent implements Root {
+                        /** {@inheritDoc} Parent refinement. */
+                        @Override public String value() { return "parent"; }
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/Child.java"), """
+                    package demo;
+                    public class Child extends Parent {
+                        /** {@inheritDoc} Child refinement. */
+                        @Override public String value() { return "child"; }
+                    }
+                    """);
+
+            compileProject(project);
+            SourceContext context = contextFor(project, "demo.Child", "value");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> effective = (Map<String, Object>) context.javadocMetadata()
+                    .get("effective_structured_tags");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> description = (Map<String, Object>) effective.get("description");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> segments = (List<Map<String, Object>>) description.get("segments");
+
+            assertEquals("composed", description.get("source"));
+            assertEquals(3, segments.size());
+            assertTrue(description.get("text").toString().contains("Root contract"));
+            assertTrue(description.get("text").toString().contains("Parent refinement"));
+            assertTrue(description.get("text").toString().contains("Child refinement"));
+            assertTrue(description.get("source_chain").toString().contains("demo.Root.value"));
+            assertTrue(description.get("source_chain").toString().contains("demo.Parent.value"));
+            assertTrue(description.get("source_chain").toString().contains("demo.Child.value"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void explicitSupertypeUsesImportsAndRejectsAmbiguousSimpleNames() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-target-scope");
+        try {
+            write(project.resolve("src/main/java/left/Contract.java"), """
+                    package left;
+                    public interface Contract { /** Left contract. */ String value(); }
+                    """);
+            write(project.resolve("src/main/java/right/Contract.java"), """
+                    package right;
+                    public interface Contract { /** Right contract. */ String value(); }
+                    """);
+            write(project.resolve("src/main/java/demo/Imported.java"), """
+                    package demo;
+                    import left.Contract;
+                    public class Imported implements Contract, right.Contract {
+                        /** {@inheritDoc Contract} */
+                        @Override public String value() { return "value"; }
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/Ambiguous.java"), """
+                    package demo;
+                    public class Ambiguous implements left.Contract, right.Contract {
+                        /** {@inheritDoc Contract} */
+                        @Override public String value() { return "value"; }
+                    }
+                    """);
+
+            compileProject(project);
+            SourceContext imported = contextFor(project, "demo.Imported", "value");
+            SourceContext ambiguous = contextFor(project, "demo.Ambiguous", "value");
+            assertTrue(imported.javadocMetadata().get("effective_structured_tags").toString()
+                    .contains("Left contract"));
+            String ambiguousEffective = ambiguous.javadocMetadata().get("effective_structured_tags").toString();
+            assertTrue(ambiguousEffective.contains("resolution=invalid"));
+            assertTrue(ambiguousEffective.contains("inheritdoc_target_ambiguous"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void duplicateThrowsTagsRemainDistinctEffectiveEntries() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-duplicate-throws");
+        try {
+            write(project.resolve("src/main/java/demo/Contract.java"), """
+                    package demo;
+                    public interface Contract {
+                        /**
+                         * Reads data.
+                         * @throws java.io.IOException if reading fails
+                         * @throws java.io.IOException if closing fails
+                         */
+                        void read() throws java.io.IOException;
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/Child.java"), """
+                    package demo;
+                    public class Child implements Contract {
+                        /** Local note. */
+                        @Override public void read() throws java.io.IOException {}
+                    }
+                    """);
+
+            compileProject(project);
+            SourceContext context = contextFor(project, "demo.Child", "read");
+            @SuppressWarnings("unchecked")
+            Map<String, Object> effective = (Map<String, Object>) context.javadocMetadata()
+                    .get("effective_structured_tags");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> throwsTags = (List<Map<String, Object>>) effective.get("throws");
+            assertEquals(2, throwsTags.size());
+            assertTrue(throwsTags.get(0).get("text").toString().contains("reading fails"));
+            assertTrue(throwsTags.get(1).get("text").toString().contains("closing fails"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void constructorsKeepDeclaredParamAndThrowsDocumentation() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-constructor-effective-docs");
+        try {
+            write(project.resolve("src/main/java/demo/Value.java"), """
+                    package demo;
+                    public class Value {
+                        /**
+                         * Creates a value.
+                         * @param text input text
+                         * @throws java.lang.IllegalArgumentException for blank input
+                         */
+                        public Value(String text) throws IllegalArgumentException {}
+                    }
+                    """);
+
+            compileProject(project);
+            SourceContext context = contextFor(project, "demo.Value", "Value");
+            assertEquals("not_applicable", context.javadocMetadata().get("inheritdoc_policy"));
+            String effective = context.javadocMetadata().get("effective_structured_tags").toString();
+            assertTrue(effective.contains("input text"));
+            assertTrue(effective.contains("for blank input"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void fixedJdk25PolicyDiffersFromJdk17DocletOrdering() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-version-policy");
+        try {
+            write(project.resolve("src/main/java/demo/Contract.java"), """
+                    package demo;
+                    public interface Contract { /** Interface documentation. */ void process(); }
+                    """);
+            write(project.resolve("src/main/java/demo/Base.java"), """
+                    package demo;
+                    public class Base { /** Superclass documentation. */ public void process() {} }
+                    """);
+            write(project.resolve("src/main/java/demo/Child.java"), """
+                    package demo;
+                    public class Child extends Base implements Contract {
+                        /** {@inheritDoc} */
+                        @Override public void process() {}
+                    }
+                    """);
+
+            compileProject(project);
+            SourceContext context = contextFor(project, "demo.Child", "process");
+            String effective = context.javadocMetadata().get("effective_structured_tags").toString();
+            assertTrue("CoCoMUT's fixed JDK 25 policy must select the superclass branch: " + effective,
+                    effective.contains("Superclass documentation"));
+            assertFalse(effective.contains("Interface documentation"));
+
+            Path docs = project.resolve("javadoc");
+            Process process = new ProcessBuilder(javadoc(), "-quiet", "-d", docs.toString(),
+                    "-sourcepath", project.resolve("src/main/java").toString(), "demo")
+                    .redirectErrorStream(true).start();
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            assertEquals("javadoc failed: " + output, 0, process.waitFor());
+            String rendered = Files.readString(docs.resolve("demo/Child.html"));
+            if (Runtime.version().feature() >= 25) {
+                assertTrue(rendered.contains("Superclass documentation"));
+            } else {
+                assertTrue(rendered.contains("Interface documentation"));
+            }
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void javadocFileReferencesCarryParserProvenanceAndStayInsideProject() throws Exception {
         Path project = Files.createTempDirectory("cocomut-javadoc-file-references");
         Path outsideSecret = project.getParent().resolve(project.getFileName() + "-secret.txt");
@@ -1136,6 +1467,15 @@ public class SourceModelEdgeCaseTest {
         }
     }
 
+    private static SourceContext contextFor(Path project, String className, String methodName) throws Exception {
+        ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
+        SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
+                .filter(method -> method.className().equals(className))
+                .filter(method -> method.methodName().equals(methodName))
+                .findFirst().orElseThrow();
+        return SourceBackends.spoon().extractContext(model, focal.methodUri()).orElseThrow();
+    }
+
     private static String javac() {
         Path javaHome = Path.of(System.getProperty("java.home"));
         Path javac = javaHome.resolve("bin").resolve("javac");
@@ -1149,6 +1489,18 @@ public class SourceModelEdgeCaseTest {
             return parentJavac.toString();
         }
         return "javac";
+    }
+
+    private static String javadoc() {
+        Path javaHome = Path.of(System.getProperty("java.home"));
+        Path javadoc = javaHome.resolve("bin").resolve("javadoc");
+        if (Files.isRegularFile(javadoc)) {
+            return javadoc.toString();
+        }
+        Path parentJavadoc = javaHome.getParent() == null
+                ? null : javaHome.getParent().resolve("bin").resolve("javadoc");
+        return parentJavadoc != null && Files.isRegularFile(parentJavadoc)
+                ? parentJavadoc.toString() : "javadoc";
     }
 
     private static Map<String, Object> referenceByTarget(List<Map<String, Object>> references, String target) {

@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.LinkedHashSet;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -24,6 +25,54 @@ public final class ContextRequest {
         DENY_BUILD,
         ALLOW_UNSANDBOXED_BUILD,
         EXTERNALLY_SANDBOXED_BUILD
+    }
+
+    /**
+     * Versioned interpretation used to construct effective method Javadoc.
+     * The host JDK never selects this policy implicitly.
+     */
+    public enum JavadocInheritancePolicy {
+        JDK25_STANDARD_DOCLET("jdk25-standard-doclet", "25", "1");
+
+        private final String id;
+        private final String specificationVersion;
+        private final String implementationVersion;
+
+        JavadocInheritancePolicy(String id, String specificationVersion, String implementationVersion) {
+            this.id = id;
+            this.specificationVersion = specificationVersion;
+            this.implementationVersion = implementationVersion;
+        }
+
+        public String id() {
+            return id;
+        }
+
+        public String specificationVersion() {
+            return specificationVersion;
+        }
+
+        public String implementationVersion() {
+            return implementationVersion;
+        }
+
+        public Map<String, Object> metadata(boolean defaulted) {
+            return Map.of(
+                    "policy_id", id,
+                    "specification_version", specificationVersion,
+                    "implementation_version", implementationVersion,
+                    "defaulted", defaulted,
+                    "granularity", "item_level",
+                    "mode", "effective_and_candidates");
+        }
+
+        public static JavadocInheritancePolicy fromId(String id) {
+            return java.util.Arrays.stream(values())
+                    .filter(value -> value.id.equalsIgnoreCase(id == null ? "" : id.trim()))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Unsupported Javadoc inheritance policy: " + id));
+        }
     }
 
     private final Path projectRoot;
@@ -48,6 +97,8 @@ public final class ContextRequest {
     private final List<Path> classpathFiles;
     private final List<Path> sourceRoots;
     private final List<Path> testSourceRoots;
+    private final JavadocInheritancePolicy javadocInheritancePolicy;
+    private final boolean javadocInheritancePolicyDefaulted;
 
     private ContextRequest(Builder builder) {
         this.projectRoot = Objects.requireNonNull(builder.projectRoot, "projectRoot cannot be null")
@@ -77,6 +128,9 @@ public final class ContextRequest {
         this.classpathFiles = normalizePaths(builder.classpathFiles, this.projectRoot);
         this.sourceRoots = normalizePaths(builder.sourceRoots, this.projectRoot);
         this.testSourceRoots = normalizePaths(builder.testSourceRoots, this.projectRoot);
+        this.javadocInheritancePolicy = Objects.requireNonNull(builder.javadocInheritancePolicy,
+                "javadocInheritancePolicy cannot be null");
+        this.javadocInheritancePolicyDefaulted = builder.javadocInheritancePolicyDefaulted;
     }
 
     public static Builder builder() {
@@ -179,6 +233,14 @@ public final class ContextRequest {
         return testSourceRoots;
     }
 
+    public JavadocInheritancePolicy javadocInheritancePolicy() {
+        return javadocInheritancePolicy;
+    }
+
+    public boolean javadocInheritancePolicyDefaulted() {
+        return javadocInheritancePolicyDefaulted;
+    }
+
     public static final class Builder {
         private Path projectRoot;
         private Scope scope = Scope.ALL;
@@ -202,6 +264,9 @@ public final class ContextRequest {
         private List<Path> classpathFiles = new java.util.ArrayList<>();
         private List<Path> sourceRoots = new java.util.ArrayList<>();
         private List<Path> testSourceRoots = new java.util.ArrayList<>();
+        private JavadocInheritancePolicy javadocInheritancePolicy =
+                JavadocInheritancePolicy.JDK25_STANDARD_DOCLET;
+        private boolean javadocInheritancePolicyDefaulted = true;
 
         public Builder projectRoot(Path projectRoot) {
             this.projectRoot = projectRoot;
@@ -235,6 +300,13 @@ public final class ContextRequest {
 
         public Builder maxSourceFiles(Integer maxSourceFiles) {
             this.maxSourceFiles = maxSourceFiles;
+            return this;
+        }
+
+        public Builder javadocInheritancePolicy(JavadocInheritancePolicy policy) {
+            this.javadocInheritancePolicy = Objects.requireNonNull(policy,
+                    "javadocInheritancePolicy cannot be null");
+            this.javadocInheritancePolicyDefaulted = false;
             return this;
         }
 

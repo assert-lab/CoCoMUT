@@ -888,8 +888,8 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 "");
         InheritedJavadocResolver.Resolution inherited = executable instanceof CtMethod<?> ctMethod
                 ? InheritedJavadocResolver.resolve(ctMethod, usesInheritDoc, declaredDocumentation,
-                candidate -> inheritedDocumentation(parsed, candidate))
-                : InheritedJavadocResolver.Resolution.notApplicable(declaredDocumentation);
+                candidate -> inheritedDocumentation(parsed, candidate), SourceBackends.javadocInheritancePolicy())
+                : InheritedJavadocResolver.Resolution.notApplicable(executable, declaredDocumentation);
         metadata.put("since", !elements.isEmpty()
                 ? blockTagTexts(elements, StandardJavadocTagType.SINCE)
                 : matches(SINCE_TAG, normalized, 1));
@@ -903,7 +903,10 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         metadata.put("declared_structured_tags", declaredStructuredTags);
         metadata.put("effective_structured_tags", inherited.effectiveStructuredTags());
         metadata.put("uses_inheritdoc", usesInheritDoc);
-        metadata.put("inheritdoc_policy", inherited.hasInheritanceEvidence() ? "item_level" : "not_applicable");
+        var policy = SourceBackends.javadocInheritancePolicy();
+        metadata.put("inheritdoc_policy", executable instanceof CtMethod<?> ? policy.id() : "not_applicable");
+        metadata.put("javadoc_inheritance",
+                policy.metadata(SourceBackends.javadocInheritancePolicyDefaulted()));
         metadata.put("deprecated", isDeprecated(executable, normalized));
         metadata.put("deprecation_text", deprecationText(normalized));
         metadata.put("inheritdoc_resolution", inherited.resolution());

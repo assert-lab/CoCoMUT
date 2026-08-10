@@ -21,7 +21,7 @@ final class RequestFingerprint {
     static String hash(ContextRequest request) {
         Objects.requireNonNull(request, "request cannot be null");
         ObjectNode node = MAPPER.createObjectNode();
-        node.put("schema", "cocomut-request-v3");
+        node.put("schema", "cocomut-request-v4");
         node.put("project_selector", "project-root");
         node.put("project_name", request.projectRoot().getFileName().toString());
         node.put("scope", request.scope().toString());
@@ -45,6 +45,11 @@ final class RequestFingerprint {
         }
         node.put("call_graph", request.callGraphAlgorithm().toString());
         node.put("build_policy", request.buildPolicy().toString());
+        node.put("javadoc_inheritance_policy", request.javadocInheritancePolicy().id());
+        node.put("javadoc_inheritance_specification_version",
+                request.javadocInheritancePolicy().specificationVersion());
+        node.put("javadoc_inheritance_implementation_version",
+                request.javadocInheritancePolicy().implementationVersion());
         node.set("class_outputs", MAPPER.valueToTree(artifactIdentities(request.projectRoot(), request.classOutputDirs())));
         node.set("test_class_outputs", MAPPER.valueToTree(artifactIdentities(request.projectRoot(), request.testClassOutputDirs())));
         node.set("project_jars", MAPPER.valueToTree(artifactIdentities(request.projectRoot(), request.projectJars())));

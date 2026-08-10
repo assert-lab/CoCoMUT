@@ -93,6 +93,10 @@ final class ExtractionManifest {
                 ? toolGitAtStart
                 : captureGitInfo(Path.of(System.getProperty("user.dir")))));
         root.set("selection", MAPPER.valueToTree(selection == null ? Map.of() : selection));
+        Object javadocInheritance = selection == null ? null : selection.get("javadoc_inheritance");
+        root.set("javadoc_inheritance", MAPPER.valueToTree(javadocInheritance == null
+                ? ContextRequest.JavadocInheritancePolicy.JDK25_STANDARD_DOCLET.metadata(true)
+                : javadocInheritance));
         root.put("jsonl_file", jsonlPath == null ? null : jsonlPath.getFileName().toString());
 
         Path projectPath = metadata != null ? metadata.getProjectPath() : null;

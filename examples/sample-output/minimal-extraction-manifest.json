@@ -14,7 +14,18 @@
   },
   "request_hash": "1400aba781f16f4a9288c4ef38aa675602d99d3cd7c144e0cd050da6d89e2efc",
   "jsonl_file": "method_contexts__1400aba781f16f4a.jsonl",
-  "selection": { "kind": "project", "scope": "main" },
+  "selection": {
+    "kind": "project",
+    "scope": "main",
+    "javadoc_inheritance": {
+      "policy_id": "jdk25-standard-doclet",
+      "specification_version": "25",
+      "implementation_version": "1",
+      "defaulted": true,
+      "granularity": "item_level",
+      "mode": "effective_and_candidates"
+    }
+  },
   "project": {
     "name": "minimal-maven-project",
     "path": "<project>",
@@ -52,31 +63,84 @@
     "gradle_model": {}
   },
   "artifacts": {
-    "source_roots": ["src/main/java"],
+    "source_roots": [
+      "src/main/java"
+    ],
     "test_source_roots": [],
-    "main_class_outputs": ["target/classes"],
+    "main_class_outputs": [
+      "target/classes"
+    ],
     "test_class_outputs": [],
     "project_jars": [],
     "dependency_classpath": [],
-    "explicit_class_output_dirs": ["target/classes"],
+    "explicit_class_output_dirs": [
+      "target/classes"
+    ],
     "explicit_test_class_output_dirs": [],
     "explicit_project_jars": [],
     "explicit_dependency_jars": [],
     "explicit_classpath_files": [],
-    "explicit_source_roots": ["src/main/java"],
+    "explicit_source_roots": [
+      "src/main/java"
+    ],
     "explicit_test_source_roots": [],
-    "origins": { "target/classes": "explicit" },
+    "origins": {
+      "target/classes": "explicit"
+    },
     "module_source_sets": []
   },
   "hashes": {
     "algorithm": "sha-256",
     "format": "cocomut-artifact-v1",
-    "main_bytecode": { "role": "main_bytecode", "sha256": null, "status": "empty", "errors": [] },
-    "test_bytecode": { "role": "test_bytecode", "sha256": null, "status": "empty", "errors": [] },
-    "combined_project_bytecode": { "role": "combined_project_bytecode", "sha256": null, "status": "empty", "errors": [] },
-    "dependency_classpath": { "role": "dependency_classpath_ordered", "sha256": null, "status": "empty", "errors": [] },
-    "dependency_classpath_content_set": { "role": "dependency_classpath_content_set", "sha256": null, "status": "empty", "errors": [] },
-    "emitted_jsonl": { "role": "emitted_jsonl", "sha256": null, "status": "empty", "errors": [] }
+    "main_bytecode": {
+      "role": "main_bytecode",
+      "sha256": null,
+      "status": "empty",
+      "errors": []
+    },
+    "test_bytecode": {
+      "role": "test_bytecode",
+      "sha256": null,
+      "status": "empty",
+      "errors": []
+    },
+    "combined_project_bytecode": {
+      "role": "combined_project_bytecode",
+      "sha256": null,
+      "status": "empty",
+      "errors": []
+    },
+    "dependency_classpath": {
+      "role": "dependency_classpath_ordered",
+      "sha256": null,
+      "status": "empty",
+      "errors": []
+    },
+    "dependency_classpath_content_set": {
+      "role": "dependency_classpath_content_set",
+      "sha256": null,
+      "status": "empty",
+      "errors": []
+    },
+    "emitted_jsonl": {
+      "role": "emitted_jsonl",
+      "sha256": null,
+      "status": "empty",
+      "errors": []
+    }
   },
-  "execution": { "status": "SUCCESS", "failure_codes": ["NONE"] }
+  "execution": {
+    "status": "SUCCESS",
+    "failure_codes": [
+      "NONE"
+    ]
+  },
+  "javadoc_inheritance": {
+    "policy_id": "jdk25-standard-doclet",
+    "specification_version": "25",
+    "implementation_version": "1",
+    "defaulted": true,
+    "granularity": "item_level",
+    "mode": "effective_and_candidates"
+  }
 }

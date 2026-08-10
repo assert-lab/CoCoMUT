@@ -67,6 +67,8 @@ ContextRequest request = ContextRequest.builder()
         .projectRoot(Path.of("/path/to/java/project"))
         .entryPoints()
         .sourceSet("main")
+        .javadocInheritancePolicy(
+                ContextRequest.JavadocInheritancePolicy.JDK25_STANDARD_DOCLET)
         .allowUnsandboxedBuild() // only for trusted checkouts
         .build();
 
@@ -120,6 +122,9 @@ Useful options:
                                 every discovered method; entry-points keeps
                                 public/protected API-like methods
 --call-graph rta|cha           Static bytecode call-graph algorithm
+--javadoc-inheritance-policy jdk25-standard-doclet
+                                Effective-documentation policy; fixed default
+                                independent of the host JDK
 --output-dir DIR               Directory for generated artifacts
 --max-methods N                Limit methods for smoke tests
 --max-source-files N           Limit parsed Java files for low-memory smoke tests
@@ -477,6 +482,7 @@ pipeline through `ContextRequest` and `ContextExtractorService`.
 | All methods | `--scope all` | `.allMethods()` or `.scope(Scope.ALL)` |
 | Entry points | `--scope entry-points`, `--entry-points` | `.entryPoints()` or `.scope(Scope.ENTRY_POINTS)` |
 | Call-graph algorithm | `--call-graph rta\|cha` | `.callGraphAlgorithm(Algorithm.RTA/CHA)` |
+| Javadoc inheritance policy | `--javadoc-inheritance-policy jdk25-standard-doclet` | `.javadocInheritancePolicy(JDK25_STANDARD_DOCLET)` |
 | Output directory | `--output-dir DIR` | `.outputDirectory(Path.of(...))` |
 | Method cap | `--max-methods N` | `.maxMethods(N)` |
 | Source-file cap | `--max-source-files N` | `.maxSourceFiles(N)` |
