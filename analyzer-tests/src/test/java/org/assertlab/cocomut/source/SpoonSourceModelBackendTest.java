@@ -1,13 +1,24 @@
 package org.assertlab.cocomut.source;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.networknt.schema.JsonSchema;
+import com.networknt.schema.JsonSchemaFactory;
+import com.networknt.schema.SpecVersion;
+import com.networknt.schema.ValidationMessage;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.assertlab.cocomut.ContextRequest;
+import org.assertlab.cocomut.JsonGenerator;
+import org.assertlab.cocomut.MethodContext;
 import org.assertlab.cocomut.ModuleSourceSet;
 import org.assertlab.cocomut.ProjectMetadata;
 import org.junit.Test;
@@ -39,7 +50,7 @@ public class SpoonSourceModelBackendTest {
     }
 
     @Test
-    public void focalJavadocExtractionFailureMakesEffectiveItemsIndeterminate() {
+    public void focalJavadocExtractionFailureMakesEffectiveItemsIndeterminate() throws Exception {
         Launcher launcher = new Launcher();
         launcher.getEnvironment().setComplianceLevel(17);
         launcher.addInputResource(new VirtualFile(
@@ -65,13 +76,65 @@ public class SpoonSourceModelBackendTest {
 
         InheritedJavadocResolver.Resolution resolution = InheritedJavadocResolver.resolve(
                 method, false, failed, ignored -> failed,
+                SpoonSourceModelBackend::resolveJavadocTypeName,
                 ContextRequest.JavadocInheritancePolicy.JDK25_STANDARD_DOCLET);
         @SuppressWarnings("unchecked")
         Map<String, Object> description = (Map<String, Object>) resolution
                 .effectiveStructuredTags().get("description");
         assertEquals("indeterminate", description.get("resolution"));
         assertEquals("source_documentation_unavailable", description.get("diagnostic_code"));
+        assertEquals("unknown", description.get("inheritance_mode"));
         assertEquals("partial", resolution.effectiveStructuredTags().get("resolution"));
+
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("structured_tags", tags);
+        metadata.put("declared_structured_tags", tags);
+        metadata.put("effective_structured_tags", resolution.effectiveStructuredTags());
+        metadata.put("uses_inheritdoc", false);
+        metadata.put("inheritdoc_policy",
+                ContextRequest.JavadocInheritancePolicy.JDK25_STANDARD_DOCLET.id());
+        metadata.put("javadoc_inheritance",
+                ContextRequest.JavadocInheritancePolicy.JDK25_STANDARD_DOCLET.metadata(true));
+        metadata.put("inheritdoc_resolution", resolution.resolution());
+        metadata.put("inherited_javadoc_candidates", resolution.candidates());
+        metadata.put("inheritdoc_candidate_count", resolution.candidateCount());
+        metadata.put("inheritdoc_documented_candidate_count",
+                resolution.documentedCandidateCount());
+        metadata.put("inheritdoc_candidates_truncated", resolution.truncated());
+
+        Path output = Files.createTempDirectory("cocomut-focal-javadoc-schema");
+        try {
+            Path jsonl = output.resolve("method_contexts.jsonl");
+            MethodContext context = new MethodContext.Builder()
+                    .methodUri("Sample.java#Sample.value():java.lang.String")
+                    .methodName("value")
+                    .classname("Sample")
+                    .signature("value():java.lang.String")
+                    .returnType("java.lang.String")
+                    .javadocMetadata(metadata)
+                    .build();
+            new JsonGenerator(output).generateJsonLinesFile(
+                    Map.of(context.getMethodUri(), context), jsonl);
+
+            Path repositoryRoot = Paths.get(System.getProperty("user.dir")).getParent();
+            JsonNode schemaNode = new ObjectMapper().readTree(
+                    repositoryRoot.resolve("schemas/method-context.schema.json").toFile());
+            JsonSchema schema = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012)
+                    .getSchema(schemaNode);
+            Set<ValidationMessage> errors = schema.validate(
+                    new ObjectMapper().readTree(Files.readString(jsonl)));
+            assertTrue("Focal parse-failure row must validate against the schema: " + errors,
+                    errors.isEmpty());
+        } finally {
+            try (var paths = Files.walk(output)) {
+                paths.sorted((left, right) -> right.compareTo(left)).forEach(path -> {
+                    try {
+                        Files.deleteIfExists(path);
+                    } catch (Exception ignored) {
+                    }
+                });
+            }
+        }
     }
 
     @Test

@@ -16,7 +16,6 @@ import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -46,10 +45,41 @@ final class InheritedJavadocResolver {
     private InheritedJavadocResolver() {
     }
 
+    @FunctionalInterface
+    interface JavadocTypeNameResolver {
+        TypeNameResolution resolve(CtMethod<?> focal, String sourceSpelling);
+    }
+
+    enum TypeNameResolutionStatus {
+        RESOLVED,
+        AMBIGUOUS,
+        UNRESOLVED
+    }
+
+    record TypeNameResolution(TypeNameResolutionStatus status, String canonicalName) {
+        TypeNameResolution {
+            status = status == null ? TypeNameResolutionStatus.UNRESOLVED : status;
+            canonicalName = canonicalName == null ? "" : canonicalName;
+        }
+
+        static TypeNameResolution resolved(String canonicalName) {
+            return new TypeNameResolution(TypeNameResolutionStatus.RESOLVED, canonicalName);
+        }
+
+        static TypeNameResolution ambiguous() {
+            return new TypeNameResolution(TypeNameResolutionStatus.AMBIGUOUS, "");
+        }
+
+        static TypeNameResolution unresolved() {
+            return new TypeNameResolution(TypeNameResolutionStatus.UNRESOLVED, "");
+        }
+    }
+
     static Resolution resolve(CtMethod<?> focal,
                               boolean usesInheritDoc,
                               Documentation declaredDocumentation,
                               Function<CtMethod<?>, Documentation> documentationExtractor,
+                              JavadocTypeNameResolver typeNameResolver,
                               ContextRequest.JavadocInheritancePolicy policy) {
         if (focal == null) {
             return Resolution.notApplicable(null, declaredDocumentation);
@@ -58,7 +88,7 @@ final class InheritedJavadocResolver {
             throw new IllegalArgumentException("Unsupported Javadoc inheritance policy: " + policy);
         }
 
-        ResolutionContext context = new ResolutionContext(documentationExtractor);
+        ResolutionContext context = new ResolutionContext(documentationExtractor, typeNameResolver);
         Evidence focalEvidence = context.evidence(focal);
         List<Candidate> candidates = focalEvidence.candidates();
 
@@ -180,24 +210,24 @@ final class InheritedJavadocResolver {
         if (declared.availability().isIndeterminate()) {
             resolved = List.of(ResolvedText.indeterminate(
                     JavadocResolutionDiagnostic.SOURCE_DOCUMENTATION_UNAVAILABLE.id()));
-            inheritanceMode = "source_documentation_unavailable";
+            inheritanceMode = JavadocInheritanceMode.UNKNOWN.id();
         } else if ("throws".equals(kind) && inheritDocCount(localText) > 1) {
             resolved = List.of(ResolvedText.invalid(
                     JavadocResolutionDiagnostic.THROWS_MULTIPLE_INHERITDOC.id()));
-            inheritanceMode = "explicit_inheritdoc";
+            inheritanceMode = JavadocInheritanceMode.EXPLICIT_INHERITDOC.id();
         } else if (!localText.isBlank() && !containsResolutionSyntax(localText)) {
             resolved = List.of(ResolvedText.declared(localText,
                     Segment.declared(localText, declared.methodUri(), declaringType(focal))));
-            inheritanceMode = "declared";
+            inheritanceMode = JavadocInheritanceMode.DECLARED.id();
         } else if (containsResolutionSyntax(localText)) {
             resolved = resolveInlineText(kind, position, name == null ? "" : name,
                     focal, localText, declared.methodUri(), declaringType(focal), 0,
                     context, 0, true);
-            inheritanceMode = "explicit_inheritdoc";
+            inheritanceMode = JavadocInheritanceMode.EXPLICIT_INHERITDOC.id();
         } else {
             resolved = resolveInherited(kind, position, name == null ? "" : name,
                     focal, "", context, 0, 0, false);
-            inheritanceMode = "implicit_missing_item";
+            inheritanceMode = JavadocInheritanceMode.IMPLICIT_MISSING_ITEM.id();
         }
         if (resolved.isEmpty()) {
             resolved = List.of(ResolvedText.missing());
@@ -517,7 +547,8 @@ final class InheritedJavadocResolver {
                                                     ResolutionContext context) {
         String canonicalTarget = "";
         if (!requiredSupertype.isBlank()) {
-            ExplicitTarget target = resolveExplicitTarget(method, requiredSupertype, evidence);
+            ExplicitTarget target = resolveExplicitTarget(
+                    method, requiredSupertype, evidence, context.typeNameResolver());
             if (target.resolution() != ItemResolution.RESOLVED) {
                 return new SelectedEvidence(null, null, target.resolution(), target.diagnostic());
             }
@@ -570,247 +601,26 @@ final class InheritedJavadocResolver {
 
     private static ExplicitTarget resolveExplicitTarget(CtMethod<?> method,
                                                         String rawTarget,
-                                                        Evidence evidence) {
-        String target = normalizeTagType(stripModulePrefix(rawTarget));
+                                                        Evidence evidence,
+                                                        JavadocTypeNameResolver typeNameResolver) {
+        TypeNameResolution sourceResolution = typeNameResolver.resolve(method, rawTarget);
+        if (sourceResolution.status() == TypeNameResolutionStatus.AMBIGUOUS) {
+            return ExplicitTarget.invalid(
+                    JavadocResolutionDiagnostic.INHERITDOC_TARGET_AMBIGUOUS.id());
+        }
+        if (sourceResolution.status() != TypeNameResolutionStatus.RESOLVED) {
+            return ExplicitTarget.invalid(
+                    JavadocResolutionDiagnostic.INHERITDOC_TARGET_NOT_OVERRIDDEN.id());
+        }
+        String target = normalizeTagType(sourceResolution.canonicalName());
         Set<String> available = new LinkedHashSet<>();
         evidence.supertypes().stream().map(SupertypeEvidence::canonicalName)
                 .map(InheritedJavadocResolver::normalizeTagType).forEach(available::add);
         if (available.contains(target)) {
             return ExplicitTarget.resolved(target);
         }
-
-        String simple = simpleTypeName(target);
-        if (target.contains(".")) {
-            Set<String> scopedQualified = scopedQualifiedTypeMatches(method, target, available);
-            if (scopedQualified.size() == 1) {
-                return ExplicitTarget.resolved(scopedQualified.iterator().next());
-            }
-            return ExplicitTarget.invalid(scopedQualified.size() > 1
-                    ? JavadocResolutionDiagnostic.INHERITDOC_TARGET_AMBIGUOUS.id()
-                    : JavadocResolutionDiagnostic.INHERITDOC_TARGET_NOT_OVERRIDDEN.id());
-        }
-        Set<String> simpleMatches = available.stream()
-                .filter(candidate -> simpleTypeName(candidate).equals(simple))
-                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-        if (simpleMatches.isEmpty()) {
-            return ExplicitTarget.invalid(
-                    JavadocResolutionDiagnostic.INHERITDOC_TARGET_NOT_OVERRIDDEN.id());
-        }
-        Set<String> scoped = scopedTypeMatches(method, simple, simpleMatches);
-        if (scoped.size() == 1) {
-            return ExplicitTarget.resolved(scoped.iterator().next());
-        }
-        return ExplicitTarget.invalid(scoped.isEmpty() && simpleMatches.size() == 1
-                ? JavadocResolutionDiagnostic.INHERITDOC_TARGET_NOT_OVERRIDDEN.id()
-                : JavadocResolutionDiagnostic.INHERITDOC_TARGET_AMBIGUOUS.id());
-    }
-
-    private static Set<String> scopedQualifiedTypeMatches(CtMethod<?> method,
-                                                          String target,
-                                                          Set<String> candidates) {
-        CtType<?> owner = method == null ? null : method.getDeclaringType();
-        Set<String> lexicalMatches = new LinkedHashSet<>();
-        addEnclosingTypeMatches(owner, target, candidates, lexicalMatches);
-        if (!lexicalMatches.isEmpty()) {
-            return lexicalMatches;
-        }
-
-        Set<String> explicitImportMatches = new LinkedHashSet<>();
-        Set<String> onDemandMatches = new LinkedHashSet<>();
-        addQualifiedImportMatches(method, target, candidates,
-                explicitImportMatches, onDemandMatches);
-        if (!explicitImportMatches.isEmpty()) {
-            return explicitImportMatches;
-        }
-
-        String ownerPackage = owner == null || owner.getPackage() == null
-                ? "" : owner.getPackage().getQualifiedName();
-        String samePackage = ownerPackage.isBlank() ? target : ownerPackage + "." + target;
-        if (candidates.contains(samePackage)) {
-            return Set.of(samePackage);
-        }
-
-        String javaLang = "java.lang." + target;
-        if (candidates.contains(javaLang)) {
-            onDemandMatches.add(javaLang);
-        }
-        return onDemandMatches;
-    }
-
-    private static void addQualifiedImportMatches(CtMethod<?> method,
-                                                  String target,
-                                                  Set<String> candidates,
-                                                  Set<String> explicitMatches,
-                                                  Set<String> onDemandMatches) {
-        int separator = target.indexOf('.');
-        String leadingType = separator < 0 ? target : target.substring(0, separator);
-        String suffix = separator < 0 ? "" : target.substring(separator);
-        try {
-            if (method != null && method.getPosition().isValidPosition()) {
-                method.getPosition().getCompilationUnit().getImports().forEach(importValue -> {
-                    String imported = importValue.toString()
-                            .replaceFirst("^import\\s+(?:static\\s+)?", "")
-                            .replace(";", "").trim();
-                    if (imported.endsWith(".*")) {
-                        String candidate = normalizeTagType(
-                                imported.substring(0, imported.length() - 1) + target);
-                        if (candidates.contains(candidate)) {
-                            onDemandMatches.add(candidate);
-                        }
-                    } else if (simpleTypeName(imported).equals(leadingType)) {
-                        String candidate = normalizeTagType(imported + suffix);
-                        if (candidates.contains(candidate)) {
-                            explicitMatches.add(candidate);
-                        }
-                    }
-                });
-            }
-        } catch (RuntimeException ignored) {
-            // Incomplete import metadata cannot justify repairing a qualified spelling.
-        }
-    }
-
-    private static Set<String> scopedTypeMatches(CtMethod<?> method,
-                                                 String simple,
-                                                 Set<String> candidates) {
-        CtType<?> owner = method == null ? null : method.getDeclaringType();
-
-        Set<String> lexicalMatches = new LinkedHashSet<>();
-        addEnclosingTypeMatches(owner, simple, candidates, lexicalMatches);
-        if (!lexicalMatches.isEmpty()) {
-            return lexicalMatches;
-        }
-
-        Set<String> inheritedMemberMatches = inheritedMemberTypeMatches(owner, simple, candidates);
-        if (!inheritedMemberMatches.isEmpty()) {
-            return inheritedMemberMatches;
-        }
-
-        Set<String> explicitImportMatches = new LinkedHashSet<>();
-        Set<String> onDemandMatches = new LinkedHashSet<>();
-        addImportMatches(method, simple, candidates, explicitImportMatches, onDemandMatches);
-        if (!explicitImportMatches.isEmpty()) {
-            return explicitImportMatches;
-        }
-
-        String ownerPackage = owner == null || owner.getPackage() == null
-                ? "" : owner.getPackage().getQualifiedName();
-        String samePackage = ownerPackage.isBlank() ? simple : ownerPackage + "." + simple;
-        if (candidates.contains(samePackage)) {
-            return Set.of(samePackage);
-        }
-
-        String javaLang = "java.lang." + simple;
-        if (candidates.contains(javaLang)) {
-            onDemandMatches.add(javaLang);
-        }
-        return onDemandMatches;
-    }
-
-    private static Set<String> inheritedMemberTypeMatches(CtType<?> owner,
-                                                           String simple,
-                                                           Set<String> candidates) {
-        if (owner == null) {
-            return Set.of();
-        }
-        List<CtTypeReference<?>> pending = new ArrayList<>();
-        if (owner.getSuperclass() != null) {
-            pending.add(owner.getSuperclass());
-        }
-        pending.addAll(owner.getSuperInterfaces());
-        Set<String> visited = new LinkedHashSet<>();
-        Set<String> matches = new LinkedHashSet<>();
-        for (int index = 0; index < pending.size(); index++) {
-            CtTypeReference<?> reference = pending.get(index);
-            String qualified = normalizeTagType(reference == null ? "" : reference.getQualifiedName());
-            if (qualified.isBlank() || !visited.add(qualified)) {
-                continue;
-            }
-            CtType<?> declaration = typeDeclarationForScope(reference);
-            if (declaration == null) {
-                continue;
-            }
-            for (CtType<?> nested : declaration.getNestedTypes()) {
-                String candidate = normalizeTagType(nested.getQualifiedName());
-                if (simple.equals(nested.getSimpleName())
-                        && candidates.contains(candidate)
-                        && isInheritedMemberTypeAccessible(nested, owner)) {
-                    matches.add(candidate);
-                }
-            }
-            if (declaration.getSuperclass() != null) {
-                pending.add(declaration.getSuperclass());
-            }
-            pending.addAll(declaration.getSuperInterfaces());
-        }
-        return matches;
-    }
-
-    private static boolean isInheritedMemberTypeAccessible(CtType<?> member, CtType<?> owner) {
-        if (member.isPrivate()) {
-            return false;
-        }
-        if (member.isPublic() || member.isProtected()) {
-            return true;
-        }
-        return packageName(member).equals(packageName(owner));
-    }
-
-    private static String packageName(CtType<?> type) {
-        return type == null || type.getPackage() == null ? "" : type.getPackage().getQualifiedName();
-    }
-
-    private static CtType<?> typeDeclarationForScope(CtTypeReference<?> reference) {
-        try {
-            return reference == null ? null : reference.getTypeDeclaration();
-        } catch (RuntimeException ignored) {
-            return null;
-        }
-    }
-
-    private static void addImportMatches(CtMethod<?> method,
-                                         String simple,
-                                         Set<String> candidates,
-                                         Set<String> explicitMatches,
-                                         Set<String> onDemandMatches) {
-        try {
-            if (method != null && method.getPosition().isValidPosition()) {
-                method.getPosition().getCompilationUnit().getImports().forEach(importValue -> {
-                    String imported = importValue.toString()
-                            .replaceFirst("^import\\s+(?:static\\s+)?", "")
-                            .replace(";", "").trim();
-                    if (imported.endsWith(".*")) {
-                        String candidate = imported.substring(0, imported.length() - 1) + simple;
-                        if (candidates.contains(candidate)) {
-                            onDemandMatches.add(candidate);
-                        }
-                    } else if (simpleTypeName(imported).equals(simple) && candidates.contains(imported)) {
-                        explicitMatches.add(imported);
-                    }
-                });
-            }
-        } catch (RuntimeException ignored) {
-            // Incomplete import metadata cannot justify resolving a source spelling.
-        }
-    }
-
-    private static void addEnclosingTypeMatches(CtType<?> owner,
-                                                String target,
-                                                Set<String> candidates,
-                                                Set<String> matches) {
-        CtType<?> enclosing = owner;
-        while (enclosing != null) {
-            String candidate = normalizeTagType(enclosing.getQualifiedName() + "." + target);
-            if (candidates.contains(candidate)) {
-                matches.add(candidate);
-            }
-            enclosing = enclosing.getDeclaringType();
-        }
-    }
-
-    private static String stripModulePrefix(String type) {
-        int separator = type == null ? -1 : type.indexOf('/');
-        return separator >= 0 ? type.substring(separator + 1) : type;
+        return ExplicitTarget.invalid(
+                JavadocResolutionDiagnostic.INHERITDOC_TARGET_NOT_OVERRIDDEN.id());
     }
 
     private static List<String> candidateTexts(Candidate candidate,
@@ -1349,10 +1159,17 @@ final class InheritedJavadocResolver {
 
     private static final class ResolutionContext {
         private final Function<CtMethod<?>, Documentation> documentationExtractor;
+        private final JavadocTypeNameResolver typeNameResolver;
         private final Map<CtMethod<?>, Evidence> evidenceByMethod = new IdentityHashMap<>();
 
-        private ResolutionContext(Function<CtMethod<?>, Documentation> documentationExtractor) {
+        private ResolutionContext(Function<CtMethod<?>, Documentation> documentationExtractor,
+                                  JavadocTypeNameResolver typeNameResolver) {
             this.documentationExtractor = documentationExtractor;
+            this.typeNameResolver = typeNameResolver;
+        }
+
+        JavadocTypeNameResolver typeNameResolver() {
+            return typeNameResolver;
         }
 
         Evidence evidence(CtMethod<?> method) {

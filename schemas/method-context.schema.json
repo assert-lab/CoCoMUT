@@ -220,7 +220,7 @@
         "type": {"type": "string"},
         "text": {"type": "string"},
         "source": {"enum": ["declared", "inherited", "composed", "missing", "indeterminate", "invalid"]},
-        "inheritance_mode": {"enum": ["declared", "explicit_inheritdoc", "implicit_missing_item"]},
+        "inheritance_mode": {"enum": ["declared", "explicit_inheritdoc", "implicit_missing_item", "unknown"]},
         "inherited_from": {"type": "string"},
         "inherited_method_uri": {"type": "string"},
         "hierarchy_distance": {"type": "integer", "minimum": 1},

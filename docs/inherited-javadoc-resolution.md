@@ -63,9 +63,12 @@ unresolved effective items are marked indeterminate.
 
 The explicit JDK 22+ form `{@inheritDoc S}` may name an intermediate supertype
 that inherits, but does not directly declare, the overridden method. CoCoMUT
-resolves `S` in the focal compilation-unit scope, verifies that it is a real
-supertype, and starts item lookup from the method visible in `S`. A syntactically
-qualified name is never repaired by falling back to an equal simple name.
+resolves `S` in the focal Java source scope before consulting inheritance
+evidence, verifies that the resolved type is a real supertype, and starts item
+lookup from the method visible in `S`. Lexical member declarations and nearer
+inherited member types therefore hide same-named imports or older declarations.
+A syntactically qualified name is never repaired by falling back to an equal
+simple name.
 
 ## Declared and effective views
 
@@ -118,6 +121,9 @@ method URIs. This also preserves provenance through nested inheritance.
 `inheritance_mode` distinguishes documentation written locally, explicit
 `{@inheritDoc}`, and inheritance caused by an omitted item. In particular,
 `uses_inheritdoc=false` does not imply that no documentation was inherited.
+The value `unknown` is used only when unavailable focal-comment evidence makes
+the inheritance mode indeterminate; the corresponding item also records
+`resolution=indeterminate` and a diagnostic code.
 The JDK 22+ explicit-supertype form, such as `{@inheritDoc SomeInterface}`, is
 also honored. Every inline occurrence is resolved independently. CoCoMUT uses
 the focal package, imports, enclosing and inherited member types, and canonical
@@ -136,6 +142,10 @@ same-type `@throws` entries are retained as separate effective items.
 Inheritance substitution is syntax-aware. Text inside `{@code ...}`,
 `{@literal ...}`, and `{@snippet ...}` remains literal even when it contains the characters
 `{@inheritDoc}`; only actual inheritance-tag nodes invoke the resolver.
+Raw source spelling is the lexical authority for tag identity and placement in
+both typed and fallback paths. This prevents Spoon 11's case-insensitive tag
+normalization from turning misspelled forms such as `{@inheritdoc}` or
+`@RETURN` into standard Javadoc tags.
 
 `effective_structured_tags.resolution=complete` means that no item is uncertain;
 it does not mean that every possible item has text. A genuinely missing item can
@@ -243,7 +253,9 @@ falls back to the raw source comment and labels the parser confidence. It only
 reports `absent` after both views establish that the source declaration has no
 Javadoc. The fallback recognizes complete, case-sensitive tag identifiers,
 uses every block tag (including unsupported custom tags) as a main-description
-boundary, and does not interpret block-like text inside inline tags.
+boundary, and does not interpret block-like text inside inline tags. Typed Spoon
+elements are used for tag bodies and references only when their tag sequence is
+consistent with the exact raw source spelling.
 
 The normative behavior is based on the JDK 25
 [Documentation Comment Specification for the Standard Doclet](https://docs.oracle.com/en/java/javase/25/docs/specs/javadoc/doc-comment-spec.html),

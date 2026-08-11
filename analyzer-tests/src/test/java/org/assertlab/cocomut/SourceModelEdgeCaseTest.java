@@ -18,6 +18,7 @@ import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 public class SourceModelEdgeCaseTest {
@@ -1184,7 +1185,7 @@ public class SourceModelEdgeCaseTest {
     }
 
     @Test
-    public void explicitSupertypeUsesImportsAndRejectsAmbiguousSimpleNames() throws Exception {
+    public void explicitSupertypeUsesImportsAndRejectsOutOfScopeSimpleNames() throws Exception {
         Path project = Files.createTempDirectory("cocomut-inheritdoc-target-scope");
         try {
             write(project.resolve("src/main/java/left/Contract.java"), """
@@ -1217,7 +1218,7 @@ public class SourceModelEdgeCaseTest {
             assertEquals("Left contract.", effectiveDescription(imported).get("text"));
             assertEquals("resolved", effectiveDescription(imported).get("resolution"));
             assertEquals("invalid", effectiveDescription(ambiguous).get("resolution"));
-            assertEquals("inheritdoc_target_ambiguous",
+            assertEquals("inheritdoc_target_not_overridden",
                     effectiveDescription(ambiguous).get("diagnostic_code"));
         } finally {
             deleteRecursively(project);
@@ -1565,6 +1566,10 @@ public class SourceModelEdgeCaseTest {
             assertEquals(false, standalone.documentationMetrics().get("has_see_tag"));
             assertEquals(false, standalone.javadocMetadata().get("deprecated"));
             assertEquals("missing", firstEffectiveItem(standalone, "return").get("source"));
+            Map<String, Object> standaloneDescription = effectiveDescription(standalone);
+            assertEquals("declared", standaloneDescription.get("source"));
+            assertEquals("resolved", standaloneDescription.get("resolution"));
+            assertTrue(standaloneDescription.get("text").toString().contains("{@inheritDoc}"));
 
             if (Runtime.version().feature() >= 25) {
                 Path docs = project.resolve("javadoc");
@@ -1754,6 +1759,82 @@ public class SourceModelEdgeCaseTest {
     }
 
     @Test
+    public void explicitSupertypeUsesJavaMemberTypeHidingAndShadowing() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-member-scope");
+        try {
+            write(project.resolve("src/main/java/demo/A.java"), """
+                    package demo;
+                    public class A {
+                        public interface Contract {
+                            /** A contract. */ String value();
+                        }
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/B.java"), """
+                    package demo;
+                    public class B extends A {
+                        public interface Contract extends A.Contract {
+                            /** B contract. */ String value();
+                        }
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/C.java"), """
+                    package demo;
+                    public class C extends B implements B.Contract {
+                        /** {@inheritDoc Contract} */
+                        @Override public String value() { return ""; }
+                    }
+                    """);
+            write(project.resolve("src/main/java/api/Contract.java"), """
+                    package api;
+                    public interface Contract {
+                        /** Imported contract. */ String value();
+                    }
+                    """);
+            write(project.resolve("src/main/java/consumer/Child.java"), """
+                    package consumer;
+                    import api.Contract;
+                    public class Child implements api.Contract {
+                        public static class Contract {}
+                        /** {@inheritDoc Contract} */
+                        @Override public String value() { return ""; }
+                    }
+                    """);
+
+            compileProject(project);
+            Map<String, Object> hidden = effectiveDescription(contextFor(project, "demo.C", "value"));
+            assertEquals("B contract.", hidden.get("text"));
+            assertEquals("resolved", hidden.get("resolution"));
+
+            Map<String, Object> shadowed = effectiveDescription(
+                    contextFor(project, "consumer.Child", "value"));
+            assertEquals("invalid", shadowed.get("resolution"));
+            assertEquals("inheritdoc_target_not_overridden", shadowed.get("diagnostic_code"));
+
+            if (Runtime.version().feature() >= 25) {
+                Path docs = project.resolve("javadoc");
+                Process valid = new ProcessBuilder(javadoc(), "-quiet", "-d", docs.toString(),
+                        "-sourcepath", project.resolve("src/main/java").toString(), "demo")
+                        .redirectErrorStream(true).start();
+                String validOutput = new String(valid.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+                assertEquals("JDK 25 javadoc failed: " + validOutput, 0, valid.waitFor());
+                assertTrue(Files.readString(docs.resolve("demo/C.html")).contains("B contract."));
+
+                Process invalid = new ProcessBuilder(javadoc(), "-quiet", "-d",
+                        project.resolve("invalid-javadoc").toString(), "-sourcepath",
+                        project.resolve("src/main/java").toString(), "api", "consumer")
+                        .redirectErrorStream(true).start();
+                String invalidOutput = new String(
+                        invalid.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+                assertNotEquals("JDK 25 javadoc should reject the shadowed explicit target: "
+                        + invalidOutput, 0, invalid.waitFor());
+            }
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void inlineTagsAreCaseSensitiveExactAndPositionAware() throws Exception {
         Path project = Files.createTempDirectory("cocomut-inline-tag-grammar");
         try {
@@ -1761,13 +1842,18 @@ public class SourceModelEdgeCaseTest {
                     package demo;
                     public interface Parent {
                         /** Parent description. */ String value();
+                        /** Parent lower-case contract. */ String lowerCaseTag();
+                        /** @param value parent parameter contract */
+                        String lowerCaseParameter(String value);
                     }
                     """);
             write(project.resolve("src/main/java/demo/Child.java"), """
                     package demo;
                     public class Child implements Parent {
-                        /** {@inheritdoc Parent} */
-                        public String lowerCaseTag() { return ""; }
+                        /** {@inheritdoc} */
+                        @Override public String lowerCaseTag() { return ""; }
+                        /** @param value {@inheritdoc} */
+                        @Override public String lowerCaseParameter(String value) { return value; }
                         /** {@INHERITDOC Parent} */
                         public String upperCaseTag() { return ""; }
                         /** Text first. {@return invalid return} */
@@ -1776,8 +1862,16 @@ public class SourceModelEdgeCaseTest {
                         public String afterSummary() { return ""; }
                         /** {@RETURN upper-case return} */
                         public String upperCaseReturn() { return ""; }
+                        /**
+                         * @RETURN upper-case block return
+                         */
+                        public String upperCaseBlockReturn() { return ""; }
                         /** {@returnValue prefixed return} */
                         public String prefixedReturn() { return ""; }
+                        /** {@LINK java.lang.String} */
+                        public String upperCaseLink() { return ""; }
+                        /** @SEE java.lang.String */
+                        public String upperCaseSee() { return ""; }
                         /** {@return valid return} */
                         public String validReturn() { return ""; }
                         /** {@inheritDoc Parent} {@returnValue not a return tag} */
@@ -1786,13 +1880,23 @@ public class SourceModelEdgeCaseTest {
                     """);
 
             compileProject(project);
-            for (String method : List.of("lowerCaseTag", "upperCaseTag")) {
+            for (String method : List.of("lowerCaseTag", "lowerCaseParameter", "upperCaseTag")) {
                 SourceContext context = contextFor(project, "demo.Child", method);
                 assertEquals(false, context.javadocMetadata().get("uses_inheritdoc"));
                 assertEquals(false, context.documentationMetrics().get("uses_inheritdoc"));
             }
+            SourceContext lowerCaseOverride = contextFor(project, "demo.Child", "lowerCaseTag");
+            assertFalse(effectiveDescription(lowerCaseOverride).get("text").toString()
+                    .contains("Parent lower-case contract."));
+            assertEquals("declared", effectiveDescription(lowerCaseOverride).get("source"));
+            Map<String, Object> lowerCaseParameter = firstEffectiveItem(
+                    contextFor(project, "demo.Child", "lowerCaseParameter"), "params");
+            assertFalse(lowerCaseParameter.get("text").toString()
+                    .contains("parent parameter contract"));
+            assertEquals("declared", lowerCaseParameter.get("source"));
             for (String method : List.of(
-                    "misplacedReturn", "afterSummary", "upperCaseReturn", "prefixedReturn")) {
+                    "misplacedReturn", "afterSummary", "upperCaseReturn",
+                    "upperCaseBlockReturn", "prefixedReturn")) {
                 Map<String, Object> missingReturn = firstEffectiveItem(
                         contextFor(project, "demo.Child", method), "return");
                 assertEquals("missing", missingReturn.get("source"));
@@ -1800,6 +1904,12 @@ public class SourceModelEdgeCaseTest {
             }
             assertEquals("valid return", firstEffectiveItem(
                     contextFor(project, "demo.Child", "validReturn"), "return").get("text"));
+            SourceContext upperCaseLink = contextFor(project, "demo.Child", "upperCaseLink");
+            assertEquals(0, upperCaseLink.documentationMetrics().get("inline_link_count"));
+            assertTrue(((List<?>) upperCaseLink.javadocMetadata().get("javadoc_references")).isEmpty());
+            SourceContext upperCaseSee = contextFor(project, "demo.Child", "upperCaseSee");
+            assertEquals(false, upperCaseSee.documentationMetrics().get("has_see_tag"));
+            assertTrue(((List<?>) upperCaseSee.javadocMetadata().get("javadoc_references")).isEmpty());
             Map<String, Object> prefixReturn = firstEffectiveItem(
                     contextFor(project, "demo.Child", "value"), "return");
             assertEquals("missing", prefixReturn.get("source"));
