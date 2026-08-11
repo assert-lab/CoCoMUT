@@ -120,19 +120,21 @@ method URIs. This also preserves provenance through nested inheritance.
 `uses_inheritdoc=false` does not imply that no documentation was inherited.
 The JDK 22+ explicit-supertype form, such as `{@inheritDoc SomeInterface}`, is
 also honored. Every inline occurrence is resolved independently. CoCoMUT uses
-the focal package, imports, enclosing type, and canonical supertype identities
-to resolve a target; it does not choose an arbitrary equal simple name. Because
+the focal package, imports, enclosing and inherited member types, and canonical
+supertype identities to resolve a target; it does not choose an arbitrary equal simple name. Because
 Spoon 11 normalizes away the optional target, CoCoMUT preserves and parses the
 raw source spelling for this form.
 
 Known-invalid explicit targets use `resolution=invalid` and a stable
 `diagnostic_code`. Multiple `{@inheritDoc}` tags within one `@throws`
-description are also invalid under this policy. Missing source evidence instead uses
+description are invalid under this policy. A decorated `{@inheritDoc}` is also
+invalid when it would expand into multiple same-exception entries; a standalone
+tag may expand into those entries. Missing source evidence instead uses
 `resolution=indeterminate`; the two states are not conflated. Duplicate
 same-type `@throws` entries are retained as separate effective items.
 
-Inheritance substitution is syntax-aware. Text inside `{@code ...}` and
-`{@literal ...}` remains literal even when it contains the characters
+Inheritance substitution is syntax-aware. Text inside `{@code ...}`,
+`{@literal ...}`, and `{@snippet ...}` remains literal even when it contains the characters
 `{@inheritDoc}`; only actual inheritance-tag nodes invoke the resolver.
 
 `effective_structured_tags.resolution=complete` means that no item is uncertain;
@@ -239,7 +241,9 @@ comment into `absent`. It records `source_unavailable` instead.
 When source is available but Spoon does not expose a typed comment, CoCoMUT
 falls back to the raw source comment and labels the parser confidence. It only
 reports `absent` after both views establish that the source declaration has no
-Javadoc.
+Javadoc. The fallback recognizes complete, case-sensitive tag identifiers,
+uses every block tag (including unsupported custom tags) as a main-description
+boundary, and does not interpret block-like text inside inline tags.
 
 The normative behavior is based on the JDK 25
 [Documentation Comment Specification for the Standard Doclet](https://docs.oracle.com/en/java/javase/25/docs/specs/javadoc/doc-comment-spec.html),

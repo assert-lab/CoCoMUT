@@ -177,7 +177,11 @@ final class InheritedJavadocResolver {
         String localText = local == null ? "" : local.trim();
         List<ResolvedText> resolved;
         String inheritanceMode;
-        if ("throws".equals(kind) && inheritDocCount(localText) > 1) {
+        if (declared.availability().isIndeterminate()) {
+            resolved = List.of(ResolvedText.indeterminate(
+                    JavadocResolutionDiagnostic.SOURCE_DOCUMENTATION_UNAVAILABLE.id()));
+            inheritanceMode = "source_documentation_unavailable";
+        } else if ("throws".equals(kind) && inheritDocCount(localText) > 1) {
             resolved = List.of(ResolvedText.invalid(
                     JavadocResolutionDiagnostic.THROWS_MULTIPLE_INHERITDOC.id()));
             inheritanceMode = "explicit_inheritdoc";
@@ -357,6 +361,13 @@ final class InheritedJavadocResolver {
             String requested = matcher.group(1) == null ? "" : matcher.group(1).trim();
             List<ResolvedText> inherited = resolveInherited(kind, position, name, method,
                     requested, context, depth + 1, sourceDistance, strict);
+            if ("throws".equals(kind)
+                    && inherited.size() > 1
+                    && (!text.substring(cursor, matcher.start()).isBlank()
+                    || !text.substring(matcher.end()).isBlank())) {
+                return List.of(ResolvedText.invalid(
+                        JavadocResolutionDiagnostic.THROWS_MULTIPLE_EXPANSION_WITH_LOCAL_TEXT.id()));
+            }
             List<Composition> expanded = new ArrayList<>();
             for (Composition composition : compositions) {
                 for (ResolvedText inheritedText : inherited) {
@@ -670,6 +681,11 @@ final class InheritedJavadocResolver {
             return lexicalMatches;
         }
 
+        Set<String> inheritedMemberMatches = inheritedMemberTypeMatches(owner, simple, candidates);
+        if (!inheritedMemberMatches.isEmpty()) {
+            return inheritedMemberMatches;
+        }
+
         Set<String> explicitImportMatches = new LinkedHashSet<>();
         Set<String> onDemandMatches = new LinkedHashSet<>();
         addImportMatches(method, simple, candidates, explicitImportMatches, onDemandMatches);
@@ -689,6 +705,67 @@ final class InheritedJavadocResolver {
             onDemandMatches.add(javaLang);
         }
         return onDemandMatches;
+    }
+
+    private static Set<String> inheritedMemberTypeMatches(CtType<?> owner,
+                                                           String simple,
+                                                           Set<String> candidates) {
+        if (owner == null) {
+            return Set.of();
+        }
+        List<CtTypeReference<?>> pending = new ArrayList<>();
+        if (owner.getSuperclass() != null) {
+            pending.add(owner.getSuperclass());
+        }
+        pending.addAll(owner.getSuperInterfaces());
+        Set<String> visited = new LinkedHashSet<>();
+        Set<String> matches = new LinkedHashSet<>();
+        for (int index = 0; index < pending.size(); index++) {
+            CtTypeReference<?> reference = pending.get(index);
+            String qualified = normalizeTagType(reference == null ? "" : reference.getQualifiedName());
+            if (qualified.isBlank() || !visited.add(qualified)) {
+                continue;
+            }
+            CtType<?> declaration = typeDeclarationForScope(reference);
+            if (declaration == null) {
+                continue;
+            }
+            for (CtType<?> nested : declaration.getNestedTypes()) {
+                String candidate = normalizeTagType(nested.getQualifiedName());
+                if (simple.equals(nested.getSimpleName())
+                        && candidates.contains(candidate)
+                        && isInheritedMemberTypeAccessible(nested, owner)) {
+                    matches.add(candidate);
+                }
+            }
+            if (declaration.getSuperclass() != null) {
+                pending.add(declaration.getSuperclass());
+            }
+            pending.addAll(declaration.getSuperInterfaces());
+        }
+        return matches;
+    }
+
+    private static boolean isInheritedMemberTypeAccessible(CtType<?> member, CtType<?> owner) {
+        if (member.isPrivate()) {
+            return false;
+        }
+        if (member.isPublic() || member.isProtected()) {
+            return true;
+        }
+        return packageName(member).equals(packageName(owner));
+    }
+
+    private static String packageName(CtType<?> type) {
+        return type == null || type.getPackage() == null ? "" : type.getPackage().getQualifiedName();
+    }
+
+    private static CtType<?> typeDeclarationForScope(CtTypeReference<?> reference) {
+        try {
+            return reference == null ? null : reference.getTypeDeclaration();
+        } catch (RuntimeException ignored) {
+            return null;
+        }
     }
 
     private static void addImportMatches(CtMethod<?> method,

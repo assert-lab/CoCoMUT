@@ -1432,6 +1432,154 @@ public class SourceModelEdgeCaseTest {
     }
 
     @Test
+    public void rawFallbackPreservesLeadingInlineReturnWhenLiteralContentNeedsProtection() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inline-return-protected-fallback");
+        try {
+            write(project.resolve("src/main/java/demo/Parent.java"), """
+                    package demo;
+                    public interface Parent {
+                        /** @param value parent parameter
+                         * @return parent return
+                         */
+                        String value(String value);
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/Child.java"), """
+                    package demo;
+                    public class Child implements Parent {
+                        /** {@return child return}
+                         * Example: {@code @Override}
+                         * @param value {@inheritDoc Parent}
+                         */
+                        @Override public String value(String value) { return value; }
+                    }
+                    """);
+
+            compileProject(project);
+            SourceContext context = contextFor(project, "demo.Child", "value");
+            assertTrue(effectiveDescription(context).get("text").toString()
+                    .startsWith("Returns child return."));
+            assertFalse(effectiveDescription(context).get("text").toString().contains("parent return"));
+            assertEquals("child return", firstEffectiveItem(context, "return").get("text"));
+            assertEquals("declared", firstEffectiveItem(context, "return").get("source"));
+            assertEquals("parent parameter", firstEffectiveItem(context, "params").get("text"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void rawFallbackUsesExactBlockIdentifiersAndAllBlockBoundaries() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-block-tag-grammar");
+        try {
+            write(project.resolve("src/main/java/demo/Parent.java"), """
+                    package demo;
+                    public interface Parent {
+                        /** Parent description.
+                         * @return parent return
+                         */
+                        String value();
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/PrefixChild.java"), """
+                    package demo;
+                    public class PrefixChild implements Parent {
+                        /** {@inheritDoc Parent}
+                         * @returnValue not a return contract
+                         * @RETURN not an uppercase return contract
+                         */
+                        @Override public String value() { return ""; }
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/BoundaryChild.java"), """
+                    package demo;
+                    public class BoundaryChild implements Parent {
+                        /** Local {@inheritDoc Parent}
+                         * @custom custom information
+                         * @return local return
+                         */
+                        @Override public String value() { return ""; }
+                    }
+                    """);
+
+            compileProject(project);
+            SourceContext prefix = contextFor(project, "demo.PrefixChild", "value");
+            assertEquals("parent return", firstEffectiveItem(prefix, "return").get("text"));
+            assertFalse(firstEffectiveItem(prefix, "return").get("text").toString()
+                    .contains("not a return contract"));
+
+            SourceContext boundary = contextFor(project, "demo.BoundaryChild", "value");
+            assertEquals("Local Parent description.", effectiveDescription(boundary).get("text"));
+            assertFalse(effectiveDescription(boundary).get("text").toString()
+                    .contains("custom information"));
+            assertEquals("local return", firstEffectiveItem(boundary, "return").get("text"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void snippetContentNeverBecomesInheritanceOrBlockDocumentation() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-snippet-javadoc-grammar");
+        try {
+            write(project.resolve("src/main/java/demo/Parent.java"), """
+                    package demo;
+                    public interface Parent {
+                        /** Parent description.
+                         * @return actual parent return
+                         */
+                        String value();
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/Child.java"), """
+                    package demo;
+                    public class Child implements Parent {
+                        /** {@inheritDoc Parent}
+                         * {@snippet :
+                         * {@inheritDoc}
+                         * @return fake return
+                         * }
+                         */
+                        @Override public String value() { return ""; }
+
+                        /** {@snippet :
+                         * {@inheritDoc}
+                         * @return fake standalone return
+                         * @see fake.Reference
+                         * @deprecated fake deprecation
+                         * }
+                         */
+                        public String standalone() { return ""; }
+                    }
+                    """);
+
+            compileProject(project);
+            SourceContext child = contextFor(project, "demo.Child", "value");
+            assertEquals(true, child.javadocMetadata().get("uses_inheritdoc"));
+            assertEquals("actual parent return", firstEffectiveItem(child, "return").get("text"));
+            assertFalse(firstEffectiveItem(child, "return").get("text").toString().contains("fake"));
+
+            SourceContext standalone = contextFor(project, "demo.Child", "standalone");
+            assertEquals(false, standalone.javadocMetadata().get("uses_inheritdoc"));
+            assertEquals(false, standalone.documentationMetrics().get("uses_inheritdoc"));
+            assertEquals(false, standalone.documentationMetrics().get("has_see_tag"));
+            assertEquals(false, standalone.javadocMetadata().get("deprecated"));
+            assertEquals("missing", firstEffectiveItem(standalone, "return").get("source"));
+
+            if (Runtime.version().feature() >= 25) {
+                Path docs = project.resolve("javadoc");
+                Process process = new ProcessBuilder(javadoc(), "-quiet", "-d", docs.toString(),
+                        "-sourcepath", project.resolve("src/main/java").toString(), "demo")
+                        .redirectErrorStream(true).start();
+                String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+                assertEquals("JDK 25 javadoc failed: " + output, 0, process.waitFor());
+            }
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void explicitSupertypeUsesWildcardAndEnclosingTypeScope() throws Exception {
         Path project = Files.createTempDirectory("cocomut-inheritdoc-target-scope");
         try {
@@ -1566,6 +1714,46 @@ public class SourceModelEdgeCaseTest {
     }
 
     @Test
+    public void explicitSupertypeCanNameAnInheritedMemberType() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inherited-member-target");
+        try {
+            write(project.resolve("src/main/java/demo/Base.java"), """
+                    package demo;
+                    public class Base {
+                        public interface Contract {
+                            /** Inherited member contract. */ String value();
+                        }
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/Child.java"), """
+                    package demo;
+                    public class Child extends Base implements Base.Contract {
+                        /** {@inheritDoc Contract} */
+                        @Override public String value() { return ""; }
+                    }
+                    """);
+
+            compileProject(project);
+            SourceContext context = contextFor(project, "demo.Child", "value");
+            assertEquals("Inherited member contract.", effectiveDescription(context).get("text"));
+            assertEquals("resolved", effectiveDescription(context).get("resolution"));
+
+            if (Runtime.version().feature() >= 25) {
+                Path docs = project.resolve("javadoc");
+                Process process = new ProcessBuilder(javadoc(), "-quiet", "-d", docs.toString(),
+                        "-sourcepath", project.resolve("src/main/java").toString(), "demo")
+                        .redirectErrorStream(true).start();
+                String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+                assertEquals("JDK 25 javadoc failed: " + output, 0, process.waitFor());
+                assertTrue(Files.readString(docs.resolve("demo/Child.html"))
+                        .contains("Inherited member contract."));
+            }
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void inlineTagsAreCaseSensitiveExactAndPositionAware() throws Exception {
         Path project = Files.createTempDirectory("cocomut-inline-tag-grammar");
         try {
@@ -1674,6 +1862,77 @@ public class SourceModelEdgeCaseTest {
                     .javadocMetadata().get("effective_structured_tags").toString();
             assertTrue(effective.contains("resolution=invalid"));
             assertTrue(effective.contains("throws_multiple_inheritdoc"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void decoratedThrowsCannotExpandToMultipleInheritedEntries() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-inheritdoc-decorated-throws");
+        try {
+            write(project.resolve("src/main/java/demo/Parent.java"), """
+                    package demo;
+                    public interface Parent {
+                        /** @throws java.io.IOException if reading fails
+                         * @throws java.io.IOException if closing fails
+                         */
+                        void read() throws java.io.IOException;
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/LoneChild.java"), """
+                    package demo;
+                    public class LoneChild implements Parent {
+                        /** @throws java.io.IOException {@inheritDoc} */
+                        @Override public void read() throws java.io.IOException {}
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/DecoratedChild.java"), """
+                    package demo;
+                    public class DecoratedChild implements Parent {
+                        /** @throws java.io.IOException before {@inheritDoc} after */
+                        @Override public void read() throws java.io.IOException {}
+                    }
+                    """);
+
+            compileProject(project);
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> lone = (List<Map<String, Object>>) effectiveTags(
+                    contextFor(project, "demo.LoneChild", "read")).get("throws");
+            assertEquals(2, lone.size());
+            assertEquals(List.of("if reading fails", "if closing fails"),
+                    lone.stream().map(item -> item.get("text").toString()).toList());
+
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> decorated = (List<Map<String, Object>>) effectiveTags(
+                    contextFor(project, "demo.DecoratedChild", "read")).get("throws");
+            assertEquals(1, decorated.size());
+            assertEquals("invalid", decorated.get(0).get("resolution"));
+            assertEquals("throws_multiple_expansion_with_local_text",
+                    decorated.get(0).get("diagnostic_code"));
+
+            if (Runtime.version().feature() >= 25) {
+                Path sourceRoot = project.resolve("src/main/java");
+                Path loneDocs = project.resolve("javadoc-lone");
+                Process loneProcess = new ProcessBuilder(javadoc(), "-quiet", "-d", loneDocs.toString(),
+                        sourceRoot.resolve("demo/Parent.java").toString(),
+                        sourceRoot.resolve("demo/LoneChild.java").toString())
+                        .redirectErrorStream(true).start();
+                String loneOutput = new String(loneProcess.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+                assertEquals("JDK 25 should accept standalone throws expansion: " + loneOutput,
+                        0, loneProcess.waitFor());
+
+                Path decoratedDocs = project.resolve("javadoc-decorated");
+                Process decoratedProcess = new ProcessBuilder(javadoc(), "-quiet", "-d", decoratedDocs.toString(),
+                        sourceRoot.resolve("demo/Parent.java").toString(),
+                        sourceRoot.resolve("demo/DecoratedChild.java").toString())
+                        .redirectErrorStream(true).start();
+                String decoratedOutput = new String(
+                        decoratedProcess.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+                assertTrue("JDK 25 should reject decorated multi-entry throws expansion: "
+                                + decoratedOutput,
+                        decoratedProcess.waitFor() != 0);
+            }
         } finally {
             deleteRecursively(project);
         }

@@ -232,7 +232,8 @@
             "supertype_declaration_unavailable", "source_evidence_unavailable",
             "source_documentation_unavailable", "inheritdoc_target_not_overridden",
             "inheritdoc_target_ambiguous", "inheritdoc_corresponding_item_missing",
-            "throws_multiple_inheritdoc"
+            "throws_multiple_inheritdoc",
+            "throws_multiple_expansion_with_local_text"
           ]
         },
         "resolution": {"enum": ["resolved", "missing", "indeterminate", "invalid"]}

@@ -15,7 +15,8 @@ enum JavadocResolutionDiagnostic {
     INHERITDOC_TARGET_NOT_OVERRIDDEN("inheritdoc_target_not_overridden"),
     INHERITDOC_TARGET_AMBIGUOUS("inheritdoc_target_ambiguous"),
     INHERITDOC_CORRESPONDING_ITEM_MISSING("inheritdoc_corresponding_item_missing"),
-    THROWS_MULTIPLE_INHERITDOC("throws_multiple_inheritdoc");
+    THROWS_MULTIPLE_INHERITDOC("throws_multiple_inheritdoc"),
+    THROWS_MULTIPLE_EXPANSION_WITH_LOCAL_TEXT("throws_multiple_expansion_with_local_text");
 
     private final String id;
 
