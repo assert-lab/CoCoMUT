@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://assert-lab.github.io/cocomut/schemas/method-context.schema.json",
+  "$id": "https://assert-lab.github.io/cocomut/schemas/method-context-v0.5.0.schema.json",
   "title": "CoCoMUT Method Context",
   "type": "object",
   "required": ["MUT", "metadata", "provenance", "documentation_metrics", "javadoc_metadata", "dynamic_features"],
@@ -77,7 +77,7 @@
         "call_graph"
       ],
       "properties": {
-        "schema_version": {"type": "string"},
+        "schema_version": {"const": "0.5.0"},
         "source_backend": {"type": "string"},
         "source_backend_mode": {"type": "string"},
         "method_identity": {"type": "string"},
@@ -113,6 +113,12 @@
     },
     "javadoc_metadata": {
       "type": "object",
+      "required": [
+        "structured_tags", "declared_structured_tags", "effective_structured_tags",
+        "uses_inheritdoc", "inheritdoc_policy", "javadoc_inheritance", "inheritdoc_resolution",
+        "inherited_javadoc_candidates", "inheritdoc_candidate_count",
+        "inheritdoc_documented_candidate_count", "inheritdoc_candidates_truncated"
+      ],
       "properties": {
         "see": {"type": "array"},
         "inline_links": {"type": "array"},
@@ -126,15 +132,45 @@
         },
         "structured_tags": {
           "type": "object",
-          "description": "Parser-derived param/return/throws/since/apiNote/implSpec/implNote/deprecated tags. Includes parser and parse_confidence."
+          "description": "Declared-only parser-derived tags retained as a compatibility alias for declared_structured_tags."
+        },
+        "declared_structured_tags": {
+          "type": "object",
+          "description": "Tags written on the focal declaration; inherited text is never merged into this object."
+        },
+        "effective_structured_tags": {
+          "$ref": "#/$defs/effectiveDocumentation",
+          "description": "Item-level description, type-parameter, parameter, return, and throws documentation after Javadoc inheritance, with per-item provenance."
         },
         "uses_inheritdoc": {"type": "boolean"},
         "inheritdoc_policy": {
-          "type": "string",
-          "description": "not_applicable when inheritDoc is absent; candidate_only when inherited documentation candidates are reported without silently expanding child structured tags."
+          "enum": ["not_applicable", "jdk25-standard-doclet"],
+          "description": "Semantic policy used for effective Javadoc, or not_applicable for executables that cannot inherit method documentation."
         },
-        "inheritdoc_resolution": {"type": "string"},
-        "inherited_javadoc_candidates": {"type": "array"}
+        "javadoc_inheritance": {
+          "$ref": "#/$defs/javadocInheritancePolicy"
+        },
+        "inheritdoc_resolution": {
+          "enum": ["not_applicable", "resolved_candidate", "no_documentation", "indeterminate", "unresolved"],
+          "description": "Candidate-availability summary. Effective-item certainty is reported separately under effective_structured_tags."
+        },
+        "inherited_javadoc_candidates": {
+          "type": "array",
+          "description": "Ordered override declarations and unresolved ancestor evidence in standard Javadoc automatic-search order.",
+          "items": {"$ref": "#/$defs/inheritedJavadocCandidate"}
+        },
+        "inheritdoc_candidate_count": {
+          "type": "integer", "minimum": 0,
+          "description": "Number of entries in inherited_javadoc_candidates, including absent and unavailable evidence."
+        },
+        "inheritdoc_documented_candidate_count": {
+          "type": "integer", "minimum": 0,
+          "description": "Number of candidate entries whose javadoc_availability is present."
+        },
+        "inheritdoc_candidates_truncated": {
+          "type": "boolean",
+          "description": "True when the bounded hierarchy traversal stopped before all reachable supertypes were inspected."
+        }
       },
       "additionalProperties": true
     },
@@ -151,6 +187,102 @@
     }
   },
   "$defs": {
+    "javadocInheritancePolicy": {
+      "type": "object",
+      "required": ["policy_id", "specification_version", "implementation_version", "defaulted", "granularity", "mode"],
+      "properties": {
+        "policy_id": {"enum": ["jdk25-standard-doclet"]},
+        "specification_version": {"const": "25"},
+        "implementation_version": {"type": "string", "minLength": 1},
+        "defaulted": {"type": "boolean"},
+        "granularity": {"const": "item_level"},
+        "mode": {"const": "effective_and_candidates"}
+      },
+      "additionalProperties": false
+    },
+    "documentationSourceSegment": {
+      "type": "object",
+      "required": ["kind", "text", "source_method_uri", "declaring_type", "hierarchy_distance"],
+      "properties": {
+        "kind": {"enum": ["declared", "inherited"]},
+        "text": {"type": "string"},
+        "source_method_uri": {"type": "string"},
+        "declaring_type": {"type": "string"},
+        "hierarchy_distance": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "effectiveDocumentationItem": {
+      "type": "object",
+      "required": ["text", "source", "inheritance_mode", "resolution"],
+      "properties": {
+        "name": {"type": "string"},
+        "type": {"type": "string"},
+        "text": {"type": "string"},
+        "source": {"enum": ["declared", "inherited", "composed", "missing", "indeterminate", "invalid"]},
+        "inheritance_mode": {"enum": ["declared", "explicit_inheritdoc", "implicit_missing_item", "unknown"]},
+        "inherited_from": {"type": "string"},
+        "inherited_method_uri": {"type": "string"},
+        "hierarchy_distance": {"type": "integer", "minimum": 1},
+        "segments": {"type": "array", "items": {"$ref": "#/$defs/documentationSourceSegment"}},
+        "source_chain": {"type": "array", "items": {"type": "string"}},
+        "diagnostic_code": {
+          "enum": [
+            "hierarchy_resolution_limit", "hierarchy_traversal_limit", "hierarchy_truncated",
+            "supertype_declaration_unavailable", "source_evidence_unavailable",
+            "source_documentation_unavailable", "inheritdoc_target_not_overridden",
+            "inheritdoc_target_ambiguous", "inheritdoc_corresponding_item_missing",
+            "throws_multiple_inheritdoc",
+            "throws_multiple_expansion_with_local_text"
+          ]
+        },
+        "resolution": {"enum": ["resolved", "missing", "indeterminate", "invalid"]}
+      },
+      "additionalProperties": false
+    },
+    "effectiveDocumentation": {
+      "type": "object",
+      "required": ["description", "type_params", "params", "return", "throws", "resolution"],
+      "properties": {
+        "description": {"$ref": "#/$defs/effectiveDocumentationItem"},
+        "type_params": {"type": "array", "items": {"$ref": "#/$defs/effectiveDocumentationItem"}},
+        "params": {"type": "array", "items": {"$ref": "#/$defs/effectiveDocumentationItem"}},
+        "return": {"type": "array", "items": {"$ref": "#/$defs/effectiveDocumentationItem"}},
+        "throws": {"type": "array", "items": {"$ref": "#/$defs/effectiveDocumentationItem"}},
+        "resolution": {"enum": ["complete", "partial"]}
+      },
+      "additionalProperties": false
+    },
+    "inheritedJavadocCandidate": {
+      "type": "object",
+      "required": [
+        "declaring_type", "declaring_type_kind", "relationship", "method_uri", "method_signature",
+        "hierarchy_distance", "search_order", "javadoc_availability", "raw_javadoc", "structured_tags",
+        "parser", "parse_confidence", "resolution_confidence"
+      ],
+      "properties": {
+        "declaring_type": {"type": "string"},
+        "declaring_type_kind": {"enum": ["class", "interface", "unknown"]},
+        "declaring_type_abstract": {"type": "boolean"},
+        "method_abstract": {"type": "boolean"},
+        "method_default": {"type": "boolean"},
+        "relationship": {"enum": ["superclass", "superinterface", "unknown"]},
+        "method_uri": {"type": "string"},
+        "method_signature": {"type": "string"},
+        "hierarchy_distance": {"type": "integer", "minimum": 1},
+        "search_order": {"type": "integer", "minimum": 1},
+        "javadoc_availability": {
+          "enum": ["present", "absent", "source_unavailable", "parse_failed", "partial_resolution"]
+        },
+        "raw_javadoc": {"type": "string"},
+        "structured_tags": {"type": "object"},
+        "parser": {"type": "string"},
+        "parse_confidence": {"type": "string"},
+        "resolution_confidence": {"enum": ["high", "medium", "low"]},
+        "diagnostic": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
     "callGraphEdge": {
       "type": "object",
       "required": [

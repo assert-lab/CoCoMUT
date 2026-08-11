@@ -19,6 +19,10 @@
 - Bumped the output schema to `0.4.0` for structured build actions. CoCoMUT
   ships the current schema in each release; earlier contracts remain available
   from Git history and archived release artifacts.
+- Bumped the output schema to `0.5.0` for structured inherited Javadoc
+  candidates and a separate, provenance-preserving effective-documentation
+  view. Candidate discovery now follows Javadoc supertype search order and
+  distinguishes absent documentation from unavailable source.
 - Assigned a version-specific manifest schema identifier, preserved terminal
   diagnostics in bounded logs, tightened Android preflight/process cleanup, and
   made field-test resume validate cohort, tool, and runtime identity.

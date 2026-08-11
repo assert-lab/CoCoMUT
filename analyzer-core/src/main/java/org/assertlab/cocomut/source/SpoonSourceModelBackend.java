@@ -59,14 +59,8 @@ import java.util.regex.Pattern;
  * product mode.
  */
 final class SpoonSourceModelBackend implements SourceModelBackend {
-    private static final Pattern PARAM_TAG = Pattern.compile("(?m)^\\s*\\*?\\s*@param\\s+(\\S+)");
-    private static final Pattern THROWS_TAG = Pattern.compile("(?m)^\\s*\\*?\\s*@(throws|exception)\\s+(\\S+)");
-    private static final Pattern SINCE_TAG = Pattern.compile("(?m)^\\s*\\*?\\s*@since\\s+(.+)$");
-    private static final Pattern SEE_TAG = Pattern.compile("(?m)^\\s*\\*?\\s*@see\\s+(.+)$");
     private static final Pattern ANCHOR_HREF = Pattern.compile("<a\\s+[^>]*href\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>(.*?)</a>",
             Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-    private static final Pattern BLOCK_TAG = Pattern.compile(
-            "(?ms)(?:^|\\R)\\s*\\*?\\s*@(param|return|throws|exception|since|deprecated|see|apiNote|implSpec|implNote)\\s*(.*?)(?=\\R\\s*\\*?\\s*@|\\z)");
     private static final Pattern JAVADOC_FILE_REFERENCE = Pattern.compile(
             "(?:\\{@docRoot\\}/)?(?:[\\w.$-]+/)*(?:doc-files/)?[\\w.$-]+\\.(?:png|svg|gif|jpg|jpeg|html|htm|txt|java)",
             Pattern.CASE_INSENSITIVE);
@@ -106,8 +100,16 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
 
         CtType<?> owner = executable.getParent(CtType.class);
         String methodBody = sourceSlice(executable);
-        String javadoc = docComment(executable);
-        String rawJavadoc = rawDocComment(parsed, executable).orElse(javadoc);
+        CommentAttempt parsedComment = docCommentAttempt(executable);
+        RawCommentAttempt rawComment = rawDocCommentAttempt(parsed, executable);
+        String parsedJavadoc = parsedComment.text();
+        String rawJavadoc = rawComment.text().orElse(parsedJavadoc);
+        // Raw source is a lossless fallback when Spoon can model the method but
+        // cannot expose its comment through the typed Javadoc representation.
+        // Spoon 11 also drops the optional supertype from {@inheritDoc Type}.
+        String javadoc = parsedJavadoc.isBlank() || hasExplicitInheritDocTarget(rawJavadoc)
+                ? rawJavadoc
+                : parsedJavadoc;
         List<JavadocElement> javadocElements = spoonJavadocElements(executable);
         String classJavadoc = owner != null ? docComment(owner) : "";
         String classHierarchy = owner != null ? classHierarchy(owner) : "";
@@ -127,7 +129,8 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 classContext.siblingMethods(),
                 classContext.overloadGroup(),
                 dynamicFeatures(executable),
-                javadocMetadata(parsed, owner, executable, method, javadocElements, javadoc, rawJavadoc),
+                javadocMetadata(parsed, owner, executable, method, javadocElements, javadoc, rawJavadoc,
+                        parsedComment, rawComment),
                 documentationMetrics(method, javadocElements, javadoc),
                 parsed.mode()));
     }
@@ -629,19 +632,27 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     }
 
     private static String docComment(CtElement element) {
+        return docCommentAttempt(element).text();
+    }
+
+    private static CommentAttempt docCommentAttempt(CtElement element) {
         try {
             String doc = element.getDocComment();
-            return doc != null ? doc.trim() : "";
+            return new CommentAttempt(doc != null ? doc.trim() : "", false);
         } catch (Exception e) {
-            return "";
+            return new CommentAttempt("", true);
         }
     }
 
     private static Optional<String> rawDocComment(ParsedProject parsed, CtElement element) {
+        return rawDocCommentAttempt(parsed, element).text();
+    }
+
+    private static RawCommentAttempt rawDocCommentAttempt(ParsedProject parsed, CtElement element) {
         try {
             SourcePosition position = element.getPosition();
             if (position == null || !position.isValidPosition() || position.getFile() == null) {
-                return Optional.empty();
+                return new RawCommentAttempt(Optional.empty(), false);
             }
             Path sourceFile = position.getFile().toPath().toAbsolutePath().normalize();
             String source = parsed.sourceTextByFile().get(sourceFile);
@@ -652,19 +663,20 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             int start = Math.max(0, Math.min(position.getSourceStart(), source.length()));
             int open = source.lastIndexOf("/**", start);
             if (open < 0) {
-                return Optional.empty();
+                return new RawCommentAttempt(Optional.empty(), false);
             }
             int close = source.indexOf("*/", open);
             if (close < 0 || close > start) {
-                return Optional.empty();
+                return new RawCommentAttempt(Optional.empty(), false);
             }
             String between = source.substring(close + 2, start);
             if (!between.replaceAll("@\\w+(?:\\([^)]*\\))?", "").trim().isBlank()) {
-                return Optional.empty();
+                return new RawCommentAttempt(Optional.empty(), false);
             }
-            return Optional.of(cleanRawJavadoc(source.substring(open, close + 2)));
+            return new RawCommentAttempt(
+                    Optional.of(cleanRawJavadoc(source.substring(open, close + 2))), false);
         } catch (Exception ignored) {
-            return Optional.empty();
+            return new RawCommentAttempt(Optional.empty(), true);
         }
     }
 
@@ -818,9 +830,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                                                             String javadoc) {
         Map<String, Object> metrics = new LinkedHashMap<>();
         String normalized = javadoc == null ? "" : javadoc.strip();
-        Map<String, Object> structuredTags = !elements.isEmpty()
-                ? structuredTagsFromElements(elements)
-                : fallbackStructuredTags(normalized);
+        Map<String, Object> structuredTags = structuredTags(elements, normalized);
         List<String> paramTags = structuredTagNames(structuredTags, "params");
         @SuppressWarnings("unchecked")
         List<Map<String, String>> throwsTags = (List<Map<String, String>>) structuredTags.getOrDefault("throws", List.of());
@@ -834,19 +844,16 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
 
         metrics.put("parser", structuredTags.getOrDefault("parser", "cocomut-fallback"));
         metrics.put("parse_confidence", structuredTags.getOrDefault("parse_confidence", "low"));
-        metrics.put("has_summary", !elements.isEmpty() ? hasSummary(elements) : hasSummary(normalized));
+        metrics.put("has_summary", hasSummary(normalized));
         metrics.put("has_param_tags", !paramTags.isEmpty());
         metrics.put("missing_param_tags", missingParams);
         metrics.put("has_return_tag", !structuredList(structuredTags, "return").isEmpty());
         metrics.put("has_throws_tag", !throwsTags.isEmpty());
         metrics.put("mentions_null", normalized.toLowerCase(Locale.ROOT).contains("null"));
         metrics.put("mentions_examples", mentionsExample(normalized));
-        metrics.put("uses_inheritdoc", !elements.isEmpty()
-                ? usesInheritDoc(elements)
-                : normalized.contains("{@inheritDoc}") || normalized.contains("@inheritDoc"));
+        metrics.put("uses_inheritdoc", containsInheritDoc(normalized));
         metrics.put("has_since_tag", !structuredList(structuredTags, "since").isEmpty());
-        metrics.put("has_see_tag", hasBlockTag(elements, StandardJavadocTagType.SEE)
-                || !matches(SEE_TAG, normalized, 1).isEmpty());
+        metrics.put("has_see_tag", !rawBlockTagBodies(normalized, "see").isEmpty());
         metrics.put("inline_link_count", inlineLinkTargets(elements, normalized).size());
         return metrics;
     }
@@ -854,28 +861,646 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     private static Map<String, Object> javadocMetadata(ParsedProject parsed, CtType<?> owner,
                                                        CtExecutable<?> executable, SourceMethod method,
                                                        List<JavadocElement> elements,
-                                                       String javadoc, String rawJavadoc) {
+                                                       String javadoc, String rawJavadoc,
+                                                       CommentAttempt parsedComment,
+                                                       RawCommentAttempt rawComment) {
         Map<String, Object> metadata = new LinkedHashMap<>();
         String normalized = javadoc == null ? "" : javadoc.strip();
         List<Map<String, Object>> references = javadocReferences(parsed, owner, elements, normalized);
-        boolean usesInheritDoc = !elements.isEmpty()
-                ? usesInheritDoc(elements)
-                : normalized.contains("{@inheritDoc}") || normalized.contains("@inheritDoc");
-        metadata.put("since", !elements.isEmpty()
-                ? blockTagTexts(elements, StandardJavadocTagType.SINCE)
-                : matches(SINCE_TAG, normalized, 1));
+        boolean usesInheritDoc = containsInheritDoc(
+                rawJavadoc == null || rawJavadoc.isBlank() ? normalized : rawJavadoc);
+        boolean preserveExplicitTarget = hasExplicitInheritDocTarget(rawJavadoc);
+        List<JavadocElement> inheritanceElements = preserveExplicitTarget ? List.of() : elements;
+        String inheritanceText = preserveExplicitTarget ? rawJavadoc.strip() : normalized;
+        Map<String, Object> declaredStructuredTags = structuredTags(inheritanceElements, inheritanceText);
+        Map<String, Object> resolutionStructuredTags = structuredTagsForInheritance(
+                inheritanceElements, inheritanceText);
+        InheritedJavadocResolver.Availability focalAvailability = focalJavadocAvailability(
+                normalized, rawJavadoc, parsedComment.failed(), rawComment.failed());
+        boolean extractionFailed = focalAvailability == InheritedJavadocResolver.Availability.PARSE_FAILED;
+        InheritedJavadocResolver.Documentation declaredDocumentation = new InheritedJavadocResolver.Documentation(
+                focalAvailability,
+                method.methodUri(),
+                rawJavadoc,
+                mainDescription(inheritanceElements, inheritanceText),
+                declaredStructuredTags,
+                mainDescriptionForInheritance(inheritanceText),
+                resolutionStructuredTags,
+                stringValue(declaredStructuredTags.get("parser")),
+                stringValue(declaredStructuredTags.get("parse_confidence")),
+                extractionFailed ? "source_javadoc_extraction_failed" : "");
+        InheritedJavadocResolver.Resolution inherited = executable instanceof CtMethod<?> ctMethod
+                ? InheritedJavadocResolver.resolve(ctMethod, usesInheritDoc, declaredDocumentation,
+                candidate -> inheritedDocumentation(parsed, candidate),
+                SpoonSourceModelBackend::resolveJavadocTypeName,
+                SourceBackends.javadocInheritancePolicy())
+                : InheritedJavadocResolver.Resolution.notApplicable(executable, declaredDocumentation);
+        metadata.put("since", structuredList(declaredStructuredTags, "since"));
         metadata.put("see", referenceTargetsByTag(references, "see"));
         metadata.put("inline_links", inlineReferenceTargets(references));
         metadata.put("javadoc_references", references);
         metadata.put("file_references", fileReferences(parsed.projectRoot(), method, rawJavadoc));
-        metadata.put("structured_tags", structuredTags(elements, normalized));
+        // structured_tags remains the declared-only compatibility view. Effective
+        // Javadoc inheritance is exposed separately and never overwrites source text.
+        metadata.put("structured_tags", declaredStructuredTags);
+        metadata.put("declared_structured_tags", declaredStructuredTags);
+        metadata.put("effective_structured_tags", inherited.effectiveStructuredTags());
         metadata.put("uses_inheritdoc", usesInheritDoc);
-        metadata.put("inheritdoc_policy", usesInheritDoc ? "candidate_only" : "not_applicable");
+        var policy = SourceBackends.javadocInheritancePolicy();
+        metadata.put("inheritdoc_policy", executable instanceof CtMethod<?> ? policy.id() : "not_applicable");
+        metadata.put("javadoc_inheritance",
+                policy.metadata(SourceBackends.javadocInheritancePolicyDefaulted()));
         metadata.put("deprecated", isDeprecated(executable, normalized));
         metadata.put("deprecation_text", deprecationText(normalized));
-        metadata.put("inheritdoc_resolution", inheritdocResolution(executable, normalized));
-        metadata.put("inherited_javadoc_candidates", inheritedJavadocCandidates(executable));
+        metadata.put("inheritdoc_resolution", inherited.resolution());
+        metadata.put("inherited_javadoc_candidates", inherited.candidates());
+        metadata.put("inheritdoc_candidate_count", inherited.candidateCount());
+        metadata.put("inheritdoc_documented_candidate_count", inherited.documentedCandidateCount());
+        metadata.put("inheritdoc_candidates_truncated", inherited.truncated());
         return metadata;
+    }
+
+    static InheritedJavadocResolver.Availability focalJavadocAvailability(
+            String parsedJavadoc,
+            String rawJavadoc,
+            boolean parsedFailed,
+            boolean rawFailed) {
+        if (!(parsedJavadoc == null || parsedJavadoc.isBlank())
+                || !(rawJavadoc == null || rawJavadoc.isBlank())) {
+            return InheritedJavadocResolver.Availability.PRESENT;
+        }
+        return parsedFailed || rawFailed
+                ? InheritedJavadocResolver.Availability.PARSE_FAILED
+                : InheritedJavadocResolver.Availability.ABSENT;
+    }
+
+    static InheritedJavadocResolver.TypeNameResolution resolveJavadocTypeName(
+            CtMethod<?> focal, String sourceSpelling) {
+        if (focal == null || focal.getDeclaringType() == null) {
+            return InheritedJavadocResolver.TypeNameResolution.unresolved();
+        }
+        String spelling = normalizeJavadocTypeSpelling(sourceSpelling);
+        if (spelling.isBlank()) {
+            return InheritedJavadocResolver.TypeNameResolution.unresolved();
+        }
+        CtType<?> owner = focal.getDeclaringType();
+
+        if (!spelling.contains(".")) {
+            boolean methodTypeParameter = focal.getFormalCtTypeParameters().stream()
+                    .anyMatch(parameter -> spelling.equals(parameter.getSimpleName()));
+            boolean ownerTypeParameter = enclosingTypes(owner).stream()
+                    .flatMap(type -> type.getFormalCtTypeParameters().stream())
+                    .anyMatch(parameter -> spelling.equals(parameter.getSimpleName()));
+            if (methodTypeParameter || ownerTypeParameter) {
+                return InheritedJavadocResolver.TypeNameResolution.resolved(
+                        "type-parameter:" + spelling);
+            }
+        }
+
+        if (spelling.contains(".")) {
+            Optional<String> exact = knownTypeName(focal, spelling);
+            if (exact.isPresent()) {
+                return InheritedJavadocResolver.TypeNameResolution.resolved(exact.get());
+            }
+        }
+
+        InheritedJavadocResolver.TypeNameResolution lexical = lexicalTypeName(owner, spelling);
+        if (lexical.status() != InheritedJavadocResolver.TypeNameResolutionStatus.UNRESOLVED) {
+            return lexical;
+        }
+
+        if (!spelling.contains(".")) {
+            Set<String> inheritedMembers = inheritedMemberTypeNames(owner, spelling);
+            if (inheritedMembers.size() == 1) {
+                return InheritedJavadocResolver.TypeNameResolution.resolved(
+                        inheritedMembers.iterator().next());
+            }
+            if (inheritedMembers.size() > 1) {
+                return InheritedJavadocResolver.TypeNameResolution.ambiguous();
+            }
+        }
+
+        ImportNameResolution imports = importedTypeNames(focal, spelling);
+        if (imports.explicit().size() == 1) {
+            return InheritedJavadocResolver.TypeNameResolution.resolved(
+                    imports.explicit().iterator().next());
+        }
+        if (imports.explicit().size() > 1) {
+            return InheritedJavadocResolver.TypeNameResolution.ambiguous();
+        }
+
+        String ownerPackage = owner.getPackage() == null ? "" : owner.getPackage().getQualifiedName();
+        String samePackage = ownerPackage.isBlank() ? spelling : ownerPackage + "." + spelling;
+        Optional<String> samePackageType = knownTypeName(focal, samePackage);
+        if (samePackageType.isPresent()) {
+            return InheritedJavadocResolver.TypeNameResolution.resolved(samePackageType.get());
+        }
+
+        Optional<String> javaLang = knownTypeName(focal, "java.lang." + spelling);
+        if (javaLang.isPresent()) {
+            return InheritedJavadocResolver.TypeNameResolution.resolved(javaLang.get());
+        }
+
+        if (imports.onDemand().size() == 1) {
+            return InheritedJavadocResolver.TypeNameResolution.resolved(
+                    imports.onDemand().iterator().next());
+        }
+        if (imports.onDemand().size() > 1) {
+            return InheritedJavadocResolver.TypeNameResolution.ambiguous();
+        }
+
+        Optional<String> canonical = knownTypeName(focal, spelling);
+        return canonical.map(InheritedJavadocResolver.TypeNameResolution::resolved)
+                .orElseGet(InheritedJavadocResolver.TypeNameResolution::unresolved);
+    }
+
+    private static String normalizeJavadocTypeSpelling(String sourceSpelling) {
+        return stripModulePrefix(sourceSpelling == null ? "" : sourceSpelling)
+                .replaceAll("<.*>", "")
+                .trim();
+    }
+
+    private static List<CtType<?>> enclosingTypes(CtType<?> owner) {
+        List<CtType<?>> types = new ArrayList<>();
+        for (CtType<?> current = owner; current != null; current = current.getDeclaringType()) {
+            types.add(current);
+        }
+        return types;
+    }
+
+    private static InheritedJavadocResolver.TypeNameResolution lexicalTypeName(
+            CtType<?> owner, String spelling) {
+        for (CtType<?> lexical : enclosingTypes(owner)) {
+            String[] parts = spelling.split("\\.");
+            int nextPart = 1;
+            CtType<?> resolved = parts[0].equals(lexical.getSimpleName())
+                    ? lexical : lexical.getNestedType(parts[0]);
+            if (resolved == null) {
+                continue;
+            }
+            while (nextPart < parts.length && resolved != null) {
+                resolved = resolved.getNestedType(parts[nextPart++]);
+            }
+            if (resolved != null) {
+                return InheritedJavadocResolver.TypeNameResolution.resolved(
+                        resolved.getQualifiedName());
+            }
+        }
+        return InheritedJavadocResolver.TypeNameResolution.unresolved();
+    }
+
+    private static Set<String> inheritedMemberTypeNames(CtType<?> owner, String simpleName) {
+        Set<String> matches = new LinkedHashSet<>();
+        Set<String> visited = new LinkedHashSet<>();
+        if (owner.getSuperclass() != null) {
+            matches.addAll(nearestMemberTypeNames(
+                    owner.getSuperclass(), owner, simpleName, visited));
+        }
+        for (CtTypeReference<?> superInterface : owner.getSuperInterfaces()) {
+            matches.addAll(nearestMemberTypeNames(
+                    superInterface, owner, simpleName, visited));
+        }
+        return matches;
+    }
+
+    private static Set<String> nearestMemberTypeNames(CtTypeReference<?> reference,
+                                                       CtType<?> owner,
+                                                       String simpleName,
+                                                       Set<String> visited) {
+        if (reference == null || !visited.add(reference.getQualifiedName())) {
+            return Set.of();
+        }
+        CtType<?> declaration;
+        try {
+            declaration = reference.getTypeDeclaration();
+        } catch (RuntimeException ignored) {
+            declaration = null;
+        }
+        if (declaration == null) {
+            return Set.of();
+        }
+        Set<String> declaredHere = new LinkedHashSet<>();
+        for (CtType<?> nested : declaration.getNestedTypes()) {
+            if (simpleName.equals(nested.getSimpleName())
+                    && inheritedMemberTypeAccessible(nested, owner)) {
+                declaredHere.add(nested.getQualifiedName());
+            }
+        }
+        if (!declaredHere.isEmpty()) {
+            return declaredHere;
+        }
+
+        Set<String> inherited = new LinkedHashSet<>();
+        if (declaration.getSuperclass() != null) {
+            inherited.addAll(nearestMemberTypeNames(
+                    declaration.getSuperclass(), owner, simpleName, visited));
+        }
+        for (CtTypeReference<?> superInterface : declaration.getSuperInterfaces()) {
+            inherited.addAll(nearestMemberTypeNames(
+                    superInterface, owner, simpleName, visited));
+        }
+        return inherited;
+    }
+
+    private static boolean inheritedMemberTypeAccessible(CtType<?> member, CtType<?> owner) {
+        if (member.isPrivate()) {
+            return false;
+        }
+        if (member.isPublic() || member.isProtected()) {
+            return true;
+        }
+        String memberPackage = member.getPackage() == null ? "" : member.getPackage().getQualifiedName();
+        String ownerPackage = owner.getPackage() == null ? "" : owner.getPackage().getQualifiedName();
+        return memberPackage.equals(ownerPackage);
+    }
+
+    private static ImportNameResolution importedTypeNames(CtMethod<?> focal, String spelling) {
+        Set<String> explicit = new LinkedHashSet<>();
+        Set<String> onDemand = new LinkedHashSet<>();
+        int separator = spelling.indexOf('.');
+        String leading = separator < 0 ? spelling : spelling.substring(0, separator);
+        String suffix = separator < 0 ? "" : spelling.substring(separator);
+        try {
+            if (focal.getPosition().isValidPosition()) {
+                focal.getPosition().getCompilationUnit().getImports().forEach(importValue -> {
+                    String imported = importValue.toString()
+                            .replaceFirst("^import\\s+(?:static\\s+)?", "")
+                            .replace(";", "").trim();
+                    if (imported.endsWith(".*")) {
+                        String candidate = imported.substring(0, imported.length() - 1) + spelling;
+                        knownTypeName(focal, candidate).ifPresent(onDemand::add);
+                    } else if (simpleTypeName(imported).equals(leading)) {
+                        explicit.add(imported + suffix);
+                    }
+                });
+            }
+        } catch (RuntimeException ignored) {
+            // Incomplete import metadata leaves the source spelling unresolved.
+        }
+        return new ImportNameResolution(explicit, onDemand);
+    }
+
+    private static Optional<String> knownTypeName(CtMethod<?> focal, String candidate) {
+        return knownTypeName(focal.getFactory().Type().getAll(), candidate)
+                .or(() -> hierarchyTypeName(focal.getDeclaringType(), candidate));
+    }
+
+    private static Optional<String> knownTypeName(List<CtType<?>> types, String candidate) {
+        String normalized = candidate.replace('$', '.');
+        return types.stream()
+                .map(CtType::getQualifiedName)
+                .filter(name -> name.replace('$', '.').equals(normalized))
+                .findFirst();
+    }
+
+    private static Optional<String> hierarchyTypeName(CtType<?> owner, String candidate) {
+        String normalized = candidate.replace('$', '.');
+        List<CtTypeReference<?>> pending = new ArrayList<>();
+        if (owner.getSuperclass() != null) {
+            pending.add(owner.getSuperclass());
+        }
+        pending.addAll(owner.getSuperInterfaces());
+        Set<String> visited = new LinkedHashSet<>();
+        for (int index = 0; index < pending.size(); index++) {
+            CtTypeReference<?> reference = pending.get(index);
+            if (reference == null || !visited.add(reference.getQualifiedName())) {
+                continue;
+            }
+            if (reference.getQualifiedName().replace('$', '.').equals(normalized)) {
+                return Optional.of(reference.getQualifiedName());
+            }
+            try {
+                CtType<?> declaration = reference.getTypeDeclaration();
+                if (declaration != null) {
+                    if (declaration.getSuperclass() != null) {
+                        pending.add(declaration.getSuperclass());
+                    }
+                    pending.addAll(declaration.getSuperInterfaces());
+                }
+            } catch (RuntimeException ignored) {
+                // A shadow type can still be matched by its existing reference.
+            }
+        }
+        return Optional.empty();
+    }
+
+    private record ImportNameResolution(Set<String> explicit, Set<String> onDemand) {
+    }
+
+    private static InheritedJavadocResolver.Documentation inheritedDocumentation(
+            ParsedProject parsed, CtMethod<?> method) {
+        CommentAttempt parsedComment = docCommentAttempt(method);
+        RawCommentAttempt rawComment = rawDocCommentAttempt(parsed, method);
+        String normalized = parsedComment.text().strip();
+        Optional<String> raw = rawComment.text();
+        String rawJavadoc = raw.orElse(normalized);
+        boolean preserveExplicitTarget = hasExplicitInheritDocTarget(rawJavadoc);
+        String parseText = normalized.isBlank() || preserveExplicitTarget ? rawJavadoc : normalized;
+        boolean sourceAvailable = sourceFile(method).isPresent() && !method.isShadow();
+        if (normalized.isBlank() && rawJavadoc.isBlank()) {
+            boolean extractionFailed = parsedComment.failed() || rawComment.failed();
+            return new InheritedJavadocResolver.Documentation(
+                    sourceAvailable ? extractionFailed
+                            ? InheritedJavadocResolver.Availability.PARSE_FAILED
+                            : InheritedJavadocResolver.Availability.ABSENT
+                            : InheritedJavadocResolver.Availability.SOURCE_UNAVAILABLE,
+                    sourceMethodUri(parsed, method), "", "", emptyStructuredTags(),
+                    "", emptyStructuredTags(), "", "none",
+                    sourceAvailable ? extractionFailed
+                            ? "source_javadoc_extraction_failed"
+                            : "source_declaration_has_no_javadoc"
+                            : "source_declaration_unavailable");
+        }
+
+        List<JavadocElement> elements = preserveExplicitTarget ? List.of() : spoonJavadocElements(method);
+        Map<String, Object> tags = structuredTags(elements, parseText);
+        Map<String, Object> resolutionTags = structuredTagsForInheritance(elements, parseText);
+        String diagnostic = elements.isEmpty() && !parseText.isBlank()
+                ? "spoon_javadoc_parse_unavailable_fallback_used"
+                : "";
+        return new InheritedJavadocResolver.Documentation(
+                InheritedJavadocResolver.Availability.PRESENT,
+                sourceMethodUri(parsed, method),
+                rawJavadoc,
+                mainDescription(elements, parseText),
+                tags,
+                mainDescriptionForInheritance(parseText),
+                resolutionTags,
+                stringValue(tags.get("parser")),
+                stringValue(tags.get("parse_confidence")),
+                diagnostic);
+    }
+
+    private record CommentAttempt(String text, boolean failed) {
+    }
+
+    private record RawCommentAttempt(Optional<String> text, boolean failed) {
+    }
+
+    private static String sourceMethodUri(ParsedProject parsed, CtMethod<?> method) {
+        CtType<?> owner = method != null ? method.getDeclaringType() : null;
+        Optional<Path> source = sourceFile(method);
+        if (owner == null || source.isEmpty()) {
+            return "";
+        }
+        List<SourceParameter> parameters = parameters(method);
+        String sourceReturnType = returnType(method);
+        String signature = identitySignature(method.getSimpleName(), parameters,
+                erasedReturnType(method, sourceReturnType));
+        return methodUri(parsed.projectRoot(), source.get(), owner.getQualifiedName(), signature);
+    }
+
+    private static Map<String, Object> emptyStructuredTags() {
+        Map<String, Object> tags = new LinkedHashMap<>();
+        tags.put("parser", "");
+        tags.put("parse_confidence", "none");
+        tags.put("params", List.of());
+        tags.put("return", List.of());
+        tags.put("throws", List.of());
+        tags.put("since", List.of());
+        tags.put("api_notes", List.of());
+        tags.put("impl_specs", List.of());
+        tags.put("impl_notes", List.of());
+        tags.put("deprecated", List.of());
+        return tags;
+    }
+
+    private static String mainDescription(List<JavadocElement> elements, String javadoc) {
+        if (elements != null && !elements.isEmpty()) {
+            List<JavadocElement> description = new ArrayList<>();
+            for (JavadocElement element : elements) {
+                if (element instanceof JavadocBlockTag) {
+                    break;
+                }
+                description.add(element);
+            }
+            return elementsText(description);
+        }
+        String value = javadoc == null ? "" : javadoc;
+        List<RawBlockTag> blockTags = rawBlockTags(value);
+        return (blockTags.isEmpty() ? value : value.substring(0, blockTags.get(0).start()))
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
+
+    private static String mainDescriptionForInheritance(String javadoc) {
+        // Spoon 11.2 normalizes standard tag names case-insensitively. The raw
+        // source spelling must therefore remain authoritative for inheritance.
+        String value = protectLiteralContent(javadoc == null ? "" : javadoc);
+        List<RawBlockTag> blockTags = rawBlockTags(value);
+        String description = blockTags.isEmpty() ? value : value.substring(0, blockTags.get(0).start());
+        return markInlineReturns(description).replaceAll("\\s+", " ").trim();
+    }
+
+    private static String protectLiteralContent(String text) {
+        String value = text == null ? "" : text;
+        StringBuilder protectedText = new StringBuilder(value.length());
+        int cursor = 0;
+        while (cursor < value.length()) {
+            InlineTag tag = nextInlineTag(value, cursor);
+            if (tag == null) {
+                protectedText.append(value, cursor, value.length());
+                break;
+            }
+            protectedText.append(value, cursor, tag.nameEnd());
+            String body = value.substring(tag.nameEnd(), tag.end());
+            protectedText.append(containsLiteralContent(tag.name())
+                    ? protectJavadocTagMarkers(body)
+                    : protectLiteralContent(body));
+            protectedText.append('}');
+            cursor = tag.end() + 1;
+        }
+        return protectedText.toString();
+    }
+
+    private static String protectJavadocTagMarkers(String text) {
+        return (text == null ? "" : text).replace('@', InheritedJavadocResolver.PROTECTED_AT_SIGN);
+    }
+
+    private static boolean containsLiteralContent(String tagName) {
+        return "code".equals(tagName) || "literal".equals(tagName) || "snippet".equals(tagName);
+    }
+
+    private static String markInlineReturns(String text) {
+        String value = text == null ? "" : text;
+        int firstSignificant = 0;
+        while (firstSignificant < value.length()
+                && Character.isWhitespace(value.charAt(firstSignificant))) {
+            firstSignificant++;
+        }
+        InlineTag tag = nextInlineTag(value, firstSignificant);
+        if (tag == null || tag.start() != firstSignificant || !"return".equals(tag.name())) {
+            return value;
+        }
+        return value.substring(0, tag.start())
+                + InheritedJavadocResolver.INLINE_RETURN_START
+                + tag.body()
+                + InheritedJavadocResolver.INLINE_RETURN_END
+                + value.substring(tag.end() + 1);
+    }
+
+    private static int inlineTagEnd(String text, int start) {
+        int depth = 0;
+        for (int index = start; index < text.length(); index++) {
+            char value = text.charAt(index);
+            if (value == '{') {
+                depth++;
+            } else if (value == '}' && --depth == 0) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private static InlineTag nextInlineTag(String text, int fromIndex) {
+        String value = text == null ? "" : text;
+        int cursor = Math.max(0, fromIndex);
+        while (cursor < value.length()) {
+            int start = value.indexOf("{@", cursor);
+            if (start < 0 || start + 2 >= value.length()) {
+                return null;
+            }
+            int nameStart = start + 2;
+            if (!Character.isJavaIdentifierStart(value.charAt(nameStart))) {
+                cursor = nameStart + 1;
+                continue;
+            }
+            int nameEnd = nameStart + 1;
+            while (nameEnd < value.length()
+                    && Character.isJavaIdentifierPart(value.charAt(nameEnd))) {
+                nameEnd++;
+            }
+            int end = inlineTagEnd(value, start);
+            if (end < 0) {
+                return null;
+            }
+            return new InlineTag(start, end, nameEnd,
+                    value.substring(nameStart, nameEnd),
+                    value.substring(nameEnd, end).trim());
+        }
+        return null;
+    }
+
+    private static boolean containsInheritDoc(String javadoc) {
+        return containsInlineTag(protectLiteralContent(javadoc), "inheritDoc", false);
+    }
+
+    private static boolean hasExplicitInheritDocTarget(String javadoc) {
+        return containsInlineTag(protectLiteralContent(javadoc), "inheritDoc", true);
+    }
+
+    private static boolean containsInlineTag(String text, String name, boolean requireBody) {
+        String value = text == null ? "" : text;
+        int cursor = 0;
+        while (cursor < value.length()) {
+            InlineTag tag = nextInlineTag(value, cursor);
+            if (tag == null) {
+                return false;
+            }
+            if (name.equals(tag.name()) && (!requireBody || !tag.body().isBlank())) {
+                return true;
+            }
+            if (!containsLiteralContent(tag.name())
+                    && containsInlineTag(tag.body(), name, requireBody)) {
+                return true;
+            }
+            cursor = tag.end() + 1;
+        }
+        return false;
+    }
+
+    private record InlineTag(int start, int end, int nameEnd, String name, String body) {
+    }
+
+    private record RawBlockTag(int start, String name, String body) {
+    }
+
+    private record RawBlockTagStart(int start, int nameEnd, String name) {
+    }
+
+    private static List<RawBlockTag> rawBlockTags(String text) {
+        String value = text == null ? "" : text;
+        List<InlineTag> inlineTags = new ArrayList<>();
+        int inlineCursor = 0;
+        while (inlineCursor < value.length()) {
+            InlineTag tag = nextInlineTag(value, inlineCursor);
+            if (tag == null) {
+                break;
+            }
+            inlineTags.add(tag);
+            inlineCursor = tag.end() + 1;
+        }
+
+        List<RawBlockTagStart> starts = new ArrayList<>();
+        int lineStart = 0;
+        while (lineStart <= value.length()) {
+            int lineEnd = value.indexOf('\n', lineStart);
+            if (lineEnd < 0) {
+                lineEnd = value.length();
+            }
+            int cursor = lineStart;
+            while (cursor < lineEnd && Character.isWhitespace(value.charAt(cursor))) {
+                cursor++;
+            }
+            if (cursor < lineEnd && value.charAt(cursor) == '*') {
+                cursor++;
+                while (cursor < lineEnd && Character.isWhitespace(value.charAt(cursor))) {
+                    cursor++;
+                }
+            }
+            if (cursor < lineEnd && value.charAt(cursor) == '@'
+                    && !insideInlineTag(inlineTags, cursor)) {
+                int nameStart = cursor + 1;
+                if (nameStart < lineEnd && Character.isJavaIdentifierStart(value.charAt(nameStart))) {
+                    int nameEnd = nameStart + 1;
+                    while (nameEnd < lineEnd && Character.isJavaIdentifierPart(value.charAt(nameEnd))) {
+                        nameEnd++;
+                    }
+                    starts.add(new RawBlockTagStart(lineStart, nameEnd,
+                            value.substring(nameStart, nameEnd)));
+                }
+            }
+            if (lineEnd == value.length()) {
+                break;
+            }
+            lineStart = lineEnd + 1;
+        }
+
+        List<RawBlockTag> tags = new ArrayList<>();
+        for (int index = 0; index < starts.size(); index++) {
+            RawBlockTagStart start = starts.get(index);
+            int end = index + 1 < starts.size() ? starts.get(index + 1).start() : value.length();
+            tags.add(new RawBlockTag(start.start(), start.name(),
+                    normalizeRawBlockBody(value.substring(start.nameEnd(), end))));
+        }
+        return tags;
+    }
+
+    private static boolean insideInlineTag(List<InlineTag> tags, int offset) {
+        for (InlineTag tag : tags) {
+            if (offset < tag.start()) {
+                return false;
+            }
+            if (offset <= tag.end()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String normalizeRawBlockBody(String body) {
+        List<String> lines = new ArrayList<>();
+        for (String line : (body == null ? "" : body).split("\\R", -1)) {
+            lines.add(line.replaceFirst("^\\s*\\*?\\s?", ""));
+        }
+        return String.join(" ", lines).replaceAll("\\s+", " ").trim();
+    }
+
+    private static List<String> rawBlockTagBodies(String text, String name) {
+        return rawBlockTags(text).stream()
+                .filter(tag -> name.equals(tag.name()))
+                .map(RawBlockTag::body)
+                .toList();
     }
 
     private static List<Map<String, Object>> fileReferences(Path projectRoot, SourceMethod method, String javadoc) {
@@ -1023,13 +1648,70 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     }
 
     private static Map<String, Object> structuredTags(List<JavadocElement> elements, String javadoc) {
-        if (!elements.isEmpty()) {
-            return structuredTagsFromElements(elements);
-        }
-        return fallbackStructuredTags(javadoc);
+        Map<String, Object> tags = !elements.isEmpty() && typedSyntaxMatches(elements, javadoc)
+                ? structuredTagsFromElements(elements, false)
+                : fallbackStructuredTags(javadoc, false);
+        addLeadingInlineReturn(tags, javadoc, false);
+        return tags;
     }
 
-    private static Map<String, Object> structuredTagsFromElements(List<JavadocElement> elements) {
+    private static Map<String, Object> structuredTagsForInheritance(
+            List<JavadocElement> elements, String javadoc) {
+        String protectedJavadoc = protectLiteralContent(javadoc);
+        Map<String, Object> tags = literalContentNeedsProtection(javadoc)
+                || elements.isEmpty()
+                || !typedSyntaxMatches(elements, javadoc)
+                ? fallbackStructuredTags(protectedJavadoc, true)
+                : structuredTagsFromElements(elements, true);
+        addLeadingInlineReturn(tags, protectedJavadoc, true);
+        return tags;
+    }
+
+    private static boolean literalContentNeedsProtection(String javadoc) {
+        String value = javadoc == null ? "" : javadoc;
+        return !value.equals(protectLiteralContent(value));
+    }
+
+    private static boolean typedSyntaxMatches(List<JavadocElement> elements, String javadoc) {
+        List<JavadocBlockTag> typed = blockTags(elements);
+        List<RawBlockTag> raw = rawBlockTags(javadoc);
+        if (typed.size() != raw.size()) {
+            return false;
+        }
+        for (int index = 0; index < typed.size(); index++) {
+            if (!raw.get(index).name().equals(typed.get(index).getTagType().getName())) {
+                return false;
+            }
+        }
+        return !containsCaseVariantOfStandardInlineTag(javadoc);
+    }
+
+    private static boolean containsCaseVariantOfStandardInlineTag(String text) {
+        String value = text == null ? "" : text;
+        int cursor = 0;
+        while (cursor < value.length()) {
+            InlineTag tag = nextInlineTag(value, cursor);
+            if (tag == null) {
+                return false;
+            }
+            boolean standardIgnoringCase = java.util.Arrays.stream(StandardJavadocTagType.values())
+                    .anyMatch(type -> type.getName().equalsIgnoreCase(tag.name()));
+            boolean standardExact = java.util.Arrays.stream(StandardJavadocTagType.values())
+                    .anyMatch(type -> type.getName().equals(tag.name()));
+            if (standardIgnoringCase && !standardExact) {
+                return true;
+            }
+            if (!containsLiteralContent(tag.name())
+                    && containsCaseVariantOfStandardInlineTag(tag.body())) {
+                return true;
+            }
+            cursor = tag.end() + 1;
+        }
+        return false;
+    }
+
+    private static Map<String, Object> structuredTagsFromElements(
+            List<JavadocElement> elements, boolean inheritanceSafe) {
         Map<String, Object> tags = new LinkedHashMap<>();
         List<Map<String, String>> params = new ArrayList<>();
         List<Map<String, String>> throwsTags = new ArrayList<>();
@@ -1044,20 +1726,20 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             String tag = block.getTagType().getName();
             List<JavadocElement> blockElements = block.getElements();
             switch (tag) {
-                case "param" -> params.add(namedBlockTag(blockElements, "name"));
-                case "return" -> returns.add(elementsText(blockElements));
-                case "throws", "exception" -> throwsTags.add(namedBlockTag(blockElements, "type"));
-                case "since" -> since.add(elementsText(blockElements));
-                case "apiNote" -> apiNotes.add(elementsText(blockElements));
-                case "implSpec" -> implSpecs.add(elementsText(blockElements));
-                case "implNote" -> implNotes.add(elementsText(blockElements));
-                case "deprecated" -> deprecated.add(elementsText(blockElements));
+                case "param" -> params.add(namedBlockTag(blockElements, "name", inheritanceSafe));
+                case "return" -> returns.add(elementsText(blockElements, inheritanceSafe));
+                case "throws", "exception" -> throwsTags.add(
+                        namedBlockTag(blockElements, "type", inheritanceSafe));
+                case "since" -> since.add(elementsText(blockElements, inheritanceSafe));
+                case "apiNote" -> apiNotes.add(elementsText(blockElements, inheritanceSafe));
+                case "implSpec" -> implSpecs.add(elementsText(blockElements, inheritanceSafe));
+                case "implNote" -> implNotes.add(elementsText(blockElements, inheritanceSafe));
+                case "deprecated" -> deprecated.add(elementsText(blockElements, inheritanceSafe));
                 default -> {
                     // Only expose the structured tags CoCoMUT's schema names.
                 }
             }
         }
-
         tags.put("parser", "spoon-javadoc");
         tags.put("parse_confidence", "high");
         tags.put("params", params);
@@ -1072,6 +1754,11 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     }
 
     private static Map<String, Object> fallbackStructuredTags(String javadoc) {
+        return fallbackStructuredTags(javadoc, false);
+    }
+
+    private static Map<String, Object> fallbackStructuredTags(
+            String javadoc, boolean inheritanceSafe) {
         Map<String, Object> tags = new LinkedHashMap<>();
         List<Map<String, String>> params = new ArrayList<>();
         List<Map<String, String>> throwsTags = new ArrayList<>();
@@ -1082,10 +1769,13 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         List<String> implNotes = new ArrayList<>();
         List<String> deprecated = new ArrayList<>();
 
-        Matcher matcher = BLOCK_TAG.matcher(javadoc == null ? "" : javadoc);
-        while (matcher.find()) {
-            String tag = matcher.group(1);
-            String body = matcher.group(2).replaceAll("\\s+", " ").trim();
+        String protectedJavadoc = protectLiteralContent(javadoc);
+        for (RawBlockTag block : rawBlockTags(protectedJavadoc)) {
+            String tag = block.name();
+            String body = block.body();
+            if (!inheritanceSafe) {
+                body = InheritedJavadocResolver.decodeProtectedText(body);
+            }
             switch (tag) {
                 case "param" -> params.add(splitNamedText(body, "name"));
                 case "return" -> returns.add(body);
@@ -1100,7 +1790,6 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 }
             }
         }
-
         tags.put("parser", "cocomut-fallback");
         tags.put("parse_confidence", "low");
         tags.put("params", params);
@@ -1114,6 +1803,34 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return tags;
     }
 
+    @SuppressWarnings("unchecked")
+    private static void addLeadingInlineReturn(Map<String, Object> tags,
+                                               String javadoc,
+                                               boolean inheritanceSafe) {
+        String protectedJavadoc = protectLiteralContent(javadoc);
+        String main = mainDescription(List.of(), protectedJavadoc);
+        leadingInlineTagBody(main, "return").ifPresent(body -> {
+            List<String> returns = (List<String>) tags.get("return");
+            String value = inheritanceSafe
+                    ? body : InheritedJavadocResolver.decodeProtectedText(body);
+            if (!returns.contains(value)) {
+                returns.add(value);
+            }
+        });
+    }
+
+    private static Optional<String> leadingInlineTagBody(String text, String name) {
+        String value = text == null ? "" : text;
+        int firstSignificant = 0;
+        while (firstSignificant < value.length()
+                && Character.isWhitespace(value.charAt(firstSignificant))) {
+            firstSignificant++;
+        }
+        InlineTag tag = nextInlineTag(value, firstSignificant);
+        return tag != null && tag.start() == firstSignificant && name.equals(tag.name())
+                ? Optional.of(tag.body()) : Optional.empty();
+    }
+
     private static List<JavadocBlockTag> blockTags(List<JavadocElement> elements) {
         List<JavadocBlockTag> blocks = new ArrayList<>();
         for (JavadocElement element : elements == null ? List.<JavadocElement>of() : elements) {
@@ -1124,20 +1841,13 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return blocks;
     }
 
-    private static List<String> blockTagTexts(List<JavadocElement> elements, StandardJavadocTagType tagType) {
-        return blockTags(elements).stream()
-                .filter(block -> tagType.equals(block.getTagType()))
-                .map(block -> elementsText(block.getElements()))
-                .filter(text -> !text.isBlank())
-                .toList();
-    }
-
-    private static Map<String, String> namedBlockTag(List<JavadocElement> elements, String key) {
+    private static Map<String, String> namedBlockTag(
+            List<JavadocElement> elements, String key, boolean inheritanceSafe) {
         if (elements == null || elements.isEmpty()) {
             return Map.of(key, "", "text", "");
         }
-        String name = elementText(elements.get(0));
-        String text = elementsText(elements.subList(1, elements.size()));
+        String name = elementText(elements.get(0), inheritanceSafe);
+        String text = elementsText(elements.subList(1, elements.size()), inheritanceSafe);
         Map<String, String> value = new LinkedHashMap<>();
         value.put(key, name);
         value.put("text", text);
@@ -1174,48 +1884,17 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return value instanceof List<?> list ? list : List.of();
     }
 
-    private static boolean hasSummary(List<JavadocElement> elements) {
-        if (elements == null || elements.isEmpty()) {
-            return false;
-        }
-        List<JavadocElement> summaryElements = new ArrayList<>();
-        for (JavadocElement element : elements) {
-            if (element instanceof JavadocBlockTag) {
-                break;
-            }
-            summaryElements.add(element);
-        }
-        return !elementsText(summaryElements).isBlank();
-    }
-
-    private static boolean usesInheritDoc(List<JavadocElement> elements) {
-        if (elements == null || elements.isEmpty()) {
-            return false;
-        }
-        for (JavadocElement element : elements) {
-            if (element instanceof JavadocInlineTag inline) {
-                if (StandardJavadocTagType.INHERIT_DOC.equals(inline.getTagType())
-                        || usesInheritDoc(inline.getElements())) {
-                    return true;
-                }
-            } else if (element instanceof JavadocBlockTag block && usesInheritDoc(block.getElements())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean hasBlockTag(List<JavadocElement> elements, StandardJavadocTagType tagType) {
-        return blockTags(elements).stream().anyMatch(block -> tagType.equals(block.getTagType()));
-    }
-
     private static String elementsText(List<JavadocElement> elements) {
+        return elementsText(elements, false);
+    }
+
+    private static String elementsText(List<JavadocElement> elements, boolean inheritanceSafe) {
         if (elements == null || elements.isEmpty()) {
             return "";
         }
         List<String> parts = new ArrayList<>();
         for (JavadocElement element : elements) {
-            String text = elementText(element);
+            String text = elementText(element, inheritanceSafe);
             if (!text.isBlank()) {
                 parts.add(text);
             }
@@ -1224,6 +1903,10 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     }
 
     private static String elementText(JavadocElement element) {
+        return elementText(element, false);
+    }
+
+    private static String elementText(JavadocElement element, boolean inheritanceSafe) {
         if (element instanceof JavadocText text) {
             return text.getText();
         }
@@ -1234,10 +1917,20 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             if (StandardJavadocTagType.INHERIT_DOC.equals(inline.getTagType())) {
                 return "{@inheritDoc}";
             }
-            return elementsText(inline.getElements());
+            String content = elementsText(inline.getElements(), inheritanceSafe);
+            if (inheritanceSafe && (StandardJavadocTagType.CODE.equals(inline.getTagType())
+                    || StandardJavadocTagType.LITERAL.equals(inline.getTagType())
+                    || StandardJavadocTagType.SNIPPET.equals(inline.getTagType()))) {
+                return protectJavadocTagMarkers(content);
+            }
+            if (inheritanceSafe && StandardJavadocTagType.RETURN.equals(inline.getTagType())) {
+                return InheritedJavadocResolver.INLINE_RETURN_START + content
+                        + InheritedJavadocResolver.INLINE_RETURN_END;
+            }
+            return content;
         }
         if (element instanceof JavadocBlockTag block) {
-            return elementsText(block.getElements());
+            return elementsText(block.getElements(), inheritanceSafe);
         }
         return "";
     }
@@ -1250,8 +1943,10 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         List<Map<String, Object>> references = new ArrayList<>();
         List<RawJavadocReference> rawReferences = new ArrayList<>(rawJavadocReferences(javadoc));
 
-        for (JavadocElement element : elements) {
-            addSpoonJavadocReference(parsed, owner, element, rawReferences, references);
+        if (typedSyntaxMatches(elements, javadoc)) {
+            for (JavadocElement element : elements) {
+                addSpoonJavadocReference(parsed, owner, element, rawReferences, references);
+            }
         }
 
         Set<String> represented = new LinkedHashSet<>();
@@ -1332,6 +2027,11 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     }
 
     private static List<String> inlineLinkTargets(List<JavadocElement> elements, String javadoc) {
+        if (!typedSyntaxMatches(elements, javadoc)) {
+            return inlineLinkReferences(javadoc).stream()
+                    .map(InlineJavadocReference::target)
+                    .toList();
+        }
         List<String> spoonTargets = new ArrayList<>();
         collectInlineLinkTargets(elements, spoonTargets);
         if (!spoonTargets.isEmpty()) {
@@ -1593,12 +2293,11 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
         List<RawJavadocReference> references = new ArrayList<>();
 
-        Matcher blockMatcher = BLOCK_TAG.matcher(javadoc);
-        while (blockMatcher.find()) {
-            if (!"see".equals(blockMatcher.group(1))) {
+        for (RawBlockTag block : rawBlockTags(javadoc)) {
+            if (!"see".equals(block.name())) {
                 continue;
             }
-            String raw = blockMatcher.group(2).replaceAll("\\s+", " ").trim();
+            String raw = block.body();
             String[] targetAndLabel = splitReferenceTargetAndLabel(raw);
             references.add(new RawJavadocReference("see", raw, targetAndLabel[0], targetAndLabel[1]));
         }
@@ -2669,51 +3368,11 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
 
     private static boolean isDeprecated(CtExecutable<?> executable, String javadoc) {
         return annotations(executable).stream().anyMatch(a -> a.endsWith("Deprecated"))
-                || javadoc.contains("@deprecated");
+                || !rawBlockTagBodies(javadoc, "deprecated").isEmpty();
     }
 
     private static String deprecationText(String javadoc) {
-        Matcher matcher = Pattern.compile("(?ms)^\\s*\\*?\\s*@deprecated\\s+(.+?)(?:\\R\\s*\\*?\\s*@|\\z)").matcher(javadoc);
-        if (matcher.find()) {
-            return matcher.group(1).replaceAll("\\s+", " ").trim();
-        }
-        return "";
-    }
-
-    private static String inheritdocResolution(CtExecutable<?> executable, String javadoc) {
-        if (!(javadoc.contains("{@inheritDoc}") || javadoc.contains("@inheritDoc"))) {
-            return "not_used";
-        }
-        try {
-            if (executable instanceof CtMethod<?> method && method.getTopDefinitions() != null
-                    && !method.getTopDefinitions().isEmpty()) {
-                return "resolved_candidate";
-            }
-        } catch (Exception | StackOverflowError ignored) {
-            return "unresolved";
-        }
-        return "unresolved";
-    }
-
-    private static List<String> inheritedJavadocCandidates(CtExecutable<?> executable) {
-        if (!(executable instanceof CtMethod<?> method)) {
-            return List.of();
-        }
-        List<String> candidates = new ArrayList<>();
-        try {
-            for (CtMethod<?> definition : method.getTopDefinitions()) {
-                String doc = docComment(definition);
-                if (!doc.isBlank()) {
-                    candidates.add(doc);
-                }
-                if (candidates.size() >= 3) {
-                    break;
-                }
-            }
-        } catch (Exception | StackOverflowError ignored) {
-            return List.of();
-        }
-        return candidates;
+        return rawBlockTagBodies(javadoc, "deprecated").stream().findFirst().orElse("");
     }
 
     private static Integer maxSourceFiles() {
@@ -2734,15 +3393,6 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         } catch (NumberFormatException e) {
             return null;
         }
-    }
-
-    private static List<String> matches(Pattern pattern, String text, int group) {
-        List<String> values = new ArrayList<>();
-        Matcher matcher = pattern.matcher(text);
-        while (matcher.find()) {
-            values.add(matcher.group(group));
-        }
-        return values;
     }
 
     private static boolean hasSummary(String javadoc) {

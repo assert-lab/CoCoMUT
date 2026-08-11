@@ -736,7 +736,11 @@ public class ProjectAnalyzerTest {
                     null, java.util.Map.of(), "3".repeat(64), null, report);
 
             JsonNode root = new ObjectMapper().readTree(manifest.toFile());
-            assertEquals("0.4.0", root.path("schema_version").asText());
+            assertEquals("0.5.0", root.path("schema_version").asText());
+            assertEquals("jdk25-standard-doclet",
+                    root.path("javadoc_inheritance").path("policy_id").asText());
+            assertEquals("25",
+                    root.path("javadoc_inheritance").path("specification_version").asText());
             JsonNode emitted = root.path("hashes").path("emitted_jsonl");
             assertEquals("empty", emitted.path("status").asText());
             assertEquals(0, emitted.path("errors").size());

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://assert-lab.github.io/cocomut/schemas/extraction-manifest-v0.4.0.schema.json",
+  "$id": "https://assert-lab.github.io/cocomut/schemas/extraction-manifest-v0.5.0.schema.json",
   "title": "CoCoMUT Extraction Manifest",
   "type": "object",
   "additionalProperties": false,
@@ -12,6 +12,7 @@
     "tool_git",
     "request_hash",
     "selection",
+    "javadoc_inheritance",
     "project",
     "build",
     "artifacts",
@@ -19,7 +20,7 @@
     "execution"
   ],
   "properties": {
-    "schema_version": { "const": "0.4.0" },
+    "schema_version": { "const": "0.5.0" },
     "generated_at": { "type": "string", "format": "date-time" },
     "tool": { "const": "CoCoMUT" },
     "tool_version": { "type": "string" },
@@ -27,6 +28,19 @@
     "request_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "jsonl_file": { "type": ["string", "null"] },
     "selection": { "type": "object" },
+    "javadoc_inheritance": {
+      "type": "object",
+      "required": ["policy_id", "specification_version", "implementation_version", "defaulted", "granularity", "mode"],
+      "properties": {
+        "policy_id": {"const": "jdk25-standard-doclet"},
+        "specification_version": {"const": "25"},
+        "implementation_version": {"type": "string", "minLength": 1},
+        "defaulted": {"type": "boolean"},
+        "granularity": {"const": "item_level"},
+        "mode": {"const": "effective_and_candidates"}
+      },
+      "additionalProperties": false
+    },
     "execution": { "type": "object" },
     "project": {
       "type": "object",

@@ -39,3 +39,22 @@ jobs:
             --max-methods 1 \
             --output-dir /tmp/cocomut-ci-smoke
           test -n "$(find /tmp/cocomut-ci-smoke -maxdepth 1 -name 'method_contexts__*.jsonl' -size +0c -print -quit)"
+
+  jdk25-javadoc-conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Test inherited Javadoc conformance
+        run: >-
+          ./mvnw -q -pl analyzer-tests -am
+          -Dtest=SourceModelEdgeCaseTest
+          -Dsurefire.failIfNoSpecifiedTests=false test

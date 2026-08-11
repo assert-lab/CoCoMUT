@@ -69,6 +69,8 @@ final class AnalyzerFacade {
         selection.put("classes", request.classes());
         selection.put("methods", request.methods());
         selection.put("source_sets", request.sourceSets());
+        selection.put("javadoc_inheritance", request.javadocInheritancePolicy()
+                .metadata(request.javadocInheritancePolicyDefaulted()));
         return selection;
     }
 

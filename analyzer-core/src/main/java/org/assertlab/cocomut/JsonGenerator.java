@@ -125,7 +125,7 @@ public class JsonGenerator {
 
         // Metadata
         ObjectNode metadata = objectMapper.createObjectNode();
-        metadata.put("schema_version", "0.4.0");
+        metadata.put("schema_version", "0.5.0");
         metadata.put("source_backend", context.getSourceBackend());
         metadata.put("source_backend_mode", context.getSourceBackendMode());
         metadata.put("method_identity", "uri");

@@ -59,6 +59,9 @@ final class Orchestrator {
     private List<Path> explicitSourceRoots = List.of();
     private List<Path> explicitTestSourceRoots = List.of();
     private RunSnapshot runSnapshot;
+    private ContextRequest.JavadocInheritancePolicy javadocInheritancePolicy =
+            ContextRequest.JavadocInheritancePolicy.JDK25_STANDARD_DOCLET;
+    private boolean javadocInheritancePolicyDefaulted = true;
 
     // Pipeline state passed between phases
     private ProjectMetadata projectMetadata;
@@ -103,6 +106,8 @@ final class Orchestrator {
         this.explicitClasspathFiles = request.classpathFiles();
         this.explicitSourceRoots = request.sourceRoots();
         this.explicitTestSourceRoots = request.testSourceRoots();
+        this.javadocInheritancePolicy = request.javadocInheritancePolicy();
+        this.javadocInheritancePolicyDefaulted = request.javadocInheritancePolicyDefaulted();
     }
 
     Orchestrator(ContextRequest request, ProjectMetadata metadata) {
@@ -188,7 +193,7 @@ final class Orchestrator {
         try {
             currentPhase = 1;
             if (!executePhase1()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 1); return false; }
-            configureSourceFileLimit();
+            configureSourceAnalysis();
             currentPhase = 2;
             openSourceSession();
             if (!executePhase2()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 2); return false; }
@@ -225,7 +230,7 @@ final class Orchestrator {
                     : failureCodes.stream().map(Enum::toString).toList());
             writeExecutionReportIfPossible();
             closeSourceSession();
-            restoreSourceFileLimit();
+            restoreSourceAnalysisConfiguration();
         }
     }
 
@@ -620,11 +625,14 @@ final class Orchestrator {
                 && method.getErasedParameterTypes().equals(List.of("java.lang.String[]"));
     }
 
-    private void configureSourceFileLimit() {
+    private void configureSourceAnalysis() {
         if (maxSourceFiles != null && maxSourceFiles > 0) {
             SourceBackends.setMaxSourceFiles(maxSourceFiles);
             executionReport.put("source_max_files", maxSourceFiles);
         }
+        SourceBackends.setJavadocInheritancePolicy(
+                javadocInheritancePolicy, javadocInheritancePolicyDefaulted);
+        executionReport.put("javadoc_inheritance_policy", javadocInheritancePolicy.id());
     }
 
     private void openSourceSession() throws java.io.IOException {
@@ -680,7 +688,7 @@ final class Orchestrator {
         }
     }
 
-    private void restoreSourceFileLimit() {
+    private void restoreSourceAnalysisConfiguration() {
         SourceBackends.clearConfiguration();
     }
 
@@ -969,6 +977,7 @@ final class Orchestrator {
         selection.put("exclude_paths", excludePathGlobs.stream().sorted().toList());
         selection.put("max_methods", maxMethods);
         selection.put("max_source_files", maxSourceFiles);
+        selection.put("javadoc_inheritance", javadocInheritanceMetadata());
         if (targetFilters.isEmpty()) {
             selection.put("kind", "project");
             selection.put("uri", projectUri());
@@ -990,6 +999,10 @@ final class Orchestrator {
                         "uri", target.uri()))
                 .toList());
         return selection;
+    }
+
+    private Map<String, Object> javadocInheritanceMetadata() {
+        return javadocInheritancePolicy.metadata(javadocInheritancePolicyDefaulted);
     }
 
     private static List<PathMatcher> pathMatchers(Set<String> globs) {
@@ -1060,7 +1073,7 @@ final class Orchestrator {
             return RequestFingerprint.hash(request);
         }
         Map<String, Object> request = new LinkedHashMap<>();
-        request.put("schema", "cocomut-request-v2");
+        request.put("schema", "cocomut-request-v3");
         request.put("project_selector", "project-root");
         request.put("project_name", projectName());
         request.put("scope", scope.toString());
@@ -1076,6 +1089,11 @@ final class Orchestrator {
         request.put("max_source_files", maxSourceFiles);
         request.put("call_graph", callGraphAlgorithm.toString());
         request.put("build_policy", buildPolicy.toString());
+        request.put("javadoc_inheritance_policy", javadocInheritancePolicy.id());
+        request.put("javadoc_inheritance_specification_version",
+                javadocInheritancePolicy.specificationVersion());
+        request.put("javadoc_inheritance_implementation_version",
+                javadocInheritancePolicy.implementationVersion());
         request.put("class_outputs", artifactIdentities(explicitClassOutputDirs));
         request.put("test_class_outputs", artifactIdentities(explicitTestClassOutputDirs));
         request.put("project_jars", artifactIdentities(explicitProjectJars));

@@ -84,6 +84,9 @@ Each JSONL row contains:
 - type context, class Javadoc, hierarchy, fields, overloads, siblings, and
   documentation metrics;
 - resolved Javadoc references with target kind, domain, and scope taxonomy;
+- declared Javadoc tags, ordered inherited-documentation evidence, and a
+  separate item-level effective view under the recorded
+  `jdk25-standard-doclet` policy, with segment-level provenance;
 - callers/callees from static bytecode analysis, with project source joins when
   the bytecode target maps to one unique source method;
 - provenance fields describing backend mode, resolution confidence, failures,
@@ -107,6 +110,7 @@ See [schemas/README.md](schemas/README.md) for the full schema.
 | Example JSONL output | [examples/sample-output/minimal-method-context.jsonl](examples/sample-output/minimal-method-context.jsonl) |
 | Method/type/package URIs | [docs/symbol-model.md](docs/symbol-model.md) |
 | Javadoc reference policy | [docs/javadoc-reference-policy.md](docs/javadoc-reference-policy.md) |
+| Inherited Javadoc resolution | [docs/inherited-javadoc-resolution.md](docs/inherited-javadoc-resolution.md) |
 | Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Machine-readable citation metadata | [CITATION.cff](CITATION.cff) |
 
