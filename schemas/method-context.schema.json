@@ -18,13 +18,13 @@
         "parameters",
         "code",
         "javadoc",
-        "class_hierarchy",
+        "type_hierarchy",
         "source_context"
       ],
       "properties": {
         "method_uri": {
           "type": "string",
-          "description": "Canonical CoCoMUT method URI: relative/path.java#qualified.Class.method(erasedParamTypes):erasedReturnType"
+          "description": "Canonical CoCoMUT method URI: relative/path.java#qualified.Type.method(erasedParamTypes):erasedReturnType"
         },
         "method_name": {"type": "string"},
         "source_set": {"type": "string"},
@@ -52,9 +52,34 @@
           "type": "string",
           "description": "Method Javadoc stored separately from method source."
         },
-        "class_hierarchy": {"type": "object"},
-        "source_context": {"type": "object"},
-        "class_javadoc": {"type": "string"}
+        "type_hierarchy": {"type": "object"},
+        "source_context": {
+          "type": "object",
+          "required": ["field_reads", "field_writes", "same_type_methods", "overload_group"],
+          "properties": {
+            "field_reads": {
+              "type": "array",
+              "items": {"type": "string"}
+            },
+            "field_writes": {
+              "type": "array",
+              "items": {"type": "string"}
+            },
+            "same_type_methods": {
+              "type": "array",
+              "items": {"type": "string"},
+              "maxItems": 500,
+              "description": "Methods declared directly in the focal method's declaring type, including the focal method and overloads; constructors, initializer blocks, and inherited methods are excluded."
+            },
+            "overload_group": {
+              "type": "array",
+              "items": {"type": "string"},
+              "maxItems": 200
+            }
+          },
+          "additionalProperties": true
+        },
+        "type_javadoc": {"type": "string"}
       },
       "additionalProperties": true
     },
@@ -291,7 +316,7 @@
         "target_uri",
         "target_kind",
         "raw_signature",
-        "declaring_class",
+        "declaring_type",
         "method_name",
         "resolution"
       ],
@@ -307,7 +332,7 @@
           "description": "project_method|unresolved_project_method|jdk_method|external_method|bytecode_method|invokedynamic_method|synthetic_or_compiler_method"
         },
         "raw_signature": {"type": "string"},
-        "declaring_class": {"type": "string"},
+        "declaring_type": {"type": "string"},
         "method_name": {"type": "string"},
         "resolution": {"type": "string"},
         "context_in_output": {
@@ -317,7 +342,7 @@
         "candidate_method_uris": {"type": "array", "items": {"type": "string"}},
         "unresolved_reason": {
           "type": "string",
-          "description": "Deterministic reason why method_uri is empty, for example project_class_present_method_absent_record_component_accessor or jdk_or_platform_method_outside_project_source."
+          "description": "Deterministic reason why method_uri is empty, for example project_type_present_method_absent_record_component_accessor or jdk_or_platform_method_outside_project_source."
         },
         "context": {"type": "object"}
       },
@@ -366,13 +391,13 @@
         "type_uri": {"type": "string"},
         "referenced_method": {"type": "object"},
         "field_javadoc": {"type": "string"},
-        "class_javadoc": {"type": "string"},
-        "resolved_class": {"type": "string"},
+        "type_javadoc": {"type": "string"},
+        "resolved_type": {"type": "string"},
         "referenced_member": {"type": "string"},
         "candidate_method_uris": {"type": "array"},
         "candidate_field_uris": {"type": "array"},
         "ambiguity_reason": {"type": "string"},
-        "external_class": {"type": "string"},
+        "external_type": {"type": "string"},
         "external_member": {"type": "string"},
         "external_resolution": {"type": "string"},
         "external_member_kind": {"type": "string"},

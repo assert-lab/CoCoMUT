@@ -9,13 +9,13 @@ import java.util.Objects;
 
 /**
  * Represents the complete context for a single method.
- * Contains method body, javadocs, call graph, and class hierarchy information.
+ * Contains method body, Javadocs, call graph, and type hierarchy information.
  */
 public class MethodContext {
     private final String methodUri;
     private final String methodName;
-    private final String classname;
-    private final String signature;           // Formatted: org.example.Class.foo(String, int)
+    private final String typeName;
+    private final String signature;           // Formatted: org.example.Type.foo(String, int)
     private final String returnType;
     private final String erasedReturnType;
     private final int lineNumber;             // Source line number (1-indexed)
@@ -23,9 +23,9 @@ public class MethodContext {
     private final List<Map<String, Object>> parameterDetails;
     private final String methodBody;          // Full method source code
     private final String javadoc;             // JavaDoc comment
-    private final String classJavadoc;        // Class-level JavaDoc
-    private final String classHierarchy;      // Class inheritance chain
-    private final Map<String, String> classMethods;  // Other methods in class
+    private final String typeJavadoc;         // Declaring-type Javadoc
+    private final String typeHierarchy;       // Type inheritance hierarchy
+    private final Map<String, String> typeMethods;  // Methods declared in the type
     private final CallGraphResult callGraph;  // Call graph from Phase 3
     private final int linesOfCode;
     private final int cyclomatic;             // lexical branch-keyword estimate
@@ -33,7 +33,7 @@ public class MethodContext {
     private final List<String> thrownExceptions;
     private final List<String> fieldReads;
     private final List<String> fieldWrites;
-    private final List<String> siblingMethods;
+    private final List<String> sameTypeMethods;
     private final List<String> overloadGroup;
     private final List<String> dynamicFeatures;
     private final Map<String, Object> javadocMetadata;
@@ -46,7 +46,7 @@ public class MethodContext {
     private MethodContext(Builder builder) {
         this.methodUri = Objects.requireNonNull(builder.methodUri, "methodUri cannot be null");
         this.methodName = Objects.requireNonNull(builder.methodName, "methodName cannot be null");
-        this.classname = Objects.requireNonNull(builder.classname, "classname cannot be null");
+        this.typeName = Objects.requireNonNull(builder.typeName, "typeName cannot be null");
         this.signature = builder.signature != null ? builder.signature : "";
         this.returnType = builder.returnType != null ? builder.returnType : "";
         this.erasedReturnType = builder.erasedReturnType != null ? builder.erasedReturnType : this.returnType;
@@ -55,9 +55,9 @@ public class MethodContext {
         this.parameterDetails = Collections.unmodifiableList(new ArrayList<>(builder.parameterDetails));
         this.methodBody = builder.methodBody != null ? builder.methodBody : "";
         this.javadoc = builder.javadoc != null ? builder.javadoc : "";
-        this.classJavadoc = builder.classJavadoc != null ? builder.classJavadoc : "";
-        this.classHierarchy = builder.classHierarchy != null ? builder.classHierarchy : "";
-        this.classMethods = Collections.unmodifiableMap(new HashMap<>(builder.classMethods));
+        this.typeJavadoc = builder.typeJavadoc != null ? builder.typeJavadoc : "";
+        this.typeHierarchy = builder.typeHierarchy != null ? builder.typeHierarchy : "";
+        this.typeMethods = Collections.unmodifiableMap(new HashMap<>(builder.typeMethods));
         this.callGraph = builder.callGraph;
         this.linesOfCode = builder.linesOfCode;
         this.cyclomatic = builder.cyclomatic;
@@ -65,7 +65,7 @@ public class MethodContext {
         this.thrownExceptions = Collections.unmodifiableList(new ArrayList<>(builder.thrownExceptions));
         this.fieldReads = Collections.unmodifiableList(new ArrayList<>(builder.fieldReads));
         this.fieldWrites = Collections.unmodifiableList(new ArrayList<>(builder.fieldWrites));
-        this.siblingMethods = Collections.unmodifiableList(new ArrayList<>(builder.siblingMethods));
+        this.sameTypeMethods = Collections.unmodifiableList(new ArrayList<>(builder.sameTypeMethods));
         this.overloadGroup = Collections.unmodifiableList(new ArrayList<>(builder.overloadGroup));
         this.dynamicFeatures = Collections.unmodifiableList(new ArrayList<>(builder.dynamicFeatures));
         this.javadocMetadata = Collections.unmodifiableMap(new HashMap<>(builder.javadocMetadata));
@@ -85,8 +85,8 @@ public class MethodContext {
         return methodName;
     }
 
-    public String getClassname() {
-        return classname;
+    public String getTypeName() {
+        return typeName;
     }
 
     public String getSignature() {
@@ -121,16 +121,16 @@ public class MethodContext {
         return javadoc;
     }
 
-    public String getClassJavadoc() {
-        return classJavadoc;
+    public String getTypeJavadoc() {
+        return typeJavadoc;
     }
 
-    public String getClassHierarchy() {
-        return classHierarchy;
+    public String getTypeHierarchy() {
+        return typeHierarchy;
     }
 
-    public Map<String, String> getClassMethods() {
-        return classMethods;
+    public Map<String, String> getTypeMethods() {
+        return typeMethods;
     }
 
     public CallGraphResult getCallGraph() {
@@ -161,8 +161,8 @@ public class MethodContext {
         return fieldWrites;
     }
 
-    public List<String> getSiblingMethods() {
-        return siblingMethods;
+    public List<String> getSameTypeMethods() {
+        return sameTypeMethods;
     }
 
     public List<String> getOverloadGroup() {
@@ -201,8 +201,8 @@ public class MethodContext {
         return javadoc != null && !javadoc.isEmpty();
     }
 
-    public boolean hasClassJavadoc() {
-        return classJavadoc != null && !classJavadoc.isEmpty();
+    public boolean hasTypeJavadoc() {
+        return typeJavadoc != null && !typeJavadoc.isEmpty();
     }
 
     @Override
@@ -210,7 +210,7 @@ public class MethodContext {
         return "MethodContext{" +
                 "methodUri='" + methodUri + '\'' +
                 ", methodName='" + methodName + '\'' +
-                ", classname='" + classname + '\'' +
+                ", typeName='" + typeName + '\'' +
                 ", lineNumber=" + lineNumber +
                 ", linesOfCode=" + linesOfCode +
                 ", cyclomatic=" + cyclomatic +
@@ -226,7 +226,7 @@ public class MethodContext {
     public static class Builder {
         private String methodUri;
         private String methodName;
-        private String classname;
+        private String typeName;
         private String signature = "";
         private String returnType = "";
         private String erasedReturnType = "";
@@ -235,9 +235,9 @@ public class MethodContext {
         private List<Map<String, Object>> parameterDetails = List.of();
         private String methodBody;
         private String javadoc;
-        private String classJavadoc = "";
-        private String classHierarchy;
-        private Map<String, String> classMethods = new HashMap<>();
+        private String typeJavadoc = "";
+        private String typeHierarchy;
+        private Map<String, String> typeMethods = new HashMap<>();
         private CallGraphResult callGraph;
         private int linesOfCode = 0;
         private int cyclomatic = 1;
@@ -245,7 +245,7 @@ public class MethodContext {
         private List<String> thrownExceptions = List.of();
         private List<String> fieldReads = List.of();
         private List<String> fieldWrites = List.of();
-        private List<String> siblingMethods = List.of();
+        private List<String> sameTypeMethods = List.of();
         private List<String> overloadGroup = List.of();
         private List<String> dynamicFeatures = List.of();
         private Map<String, Object> javadocMetadata = Map.of();
@@ -265,8 +265,8 @@ public class MethodContext {
             return this;
         }
 
-        public Builder classname(String classname) {
-            this.classname = classname;
+        public Builder typeName(String typeName) {
+            this.typeName = typeName;
             return this;
         }
 
@@ -313,23 +313,23 @@ public class MethodContext {
             return this;
         }
 
-        public Builder classJavadoc(String classJavadoc) {
-            this.classJavadoc = classJavadoc;
+        public Builder typeJavadoc(String typeJavadoc) {
+            this.typeJavadoc = typeJavadoc;
             return this;
         }
 
-        public Builder classHierarchy(String classHierarchy) {
-            this.classHierarchy = classHierarchy;
+        public Builder typeHierarchy(String typeHierarchy) {
+            this.typeHierarchy = typeHierarchy;
             return this;
         }
 
-        public Builder classMethods(Map<String, String> classMethods) {
-            this.classMethods = new HashMap<>(classMethods);
+        public Builder typeMethods(Map<String, String> typeMethods) {
+            this.typeMethods = new HashMap<>(typeMethods);
             return this;
         }
 
-        public Builder addClassMethod(String methodName, String signature) {
-            this.classMethods.put(methodName, signature);
+        public Builder addTypeMethod(String methodName, String signature) {
+            this.typeMethods.put(methodName, signature);
             return this;
         }
 
@@ -368,8 +368,8 @@ public class MethodContext {
             return this;
         }
 
-        public Builder siblingMethods(List<String> siblingMethods) {
-            this.siblingMethods = siblingMethods != null ? new ArrayList<>(siblingMethods) : List.of();
+        public Builder sameTypeMethods(List<String> sameTypeMethods) {
+            this.sameTypeMethods = sameTypeMethods != null ? new ArrayList<>(sameTypeMethods) : List.of();
             return this;
         }
 

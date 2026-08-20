@@ -23,6 +23,13 @@
   candidates and a separate, provenance-preserving effective-documentation
   view. Candidate discovery now follows Javadoc supertype search order and
   distinguishes absent documentation from unavailable source.
+- Renamed `sibling_methods` to `same_type_methods` and limited that field to
+  methods declared directly in the focal method's type. Constructors,
+  initializer blocks, and inherited methods are excluded.
+- Replaced source-level class terminology with type terminology across the
+  Java API, CLI selectors, JSON output, schema, viewer, and documentation.
+  The former class-selection aliases and `class_*` JSON keys are not retained;
+  JVM artifact terms such as classpath, `.class`, and `--class-output` remain.
 - Assigned a version-specific manifest schema identifier, preserved terminal
   diagnostics in bounded logs, tightened Android preflight/process cleanup, and
   made field-test resume validate cohort, tool, and runtime identity.

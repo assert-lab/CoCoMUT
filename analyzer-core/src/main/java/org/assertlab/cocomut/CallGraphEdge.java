@@ -14,7 +14,7 @@ public record CallGraphEdge(
         String targetUri,
         String targetKind,
         String rawSignature,
-        String declaringClass,
+        String declaringType,
         String methodName,
         String resolution,
         java.util.List<String> candidateMethodUris,
@@ -26,7 +26,7 @@ public record CallGraphEdge(
         targetUri = targetUri == null ? "" : targetUri;
         targetKind = nonBlank(targetKind, "unknown");
         rawSignature = rawSignature == null ? "" : rawSignature;
-        declaringClass = declaringClass == null ? "" : declaringClass;
+        declaringType = declaringType == null ? "" : declaringType;
         methodName = methodName == null ? "" : methodName;
         resolution = nonBlank(resolution, "unresolved");
         candidateMethodUris = candidateMethodUris == null ? java.util.List.of() : java.util.List.copyOf(candidateMethodUris);
@@ -34,39 +34,39 @@ public record CallGraphEdge(
     }
 
     public static CallGraphEdge resolved(String methodUri, String rawSignature,
-                                         String declaringClass, String methodName) {
-        return resolved(methodUri, rawSignature, declaringClass, methodName, "resolved");
+                                         String declaringType, String methodName) {
+        return resolved(methodUri, rawSignature, declaringType, methodName, "resolved");
     }
 
     public static CallGraphEdge resolved(String methodUri, String rawSignature,
-                                         String declaringClass, String methodName,
+                                         String declaringType, String methodName,
                                          String resolution) {
         return new CallGraphEdge("project_method", methodUri, bytecodeUri(rawSignature),
-                "project_method", rawSignature, declaringClass, methodName, resolution,
+                "project_method", rawSignature, declaringType, methodName, resolution,
                 java.util.List.of(), "");
     }
 
-    public static CallGraphEdge ambiguous(String rawSignature, String declaringClass,
+    public static CallGraphEdge ambiguous(String rawSignature, String declaringType,
                                           String methodName, java.util.List<String> candidateMethodUris,
                                           String reason) {
         return new CallGraphEdge("ambiguous_project_method", "", bytecodeUri(rawSignature),
-                "project_method", rawSignature, declaringClass, methodName, "ambiguous",
+                "project_method", rawSignature, declaringType, methodName, "ambiguous",
                 candidateMethodUris, reason);
     }
 
-    public static CallGraphEdge unresolved(String rawSignature, String declaringClass,
+    public static CallGraphEdge unresolved(String rawSignature, String declaringType,
                                            String methodName) {
-        String targetKind = classifyTargetKind(rawSignature, declaringClass, methodName);
-        return unresolved(rawSignature, declaringClass, methodName, targetKind,
-                defaultUnresolvedReason(rawSignature, declaringClass, methodName, targetKind));
+        String targetKind = classifyTargetKind(rawSignature, declaringType, methodName);
+        return unresolved(rawSignature, declaringType, methodName, targetKind,
+                defaultUnresolvedReason(rawSignature, declaringType, methodName, targetKind));
     }
 
-    public static CallGraphEdge unresolved(String rawSignature, String declaringClass,
+    public static CallGraphEdge unresolved(String rawSignature, String declaringType,
                                            String methodName, String targetKind, String reason) {
         String kind = isSyntheticName(methodName) ? "synthetic_or_compiler_method" : targetKind;
         String resolution = isSyntheticName(methodName) ? "synthetic_or_compiler_generated" : "unresolved";
         return new CallGraphEdge(kind, "", bytecodeUri(rawSignature),
-                targetKind, rawSignature, declaringClass, methodName, resolution,
+                targetKind, rawSignature, declaringType, methodName, resolution,
                 java.util.List.of(), reason);
     }
 
@@ -86,12 +86,12 @@ public record CallGraphEdge(
         if (parsed == null) {
             return rawSignature == null || rawSignature.isBlank() ? "" : "bytecode://" + rawSignature;
         }
-        return "bytecode://" + parsed.declaringClass + "." + parsed.methodName
+        return "bytecode://" + parsed.declaringType + "." + parsed.methodName
                 + "(" + parsed.parameters + "):" + parsed.returnType;
     }
 
-    private static String classifyTargetKind(String rawSignature, String declaringClass, String methodName) {
-        String owner = declaringClass == null ? "" : declaringClass;
+    private static String classifyTargetKind(String rawSignature, String declaringType, String methodName) {
+        String owner = declaringType == null ? "" : declaringType;
         if (rawSignature != null && rawSignature.contains("sootup.dummy.InvokeDynamic")) {
             return "invokedynamic_method";
         }
@@ -106,7 +106,7 @@ public record CallGraphEdge(
         return "bytecode_method";
     }
 
-    private static String defaultUnresolvedReason(String rawSignature, String declaringClass,
+    private static String defaultUnresolvedReason(String rawSignature, String declaringType,
                                                   String methodName, String targetKind) {
         if (isSyntheticName(methodName)) {
             return "synthetic_or_compiler_generated";
@@ -120,7 +120,7 @@ public record CallGraphEdge(
         return "unresolved";
     }
 
-    private record ParsedRawSignature(String declaringClass, String returnType,
+    private record ParsedRawSignature(String declaringType, String returnType,
                                       String methodName, String parameters) {
         private static ParsedRawSignature parse(String raw) {
             if (raw == null || !raw.startsWith("<") || !raw.endsWith(">")) {

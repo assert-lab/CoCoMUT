@@ -18,9 +18,9 @@ import java.util.regex.Pattern;
  *
  * Extracts complete context for identified methods:
  * - Method source
- * - Javadoc documentation (method-level and class-level)
- * - Class hierarchy (via Spoon source model, with SootUp when available)
- * - Related class methods
+ * - Javadoc documentation (method-level and type-level)
+ * - Type hierarchy (via Spoon source model, with SootUp when available)
+ * - Related same-type methods
  * - Lexical metrics (LOC and branch-keyword complexity estimates)
  * - Combines with call graph from Phase 3
  *
@@ -87,8 +87,8 @@ public class ContextExtractor {
         return new MethodContext.Builder()
                 .methodUri(method.getMethodUri())
                 .methodName(method.getMethodName())
-                .classname(method.getClassname())
-                .signature(method.getClassname() + "." + method.getMethodSignature())
+                .typeName(method.getTypeName())
+                .signature(method.getTypeName() + "." + method.getMethodSignature())
                 .returnType(sourceMethod.returnType())
                 .erasedReturnType(sourceMethod.erasedReturnType())
                 .lineNumber(method.getLineNumber())
@@ -106,9 +106,9 @@ public class ContextExtractor {
                         .toList())
                 .methodBody(methodBody)
                 .javadoc(sourceContext.javadoc())
-                .classJavadoc(sourceContext.classJavadoc())
-                .classHierarchy(sourceContext.classHierarchy())
-                .classMethods(sourceContext.classMethods())
+                .typeJavadoc(sourceContext.typeJavadoc())
+                .typeHierarchy(sourceContext.typeHierarchy())
+                .typeMethods(sourceContext.typeMethods())
                 .callGraph(callGraph)
                 .linesOfCode(countLinesOfCode(methodBody))
                 .cyclomatic(calculateCyclomaticComplexity(methodBody))
@@ -116,7 +116,7 @@ public class ContextExtractor {
                 .thrownExceptions(sourceMethod.thrownExceptions())
                 .fieldReads(sourceContext.fieldReads())
                 .fieldWrites(sourceContext.fieldWrites())
-                .siblingMethods(sourceContext.siblingMethods())
+                .sameTypeMethods(sourceContext.sameTypeMethods())
                 .overloadGroup(sourceContext.overloadGroup())
                 .dynamicFeatures(sourceContext.dynamicFeatures())
                 .javadocMetadata(sourceContext.javadocMetadata())

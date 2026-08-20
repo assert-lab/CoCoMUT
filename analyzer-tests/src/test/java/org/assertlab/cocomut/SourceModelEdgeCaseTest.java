@@ -24,6 +24,48 @@ import static org.junit.Assert.assertTrue;
 public class SourceModelEdgeCaseTest {
 
     @Test
+    public void sameTypeMethodsContainOnlyDirectlyDeclaredMethods() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-same-type-methods");
+        try {
+            write(project.resolve("src/main/java/demo/Base.java"), """
+                    package demo;
+                    public class Base {
+                        public void inherited() {}
+                    }
+                    """);
+            write(project.resolve("src/main/java/demo/Sample.java"), """
+                    package demo;
+                    public class Sample extends Base {
+                        static { System.setProperty("sample", "loaded"); }
+                        { System.clearProperty("sample"); }
+
+                        public Sample() {}
+                        public void focal() {}
+                        public void focal(int value) {}
+                        private String other() { return ""; }
+
+                        class Nested {
+                            void nested() {}
+                        }
+                    }
+                    """);
+
+            compileProject(project);
+            SourceContext context = contextFor(project, "demo.Sample", "focal");
+
+            assertEquals(List.of("focal()", "focal(int value)", "other()"),
+                    context.sameTypeMethods());
+            assertEquals(List.of("focal()", "focal(int value)"), context.overloadGroup());
+            assertFalse(context.sameTypeMethods().contains("Sample()"));
+            assertFalse(context.sameTypeMethods().contains("()"));
+            assertFalse(context.sameTypeMethods().contains("inherited()"));
+            assertFalse(context.sameTypeMethods().contains("nested()"));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void spoonBackendFallsBackToNoClasspathAfterRuntimeFailure() throws Exception {
         Path project = Files.createTempDirectory("cocomut-no-classpath-fallback");
         try {
@@ -126,12 +168,12 @@ public class SourceModelEdgeCaseTest {
             ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
             List<SourceMethod> methods = SourceBackends.spoon().findMethods(model);
 
-            assertTrue(methods.stream().anyMatch(m -> m.className().equals("demo.EdgeCase$Inner")
+            assertTrue(methods.stream().anyMatch(m -> m.typeName().equals("demo.EdgeCase$Inner")
                     && m.methodName().equals("value")));
-            assertTrue(methods.stream().anyMatch(m -> m.constructor() && m.className().equals("demo.EdgeCase$Point")));
+            assertTrue(methods.stream().anyMatch(m -> m.constructor() && m.typeName().equals("demo.EdgeCase$Point")));
 
             SourceMethod focal = methods.stream()
-                    .filter(m -> m.className().equals("demo.EdgeCase"))
+                    .filter(m -> m.typeName().equals("demo.EdgeCase"))
                     .filter(m -> m.methodName().equals("transform"))
                     .filter(m -> m.parameters().size() == 1)
                     .findFirst()
@@ -211,7 +253,7 @@ public class SourceModelEdgeCaseTest {
             ProjectModel model = ProjectModel.from(metadata);
             List<SourceMethod> methods = SourceBackends.spoon().findMethods(model);
             long matching = methods.stream()
-                    .filter(m -> m.className().equals("demo.DuplicateRoot"))
+                    .filter(m -> m.typeName().equals("demo.DuplicateRoot"))
                     .filter(m -> m.methodName().equals("value"))
                     .count();
 
@@ -245,7 +287,7 @@ public class SourceModelEdgeCaseTest {
             compileProject(project);
             ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
             List<SourceMethod> methods = SourceBackends.spoon().findMethods(model).stream()
-                    .filter(method -> method.className().equals("demo.GenericOverloads"))
+                    .filter(method -> method.typeName().equals("demo.GenericOverloads"))
                     .filter(method -> method.methodName().equals("throwUnchecked"))
                     .toList();
 
@@ -408,7 +450,7 @@ public class SourceModelEdgeCaseTest {
             compileProject(project);
             ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
             SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
-                    .filter(method -> method.className().equals("demo.Child"))
+                    .filter(method -> method.typeName().equals("demo.Child"))
                     .filter(method -> method.methodName().equals("focal"))
                     .findFirst()
                     .orElseThrow();
@@ -477,8 +519,8 @@ public class SourceModelEdgeCaseTest {
             assertEquals("project", type.get("reference_domain"));
             assertEquals("same_package", type.get("reference_scope"));
             assertTrue(type.get("type_uri").toString().contains("Helper.java#demo.Helper"));
-            assertTrue(type.get("class_javadoc").toString().contains("Helper type docs"));
-            assertTrue(type.containsKey("class_hierarchy"));
+            assertTrue(type.get("type_javadoc").toString().contains("Helper type docs"));
+            assertTrue(type.containsKey("type_hierarchy"));
 
             Map<String, Object> otherPackageType = referenceByTarget(refs, "demo.other.OtherHelper");
             assertEquals("resolved_type", otherPackageType.get("resolution"));
@@ -512,7 +554,7 @@ public class SourceModelEdgeCaseTest {
             assertEquals("method", external.get("reference_target_kind"));
             assertEquals("external_jdk", external.get("reference_domain"));
             assertEquals("external", external.get("reference_scope"));
-            assertEquals("java.util.List", external.get("external_class"));
+            assertEquals("java.util.List", external.get("external_type"));
             assertEquals("add(java.lang.Object)", external.get("external_member"));
             assertEquals("method", external.get("external_member_kind"));
 
@@ -532,32 +574,32 @@ public class SourceModelEdgeCaseTest {
             assertEquals("spoon-javadoc", spacedInline.get("parser"));
             assertEquals("high", spacedInline.get("parse_confidence"));
             assertEquals("external_symbol", spacedInline.get("resolution"));
-            assertEquals("java.util.Map", spacedInline.get("external_class"));
+            assertEquals("java.util.Map", spacedInline.get("external_type"));
             assertEquals("method", spacedInline.get("external_member_kind"));
 
             Map<String, Object> modulePrefixed = referenceByTarget(refs, "java.base/java.util.List#remove(Object)");
             assertEquals("external_symbol", modulePrefixed.get("resolution"));
-            assertEquals("java.util.List", modulePrefixed.get("external_class"));
+            assertEquals("java.util.List", modulePrefixed.get("external_type"));
             assertEquals("remove(java.lang.Object)", modulePrefixed.get("external_member"));
             assertEquals("method", modulePrefixed.get("external_member_kind"));
 
             Map<String, Object> imported = referenceByTarget(refs, "Arrays#sort(byte[])");
             assertEquals("external_symbol", imported.get("resolution"));
-            assertEquals("java.util.Arrays", imported.get("external_class"));
+            assertEquals("java.util.Arrays", imported.get("external_type"));
             assertEquals("qualified_symbol", imported.get("external_resolution"));
             assertEquals("method", imported.get("external_member_kind"));
 
             Map<String, Object> javaLangField = referenceByTarget(refs, "Long#MIN_VALUE");
             assertEquals("field_reference", javaLangField.get("kind"));
             assertEquals("external_symbol", javaLangField.get("resolution"));
-            assertEquals("java.lang.Long", javaLangField.get("external_class"));
+            assertEquals("java.lang.Long", javaLangField.get("external_type"));
             assertEquals("qualified_symbol", javaLangField.get("external_resolution"));
             assertEquals("field", javaLangField.get("external_member_kind"));
 
             Map<String, Object> wildcardField = referenceByTarget(refs, "Pattern#DOTALL");
             assertEquals("field_reference", wildcardField.get("kind"));
             assertEquals("external_symbol", wildcardField.get("resolution"));
-            assertEquals("java.util.regex.Pattern", wildcardField.get("external_class"));
+            assertEquals("java.util.regex.Pattern", wildcardField.get("external_type"));
             assertEquals("wildcard_import_symbol", wildcardField.get("external_resolution"));
             assertEquals("field", wildcardField.get("external_member_kind"));
 
@@ -607,7 +649,7 @@ public class SourceModelEdgeCaseTest {
             compileProject(project);
             ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
             SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
-                    .filter(method -> method.className().equals("demo.ChildDocs"))
+                    .filter(method -> method.typeName().equals("demo.ChildDocs"))
                     .filter(method -> method.methodName().equals("parse"))
                     .findFirst()
                     .orElseThrow();
@@ -678,7 +720,7 @@ public class SourceModelEdgeCaseTest {
             compileProject(project);
             ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
             SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
-                    .filter(method -> method.className().equals("demo.Child"))
+                    .filter(method -> method.typeName().equals("demo.Child"))
                     .filter(method -> method.methodName().equals("copy"))
                     .findFirst()
                     .orElseThrow();
@@ -736,7 +778,7 @@ public class SourceModelEdgeCaseTest {
             compileProject(project);
             ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
             SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
-                    .filter(method -> method.className().equals("demo.Child"))
+                    .filter(method -> method.typeName().equals("demo.Child"))
                     .filter(method -> method.methodName().equals("value"))
                     .findFirst()
                     .orElseThrow();
@@ -779,7 +821,7 @@ public class SourceModelEdgeCaseTest {
             compileProject(project);
             ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
             SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
-                    .filter(method -> method.className().equals("demo.Child"))
+                    .filter(method -> method.typeName().equals("demo.Child"))
                     .filter(method -> method.methodName().equals("size"))
                     .findFirst()
                     .orElseThrow();
@@ -833,7 +875,7 @@ public class SourceModelEdgeCaseTest {
             compileProject(project);
             ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
             SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
-                    .filter(method -> method.className().equals("demo.Implementation"))
+                    .filter(method -> method.typeName().equals("demo.Implementation"))
                     .filter(method -> method.methodName().equals("accepts"))
                     .findFirst()
                     .orElseThrow();
@@ -894,7 +936,7 @@ public class SourceModelEdgeCaseTest {
             compileProject(project);
             ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
             SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
-                    .filter(method -> method.className().equals("demo.Implementation"))
+                    .filter(method -> method.typeName().equals("demo.Implementation"))
                     .filter(method -> method.methodName().equals("value"))
                     .findFirst()
                     .orElseThrow();
@@ -950,7 +992,7 @@ public class SourceModelEdgeCaseTest {
             compileProject(project);
             ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
             SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
-                    .filter(method -> method.className().equals("demo.Implementation"))
+                    .filter(method -> method.typeName().equals("demo.Implementation"))
                     .filter(method -> method.methodName().equals("convert"))
                     .findFirst()
                     .orElseThrow();
@@ -986,7 +1028,7 @@ public class SourceModelEdgeCaseTest {
             compileProject(project);
             ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
             SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
-                    .filter(method -> method.className().equals("demo.Child"))
+                    .filter(method -> method.typeName().equals("demo.Child"))
                     .filter(method -> method.methodName().equals("toString"))
                     .findFirst()
                     .orElseThrow();
@@ -1032,7 +1074,7 @@ public class SourceModelEdgeCaseTest {
             ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
             for (String methodName : List.of("privateMethod", "packageMethod")) {
                 SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
-                        .filter(method -> method.className().equals("child.Child"))
+                        .filter(method -> method.typeName().equals("child.Child"))
                         .filter(method -> method.methodName().equals(methodName))
                         .findFirst().orElseThrow();
                 SourceContext context = SourceBackends.spoon().extractContext(model, focal.methodUri()).orElseThrow();
@@ -1087,7 +1129,7 @@ public class SourceModelEdgeCaseTest {
             compileProject(project);
             ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
             SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
-                    .filter(method -> method.className().equals("demo.CloneContract"))
+                    .filter(method -> method.typeName().equals("demo.CloneContract"))
                     .filter(method -> method.methodName().equals("clone"))
                     .findFirst().orElseThrow();
             SourceContext context = SourceBackends.spoon().extractContext(model, focal.methodUri()).orElseThrow();
@@ -2268,7 +2310,7 @@ public class SourceModelEdgeCaseTest {
             compileProject(project);
             ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
             SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
-                    .filter(method -> method.className().equals("demo.FileDocs"))
+                    .filter(method -> method.typeName().equals("demo.FileDocs"))
                     .filter(method -> method.methodName().equals("files"))
                     .findFirst()
                     .orElseThrow();
@@ -2363,10 +2405,10 @@ public class SourceModelEdgeCaseTest {
         }
     }
 
-    private static SourceContext contextFor(Path project, String className, String methodName) throws Exception {
+    private static SourceContext contextFor(Path project, String typeName, String methodName) throws Exception {
         ProjectModel model = ProjectModel.from(new ProjectAnalyzer(project).analyze());
         SourceMethod focal = SourceBackends.spoon().findMethods(model).stream()
-                .filter(method -> method.className().equals(className))
+                .filter(method -> method.typeName().equals(typeName))
                 .filter(method -> method.methodName().equals(methodName))
                 .findFirst().orElseThrow();
         return SourceBackends.spoon().extractContext(model, focal.methodUri()).orElseThrow();
