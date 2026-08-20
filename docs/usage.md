@@ -131,13 +131,12 @@ Useful options:
 --source-set all|main|test|integration_test|generated|example|unknown
                                 Filter methods by source set
 --package NAME                 Include package prefix, repeatable/comma-separated
---class NAME                   Include fully qualified or simple class name
+--type NAME                    Include a fully qualified or simple type name
 --method NAME                  Include method name or method URI substring
 --target-uri KIND:URI          Exact target URI, where KIND is method, type,
                                 package, or project
 --method-uri URI               Exact method URI target
 --type-uri URI                 Exact type URI target: path#qualified.Type
---class-uri URI                Alias for --type-uri
 --package-uri URI              Exact package URI target
 --visibility public|protected|package-private|private
                                 Include methods with matching visibility
@@ -308,7 +307,7 @@ Layered selection is available when you do not want the whole repository:
 ./bin/cocomut \
   --project /path/to/java/project \
   --package org.example.api \
-  --class PublicApi \
+  --type PublicApi \
   --method parse \
   --visibility public \
   --include-path 'src/main/java/**/*.java' \
@@ -316,15 +315,15 @@ Layered selection is available when you do not want the whole repository:
 ```
 
 Repository-wide extraction writes a request-hashed JSONL file such as
-`method_contexts__4987c2439a31f002.jsonl`. Package, class, or method-filtered extraction
+`method_contexts__4987c2439a31f002.jsonl`. Package, type, or method-filtered extraction
 writes a distinguishable JSONL filename based on the selected target plus the
 same 16-character request-hash prefix, for example
 `package__org.example.api__4987c2439a31f002.jsonl`,
-`class__org.example.PublicApi__4987c2439a31f002.jsonl`, or
+`type__org.example.PublicApi__4987c2439a31f002.jsonl`, or
 `method__parse__4987c2439a31f002.jsonl`.
 
-CoCoMUT supports both filter-based package/class/method selection and exact URI
-targets through `--target-uri`, `--method-uri`, `--type-uri` / `--class-uri`,
+CoCoMUT supports both filter-based package/type/method selection and exact URI
+targets through `--target-uri`, `--method-uri`, `--type-uri`,
 and `--package-uri`; see [symbol-model.md](symbol-model.md).
 
 Examples:
@@ -488,11 +487,11 @@ pipeline through `ContextRequest` and `ContextExtractorService`.
 | Source-file cap | `--max-source-files N` | `.maxSourceFiles(N)` |
 | Source set | `--source-set main,test` | `.sourceSet("main")` or `.sourceSets(Set.of(...))` |
 | Package filter | `--package org.example` | `.packageName("org.example")` or `.packages(Set.of(...))` |
-| Type/class filter | `--class Foo` | `.typeName("Foo")`, `.className("Foo")`, or `.classes(Set.of(...))` |
+| Type filter | `--type Foo` | `.typeName("Foo")` or `.types(Set.of(...))` |
 | Method-name filter | `--method parse` | `.methodName("parse")` or `.methods(Set.of(...))` |
 | Exact target URI | `--target-uri method:...` | `.targetUri("method:...")` or `.target(SymbolTarget...)` |
 | Exact method URI | `--method-uri URI` | `.methodUri("URI")` |
-| Exact type URI | `--type-uri URI`, `--class-uri URI` | `.typeUri("URI")` or `.classUri("URI")` |
+| Exact type URI | `--type-uri URI` | `.typeUri("URI")` |
 | Exact package URI | `--package-uri URI` | `.packageUri("URI")` |
 | Visibility filter | `--visibility public` | `.visibility("public")` or `.visibilities(Set.of(...))` |
 | Include path glob | `--include-path GLOB` | `.includePathGlob("GLOB")` or `.includePathGlobs(Set.of(...))` |

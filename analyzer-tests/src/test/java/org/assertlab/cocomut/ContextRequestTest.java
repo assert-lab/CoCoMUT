@@ -20,20 +20,20 @@ public class ContextRequestTest {
                 .sourceSet("main")
                 .packageName("demo.api")
                 .typeName("PublicApi")
-                .className("demo.api.PublicApi")
+                .typeName("demo.api.PublicApi")
                 .methodName("parse")
                 .visibility("public")
                 .includePathGlob("src/main/java/**/*.java")
                 .excludePathGlob("**/generated/**")
                 .methodUri("src/main/java/demo/api/PublicApi.java#demo.api.PublicApi.parse():void")
-                .classUri("src/main/java/demo/api/PublicApi.java#demo.api.PublicApi")
+                .typeUri("src/main/java/demo/api/PublicApi.java#demo.api.PublicApi")
                 .packageUri("src/main/java/demo/api/package-info.java#demo.api")
                 .build();
 
         assertEquals(ContextRequest.Scope.ENTRY_POINTS, request.scope());
         assertEquals(Set.of("main"), request.sourceSets());
         assertEquals(Set.of("demo.api"), request.packages());
-        assertEquals(Set.of("PublicApi", "demo.api.PublicApi"), request.classes());
+        assertEquals(Set.of("PublicApi", "demo.api.PublicApi"), request.types());
         assertEquals(Set.of("parse"), request.methods());
         assertEquals(Set.of("public"), request.visibilities());
         assertEquals(Set.of("src/main/java/**/*.java"), request.includePathGlobs());

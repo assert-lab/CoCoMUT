@@ -81,7 +81,7 @@ Each JSONL row contains:
 
 - method URI, signature, source, Javadoc, parameters, return type, annotations,
   thrown exceptions, and source position;
-- type context, class Javadoc, hierarchy, fields, overloads, siblings, and
+- type context, type Javadoc, hierarchy, fields, overloads, same-type methods, and
   documentation metrics;
 - resolved Javadoc references with target kind, domain, and scope taxonomy;
 - declared Javadoc tags, ordered inherited-documentation evidence, and a

@@ -58,8 +58,8 @@ public final class CoCoMUTCommand implements Callable<Integer> {
     @Option(names = "--package", split = ",", description = "Include package prefix, for example org.example.api.")
     private Set<String> packages;
 
-    @Option(names = "--class", split = ",", description = "Include fully qualified or simple class name.")
-    private Set<String> classes;
+    @Option(names = "--type", split = ",", description = "Include a fully qualified or simple type name.")
+    private Set<String> types;
 
     @Option(names = "--method", split = ",", description = "Include method name or method URI substring.")
     private Set<String> methods;
@@ -71,8 +71,8 @@ public final class CoCoMUTCommand implements Callable<Integer> {
     @Option(names = "--method-uri", split = ",", description = "Exact method URI target.")
     private Set<String> methodUris;
 
-    @Option(names = {"--type-uri", "--class-uri"}, split = ",",
-            description = "Exact type/class URI target: path#qualified.Type.")
+    @Option(names = "--type-uri", split = ",",
+            description = "Exact type URI target: path#qualified.Type.")
     private Set<String> typeUris;
 
     @Option(names = "--package-uri", split = ",",
@@ -140,7 +140,7 @@ public final class CoCoMUTCommand implements Callable<Integer> {
                 .maxSourceFiles(maxSourceFiles)
                 .sourceSets(toSourceSets(sourceSet))
                 .packages(emptyIfNull(packages))
-                .classes(emptyIfNull(classes))
+                .types(emptyIfNull(types))
                 .methods(emptyIfNull(methods))
                 .targets(toTargets(targetUris, methodUris, typeUris, packageUris))
                 .visibilities(emptyIfNull(visibilities))

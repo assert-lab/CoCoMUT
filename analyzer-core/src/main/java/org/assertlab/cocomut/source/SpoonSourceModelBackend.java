@@ -66,7 +66,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             Pattern.CASE_INSENSITIVE);
     private static final String MAX_SOURCE_FILES_PROPERTY = "cocomut.maxSourceFiles";
     private static final String MAX_SOURCE_FILES_ENV = "COCOMUT_MAX_SOURCE_FILES";
-    private static final int MAX_CLASS_METHOD_CONTEXT = 500;
+    private static final int MAX_SAME_TYPE_METHOD_CONTEXT = 500;
     private static final int MAX_OVERLOAD_CONTEXT = 200;
     private static final List<String> COMMON_JDK_PACKAGES = List.of(
             "java.util",
@@ -111,23 +111,25 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 ? rawJavadoc
                 : parsedJavadoc;
         List<JavadocElement> javadocElements = spoonJavadocElements(executable);
-        String classJavadoc = owner != null ? docComment(owner) : "";
-        String classHierarchy = owner != null ? classHierarchy(owner) : "";
+        String typeJavadoc = owner != null ? docComment(owner) : "";
+        String typeHierarchy = owner != null ? typeHierarchy(owner) : "";
         String hierarchyResolution = hierarchyResolution(owner);
-        ClassContext classContext = owner != null ? classContext(parsed, owner, method.methodName()) : ClassContext.empty();
+        TypeContext typeContext = owner != null
+                ? typeContext(parsed, owner, method.methodName(), method.signature(), method.constructor())
+                : TypeContext.empty();
 
         return Optional.of(new SourceContext(
                 method,
                 methodBody,
                 javadoc,
-                classJavadoc,
-                classHierarchy,
+                typeJavadoc,
+                typeHierarchy,
                 hierarchyResolution,
-                classContext.classMethods(),
+                typeContext.typeMethods(),
                 fieldReads(executable),
                 fieldWrites(executable),
-                classContext.siblingMethods(),
-                classContext.overloadGroup(),
+                typeContext.sameTypeMethods(),
+                typeContext.overloadGroup(),
                 dynamicFeatures(executable),
                 javadocMetadata(parsed, owner, executable, method, javadocElements, javadoc, rawJavadoc,
                         parsedComment, rawComment),
@@ -178,8 +180,8 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         Map<String, SourceMethod> methodsByUri = new LinkedHashMap<>();
         Map<String, CtExecutable<?>> executablesByUri = new LinkedHashMap<>();
         Map<String, CtType<?>> typesByQualifiedName = new LinkedHashMap<>();
-        Map<String, List<SourceMethod>> methodsByClassName = new LinkedHashMap<>();
-        Map<String, List<SourceField>> fieldsByClassName = new LinkedHashMap<>();
+        Map<String, List<SourceMethod>> methodsByTypeName = new LinkedHashMap<>();
+        Map<String, List<SourceField>> fieldsByTypeName = new LinkedHashMap<>();
         Map<Path, ImportContext> importsByFile = new LinkedHashMap<>();
 
         List<CtExecutable<?>> executables = new ArrayList<>();
@@ -192,8 +194,8 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                     typesByQualifiedName.putIfAbsent(qualifiedName, type);
                     for (CtField<?> field : type.getFields()) {
                         toSourceField(project, type, field)
-                                .ifPresent(sourceField -> fieldsByClassName
-                                        .computeIfAbsent(sourceField.className(), ignored -> new ArrayList<>())
+                                .ifPresent(sourceField -> fieldsByTypeName
+                                        .computeIfAbsent(sourceField.typeName(), ignored -> new ArrayList<>())
                                         .add(sourceField));
                     }
                 }
@@ -218,13 +220,13 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 methods.add(sourceMethod);
                 methodsByUri.put(sourceMethod.methodUri(), sourceMethod);
                 executablesByUri.put(sourceMethod.methodUri(), executable);
-                methodsByClassName.computeIfAbsent(sourceMethod.className(), ignored -> new ArrayList<>())
+                methodsByTypeName.computeIfAbsent(sourceMethod.typeName(), ignored -> new ArrayList<>())
                         .add(sourceMethod);
             }
         }
 
         return new ParsedProject(project.projectPath(), methods, methodsByUri, executablesByUri,
-                typesByQualifiedName, methodsByClassName, fieldsByClassName,
+                typesByQualifiedName, methodsByTypeName, fieldsByTypeName,
                 importsByFile, new java.util.concurrent.ConcurrentHashMap<>(),
                 new java.util.concurrent.ConcurrentHashMap<>(),
                 new java.util.concurrent.ConcurrentHashMap<>(),
@@ -473,18 +475,18 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return Optional.empty();
         }
         Path sourceFile = position.getFile().toPath().toAbsolutePath().normalize();
-        String className = owner.getQualifiedName();
+        String typeName = owner.getQualifiedName();
         String methodName = methodName(executable, owner);
         List<SourceParameter> parameters = parameters(executable);
         String displaySignature = methodName + "(" + parameterSignature(parameters, false) + ")";
         String returnType = returnType(executable);
         String erasedReturnType = erasedReturnType(executable, returnType);
         String identitySignature = identitySignature(methodName, parameters, erasedReturnType);
-        String uri = methodUri(project.projectPath(), sourceFile, className, identitySignature);
+        String uri = methodUri(project.projectPath(), sourceFile, typeName, identitySignature);
 
         return Optional.of(new SourceMethod(
                 uri,
-                className,
+                typeName,
                 methodName,
                 displaySignature,
                 sourceFile,
@@ -693,7 +695,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return String.join("\n", lines).strip();
     }
 
-    private static String classHierarchy(CtType<?> type) {
+    private static String typeHierarchy(CtType<?> type) {
         StringBuilder hierarchy = new StringBuilder(type.getQualifiedName());
         CtTypeReference<?> superclass = type.getSuperclass();
         if (superclass != null) {
@@ -731,36 +733,51 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
     }
 
-    private static ClassContext classContext(ParsedProject parsed, CtType<?> type, String methodName) {
-        String key = type.getQualifiedName() + "#" + methodName;
-        return parsed.classContextsByTypeAndMethod().computeIfAbsent(key, ignored -> {
-            Map<String, String> classMethods = parsed.classMethodsByType().computeIfAbsent(
-                    type.getQualifiedName(), ignoredType -> classMethods(type));
-            List<String> siblingMethods = classMethods.keySet().stream().sorted().toList();
-            List<String> overloadGroup = siblingMethods.stream()
-                    .filter(sig -> sig.startsWith(methodName + "("))
+    private static TypeContext typeContext(ParsedProject parsed, CtType<?> type, String methodName,
+                                             String focalSignature, boolean constructor) {
+        String key = type.getQualifiedName() + "#" + focalSignature;
+        return parsed.typeContextsByTypeAndMethod().computeIfAbsent(key, ignored -> {
+            Map<String, String> typeMethods = parsed.typeMethodsByType().computeIfAbsent(
+                    type.getQualifiedName(), ignoredType -> typeMethods(type));
+            List<String> allMethods = typeMethods.keySet().stream().sorted().toList();
+            LinkedHashSet<String> overloads = new LinkedHashSet<>();
+            if (!constructor && typeMethods.containsKey(focalSignature)) {
+                overloads.add(focalSignature);
+            }
+            allMethods.stream()
+                    .filter(signature -> signature.startsWith(methodName + "("))
                     .limit(MAX_OVERLOAD_CONTEXT)
+                    .forEach(overloads::add);
+            List<String> overloadGroup = overloads.stream()
+                    .limit(MAX_OVERLOAD_CONTEXT)
+                    .sorted()
                     .toList();
-            return new ClassContext(classMethods, siblingMethods, overloadGroup);
+
+            LinkedHashSet<String> selected = new LinkedHashSet<>(overloadGroup);
+            for (String signature : allMethods) {
+                if (selected.size() >= MAX_SAME_TYPE_METHOD_CONTEXT) {
+                    break;
+                }
+                selected.add(signature);
+            }
+            List<String> sameTypeMethods = selected.stream().sorted().toList();
+            return new TypeContext(typeMethods, sameTypeMethods, overloadGroup);
         });
     }
 
-    private static Map<String, String> classMethods(CtType<?> type) {
+    private static Map<String, String> typeMethods(CtType<?> type) {
         Map<String, String> methods = new LinkedHashMap<>();
-        for (CtExecutable<?> executable : type.getTypeMembers().stream()
-                .filter(CtExecutable.class::isInstance)
-                .map(CtExecutable.class::cast)
+        for (CtMethod<?> executable : type.getTypeMembers().stream()
+                .filter(CtMethod.class::isInstance)
+                .map(CtMethod.class::cast)
                 .toList()) {
             try {
-                String name = executable instanceof CtConstructor<?> ? type.getSimpleName() : executable.getSimpleName();
+                String name = executable.getSimpleName();
                 String signature = name + "(" + parameterSignature(parameters(executable), false) + ")";
                 methods.put(signature, signature);
             } catch (Exception | StackOverflowError ignored) {
                 // Some generic declarations can recurse inside Spoon resolution.
-                // Class/sibling method context is optional, so keep the focal method.
-            }
-            if (methods.size() >= MAX_CLASS_METHOD_CONTEXT) {
-                break;
+                // Same-type method context is optional, so keep the focal method.
             }
         }
         return methods;
@@ -2413,7 +2430,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         } else if (spoonReference instanceof CtPackageReference packageReference) {
             ref.put("kind", "type_reference");
             ref.put("resolution", "external_symbol");
-            ref.put("external_class", packageReference.getQualifiedName());
+            ref.put("external_type", packageReference.getQualifiedName());
             ref.put("external_resolution", "package_reference");
         } else {
             resolveStringJavadocReference(parsed, owner, target, ref);
@@ -2473,36 +2490,36 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     private static void resolveExecutableJavadocReference(ParsedProject parsed, CtType<?> owner,
                                                           CtExecutableReference<?> executable,
                                                           Map<String, Object> ref) {
-        String className = projectClassName(parsed, owner, executable.getDeclaringType());
+        String typeName = projectTypeName(parsed, owner, executable.getDeclaringType());
         String memberName = executable.getSimpleName();
-        if ("<init>".equals(memberName) && !className.isBlank()) {
-            memberName = simpleTypeName(className);
+        if ("<init>".equals(memberName) && !typeName.isBlank()) {
+            memberName = simpleTypeName(typeName);
         }
         List<String> parameterTypes = executable.getParameters().stream()
                 .map(SpoonSourceModelBackend::typeName)
                 .toList();
         MemberReference memberReference = typedMemberReference(memberName, parameterTypes, stringValue(ref.get("target")));
         ref.put("kind", "member_reference");
-        ref.put("resolved_class", className);
+        ref.put("resolved_type", typeName);
         ref.put("referenced_member", memberReference.hasParameters()
                 ? memberName + "(" + String.join(",", parameterTypes) + ")"
                 : memberName);
-        boolean inheritedRelativeReference = inheritedRelativeReference(owner, className, stringValue(ref.get("target")));
+        boolean inheritedRelativeReference = inheritedRelativeReference(owner, typeName, stringValue(ref.get("target")));
 
-        if (!className.isBlank()) {
-            if (resolveMethodCandidate(parsed, className, memberReference, inheritedRelativeReference, ref)) {
+        if (!typeName.isBlank()) {
+            if (resolveMethodCandidate(parsed, typeName, memberReference, inheritedRelativeReference, ref)) {
                 return;
             }
-            if (!inheritedRelativeReference && resolveInheritedMemberCandidate(parsed, className, memberReference, ref)) {
+            if (!inheritedRelativeReference && resolveInheritedMemberCandidate(parsed, typeName, memberReference, ref)) {
                 return;
             }
-            ref.put("resolution", "class_resolved_member_unresolved");
+            ref.put("resolution", "type_resolved_member_unresolved");
             return;
         }
 
-        String externalClass = externalClassName(executable.getDeclaringType());
-        if (!externalClass.isBlank()) {
-            resolveExternalMemberReference(parsed, owner, externalClass, memberReference,
+        String externalType = externalTypeName(executable.getDeclaringType());
+        if (!externalType.isBlank()) {
+            resolveExternalMemberReference(parsed, owner, externalType, memberReference,
                     stringValue(ref.get("referenced_member")), ref);
             return;
         }
@@ -2525,57 +2542,57 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     private static void resolveFieldJavadocReference(ParsedProject parsed, CtType<?> owner,
                                                      CtFieldReference<?> field,
                                                      Map<String, Object> ref) {
-        String className = projectClassName(parsed, owner, field.getDeclaringType());
+        String typeName = projectTypeName(parsed, owner, field.getDeclaringType());
         MemberReference memberReference = new MemberReference(field.getSimpleName(), false, List.of());
         ref.put("kind", "field_reference");
-        ref.put("resolved_class", className);
+        ref.put("resolved_type", typeName);
         ref.put("referenced_member", field.getSimpleName());
-        boolean inheritedRelativeReference = inheritedRelativeReference(owner, className, stringValue(ref.get("target")));
+        boolean inheritedRelativeReference = inheritedRelativeReference(owner, typeName, stringValue(ref.get("target")));
 
-        if (!className.isBlank()) {
-            if (resolveFieldCandidate(parsed, className, memberReference, inheritedRelativeReference, ref)) {
+        if (!typeName.isBlank()) {
+            if (resolveFieldCandidate(parsed, typeName, memberReference, inheritedRelativeReference, ref)) {
                 return;
             }
-            if (!inheritedRelativeReference && resolveInheritedMemberCandidate(parsed, className, memberReference, ref)) {
+            if (!inheritedRelativeReference && resolveInheritedMemberCandidate(parsed, typeName, memberReference, ref)) {
                 return;
             }
-            ref.put("resolution", "class_resolved_member_unresolved");
+            ref.put("resolution", "type_resolved_member_unresolved");
             return;
         }
 
-        String externalClass = externalClassName(field.getDeclaringType());
-        if (!externalClass.isBlank()) {
-            resolveExternalMemberReference(parsed, owner, externalClass, memberReference,
+        String externalType = externalTypeName(field.getDeclaringType());
+        if (!externalType.isBlank()) {
+            resolveExternalMemberReference(parsed, owner, externalType, memberReference,
                     field.getSimpleName(), ref);
             return;
         }
         resolveStringJavadocReference(parsed, owner, stringValue(ref.get("target")), ref);
     }
 
-    private static boolean inheritedRelativeReference(CtType<?> owner, String className, String sourceTarget) {
-        if (owner == null || className == null || className.isBlank() || sourceTarget == null) {
+    private static boolean inheritedRelativeReference(CtType<?> owner, String typeName, String sourceTarget) {
+        if (owner == null || typeName == null || typeName.isBlank() || sourceTarget == null) {
             return false;
         }
-        return sourceTarget.trim().startsWith("#") && !owner.getQualifiedName().equals(className);
+        return sourceTarget.trim().startsWith("#") && !owner.getQualifiedName().equals(typeName);
     }
 
     private static void resolveTypeJavadocReference(ParsedProject parsed, CtType<?> owner,
                                                     CtTypeReference<?> type,
                                                     Map<String, Object> ref) {
-        String className = projectClassName(parsed, owner, type);
+        String typeName = projectTypeName(parsed, owner, type);
         ref.put("kind", "type_reference");
-        if (!className.isBlank()) {
+        if (!typeName.isBlank()) {
             ref.put("resolution", "resolved_type");
-            ref.put("resolved_class", className);
-            putTypeDetails(parsed, className, ref);
+            ref.put("resolved_type", typeName);
+            putTypeDetails(parsed, typeName, ref);
             return;
         }
 
-        String externalClass = externalClassName(type);
-        if (!externalClass.isBlank()) {
-            ExternalType external = resolveExternalType(parsed, owner, externalClass);
+        String externalType = externalTypeName(type);
+        if (!externalType.isBlank()) {
+            ExternalType external = resolveExternalType(parsed, owner, externalType);
             ref.put("resolution", external.resolved() ? "external_symbol" : "unresolved");
-            ref.put("external_class", external.qualifiedName());
+            ref.put("external_type", external.qualifiedName());
             ref.put("external_resolution", external.confidence());
             return;
         }
@@ -2631,8 +2648,8 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return "text";
         }
         if ("external_symbol".equals(resolution)) {
-            String externalClass = stringValue(ref.get("external_class"));
-            if (externalClass.startsWith("java.") || externalClass.startsWith("javax.")) {
+            String externalType = stringValue(ref.get("external_type"));
+            if (externalType.startsWith("java.") || externalType.startsWith("javax.")) {
                 return "external_jdk";
             }
             return "external_library";
@@ -2679,23 +2696,23 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         if (!inheritedFrom.isBlank()) {
             return inheritedFrom;
         }
-        String resolvedClass = stringValue(ref.get("resolved_class"));
-        if (!resolvedClass.isBlank()) {
-            return resolvedClass;
+        String resolvedType = stringValue(ref.get("resolved_type"));
+        if (!resolvedType.isBlank()) {
+            return resolvedType;
         }
         String methodUri = stringValue(ref.get("method_uri"));
         if (!methodUri.isBlank()) {
             SourceMethod method = parsed.methodsByUri().get(methodUri);
             if (method != null) {
-                return method.className();
+                return method.typeName();
             }
         }
         String fieldUri = stringValue(ref.get("field_uri"));
         if (!fieldUri.isBlank()) {
-            return parsed.fieldsByClassName().values().stream()
+            return parsed.fieldsByTypeName().values().stream()
                     .flatMap(List::stream)
                     .filter(field -> field.fieldUri().equals(fieldUri))
-                    .map(SourceField::className)
+                    .map(SourceField::typeName)
                     .findFirst()
                     .orElse("");
         }
@@ -2726,14 +2743,14 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         int hash = target.indexOf('#');
         String rawType = stripModulePrefix(target.substring(0, hash).trim());
         String member = target.substring(hash + 1).trim();
-        String className = resolveClassName(parsed, owner, rawType);
+        String typeName = resolveTypeName(parsed, owner, rawType);
         MemberReference memberReference = parseMemberReference(member);
 
         ref.put("kind", "member_reference");
-        ref.put("resolved_class", className);
+        ref.put("resolved_type", typeName);
         ref.put("referenced_member", member);
 
-        if (className.isBlank()) {
+        if (typeName.isBlank()) {
             resolveExternalMemberReference(parsed, owner, rawType, memberReference, member, ref);
             return;
         }
@@ -2743,20 +2760,20 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return;
         }
 
-        if (resolveMethodCandidate(parsed, className, memberReference, false, ref)) {
+        if (resolveMethodCandidate(parsed, typeName, memberReference, false, ref)) {
             return;
         }
-        if (resolveFieldCandidate(parsed, className, memberReference, false, ref)) {
+        if (resolveFieldCandidate(parsed, typeName, memberReference, false, ref)) {
             return;
         }
-        if (resolveInheritedMemberCandidate(parsed, className, memberReference, ref)) {
+        if (resolveInheritedMemberCandidate(parsed, typeName, memberReference, ref)) {
             return;
         }
 
-        ref.put("resolution", parsed.typesByQualifiedName().containsKey(className)
-                ? "class_resolved_member_unresolved"
+        ref.put("resolution", parsed.typesByQualifiedName().containsKey(typeName)
+                ? "type_resolved_member_unresolved"
                 : (isExternalReference(rawType) ? "external_symbol" : "unresolved"));
-        if (!parsed.typesByQualifiedName().containsKey(className)) {
+        if (!parsed.typesByQualifiedName().containsKey(typeName)) {
             resolveExternalMemberReference(parsed, owner, rawType, memberReference, member, ref);
         }
     }
@@ -2764,17 +2781,17 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     private static void resolveTypeReference(ParsedProject parsed, CtType<?> owner,
                                              String target, Map<String, Object> ref) {
         target = stripModulePrefix(target);
-        String className = resolveClassName(parsed, owner, target);
-        if (!className.isBlank()) {
+        String typeName = resolveTypeName(parsed, owner, target);
+        if (!typeName.isBlank()) {
             ref.put("kind", "type_reference");
             ref.put("resolution", "resolved_type");
-            ref.put("resolved_class", className);
-            putTypeDetails(parsed, className, ref);
+            ref.put("resolved_type", typeName);
+            putTypeDetails(parsed, typeName, ref);
         } else {
             ExternalType external = resolveExternalType(parsed, owner, target);
             ref.put("kind", "type_reference");
             ref.put("resolution", external.resolved() ? "external_symbol" : "unresolved");
-            ref.put("external_class", external.qualifiedName());
+            ref.put("external_type", external.qualifiedName());
             ref.put("external_resolution", external.confidence());
         }
     }
@@ -2783,7 +2800,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                                                        String rawType, MemberReference memberReference,
                                                        String rawMember, Map<String, Object> ref) {
         ExternalType external = resolveExternalType(parsed, owner, rawType);
-        ref.put("external_class", external.qualifiedName());
+        ref.put("external_type", external.qualifiedName());
         ref.put("external_member", rawMember);
         ref.put("external_resolution", external.confidence());
         if (!external.resolved()) {
@@ -2853,13 +2870,13 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 .orElseGet(ImportContext::empty);
     }
 
-    private static ExternalMember classifyExternalMember(ParsedProject parsed, String className,
+    private static ExternalMember classifyExternalMember(ParsedProject parsed, String typeName,
                                                          MemberReference memberReference) {
-        if (className == null || className.isBlank() || memberReference.name().isBlank()) {
+        if (typeName == null || typeName.isBlank() || memberReference.name().isBlank()) {
             return new ExternalMember("member_reference", "unknown", "unresolved");
         }
         try {
-            Class<?> clazz = classForName(parsed, className);
+            Class<?> clazz = classForName(parsed, typeName);
             if (!memberReference.hasParameters()) {
                 for (java.lang.reflect.Field field : clazz.getFields()) {
                     if (field.getName().equals(memberReference.name())) {
@@ -2917,16 +2934,16 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return name == null ? type.getName().replace('$', '.') : name;
     }
 
-    private static Class<?> classForName(ParsedProject parsed, String className) throws ClassNotFoundException {
+    private static Class<?> classForName(ParsedProject parsed, String typeName) throws ClassNotFoundException {
         ClassLoader loader = parsed != null && parsed.projectClassLoader() != null
                 ? parsed.projectClassLoader()
                 : ClassLoader.getSystemClassLoader();
-        return Class.forName(className, false, loader);
+        return Class.forName(typeName, false, loader);
     }
 
-    private static boolean classExists(ParsedProject parsed, String className) {
+    private static boolean classExists(ParsedProject parsed, String typeName) {
         try {
-            classForName(parsed, className);
+            classForName(parsed, typeName);
             return true;
         } catch (Throwable ignored) {
             return false;
@@ -2957,10 +2974,10 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return ClassLoader.getSystemClassLoader();
     }
 
-    private static boolean resolveMethodCandidate(ParsedProject parsed, String className,
+    private static boolean resolveMethodCandidate(ParsedProject parsed, String typeName,
                                                   MemberReference memberReference, boolean inherited,
                                                   Map<String, Object> ref) {
-        List<SourceMethod> nameMatches = parsed.methodsByClassName().getOrDefault(className, List.of()).stream()
+        List<SourceMethod> nameMatches = parsed.methodsByTypeName().getOrDefault(typeName, List.of()).stream()
                 .filter(method -> method.methodName().equals(memberReference.name()))
                 .toList();
         if (nameMatches.isEmpty()) {
@@ -2974,11 +2991,11 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             SourceMethod method = candidates.get(0);
             ref.put("resolution", inherited ? "resolved_inherited_method" : "resolved_method");
             ref.put("method_uri", method.methodUri());
-            ref.put("signature", method.className() + "." + method.signature());
+            ref.put("signature", method.typeName() + "." + method.signature());
             ref.put("source_set", method.sourceSet());
             ref.put("referenced_method", referencedMethodContext(parsed, method));
             if (inherited) {
-                ref.put("inherited_from", className);
+                ref.put("inherited_from", typeName);
             }
             return true;
         }
@@ -2993,20 +3010,20 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                     .limit(20)
                     .toList());
             if (inherited) {
-                ref.put("inherited_from", className);
+                ref.put("inherited_from", typeName);
             }
             return true;
         }
         return false;
     }
 
-    private static boolean resolveFieldCandidate(ParsedProject parsed, String className,
+    private static boolean resolveFieldCandidate(ParsedProject parsed, String typeName,
                                                  MemberReference memberReference, boolean inherited,
                                                  Map<String, Object> ref) {
         if (memberReference.hasParameters()) {
             return false;
         }
-        List<SourceField> fields = parsed.fieldsByClassName().getOrDefault(className, List.of()).stream()
+        List<SourceField> fields = parsed.fieldsByTypeName().getOrDefault(typeName, List.of()).stream()
                 .filter(field -> field.fieldName().equals(memberReference.name()))
                 .toList();
         if (fields.isEmpty()) {
@@ -3024,7 +3041,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             ref.put("source_set", field.sourceSet());
             ref.put("field_javadoc", field.javadoc());
             if (inherited) {
-                ref.put("inherited_from", className);
+                ref.put("inherited_from", typeName);
             }
             return true;
         }
@@ -3035,15 +3052,15 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 .limit(20)
                 .toList());
         if (inherited) {
-            ref.put("inherited_from", className);
+            ref.put("inherited_from", typeName);
         }
         return true;
     }
 
-    private static boolean resolveInheritedMemberCandidate(ParsedProject parsed, String className,
+    private static boolean resolveInheritedMemberCandidate(ParsedProject parsed, String typeName,
                                                            MemberReference memberReference,
                                                            Map<String, Object> ref) {
-        for (String parent : localSupertypes(parsed, className)) {
+        for (String parent : localSupertypes(parsed, typeName)) {
             if (resolveMethodCandidate(parsed, parent, memberReference, true, ref)) {
                 return true;
             }
@@ -3054,8 +3071,8 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return false;
     }
 
-    private static List<String> localSupertypes(ParsedProject parsed, String className) {
-        CtType<?> type = parsed.typesByQualifiedName().get(className);
+    private static List<String> localSupertypes(ParsedProject parsed, String typeName) {
+        CtType<?> type = parsed.typesByQualifiedName().get(typeName);
         if (type == null) {
             return List.of();
         }
@@ -3076,7 +3093,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
         refs.addAll(type.getSuperInterfaces());
         for (CtTypeReference<?> ref : refs) {
-            String parentName = resolveClassName(parsed, type, typeName(ref));
+            String parentName = resolveTypeName(parsed, type, typeName(ref));
             if (parentName.isBlank() || !seen.add(parentName)) {
                 continue;
             }
@@ -3089,7 +3106,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 }
                 parentRefs.addAll(parentType.getSuperInterfaces());
                 for (CtTypeReference<?> parentRef : parentRefs) {
-                    String ancestorName = resolveClassName(parsed, parentType, typeName(parentRef));
+                    String ancestorName = resolveTypeName(parsed, parentType, typeName(parentRef));
                     if (!ancestorName.isBlank() && seen.add(ancestorName)) {
                         result.add(ancestorName);
                         collectLocalSupertypes(parsed, parsed.typesByQualifiedName().get(ancestorName), result, seen);
@@ -3099,13 +3116,13 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
     }
 
-    private static void putTypeDetails(ParsedProject parsed, String className, Map<String, Object> ref) {
-        CtType<?> type = parsed.typesByQualifiedName().get(className);
+    private static void putTypeDetails(ParsedProject parsed, String typeName, Map<String, Object> ref) {
+        CtType<?> type = parsed.typesByQualifiedName().get(typeName);
         ref.put("type_uri", typeUri(parsed.projectRoot(), type));
         ref.put("source_path", sourcePath(type));
         ref.put("line_number", lineNumber(type));
-        ref.put("class_javadoc", docComment(type));
-        ref.put("class_hierarchy", type != null ? classHierarchy(type) : "");
+        ref.put("type_javadoc", docComment(type));
+        ref.put("type_hierarchy", type != null ? typeHierarchy(type) : "");
         ref.put("hierarchy_resolution", hierarchyResolution(type));
     }
 
@@ -3115,8 +3132,8 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         CtType<?> owner = executable != null ? executable.getParent(CtType.class) : null;
         details.put("method_uri", method.methodUri());
         details.put("method_name", method.methodName());
-        details.put("qualified_name", method.className() + "." + method.methodName());
-        details.put("signature", method.className() + "." + method.signature());
+        details.put("qualified_name", method.typeName() + "." + method.methodName());
+        details.put("signature", method.typeName() + "." + method.signature());
         details.put("source_set", method.sourceSet());
         details.put("line_number", method.lineNumber());
         details.put("visibility", method.visibility());
@@ -3131,7 +3148,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         details.put("throws", method.thrownExceptions());
         details.put("code", executable != null ? sourceSlice(executable) : "");
         details.put("javadoc", executable != null ? docComment(executable) : "");
-        details.put("class_javadoc", owner != null ? docComment(owner) : "");
+        details.put("type_javadoc", owner != null ? docComment(owner) : "");
         return details;
     }
 
@@ -3145,7 +3162,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return details;
     }
 
-    private static String resolveClassName(ParsedProject parsed, CtType<?> owner, String rawType) {
+    private static String resolveTypeName(ParsedProject parsed, CtType<?> owner, String rawType) {
         String target = rawType == null ? "" : rawType.trim();
         if (target.isBlank()) {
             return owner != null ? owner.getQualifiedName() : "";
@@ -3179,7 +3196,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return "";
     }
 
-    private static String projectClassName(ParsedProject parsed, CtType<?> owner, CtTypeReference<?> type) {
+    private static String projectTypeName(ParsedProject parsed, CtType<?> owner, CtTypeReference<?> type) {
         if (type == null) {
             return owner != null ? owner.getQualifiedName() : "";
         }
@@ -3212,11 +3229,11 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             if (parsed.typesByQualifiedName().containsKey(normalized)) {
                 return normalized;
             }
-            String resolved = resolveClassName(parsed, owner, normalized);
+            String resolved = resolveTypeName(parsed, owner, normalized);
             if (!resolved.isBlank()) {
                 return resolved;
             }
-            String nested = projectNestedClassName(parsed, normalized);
+            String nested = projectNestedTypeName(parsed, normalized);
             if (!nested.isBlank()) {
                 return nested;
             }
@@ -3224,7 +3241,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return "";
     }
 
-    private static String projectNestedClassName(ParsedProject parsed, String candidate) {
+    private static String projectNestedTypeName(ParsedProject parsed, String candidate) {
         if (candidate == null || candidate.isBlank()) {
             return "";
         }
@@ -3235,7 +3252,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 .orElse("");
     }
 
-    private static String externalClassName(CtTypeReference<?> type) {
+    private static String externalTypeName(CtTypeReference<?> type) {
         if (type == null) {
             return "";
         }
@@ -3510,20 +3527,20 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
     }
 
-    private static String methodUri(Path projectRoot, Path sourceFile, String className, String signature) {
+    private static String methodUri(Path projectRoot, Path sourceFile, String typeName, String signature) {
         Path normalizedRoot = projectRoot.toAbsolutePath().normalize();
         Path normalizedFile = sourceFile.toAbsolutePath().normalize();
         String relative = normalizedRoot.relativize(normalizedFile).toString().replace('\\', '/');
-        return relative + "#" + className + "." + signature.replaceAll("\\s+", " ").trim();
+        return relative + "#" + typeName + "." + signature.replaceAll("\\s+", " ").trim();
     }
 
-    private static String fieldUri(Path projectRoot, Path sourceFile, String className, String fieldName,
+    private static String fieldUri(Path projectRoot, Path sourceFile, String typeName, String fieldName,
                                    String erasedType) {
         Path normalizedRoot = projectRoot.toAbsolutePath().normalize();
         Path normalizedFile = sourceFile.toAbsolutePath().normalize();
         String relative = normalizedRoot.relativize(normalizedFile).toString().replace('\\', '/');
         String type = erasedType == null || erasedType.isBlank() ? "unknown" : erasedType;
-        return relative + "#" + className + "." + fieldName + ":" + type;
+        return relative + "#" + typeName + "." + fieldName + ":" + type;
     }
 
     private static String typeUri(Path projectRoot, CtType<?> type) {
@@ -3624,12 +3641,12 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             Map<String, SourceMethod> methodsByUri,
             Map<String, CtExecutable<?>> executablesByUri,
             Map<String, CtType<?>> typesByQualifiedName,
-            Map<String, List<SourceMethod>> methodsByClassName,
-            Map<String, List<SourceField>> fieldsByClassName,
+            Map<String, List<SourceMethod>> methodsByTypeName,
+            Map<String, List<SourceField>> fieldsByTypeName,
             Map<Path, ImportContext> importsByFile,
-            Map<String, ClassContext> classContextsByTypeAndMethod,
+            Map<String, TypeContext> typeContextsByTypeAndMethod,
             Map<Path, String> sourceTextByFile,
-            Map<String, Map<String, String>> classMethodsByType,
+            Map<String, Map<String, String>> typeMethodsByType,
             ClassLoader projectClassLoader,
             String mode,
             SourceParseStats parseStats) {
@@ -3639,11 +3656,11 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             methodsByUri = Map.copyOf(methodsByUri);
             executablesByUri = Map.copyOf(executablesByUri);
             typesByQualifiedName = Map.copyOf(typesByQualifiedName);
-            methodsByClassName = methodsByClassName.entrySet().stream()
+            methodsByTypeName = methodsByTypeName.entrySet().stream()
                     .collect(java.util.stream.Collectors.toUnmodifiableMap(
                             Map.Entry::getKey,
                             entry -> List.copyOf(entry.getValue())));
-            fieldsByClassName = fieldsByClassName.entrySet().stream()
+            fieldsByTypeName = fieldsByTypeName.entrySet().stream()
                     .collect(java.util.stream.Collectors.toUnmodifiableMap(
                             Map.Entry::getKey,
                             entry -> List.copyOf(entry.getValue())));
@@ -3685,7 +3702,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
 
     private record SourceField(
             String fieldUri,
-            String className,
+            String typeName,
             String fieldName,
             String type,
             String erasedType,
@@ -3697,7 +3714,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             String sourceSet) {
         private SourceField {
             fieldUri = fieldUri != null ? fieldUri : "";
-            className = className != null ? className : "";
+            typeName = typeName != null ? typeName : "";
             fieldName = fieldName != null ? fieldName : "";
             type = type != null ? type : "";
             erasedType = erasedType != null ? erasedType : "";
@@ -3778,18 +3795,18 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
     }
 
-    private record ClassContext(
-            Map<String, String> classMethods,
-            List<String> siblingMethods,
+    private record TypeContext(
+            Map<String, String> typeMethods,
+            List<String> sameTypeMethods,
             List<String> overloadGroup) {
-        private ClassContext {
-            classMethods = classMethods != null ? Map.copyOf(classMethods) : Map.of();
-            siblingMethods = siblingMethods != null ? List.copyOf(siblingMethods) : List.of();
+        private TypeContext {
+            typeMethods = typeMethods != null ? Map.copyOf(typeMethods) : Map.of();
+            sameTypeMethods = sameTypeMethods != null ? List.copyOf(sameTypeMethods) : List.of();
             overloadGroup = overloadGroup != null ? List.copyOf(overloadGroup) : List.of();
         }
 
-        static ClassContext empty() {
-            return new ClassContext(Map.of(), List.of(), List.of());
+        static TypeContext empty() {
+            return new TypeContext(Map.of(), List.of(), List.of());
         }
     }
 }

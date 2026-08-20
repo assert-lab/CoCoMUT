@@ -24,7 +24,7 @@ import java.util.*;
  * Phase 1: ProjectAnalyzer - Detect project, build system, Java version, classpath
  * Phase 2: MethodIdentifier - Scan Java files, extract methods, generate URI identities
  * Phase 3: CallGraphGenerator - Generate call graphs for methods
- * Phase 4: ContextExtractor - Extract method bodies, javadocs, class hierarchy
+ * Phase 4: ContextExtractor - Extract method bodies, Javadocs, and type hierarchy
  * Phase 5: JsonGenerator - Generate JSONL output
  *
  * Input: Project root path
@@ -42,7 +42,7 @@ final class Orchestrator {
     private Integer maxSourceFiles;
     private Set<String> sourceSets = Set.of();
     private Set<String> packageFilters = Set.of();
-    private Set<String> classFilters = Set.of();
+    private Set<String> typeFilters = Set.of();
     private Set<String> methodFilters = Set.of();
     private Set<String> visibilityFilters = Set.of();
     private Set<String> includePathGlobs = Set.of();
@@ -91,7 +91,7 @@ final class Orchestrator {
         this.maxSourceFiles = request.maxSourceFiles();
         this.sourceSets = request.sourceSets();
         this.packageFilters = request.packages();
-        this.classFilters = request.classes();
+        this.typeFilters = request.types();
         this.methodFilters = request.methods();
         this.visibilityFilters = request.visibilities();
         this.includePathGlobs = request.includePathGlobs();
@@ -145,8 +145,8 @@ final class Orchestrator {
         return this;
     }
 
-    Orchestrator setClassFilters(Set<String> classFilters) {
-        this.classFilters = classFilters == null ? Set.of() : Set.copyOf(classFilters);
+    Orchestrator setTypeFilters(Set<String> typeFilters) {
+        this.typeFilters = typeFilters == null ? Set.of() : Set.copyOf(typeFilters);
         return this;
     }
 
@@ -581,7 +581,7 @@ final class Orchestrator {
         List<PathMatcher> excludeMatchers = pathMatchers(excludePathGlobs);
         filtered = filtered.stream()
                 .filter(this::matchesPackageFilter)
-                .filter(this::matchesClassFilter)
+                .filter(this::matchesTypeFilter)
                 .filter(this::matchesMethodFilter)
                 .filter(this::matchesVisibilityFilter)
                 .filter(method -> matchesPathFilters(method, includeMatchers, excludeMatchers))
@@ -590,7 +590,7 @@ final class Orchestrator {
         executionReport.put("phase_2_selection_filter_before", beforeSelection);
         executionReport.put("phase_2_selection_filter_after", filtered.size());
         executionReport.put("phase_2_package_filter", packageFilters.isEmpty() ? "all" : String.join(",", packageFilters));
-        executionReport.put("phase_2_class_filter", classFilters.isEmpty() ? "all" : String.join(",", classFilters));
+        executionReport.put("phase_2_type_filter", typeFilters.isEmpty() ? "all" : String.join(",", typeFilters));
         executionReport.put("phase_2_method_filter", methodFilters.isEmpty() ? "all" : String.join(",", methodFilters));
         executionReport.put("phase_2_visibility_filter", visibilityFilters.isEmpty() ? "all" : String.join(",", visibilityFilters));
         executionReport.put("phase_2_include_path_filter", includePathGlobs.isEmpty() ? "all" : String.join(",", includePathGlobs));
@@ -807,7 +807,7 @@ final class Orchestrator {
                 node.put("phase", "context_extraction");
                 node.put("failure_code", failures.get(method.getMethodUri()));
                 node.put("method_uri", method.getMethodUri());
-                node.put("class_name", method.getClassname());
+                node.put("type_name", method.getTypeName());
                 node.put("method_name", method.getMethodName());
                 node.put("signature", method.getMethodSignature());
                 node.put("source_file", method.getSourceFile().toString());
@@ -877,20 +877,20 @@ final class Orchestrator {
         if (packageFilters.isEmpty()) {
             return true;
         }
-        String className = method.getClassname();
-        int lastDot = className.lastIndexOf('.');
-        String pkg = lastDot >= 0 ? className.substring(0, lastDot) : "";
+        String typeName = method.getTypeName();
+        int lastDot = typeName.lastIndexOf('.');
+        String pkg = lastDot >= 0 ? typeName.substring(0, lastDot) : "";
         return packageFilters.stream().anyMatch(filter ->
                 pkg.equals(filter) || pkg.startsWith(filter + "."));
     }
 
-    private boolean matchesClassFilter(MethodInfo method) {
-        if (classFilters.isEmpty()) {
+    private boolean matchesTypeFilter(MethodInfo method) {
+        if (typeFilters.isEmpty()) {
             return true;
         }
-        String className = method.getClassname();
-        String simple = className.substring(className.lastIndexOf('.') + 1);
-        return classFilters.stream().anyMatch(filter -> className.equals(filter) || simple.equals(filter));
+        String typeName = method.getTypeName();
+        String simple = typeName.substring(typeName.lastIndexOf('.') + 1);
+        return typeFilters.stream().anyMatch(filter -> typeName.equals(filter) || simple.equals(filter));
     }
 
     private boolean matchesMethodFilter(MethodInfo method) {
@@ -948,13 +948,13 @@ final class Orchestrator {
     }
 
     private String typeUri(MethodInfo method) {
-        return relativeSourceFile(method).toString().replace('\\', '/') + "#" + method.getClassname();
+        return relativeSourceFile(method).toString().replace('\\', '/') + "#" + method.getTypeName();
     }
 
     private String packageUri(MethodInfo method) {
-        String className = method.getClassname();
-        int lastDot = className.lastIndexOf('.');
-        String packageName = lastDot >= 0 ? className.substring(0, lastDot) : "";
+        String typeName = method.getTypeName();
+        int lastDot = typeName.lastIndexOf('.');
+        String packageName = lastDot >= 0 ? typeName.substring(0, lastDot) : "";
         Path relativeFile = relativeSourceFile(method);
         Path packageDir = relativeFile.getParent();
         Path packageInfo = packageDir != null ? packageDir.resolve("package-info.java") : Path.of("package-info.java");
@@ -970,7 +970,7 @@ final class Orchestrator {
         selection.put("scope", scope.toString().toLowerCase(Locale.ROOT));
         selection.put("source_sets", sourceSets.isEmpty() ? List.of("all") : sourceSets.stream().sorted().toList());
         selection.put("packages", packageFilters.stream().sorted().toList());
-        selection.put("classes", classFilters.stream().sorted().toList());
+        selection.put("types", typeFilters.stream().sorted().toList());
         selection.put("methods", methodFilters.stream().sorted().toList());
         selection.put("visibilities", visibilityFilters.stream().sorted().toList());
         selection.put("include_paths", includePathGlobs.stream().sorted().toList());
@@ -1056,8 +1056,8 @@ final class Orchestrator {
                     ? targetFilters.iterator().next().prefixedUri()
                     : "targets__" + targetFilters.size();
         }
-        if (!classFilters.isEmpty()) {
-            return "class__" + String.join("__", classFilters);
+        if (!typeFilters.isEmpty()) {
+            return "type__" + String.join("__", typeFilters);
         }
         if (!packageFilters.isEmpty()) {
             return "package__" + String.join("__", packageFilters);
@@ -1079,7 +1079,7 @@ final class Orchestrator {
         request.put("scope", scope.toString());
         request.put("source_sets", sourceSets.stream().sorted().toList());
         request.put("packages", packageFilters.stream().sorted().toList());
-        request.put("classes", classFilters.stream().sorted().toList());
+        request.put("types", typeFilters.stream().sorted().toList());
         request.put("methods", methodFilters.stream().sorted().toList());
         request.put("visibilities", visibilityFilters.stream().sorted().toList());
         request.put("include_paths", includePathGlobs.stream().sorted().toList());

@@ -66,7 +66,7 @@ final class AnalyzerFacade {
         selection.put("selector", request.targets().isEmpty() ? "project"
                 : request.targets().stream().map(SymbolTarget::prefixedUri).toList());
         selection.put("packages", request.packages());
-        selection.put("classes", request.classes());
+        selection.put("types", request.types());
         selection.put("methods", request.methods());
         selection.put("source_sets", request.sourceSets());
         selection.put("javadoc_inheritance", request.javadocInheritancePolicy()

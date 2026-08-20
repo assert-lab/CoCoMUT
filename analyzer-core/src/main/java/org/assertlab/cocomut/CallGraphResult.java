@@ -9,7 +9,7 @@ import java.util.*;
 public class CallGraphResult {
     private final String methodUri;
     private final String methodName;
-    private final String classname;
+    private final String typeName;
     private final Set<CallGraphEdge> callers;    // Methods that call this method
     private final Set<CallGraphEdge> callees;    // Methods this method calls
     private final String algorithm;        // CHA, RTA, etc.
@@ -19,7 +19,7 @@ public class CallGraphResult {
     private CallGraphResult(Builder builder) {
         this.methodUri = Objects.requireNonNull(builder.methodUri, "methodUri cannot be null");
         this.methodName = Objects.requireNonNull(builder.methodName, "methodName cannot be null");
-        this.classname = Objects.requireNonNull(builder.classname, "classname cannot be null");
+        this.typeName = Objects.requireNonNull(builder.typeName, "typeName cannot be null");
         this.callers = Collections.unmodifiableSet(new LinkedHashSet<>(builder.callers));
         this.callees = Collections.unmodifiableSet(new LinkedHashSet<>(builder.callees));
         this.algorithm = Objects.requireNonNull(builder.algorithm, "algorithm cannot be null");
@@ -36,8 +36,8 @@ public class CallGraphResult {
         return methodName;
     }
 
-    public String getClassname() {
-        return classname;
+    public String getTypeName() {
+        return typeName;
     }
 
     public Set<CallGraphEdge> getCallers() {
@@ -73,7 +73,7 @@ public class CallGraphResult {
         return "CallGraphResult{" +
                 "methodUri='" + methodUri + '\'' +
                 ", methodName='" + methodName + '\'' +
-                ", classname='" + classname + '\'' +
+                ", typeName='" + typeName + '\'' +
                 ", callerCount=" + callers.size() +
                 ", calleeCount=" + callees.size() +
                 ", algorithm='" + algorithm + '\'' +
@@ -86,7 +86,7 @@ public class CallGraphResult {
     public static class Builder {
         private String methodUri;
         private String methodName;
-        private String classname;
+        private String typeName;
         private Set<CallGraphEdge> callers = new LinkedHashSet<>();
         private Set<CallGraphEdge> callees = new LinkedHashSet<>();
         private String algorithm = "CHA";
@@ -103,8 +103,8 @@ public class CallGraphResult {
             return this;
         }
 
-        public Builder classname(String classname) {
-            this.classname = classname;
+        public Builder typeName(String typeName) {
+            this.typeName = typeName;
             return this;
         }
 

@@ -93,11 +93,11 @@ public class CallGraphGeneratorTest {
 
             assertTrue(explicitOnly.initialize());
 
-            Field methodsByClass = CallGraphGenerator.class.getDeclaredField("methodsByClass");
-            methodsByClass.setAccessible(true);
-            Map<?, ?> classes = (Map<?, ?>) methodsByClass.get(explicitOnly);
+            Field methodsByType = CallGraphGenerator.class.getDeclaredField("methodsByType");
+            methodsByType.setAccessible(true);
+            Map<?, ?> types = (Map<?, ?>) methodsByType.get(explicitOnly);
             assertFalse("CallGraphGenerator must not discover stale target/classes outside ProjectMetadata",
-                    classes.containsKey("stale.Stale"));
+                    types.containsKey("stale.Stale"));
         } finally {
             deleteRecursively(project);
         }
@@ -119,7 +119,7 @@ public class CallGraphGeneratorTest {
         
         MethodInfo testMethod = new MethodInfo.Builder()
                 .methodUri("1")
-                .classname("com.example.MyClass")
+                .typeName("com.example.MyClass")
                 .methodName("testMethod")
                 .methodSignature("testMethod()")
                 .sourceFile(Paths.get("MyClass.java"))
@@ -133,7 +133,7 @@ public class CallGraphGeneratorTest {
         assertNotNull("Should generate call graph result", result);
         assertEquals("Result should have correct method URI", "1", result.getMethodUri());
         assertEquals("Result should have correct method name", "testMethod", result.getMethodName());
-        assertEquals("Result should have correct classname", "com.example.MyClass", result.getClassname());
+        assertEquals("Result should have correct typeName", "com.example.MyClass", result.getTypeName());
     }
 
     @Test
@@ -142,7 +142,7 @@ public class CallGraphGeneratorTest {
         
         MethodInfo testMethod = new MethodInfo.Builder()
                 .methodUri("1")
-                .classname("com.example.MyClass")
+                .typeName("com.example.MyClass")
                 .methodName("processData")
                 .methodSignature("processData()")
                 .sourceFile(Paths.get("MyClass.java"))
@@ -165,7 +165,7 @@ public class CallGraphGeneratorTest {
         
         MethodInfo testMethod = new MethodInfo.Builder()
                 .methodUri("1")
-                .classname("com.example.MyClass")
+                .typeName("com.example.MyClass")
                 .methodName("testMethod")
                 .methodSignature("testMethod()")
                 .sourceFile(Paths.get("MyClass.java"))
@@ -197,7 +197,7 @@ public class CallGraphGeneratorTest {
         List<MethodInfo> methods = List.of(
                 new MethodInfo.Builder()
                         .methodUri("1")
-                        .classname("com.example.MyClass")
+                        .typeName("com.example.MyClass")
                         .methodName("method1")
                         .methodSignature("method1()")
                         .sourceFile(Paths.get("MyClass.java"))
@@ -205,7 +205,7 @@ public class CallGraphGeneratorTest {
                         .build(),
                 new MethodInfo.Builder()
                         .methodUri("2")
-                        .classname("com.example.MyClass")
+                        .typeName("com.example.MyClass")
                         .methodName("method2")
                         .methodSignature("method2()")
                         .sourceFile(Paths.get("MyClass.java"))
@@ -227,7 +227,7 @@ public class CallGraphGeneratorTest {
         generator.generateForMethods(List.of(
                 new MethodInfo.Builder()
                         .methodUri("1")
-                        .classname("com.example.MyClass")
+                        .typeName("com.example.MyClass")
                         .methodName("method1")
                         .methodSignature("method1()")
                         .sourceFile(Paths.get("MyClass.java"))
@@ -245,7 +245,7 @@ public class CallGraphGeneratorTest {
         
         MethodInfo testMethod = new MethodInfo.Builder()
                 .methodUri("1")
-                .classname("com.example.MyClass")
+                .typeName("com.example.MyClass")
                 .methodName("testMethod")
                 .methodSignature("testMethod()")
                 .sourceFile(Paths.get("MyClass.java"))
@@ -266,7 +266,7 @@ public class CallGraphGeneratorTest {
         
         MethodInfo testMethod = new MethodInfo.Builder()
                 .methodUri("1")
-                .classname("com.example.MyClass")
+                .typeName("com.example.MyClass")
                 .methodName("testMethod")
                 .methodSignature("testMethod()")
                 .sourceFile(Paths.get("MyClass.java"))
@@ -289,7 +289,7 @@ public class CallGraphGeneratorTest {
     public void testGenerateBeforeInitialization() {
         MethodInfo testMethod = new MethodInfo.Builder()
                 .methodUri("1")
-                .classname("com.example.MyClass")
+                .typeName("com.example.MyClass")
                 .methodName("testMethod")
                 .methodSignature("testMethod()")
                 .sourceFile(Paths.get("MyClass.java"))
@@ -305,7 +305,7 @@ public class CallGraphGeneratorTest {
         CallGraphResult result = new CallGraphResult.Builder()
                 .methodUri("1")
                 .methodName("testMethod")
-                .classname("com.example.MyClass")
+                .typeName("com.example.MyClass")
                 .addCaller(CallGraphEdge.resolved(
                         "src/main/java/com/example/Main.java#com.example.Main.main(java.lang.String[]):void",
                         "<com.example.Main: void main(java.lang.String[])>",
@@ -358,10 +358,10 @@ public class CallGraphGeneratorTest {
     }
 
     @Test
-    public void testReturnMismatchResolvesWhenClassNameAndParametersAreUnique() throws Exception {
+    public void testReturnMismatchResolvesWhenTypeNameAndParametersAreUnique() throws Exception {
         MethodInfo sourceMethod = new MethodInfo.Builder()
                 .methodUri("src/main/java/com/example/Box.java#com.example.Box.get():java.lang.String")
-                .classname("com.example.Box")
+                .typeName("com.example.Box")
                 .methodName("get")
                 .methodSignature("get()")
                 .returnType("java.lang.String")
@@ -382,7 +382,7 @@ public class CallGraphGeneratorTest {
     public void testParameterNormalizationResolvesVarargsArrayDescriptor() throws Exception {
         MethodInfo sourceMethod = new MethodInfo.Builder()
                 .methodUri("src/main/java/com/example/Log.java#com.example.Log.log(java.lang.String[]):void")
-                .classname("com.example.Log")
+                .typeName("com.example.Log")
                 .methodName("log")
                 .methodSignature("log(String... messages)")
                 .returnType("void")
@@ -403,7 +403,7 @@ public class CallGraphGeneratorTest {
     public void testPackageQualifiedOverloadsAreNotMatchedBySimpleName() throws Exception {
         MethodInfo first = new MethodInfo.Builder()
                 .methodUri("src/main/java/com/example/Foo.java#com.example.Foo.consume(com.alpha.Token):void")
-                .classname("com.example.Foo")
+                .typeName("com.example.Foo")
                 .methodName("consume")
                 .methodSignature("consume(com.alpha.Token token)")
                 .returnType("void")
@@ -413,7 +413,7 @@ public class CallGraphGeneratorTest {
                 .build();
         MethodInfo second = new MethodInfo.Builder()
                 .methodUri("src/main/java/com/example/Foo.java#com.example.Foo.consume(com.gamma.Token):void")
-                .classname("com.example.Foo")
+                .typeName("com.example.Foo")
                 .methodName("consume")
                 .methodSignature("consume(com.gamma.Token token)")
                 .returnType("void")
@@ -433,7 +433,7 @@ public class CallGraphGeneratorTest {
     public void testExactObjectOverloadResolvesWithoutWildcardAmbiguity() throws Exception {
         MethodInfo first = new MethodInfo.Builder()
                 .methodUri("src/main/java/com/example/Foo.java#com.example.Foo.f(java.lang.String):void")
-                .classname("com.example.Foo")
+                .typeName("com.example.Foo")
                 .methodName("f")
                 .methodSignature("f(String value)")
                 .returnType("void")
@@ -443,7 +443,7 @@ public class CallGraphGeneratorTest {
                 .build();
         MethodInfo second = new MethodInfo.Builder()
                 .methodUri("src/main/java/com/example/Foo.java#com.example.Foo.f(java.lang.Object):void")
-                .classname("com.example.Foo")
+                .typeName("com.example.Foo")
                 .methodName("f")
                 .methodSignature("f(Object value)")
                 .returnType("void")
@@ -464,7 +464,7 @@ public class CallGraphGeneratorTest {
     public void testGenericMethodUsesErasedParameterTypesForBytecodeJoin() throws Exception {
         MethodInfo sourceMethod = new MethodInfo.Builder()
                 .methodUri("src/main/java/com/example/Box.java#com.example.Box.identity(java.lang.Object):java.lang.Object")
-                .classname("com.example.Box")
+                .typeName("com.example.Box")
                 .methodName("identity")
                 .methodSignature("identity(T value)")
                 .erasedParameterTypes(List.of("java.lang.Object"))
@@ -486,7 +486,7 @@ public class CallGraphGeneratorTest {
     public void testBoundedGenericMethodUsesBoundErasureForBytecodeJoin() throws Exception {
         MethodInfo sourceMethod = new MethodInfo.Builder()
                 .methodUri("src/main/java/com/example/Box.java#com.example.Box.identity(java.lang.Number):java.lang.Number")
-                .classname("com.example.Box")
+                .typeName("com.example.Box")
                 .methodName("identity")
                 .methodSignature("identity(T value)")
                 .erasedParameterTypes(List.of("java.lang.Number"))
@@ -508,7 +508,7 @@ public class CallGraphGeneratorTest {
     public void testConstructorFlagMapsSourceConstructorToInit() throws Exception {
         MethodInfo constructor = new MethodInfo.Builder()
                 .methodUri("src/main/java/com/example/Widget.java#com.example.Widget.Widget(java.lang.String):void")
-                .classname("com.example.Widget")
+                .typeName("com.example.Widget")
                 .methodName("Widget")
                 .methodSignature("Widget(String name)")
                 .erasedParameterTypes(List.of("java.lang.String"))
@@ -531,7 +531,7 @@ public class CallGraphGeneratorTest {
     public void testOrdinaryMethodNamedLikeClassDoesNotMatchConstructor() throws Exception {
         MethodInfo ordinaryMethod = new MethodInfo.Builder()
                 .methodUri("src/main/java/com/example/Widget.java#com.example.Widget.Widget():int")
-                .classname("com.example.Widget")
+                .typeName("com.example.Widget")
                 .methodName("Widget")
                 .methodSignature("Widget()")
                 .returnType("int")
@@ -557,7 +557,7 @@ public class CallGraphGeneratorTest {
     public void testProjectMethodAbsentSubdividesSyntheticCompilerMethod() throws Exception {
         MethodInfo sourceMethod = new MethodInfo.Builder()
                 .methodUri("src/main/java/com/example/Widget.java#com.example.Widget.visible():void")
-                .classname("com.example.Widget")
+                .typeName("com.example.Widget")
                 .methodName("visible")
                 .methodSignature("visible()")
                 .returnType("void")
@@ -571,7 +571,7 @@ public class CallGraphGeneratorTest {
 
         assertEquals("", edge.methodUri());
         assertEquals("synthetic_or_compiler_method", edge.targetKind());
-        assertEquals("project_class_present_method_absent_synthetic_or_compiler_method",
+        assertEquals("project_type_present_method_absent_synthetic_or_compiler_method",
                 edge.unresolvedReason());
     }
 
@@ -581,7 +581,7 @@ public class CallGraphGeneratorTest {
         java.nio.file.Files.writeString(source, "package com.example; enum Color { RED, BLUE }\n");
         MethodInfo sourceMethod = new MethodInfo.Builder()
                 .methodUri("src/main/java/com/example/Color.java#com.example.Color.name():java.lang.String")
-                .classname("com.example.Color")
+                .typeName("com.example.Color")
                 .methodName("name")
                 .methodSignature("name()")
                 .returnType("java.lang.String")
@@ -594,7 +594,7 @@ public class CallGraphGeneratorTest {
                 "<com.example.Color: com.example.Color[] values()>");
 
         assertEquals("", edge.methodUri());
-        assertEquals("project_class_present_method_absent_enum_generated_method",
+        assertEquals("project_type_present_method_absent_enum_generated_method",
                 edge.unresolvedReason());
     }
 
@@ -604,7 +604,7 @@ public class CallGraphGeneratorTest {
         java.nio.file.Files.writeString(source, "package com.example; public record Point(int x, int y) {}\n");
         MethodInfo sourceMethod = new MethodInfo.Builder()
                 .methodUri("src/main/java/com/example/Point.java#com.example.Point.distance():int")
-                .classname("com.example.Point")
+                .typeName("com.example.Point")
                 .methodName("distance")
                 .methodSignature("distance()")
                 .returnType("int")
@@ -617,15 +617,15 @@ public class CallGraphGeneratorTest {
                 "<com.example.Point: int x()>");
 
         assertEquals("", edge.methodUri());
-        assertEquals("project_class_present_method_absent_record_component_accessor",
+        assertEquals("project_type_present_method_absent_record_component_accessor",
                 edge.unresolvedReason());
     }
 
     private CallGraphEdge resolveEdgeFor(List<MethodInfo> methods, String rawSignature) throws Exception {
         CallGraphGenerator localGenerator = new CallGraphGenerator(projectMetadata);
-        Field methodsByClass = CallGraphGenerator.class.getDeclaredField("methodsByClass");
-        methodsByClass.setAccessible(true);
-        methodsByClass.set(localGenerator, Map.of());
+        Field methodsByType = CallGraphGenerator.class.getDeclaredField("methodsByType");
+        methodsByType.setAccessible(true);
+        methodsByType.set(localGenerator, Map.of());
 
         Method index = CallGraphGenerator.class.getDeclaredMethod("indexMethodSignatures", List.class);
         index.setAccessible(true);

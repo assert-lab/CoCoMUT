@@ -45,7 +45,7 @@ public class MethodIdentifierTest {
         MethodInfo method = methods.get(0);
 
         assertNotNull("Method URI should be set", method.getMethodUri());
-        assertNotNull("Class name should be set", method.getClassname());
+        assertNotNull("Type name should be set", method.getTypeName());
         assertNotNull("Method name should be set", method.getMethodName());
         assertNotNull("Method signature should be set", method.getMethodSignature());
         assertNotNull("Source file should be set", method.getSourceFile());
@@ -56,7 +56,7 @@ public class MethodIdentifierTest {
     public void methodInfoEqualityUsesUriIdentity() {
         MethodInfo method1 = new MethodInfo.Builder()
                 .methodUri("src/main/java/Test.java#Test.test():void")
-                .classname("TestClass")
+                .typeName("TestClass")
                 .methodName("test")
                 .methodSignature("test()")
                 .sourceFile(Paths.get("Test.java"))
@@ -65,7 +65,7 @@ public class MethodIdentifierTest {
 
         MethodInfo method2 = new MethodInfo.Builder()
                 .methodUri("src/main/java/Test.java#Test.test():void")
-                .classname("TestClass")
+                .typeName("TestClass")
                 .methodName("test")
                 .methodSignature("test()")
                 .sourceFile(Paths.get("Test.java"))

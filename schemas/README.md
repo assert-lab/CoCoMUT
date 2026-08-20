@@ -35,22 +35,29 @@ selection                 Project/method/type/package target provenance
 Important `MUT` fields:
 
 ```text
-method_uri                Stable method identity: path#qualified.Class.method(erasedParamTypes):erasedReturnType
+method_uri                Stable method identity: path#qualified.Type.method(erasedParamTypes):erasedReturnType
 method_name               Simple method or constructor name
 source_set                main|test|integration_test|generated|example|unknown
 signature                 Human-readable source signature
 return_type               Source return type
 erased_return_type        Erased return type used in method_uri
-qualified_name            Qualified class plus method name
+qualified_name            Qualified declaring type plus method name
 parameters                Parameter objects with name, source type, erased_type, modifiers, annotations
 annotations               Method annotations
 throws                    Declared thrown exception types
 code                      Method/constructor source without leading Javadoc; annotations are kept
 javadoc                   Method Javadoc, stored separately from code
-class_javadoc             Declaring class Javadoc when available
-class_hierarchy           Source hierarchy and resolution confidence
-source_context            Field reads/writes, overload group, sibling methods
+type_javadoc              Declaring type Javadoc when available
+type_hierarchy           Source hierarchy and resolution confidence
+source_context            Field reads/writes, overload group, same-type methods
 ```
+
+`source_context.same_type_methods` contains a bounded, sorted list of methods
+declared directly in the focal method's declaring type. It includes the focal
+method and its overloads, but excludes constructors, initializer blocks,
+methods declared in nested types, and inherited methods. The list contains at
+most 500 signatures. `overload_group` is the subset with the focal method's
+name and contains at most 200 signatures.
 
 `lines_of_code` and `cyclomatic_complexity` are lexical estimates derived from
 the emitted method source, not AST control-flow measurements. Use them for
@@ -114,10 +121,10 @@ type_uri                  Canonical CoCoMUT URI for resolved project types
 referenced_method         Compact method context for resolved project methods:
                           URI, signature, source, Javadoc, params, return, throws
 field_javadoc             Full field Javadoc for resolved project fields
-class_javadoc             Full class/type Javadoc for resolved project types
+type_javadoc              Full type Javadoc for resolved project types
 candidate_method_uris     Present when omitted or explicit parameters are ambiguous
 ambiguity_reason          Why an overload could not be uniquely selected
-external_class/member     Symbol-only external reference when source/Javadoc is unavailable
+external_type/member      Symbol-only external reference when source/Javadoc is unavailable
 external_resolution       qualified_symbol|explicit_import|implicit_java_lang|
                           wildcard_import_symbol|common_jdk_probe|unresolved
 external_member_kind      method|field|unknown for external members
@@ -232,10 +239,10 @@ Each hash entry has `{role, sha256, status, errors}`. `sha256` is a 64-character
 hex digest when `status` is `ok`; it is `null` for `empty`, `missing`, or
 `error`. Artifact hashes do not include host-specific absolute paths. The
 ordered dependency hash preserves classpath order because order can affect
-resolution when multiple entries contain the same class.
+resolution when multiple entries contain the same type.
 
 When a target omits parameters, for example `@see #parse`, CoCoMUT resolves it
-only if there is a single project method named `parse` in the target class. If
+only if there is a single project method named `parse` in the target type. If
 multiple overloads exist, it reports `overload_ambiguous` and emits candidate
 method URIs instead of guessing. When a target includes parameters, for example
 `@see #parse(String, int)`, CoCoMUT matches those parameter types against source
@@ -257,7 +264,7 @@ target_kind               project_method|unresolved_project_method|jdk_method|
                           external_method|bytecode_method|invokedynamic_method|
                           synthetic_or_compiler_method
 raw_signature             SootUp bytecode signature retained as provenance
-declaring_class           Declaring class reported by SootUp
+declaring_type            Declaring type reported by SootUp
 method_name               Method name reported by SootUp
 resolution                resolved|resolved_normalized_exact|
                           resolved_return_mismatch_unique|
@@ -283,7 +290,7 @@ be matched to bytecode graph projections, CoCoMUT records a warning in the
 extraction report and still emits the available caller/callee edges.
 
 The source join universe is the full project source model. Focal-method filters
-such as `--scope`, `--source-set`, `--package`, `--class`, `--method`,
+such as `--scope`, `--source-set`, `--package`, `--type`, `--method`,
 `--visibility`, path filters, and `--max-methods` control which methods receive
 top-level JSONL rows; they do not remove methods from bytecode-to-source
 identity resolution. When an edge resolves to a project method outside the
@@ -300,13 +307,13 @@ target_kind                   Meaning
 ----------------------------  ------------------------------------------------
 project_method                SootUp target resolved to one unique CoCoMUT/Spoon
                               project source method. method_uri is present.
-unresolved_project_method     Target appears to belong to a project class, but
+unresolved_project_method     Target appears to belong to a project type, but
                               CoCoMUT could not identify one unique source method.
-jdk_method                    Target belongs to JDK/platform classes such as
+jdk_method                    Target belongs to JDK/platform types such as
                               java.*, javax.*, jdk.*, sun.*, com.sun.*,
                               org.w3c.dom.*, or org.xml.sax.*.
 external_method               Target belongs to a dependency or otherwise
-                              unmodeled external class.
+                              unmodeled external type.
 bytecode_method               Generic bytecode target when CoCoMUT cannot classify
                               the edge more specifically.
 invokedynamic_method          Lambda, method-handle, or invokedynamic bytecode
@@ -323,28 +330,28 @@ unresolved_reason                                      Meaning
 jdk_or_platform_method_outside_project_source          JDK/platform method.
 external_or_unmodeled_bytecode_method                  Dependency or unmodeled method.
 invokedynamic_or_lambda_bytecode_artifact              Lambda/invokedynamic artifact.
-anonymous_or_local_class_bytecode                      Anonymous/local class bytecode.
-nested_bytecode_class_without_unique_source_method     Nested bytecode class could not be
+anonymous_or_local_type_bytecode                       Anonymous/local type bytecode.
+nested_bytecode_type_without_unique_source_method      Nested bytecode type could not be
                                                        joined to one source method.
 project_method_name_present_but_signature_not_unique_or_compatible
-                                                       Project class and method name exist,
+                                                       Project type and method name exist,
                                                        but signature matching is not unique.
 multiple_source_methods_match_normalized_parameters    Normalization found multiple source
                                                        candidates; see candidate_method_uris.
-project_class_present_method_absent_synthetic_or_compiler_method
-                                                       Project class exists; bytecode target is
+project_type_present_method_absent_synthetic_or_compiler_method
+                                                       Project type exists; bytecode target is
                                                        a compiler helper such as access$...
-project_class_present_method_absent_enum_generated_method
+project_type_present_method_absent_enum_generated_method
                                                        Project enum exists; bytecode target is a
                                                        generated enum method such as values().
-project_class_present_method_absent_record_component_accessor
+project_type_present_method_absent_record_component_accessor
                                                        Project record exists; bytecode target is
                                                        a generated component accessor.
-project_class_present_method_absent_bytecode_method_not_selected
+project_type_present_method_absent_bytecode_method_not_selected
                                                        SootUp sees the method in bytecode but it
                                                        is not in the selected source-method set.
-project_class_present_method_absent_no_matching_bytecode_method
-                                                       Project class exists, but CoCoMUT cannot
+project_type_present_method_absent_no_matching_bytecode_method
+                                                       Project type exists, but CoCoMUT cannot
                                                        find a matching source or bytecode method.
 ```
 
