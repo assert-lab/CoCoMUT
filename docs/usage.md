@@ -278,6 +278,22 @@ contains input paths, requested/effective Java compliance, mode, classpath-entry
 count, outcome, and sanitized exception class/message. Failed attempts remain
 visible after recovery.
 
+Source modeling also inventories source method/constructor declarations with
+ECJ, independently of Spoon's type construction. If a combined model loses
+any declaration, CoCoMUT retries that file alone and checks coverage again.
+`source_files_recovered` and `recovered_source_files` identify successful
+recoveries; `SOURCE_MODEL_RECOVERED` marks the run `PARTIAL` because context
+comes from separate models. Syntax errors or unrecovered declarations count as
+failed files, appear in `failed_source_files.jsonl`, and produce
+`SOURCE_PARSE_FAILED`. Files with no executable declarations remain valid.
+Overlapping roots are counted once per source file. This audit checks source
+syntax and model coverage; it does not replace a successful project build.
+
+`source_model_attempts` distinguishes `model_build` and `declaration_audit`
+stages. Audit events include a `diagnostic_code` (`source_syntax_error` or
+`source_declarations_missing`); `exception_class` is reserved for actual thrown
+exceptions. The audit does not use a classpath, so its entry count is zero.
+
 Use `--require-source-classpath` (API: `requireSourceClasspath(true)`) when
 classpath-backed source evidence is required. A final `no_classpath` or `mixed`
 model then makes the run `FAILED` with `SOURCE_CLASSPATH_REQUIRED` and exit 1.

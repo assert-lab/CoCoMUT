@@ -8,12 +8,19 @@ public record SourceParseStats(
         int parsed,
         List<Path> failedFiles,
         String mode,
-        List<SourceModelAttempt> modelAttempts) {
+        List<SourceModelAttempt> modelAttempts,
+        List<Path> recoveredFiles) {
     public SourceParseStats(int discovered, int parsed, List<Path> failedFiles) {
-        this(discovered, parsed, failedFiles, "classpath", List.of());
+        this(discovered, parsed, failedFiles, "classpath", List.of(), List.of());
+    }
+
+    public SourceParseStats(int discovered, int parsed, List<Path> failedFiles,
+                            String mode, List<SourceModelAttempt> attempts) {
+        this(discovered, parsed, failedFiles, mode, attempts, List.of());
     }
 
     public SourceParseStats {
+        recoveredFiles = recoveredFiles != null ? List.copyOf(recoveredFiles) : List.of();
         modelAttempts = modelAttempts != null ? List.copyOf(modelAttempts) : List.of();
         failedFiles = failedFiles != null ? List.copyOf(failedFiles) : List.of();
     }

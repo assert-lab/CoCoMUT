@@ -190,6 +190,36 @@ public class OrchestratorTest {
     }
 
     @Test
+    public void failedSourceAuditWritesFileEvidenceAndPartialReport() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-failed-source-audit-");
+        try {
+            Path root = Files.createDirectories(project.resolve("src/main/java"));
+            Path classes = Files.createDirectories(project.resolve("target/classes"));
+            Path good = root.resolve("Good.java");
+            Files.writeString(good, "public class Good { public int kept() { return 1; } }");
+            assertEquals(0, javax.tools.ToolProvider.getSystemJavaCompiler().run(null, null, null,
+                    "-d", classes.toString(), good.toString()));
+            Files.writeString(root.resolve("Broken.java"), "class Broken { void lost( { } }");
+            Path output = project.resolve("output");
+            var report = ContextExtractorService.createDefault().extract(ContextRequest.builder()
+                    .projectRoot(project).sourceSets(java.util.Set.of("main"))
+                    .scope(ContextRequest.Scope.ALL).skipBuild(true).outputDirectory(output).build());
+            assertEquals("PARTIAL", report.asMap().get("status"));
+            assertEquals(2, report.asMap().get("source_files_discovered"));
+            assertEquals(1, report.asMap().get("source_files_parsed"));
+            assertEquals(1, report.asMap().get("source_files_failed"));
+            assertTrue(String.valueOf(report.asMap().get("failure_codes")).contains("SOURCE_PARSE_FAILED"));
+            assertTrue(report.usableRecordsEmitted());
+            var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            var failure = mapper.readTree(output.resolve("failed_source_files.jsonl").toFile());
+            assertEquals("src/main/java/Broken.java", failure.path("source_file").asText());
+            assertEquals("SOURCE_PARSE_FAILED", failure.path("failure_code").asText());
+            var saved = mapper.readTree(output.resolve("extraction_report.json").toFile());
+            assertEquals("PARTIAL", saved.path("status").asText());
+        } finally { deleteRecursively(project); }
+    }
+
+    @Test
     public void sourceClasspathFallbackReportsAttemptsAndStrictFailureWithArtifacts() throws Exception {
         Path project = Files.createTempDirectory("cocomut-source-classpath-");
         try {
@@ -198,15 +228,24 @@ public class OrchestratorTest {
             Path classes = Files.createDirectories(project.resolve("classes"));
             Files.writeString(stub, "package missing; public class External {} ");
             Path source = root.resolve("Sample.java");
-            Files.writeString(source, "package example; public class Sample extends missing.External { public int value() { return 1; } }");
+            Files.writeString(source, "package example; import missing.External; public class Sample { private External external; public int value() { return 1; } }");
             assertEquals(0, javax.tools.ToolProvider.getSystemJavaCompiler().run(null, null, null,
                     "-d", classes.toString(), stub.toString(), source.toString()));
-            Files.delete(classes.resolve("missing/External.class"));
+            Path dependency = Files.createDirectories(project.resolve("dependency/missing"));
+            Path dependencyClass = dependency.resolve("External.class");
+            Files.move(classes.resolve("missing/External.class"), dependencyClass);
+            byte[] bytecode = Files.readAllBytes(dependencyClass);
+            int unsupportedMajor = Runtime.version().feature() + 44 + 10;
+            bytecode[6] = (byte) (unsupportedMajor >>> 8);
+            bytecode[7] = (byte) unsupportedMajor;
+            Files.write(dependencyClass, bytecode);
             Files.delete(stub);
             ProjectMetadata metadata = new ProjectMetadata.Builder()
                     .projectName("source-classpath").projectPath(project).buildSystem("none").javaVersion("17")
                     .sourceRoot(root.getParent()).sourceRoots(java.util.List.of(root.getParent()))
-                    .classpath(java.util.List.of(classes)).mainClassOutputs(java.util.List.of(classes))
+                    .classpath(java.util.List.of(classes, dependency.getParent()))
+                    .dependencyClasspath(java.util.List.of(dependency.getParent()))
+                    .mainClassOutputs(java.util.List.of(classes))
                     .compiles(true).compileStatus("PRECOMPILED BYTECODE")
                     .bytecodeAvailable(true).analysisCanProceed(true).build();
             for (boolean mixed : new boolean[] {false, true}) {
@@ -227,7 +266,7 @@ public class OrchestratorTest {
                     @SuppressWarnings("unchecked")
                     var attempts = (java.util.List<java.util.Map<String, Object>>) report.asMap().get("source_model_attempts");
                     assertTrue(attempts.stream().anyMatch(attempt -> "failed".equals(attempt.get("outcome"))
-                            && String.valueOf(attempt.get("exception_class")).contains("ModelBuildingException")));
+                            && String.valueOf(attempt.get("exception_class")).contains("UnsupportedClassVersionError")));
                     assertEquals("no_classpath", attempts.get(attempts.size() - 1).get("mode"));
                     assertEquals(strict ? 1 : 2, org.assertlab.cocomut.cli.CoCoMUTCommand.exitCodeFor(report));
                     var saved = new com.fasterxml.jackson.databind.ObjectMapper().readTree(output.resolve("extraction_report.json").toFile());
