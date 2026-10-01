@@ -383,6 +383,10 @@
         },
         "kind": {"type": "string"},
         "resolution": {"type": "string"},
+        "unresolved_reason": {
+          "type": "string",
+          "description": "Reason a reference cannot receive a project identity; lexical_type_parameter means a visible method, constructor, or enclosing-type parameter rather than a project type declaration."
+        },
         "reference_target_kind": {"type": "string"},
         "reference_domain": {"type": "string"},
         "reference_scope": {"type": "string"},

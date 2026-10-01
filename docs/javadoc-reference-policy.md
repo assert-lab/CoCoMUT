@@ -90,10 +90,36 @@ but misses a raw reference that CoCoMUT's compatibility scanner can recognize,
 the fallback object is still emitted for coverage and auditability, marked with
 `parser=cocomut-fallback`, `parse_confidence=low`, and a fallback reason.
 
-When `spoon-javadoc` produces a typed `CtReference`, CoCoMUT resolves semantics
-from that typed Spoon reference rather than reparsing `target`. The raw
-`target` field remains the source spelling for audit and compatibility; it is
-not the authoritative semantic identity when `spoon_reference` is present.
+Typed Spoon member references supply method/field identity and parameter types.
+For type links, CoCoMUT resolves the reliable source spelling in lexical Java
+scope, including visible outer types in `Outer.Inner`. Lexical declarations
+and inherited member types take precedence over imports. An explicit import
+precedes same-package and on-demand imports; ambiguous on-demand outer names
+remain unresolved. Binary `$` notation is assigned only after resolving the
+outer type. A project-wide simple-name match cannot establish visibility.
+These rules apply to typed references and both text fallback paths.
+
+Method, constructor, and visible enclosing-type parameters take precedence over
+project type declarations. A reference to one is retained as non-project
+evidence, for example:
+
+```json
+{
+  "tag": "link",
+  "raw": "T",
+  "target": "T",
+  "kind": "type_reference",
+  "resolution": "unresolved",
+  "unresolved_reason": "lexical_type_parameter",
+  "reference_domain": "unresolved",
+  "reference_scope": "unknown"
+}
+```
+
+Such a reference has no `type_uri` or `resolved_type`. It does not claim that
+`T` is an unknown project class: `unresolved_reason` records that the current
+URI contract does not address lexical type parameters. Type parameters are
+also excluded from the globally addressable project type index.
 
 Auxiliary documentation files such as `doc-files/...`, `{@docRoot}/...`,
 `@filename ...`, and `{@snippet file="..."}` are recorded under
@@ -131,6 +157,38 @@ match, CoCoMUT records an overload ambiguity instead of guessing.
 External JDK/library references are classified as external method, external
 field, or external type symbols when possible. They are not expanded into
 external source code or external Javadoc excerpts.
+
+## Regression Checks
+
+`JavadocLexicalResolutionTest` covers visible outer types, lexical shadowing,
+ambiguous and unrelated names, type parameters, and emitted schema validity.
+Run it with:
+
+```sh
+./mvnw -Dtest=JavadocLexicalResolutionTest -Dsurefire.failIfNoSpecifiedTests=false test
+```
+
+`JavadocPinnedSubjectsTest` checks the exact audited method URIs from issues
+#22 and #23 through source lookup, final context extraction, JSONL emission,
+and schema validation. It skips unless the subject paths are supplied. Use
+Jedis commit `60b6eaa041aac701f5a5c52a410eafc4a9d81c3c` and Fastjson2 commit
+`3697c2d37cd659d2a94543093d0d08cb4baf4d73`, with existing compiled outputs:
+
+```sh
+./mvnw -Dtest=JavadocPinnedSubjectsTest \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  -Dcocomut.jedisProject=/path/to/pinned/jedis \
+  -Dcocomut.fastjsonProject=/path/to/pinned/fastjson2 \
+  -Dcocomut.lexicalOutputDir=/path/to/results \
+  '-DargLine=-Xmx4g -da:spoon...' test
+```
+
+These tests do not rebuild subjects or generate a call graph. The Spoon-specific
+assertion setting matches the normal CLI JVM and avoids a separate Spoon
+assertion failure tracked in issue #36; JUnit checks remain active. The regular
+full suite runs with the default assertion settings. Isolated source mirrors
+can supply `.cocomut-pinned-revision` after their inputs have been verified
+against the pinned checkout; normal checkouts are checked with `git rev-parse`.
 
 ## Official Sources
 
