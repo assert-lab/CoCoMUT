@@ -12,12 +12,45 @@ import java.util.Map;
 public record GradleBuildPlan(Map<String, String> projects,
                               Map<String, String> skippedProjects,
                               List<String> compilationTasks,
-                              List<String> unavailableSourceSets) {
+                              List<String> unavailableSourceSets,
+                              List<ModuleSourceSet> sourceSets) {
     public GradleBuildPlan {
         projects = projects == null ? Map.of() : Map.copyOf(projects);
         skippedProjects = skippedProjects == null ? Map.of() : Map.copyOf(skippedProjects);
         compilationTasks = compilationTasks == null ? List.of() : List.copyOf(compilationTasks);
         unavailableSourceSets = unavailableSourceSets == null ? List.of() : List.copyOf(unavailableSourceSets);
+        sourceSets = sourceSets == null ? List.of() : List.copyOf(sourceSets);
+    }
+
+    public GradleBuildPlan(Map<String, String> projects, Map<String, String> skippedProjects,
+                           List<String> compilationTasks, List<String> unavailableSourceSets) {
+        this(projects, skippedProjects, compilationTasks, unavailableSourceSets, List.of());
+    }
+
+    /** Recover declared roots first; infer conventional roots only for actual selected projects. */
+    public List<Path> sourceRoots(Iterable<Path> outputs, boolean tests) {
+        java.util.Set<Path> roots = new java.util.LinkedHashSet<>();
+        sourceSets.stream().filter(set -> (tests ? "test" : "main").equals(set.sourceSet()))
+                .flatMap(set -> set.sources().stream()).filter(Files::isDirectory)
+                .filter(this::includes).forEach(roots::add);
+        for (Path output : outputs) {
+            Path current = output.toAbsolutePath().normalize();
+            while (current != null && current.getFileName() != null
+                    && !current.getFileName().toString().equals("build")) current = current.getParent();
+            Path module = current == null ? null : current.getParent();
+            if (module == null) continue;
+            Path normalized = module;
+            try { normalized = normalized.toRealPath(); } catch (IOException ignored) { }
+            Path modulePath = normalized;
+            boolean selected = projects.isEmpty() || projects.entrySet().stream().anyMatch(entry ->
+                    Path.of(entry.getValue()).equals(modulePath) && !skippedProjects.containsKey(entry.getKey()));
+            Path root = module.resolve(tests ? "src/test/java" : "src/main/java");
+            boolean declared = sourceSets.stream().anyMatch(set ->
+                    (tests ? "test" : "main").equals(set.sourceSet())
+                            && modulePath.toString().equals(projects.get(set.projectPath())));
+            if (selected && !declared && Files.isDirectory(root) && includes(root)) roots.add(root);
+        }
+        return List.copyOf(roots);
     }
 
     public static GradleBuildPlan empty() {
@@ -113,9 +146,20 @@ public record GradleBuildPlan(Map<String, String> projects,
                     def selectedTasks = []
                     def projects = [:]
                     def unavailable = []
+                    def sourceSets = []
                     rootProject.allprojects.each { p ->
                         projects[p.path] = p.projectDir.canonicalPath
                         if (!gradle.ext.cocomutSkippedProjects.containsKey(p.path)) {
+                            def sets = p.extensions.findByName('sourceSets')
+                            if (sets != null) sets.each { ss ->
+                                if (ss.name == 'main' || (%s && ss.name == 'test')) {
+                                    def outputs
+                                    try { outputs = ss.output.classesDirs.files } catch (MissingPropertyException ignored) { outputs = [ss.output.classesDir] }
+                                    sourceSets.add([projectPath: p.path, sourceSet: ss.name,
+                                        sources: ss.allJava.srcDirs.collect { it.canonicalPath },
+                                        outputs: outputs.collect { it.canonicalPath }, classpath: [], javaVersion: 'unknown'])
+                                }
+                            }
                             def mainTask = p.tasks.findByName('classes') ?: p.tasks.findByName('compileJava') ?: p.tasks.findByName('assemble')
                             def testTask = p.tasks.findByName('testClasses') ?: p.tasks.findByName('compileTestJava')
                             if (mainTask != null) selectedTasks.add(mainTask)
@@ -125,7 +169,7 @@ public record GradleBuildPlan(Map<String, String> projects,
                     }
                     def plan = [projects: projects, skippedProjects: gradle.ext.cocomutSkippedProjects,
                                 compilationTasks: selectedTasks.collect { it.path }.unique(),
-                                unavailableSourceSets: unavailable]
+                                unavailableSourceSets: unavailable, sourceSets: sourceSets]
                     new File('%s').text = groovy.json.JsonOutput.toJson(plan)
                     rootProject.tasks.create('cocomutCompileSelected') {
                         dependsOn selectedTasks
@@ -137,7 +181,7 @@ public record GradleBuildPlan(Map<String, String> projects,
                         }
                     }
                 }
-                """.formatted(tests, tests, groovy(result.toString()));
+                """.formatted(tests, tests, tests, groovy(result.toString()));
         Files.writeString(script, selectionScript(root) + body);
         return new Invocation(script, result);
     }
