@@ -953,7 +953,7 @@ public class ProjectAnalyzer {
                 String gradle = executableWithWrapper("gradle", isWindows);
                 command = List.of(gradle, "--no-daemon",
                         gradleBuildTask(androidPreparation.androidProject(), includeTests),
-                        "-x", "test", "--build-cache", "-q");
+                        "-x", "test", "-q");
             } else {
                 lastBuildResult = BuildResult.notAttempted(NO_ROOT_BUILD_DESCRIPTOR);
                 return lastBuildResult;
