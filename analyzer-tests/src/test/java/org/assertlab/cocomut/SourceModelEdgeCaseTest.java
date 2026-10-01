@@ -24,6 +24,98 @@ import static org.junit.Assert.assertTrue;
 public class SourceModelEdgeCaseTest {
 
     @Test
+    public void largeTypeSharesImmutableIndexThroughFinalContexts() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-shared-type-index");
+        try {
+            StringBuilder source = new StringBuilder("package demo; public class Large {\n");
+            for (int i = 0; i < 510; i++) {
+                source.append("public void m").append(i).append("() {}\n");
+            }
+            source.append("public void zFocal() {}\npublic void zFocal(int value) {}\n}");
+            write(project.resolve("src/main/java/demo/Large.java"), source.toString());
+            compileProject(project);
+            ProjectMetadata metadata = new ProjectAnalyzer(project).analyze();
+            try (SourceAnalysisSession session = SourceBackends.spoon().open(ProjectModel.from(metadata))) {
+                ContextExtractor extractor = new ContextExtractor(metadata, null, session);
+                Map<String, String> shared = null;
+                List<MethodInfo> focals = new MethodIdentifier(metadata).identify(session).stream()
+                        .filter(method -> List.of("m0", "m509", "zFocal").contains(method.getMethodName()))
+                        .toList();
+                assertEquals(4, focals.size());
+                for (MethodInfo focal : focals) {
+                    SourceContext sourceContext = session.extractContext(focal.getMethodUri()).orElseThrow();
+                    MethodContext context = extractor.extractContext(focal);
+                    org.junit.Assert.assertNotNull(context);
+                    assertEquals(512, context.getTypeMethods().size());
+                    assertEquals(500, context.getSameTypeMethods().size());
+                    assertTrue(context.getSameTypeMethods().contains(focal.getMethodSignature()));
+                    assertTrue(context.getSameTypeMethods().containsAll(context.getOverloadGroup()));
+                    org.junit.Assert.assertSame(sourceContext.typeMethods(), context.getTypeMethods());
+                    if (shared != null) {
+                        org.junit.Assert.assertSame(shared, context.getTypeMethods());
+                    }
+                    shared = context.getTypeMethods();
+                    Map<String, String> index = shared;
+                    org.junit.Assert.assertThrows(UnsupportedOperationException.class,
+                            () -> index.put("injected()", "injected()"));
+                }
+            }
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void constructorContextsDoNotReuseOrdinaryMethodOverloadsInEitherOrder() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-constructor-overloads");
+        try {
+            write(project.resolve("src/main/java/demo/Widget.java"), """
+                    package demo;
+                    public class Widget {
+                        public Widget() {}
+                        public Widget(int value) {}
+                        public int Widget() { return 0; }
+                    }
+                    """);
+            compileProject(project);
+            ProjectMetadata metadata = new ProjectAnalyzer(project).analyze();
+            for (boolean constructorsFirst : List.of(true, false)) {
+                try (SourceAnalysisSession session = SourceBackends.spoon().open(ProjectModel.from(metadata))) {
+                    List<SourceMethod> focals = session.methods().stream()
+                            .filter(method -> method.typeName().equals("demo.Widget"))
+                            .sorted(Comparator.comparingInt(method ->
+                                    method.constructor() == constructorsFirst ? 0 : 1))
+                            .toList();
+                    assertEquals(3, focals.size());
+                    for (SourceMethod focal : focals) {
+                        SourceContext context = session.extractContext(focal.methodUri()).orElseThrow();
+                        assertEquals(List.of("Widget()"), context.sameTypeMethods());
+                        assertEquals(focal.constructor() ? List.of() : List.of("Widget()"),
+                                context.overloadGroup());
+                    }
+                }
+            }
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void publicTypeMethodBuilderInputsAndBuiltContextsRemainIndependent() {
+        Map<String, String> input = new java.util.HashMap<>(Map.of("one()", "one()"));
+        MethodContext.Builder builder = new MethodContext.Builder()
+                .methodUri("test").methodName("one").typeName("demo.Test").typeMethods(input);
+        input.put("outside()", "outside()");
+        MethodContext first = builder.build();
+        builder.addTypeMethod("two()", "two()");
+        MethodContext second = builder.build();
+        assertEquals(Map.of("one()", "one()"), first.getTypeMethods());
+        assertEquals(Map.of("one()", "one()", "two()", "two()"), second.getTypeMethods());
+        org.junit.Assert.assertThrows(UnsupportedOperationException.class,
+                () -> first.getTypeMethods().clear());
+    }
+
+    @Test
     public void sameTypeMethodsContainOnlyDirectlyDeclaredMethods() throws Exception {
         Path project = Files.createTempDirectory("cocomut-same-type-methods");
         try {

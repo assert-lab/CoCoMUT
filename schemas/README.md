@@ -53,11 +53,14 @@ source_context            Field reads/writes, overload group, same-type methods
 ```
 
 `source_context.same_type_methods` contains a bounded, sorted list of methods
-declared directly in the focal method's declaring type. It includes the focal
-method and its overloads, but excludes constructors, initializer blocks,
+declared directly in the focal declaration's type. For an ordinary focal
+method, it includes that method and its overloads, but excludes constructors, initializer blocks,
 methods declared in nested types, and inherited methods. The list contains at
 most 500 signatures. `overload_group` is the subset with the focal method's
-name and contains at most 200 signatures.
+name and contains at most 200 signatures. For a constructor focal row,
+`overload_group` is empty; `same_type_methods` still lists only ordinary methods.
+The complete immutable method index is shared per declaring type, while these
+emitted lists remain bounded per focal declaration.
 
 `lines_of_code` and `cyclomatic_complexity` are lexical estimates derived from
 the emitted method source, not AST control-flow measurements. Use them for

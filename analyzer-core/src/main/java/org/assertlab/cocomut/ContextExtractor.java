@@ -108,7 +108,7 @@ public class ContextExtractor {
                 .javadoc(sourceContext.javadoc())
                 .typeJavadoc(sourceContext.typeJavadoc())
                 .typeHierarchy(sourceContext.typeHierarchy())
-                .typeMethods(sourceContext.typeMethods())
+                .sourceTypeMethods(sourceContext)
                 .callGraph(callGraph)
                 .linesOfCode(countLinesOfCode(methodBody))
                 .cyclomatic(calculateCyclomaticComplexity(methodBody))

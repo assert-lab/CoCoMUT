@@ -57,7 +57,7 @@ public class MethodContext {
         this.javadoc = builder.javadoc != null ? builder.javadoc : "";
         this.typeJavadoc = builder.typeJavadoc != null ? builder.typeJavadoc : "";
         this.typeHierarchy = builder.typeHierarchy != null ? builder.typeHierarchy : "";
-        this.typeMethods = Collections.unmodifiableMap(new HashMap<>(builder.typeMethods));
+        this.typeMethods = builder.typeMethods;
         this.callGraph = builder.callGraph;
         this.linesOfCode = builder.linesOfCode;
         this.cyclomatic = builder.cyclomatic;
@@ -237,7 +237,7 @@ public class MethodContext {
         private String javadoc;
         private String typeJavadoc = "";
         private String typeHierarchy;
-        private Map<String, String> typeMethods = new HashMap<>();
+        private Map<String, String> typeMethods = Map.of();
         private CallGraphResult callGraph;
         private int linesOfCode = 0;
         private int cyclomatic = 1;
@@ -324,12 +324,23 @@ public class MethodContext {
         }
 
         public Builder typeMethods(Map<String, String> typeMethods) {
-            this.typeMethods = new HashMap<>(typeMethods);
+            this.typeMethods = Collections.unmodifiableMap(new HashMap<>(typeMethods));
+            return this;
+        }
+
+        // SourceContext freezes its index on construction. Share that snapshot
+        // across focal contexts without exposing a trusted-map public API.
+        Builder sourceTypeMethods(org.assertlab.cocomut.source.SourceContext sourceContext) {
+            this.typeMethods = sourceContext.typeMethods();
             return this;
         }
 
         public Builder addTypeMethod(String methodName, String signature) {
-            this.typeMethods.put(methodName, signature);
+            // Copy on write keeps previously built contexts and shared source
+            // indexes immutable when this builder is reused.
+            Map<String, String> updated = new HashMap<>(this.typeMethods);
+            updated.put(methodName, signature);
+            this.typeMethods = Collections.unmodifiableMap(updated);
             return this;
         }
 

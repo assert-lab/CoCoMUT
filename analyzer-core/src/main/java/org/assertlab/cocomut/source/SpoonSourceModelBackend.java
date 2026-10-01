@@ -735,19 +735,21 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
 
     private static TypeContext typeContext(ParsedProject parsed, CtType<?> type, String methodName,
                                              String focalSignature, boolean constructor) {
-        String key = type.getQualifiedName() + "#" + focalSignature;
+        String key = type.getQualifiedName() + "#" + (constructor ? "constructor:" : "method:") + focalSignature;
         return parsed.typeContextsByTypeAndMethod().computeIfAbsent(key, ignored -> {
             Map<String, String> typeMethods = parsed.typeMethodsByType().computeIfAbsent(
                     type.getQualifiedName(), ignoredType -> typeMethods(type));
             List<String> allMethods = typeMethods.keySet().stream().sorted().toList();
             LinkedHashSet<String> overloads = new LinkedHashSet<>();
-            if (!constructor && typeMethods.containsKey(focalSignature)) {
-                overloads.add(focalSignature);
+            if (!constructor) {
+                if (typeMethods.containsKey(focalSignature)) {
+                    overloads.add(focalSignature);
+                }
+                allMethods.stream()
+                        .filter(signature -> signature.startsWith(methodName + "("))
+                        .limit(MAX_OVERLOAD_CONTEXT)
+                        .forEach(overloads::add);
             }
-            allMethods.stream()
-                    .filter(signature -> signature.startsWith(methodName + "("))
-                    .limit(MAX_OVERLOAD_CONTEXT)
-                    .forEach(overloads::add);
             List<String> overloadGroup = overloads.stream()
                     .limit(MAX_OVERLOAD_CONTEXT)
                     .sorted()
@@ -780,7 +782,9 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 // Same-type method context is optional, so keep the focal method.
             }
         }
-        return methods;
+        // Freeze once per declaring type; Map.copyOf in downstream source
+        // records reuses this immutable snapshot rather than copying entries.
+        return Map.copyOf(methods);
     }
 
     private static List<String> fieldReads(CtExecutable<?> executable) {

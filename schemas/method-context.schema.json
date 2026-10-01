@@ -69,7 +69,7 @@
               "type": "array",
               "items": {"type": "string"},
               "maxItems": 500,
-              "description": "Methods declared directly in the focal method's declaring type, including the focal method and overloads; constructors, initializer blocks, and inherited methods are excluded."
+              "description": "Ordinary methods declared directly in the focal declaration's type, including an ordinary focal method and its overloads; constructors, initializer blocks, nested-type methods, and inherited methods are excluded. Constructor focal rows have an empty overload_group."
             },
             "overload_group": {
               "type": "array",
