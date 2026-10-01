@@ -992,8 +992,8 @@ function renderRecord(record) {
     ["parameters", (mut.parameters || []).map((p) => `${p.type || "?"} ${p.name || "?"}`)],
     ["annotations", mut.annotations],
     ["throws", mut.throws],
-    ["class", mut.class_hierarchy && mut.class_hierarchy.hierarchy_detail],
-    ["class_javadoc", mut.class_javadoc],
+    ["type", mut.type_hierarchy && mut.type_hierarchy.hierarchy_detail],
+    ["type_javadoc", mut.type_javadoc],
   ]);
 
   fillDl("metaDetails", [

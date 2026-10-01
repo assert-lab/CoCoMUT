@@ -29,7 +29,7 @@ import sootup.callgraph.RapidTypeAnalysisAlgorithm;
  * - Builds CHA or RTA call graph over compiled classes
  * - Resolves caller/callee relationships
  * - Provides signature→methodUri reverse lookup
- * - Queries transitive class hierarchy (superclasses, interfaces, subclasses)
+ * - Queries the transitive type hierarchy (superclasses, interfaces, subclasses)
  * - Exposes raw call graph text for human-readable {@code Output_CallGraph_<ALGORITHM>.txt}
  */
 public class CallGraphGenerator {
@@ -44,40 +44,40 @@ public class CallGraphGenerator {
     // SootUp state
     private JavaView view;
     private CallGraph cg;
-    private Map<String, List<SootMethod>> methodsByClass;
+    private Map<String, List<SootMethod>> methodsByType;
 
     // Reverse lookup: SootUp signature string → project methodUri
     private Map<String, String> signatureToMethodUri;
     private Map<SourceMethodKey, List<MethodInfo>> sourceMethodsByKey;
     private Map<SourceMethodShapeKey, List<MethodInfo>> sourceMethodsByShape;
     private Map<SourceMethodNameKey, List<MethodInfo>> sourceMethodsByName;
-    private Set<String> projectSourceClasses;
-    private Map<String, List<MethodInfo>> sourceMethodsByClass;
-    private Map<String, SourceClassSummary> sourceClassSummaries;
+    private Set<String> projectSourceTypes;
+    private Map<String, List<MethodInfo>> sourceMethodsByType;
+    private Map<String, SourceTypeSummary> sourceTypeSummaries;
 
-    // Class hierarchy cache
-    private final Map<String, ClassHierarchyInfo> hierarchyCache = new HashMap<>();
+    // Type hierarchy cache
+    private final Map<String, TypeHierarchyInfo> hierarchyCache = new HashMap<>();
 
     public enum Algorithm {
         CHA, RTA
     }
 
     /**
-     * Plain data class for class hierarchy information.
+     * Plain data object for type hierarchy information.
      * Encapsulates SootUp type resolution without leaking SootUp types.
      */
-    public static class ClassHierarchyInfo {
-        private final String className;
+    public static class TypeHierarchyInfo {
+        private final String typeName;
         private final String simpleName;
         private final String packageName;
         private final List<String> superclasses;
         private final List<String> interfaces;
         private final List<String> directSubclasses;
 
-        public ClassHierarchyInfo(String className, String simpleName, String packageName,
+        public TypeHierarchyInfo(String typeName, String simpleName, String packageName,
                                   List<String> superclasses, List<String> interfaces,
                                   List<String> directSubclasses) {
-            this.className = className;
+            this.typeName = typeName;
             this.simpleName = simpleName;
             this.packageName = packageName;
             this.superclasses = Collections.unmodifiableList(superclasses);
@@ -85,7 +85,7 @@ public class CallGraphGenerator {
             this.directSubclasses = Collections.unmodifiableList(directSubclasses);
         }
 
-        public String getClassName() { return className; }
+        public String getTypeName() { return typeName; }
         public String getSimpleName() { return simpleName; }
         public String getPackageName() { return packageName; }
         public List<String> getSuperclasses() { return superclasses; }
@@ -105,9 +105,9 @@ public class CallGraphGenerator {
         this.sourceMethodsByKey = new HashMap<>();
         this.sourceMethodsByShape = new HashMap<>();
         this.sourceMethodsByName = new HashMap<>();
-        this.projectSourceClasses = new HashSet<>();
-        this.sourceMethodsByClass = new HashMap<>();
-        this.sourceClassSummaries = new HashMap<>();
+        this.projectSourceTypes = new HashSet<>();
+        this.sourceMethodsByType = new HashMap<>();
+        this.sourceTypeSummaries = new HashMap<>();
         this.initialized = false;
     }
 
@@ -142,15 +142,15 @@ public class CallGraphGenerator {
 
             view = new JavaView(inputLocations);
 
-            methodsByClass = new HashMap<>();
+            methodsByType = new HashMap<>();
 
             for (JavaSootClass sootClass : view.getClasses().sequential().collect(Collectors.toList())) {
-                String className = sootClass.getType().toString();
+                String typeName = sootClass.getType().toString();
                 List<SootMethod> methods = new ArrayList<>();
                 for (SootMethod m : sootClass.getMethods()) {
                     methods.add(m);
                 }
-                methodsByClass.put(className, methods);
+                methodsByType.put(typeName, methods);
             }
 
             initialized = true;
@@ -201,7 +201,7 @@ public class CallGraphGenerator {
             CallGraphResult result = new CallGraphResult.Builder()
                     .methodUri(method.getMethodUri())
                     .methodName(method.getMethodName())
-                    .classname(method.getClassname())
+                    .typeName(method.getTypeName())
                     .callers(callers)
                     .callees(callees)
                     .algorithm(algorithm.toString())
@@ -237,13 +237,13 @@ public class CallGraphGenerator {
         if (cg != null) {
             return;
         }
-        Set<String> applicationClasses = projectSourceClasses == null || projectSourceClasses.isEmpty()
-                ? methodsByClass.keySet()
-                : projectSourceClasses;
+        Set<String> applicationClasses = projectSourceTypes == null || projectSourceTypes.isEmpty()
+                ? methodsByType.keySet()
+                : projectSourceTypes;
         List<MethodSignature> entryPoints = new ArrayList<>();
-        for (String className : applicationClasses) {
-            for (String bytecodeClass : bytecodeClassNamesForSourceClass(className)) {
-                for (SootMethod method : methodsByClass.getOrDefault(bytecodeClass, List.of())) {
+        for (String typeName : applicationClasses) {
+            for (String bytecodeClass : bytecodeTypeNamesForSourceType(typeName)) {
+                for (SootMethod method : methodsByType.getOrDefault(bytecodeClass, List.of())) {
                     if (method.hasBody() && method.isConcrete() && !isClassInitializer(method.getSignature())) {
                         entryPoints.add(method.getSignature());
                     }
@@ -267,12 +267,12 @@ public class CallGraphGenerator {
         sourceMethodsByKey = new HashMap<>();
         sourceMethodsByShape = new HashMap<>();
         sourceMethodsByName = new HashMap<>();
-        projectSourceClasses = new HashSet<>();
-        sourceMethodsByClass = new HashMap<>();
-        sourceClassSummaries = new HashMap<>();
+        projectSourceTypes = new HashSet<>();
+        sourceMethodsByType = new HashMap<>();
+        sourceTypeSummaries = new HashMap<>();
         for (MethodInfo method : methods) {
-            projectSourceClasses.add(method.getClassname());
-            sourceMethodsByClass.computeIfAbsent(method.getClassname(), ignored -> new ArrayList<>()).add(method);
+            projectSourceTypes.add(method.getTypeName());
+            sourceMethodsByType.computeIfAbsent(method.getTypeName(), ignored -> new ArrayList<>()).add(method);
             SourceMethodKey key = SourceMethodKey.from(method);
             sourceMethodsByKey.computeIfAbsent(key, ignored -> new ArrayList<>()).add(method);
             sourceMethodsByShape.computeIfAbsent(SourceMethodShapeKey.from(key), ignored -> new ArrayList<>())
@@ -280,7 +280,7 @@ public class CallGraphGenerator {
             sourceMethodsByName.computeIfAbsent(SourceMethodNameKey.from(key), ignored -> new ArrayList<>())
                     .add(method);
         }
-        sourceMethodsByClass.replaceAll((key, value) -> value.stream()
+        sourceMethodsByType.replaceAll((key, value) -> value.stream()
                 .sorted(Comparator.comparing(MethodInfo::getMethodUri))
                 .toList());
         sourceMethodsByKey.replaceAll((key, value) -> value.stream()
@@ -292,18 +292,18 @@ public class CallGraphGenerator {
         sourceMethodsByName.replaceAll((key, value) -> value.stream()
                 .sorted(Comparator.comparing(MethodInfo::getMethodUri))
                 .toList());
-        List<Map.Entry<String, List<MethodInfo>>> classesBySourceFile = sourceMethodsByClass.entrySet().stream()
+        List<Map.Entry<String, List<MethodInfo>>> typesBySourceFile = sourceMethodsByType.entrySet().stream()
                 .sorted(Comparator.comparing(entry -> sourceFileSortKey(entry.getValue())))
                 .toList();
         Path currentSourceFile = null;
         String currentSource = null;
-        for (Map.Entry<String, List<MethodInfo>> entry : classesBySourceFile) {
+        for (Map.Entry<String, List<MethodInfo>> entry : typesBySourceFile) {
             Path sourceFile = firstSourceFile(entry.getValue());
             if (!Objects.equals(currentSourceFile, sourceFile)) {
                 currentSourceFile = sourceFile;
                 currentSource = readSourceFile(sourceFile);
             }
-            sourceClassSummaries.put(entry.getKey(), SourceClassSummary.from(entry.getValue(), currentSource));
+            sourceTypeSummaries.put(entry.getKey(), SourceTypeSummary.from(entry.getValue(), currentSource));
         }
 
         for (MethodInfo method : methods) {
@@ -337,14 +337,14 @@ public class CallGraphGenerator {
     private CallGraphEdge edgeFor(MethodSignature sig) {
         String raw = sig.toString();
         String methodUri = resolveSignatureToMethodUri(raw);
-        String declaringClass = sig.getDeclClassType() != null ? sig.getDeclClassType().toString() : "";
+        String declaringType = sig.getDeclClassType() != null ? sig.getDeclClassType().toString() : "";
         String methodName = sig.getName();
         if (methodUri != null && !methodUri.isBlank()) {
-            return CallGraphEdge.resolved(methodUri, raw, declaringClass, methodName);
+            return CallGraphEdge.resolved(methodUri, raw, declaringType, methodName);
         }
         return resolveSootSignature(sig)
-                .orElseGet(() -> CallGraphEdge.unresolved(raw, declaringClass, methodName,
-                        targetKindFor(raw, declaringClass, methodName), unresolvedReason(sig)));
+                .orElseGet(() -> CallGraphEdge.unresolved(raw, declaringType, methodName,
+                        targetKindFor(raw, declaringType, methodName), unresolvedReason(sig)));
     }
 
     private Optional<CallGraphEdge> resolveSootSignature(MethodSignature sig) {
@@ -353,7 +353,7 @@ public class CallGraphGenerator {
         }
 
         String raw = sig.toString();
-        String declaringClass = sig.getDeclClassType() != null ? sig.getDeclClassType().toString() : "";
+        String declaringType = sig.getDeclClassType() != null ? sig.getDeclClassType().toString() : "";
         String methodName = sig.getName();
         BytecodeMethodKey exactKey = BytecodeMethodKey.from(sig, true);
         BytecodeMethodKey returnAgnosticKey = BytecodeMethodKey.from(sig, false);
@@ -363,11 +363,11 @@ public class CallGraphGenerator {
         if (exactCandidates.size() == 1) {
             MethodInfo method = exactCandidates.get(0);
             signatureToMethodUri.put(raw, method.getMethodUri());
-            return Optional.of(CallGraphEdge.resolved(method.getMethodUri(), raw, declaringClass,
+            return Optional.of(CallGraphEdge.resolved(method.getMethodUri(), raw, declaringType,
                     methodName, "resolved_normalized_exact"));
         }
         if (exactCandidates.size() > 1) {
-            return Optional.of(CallGraphEdge.ambiguous(raw, declaringClass, methodName,
+            return Optional.of(CallGraphEdge.ambiguous(raw, declaringType, methodName,
                     methodUris(exactCandidates), "multiple_source_methods_match_normalized_exact_signature"));
         }
 
@@ -376,11 +376,11 @@ public class CallGraphGenerator {
         if (returnAgnosticCandidates.size() == 1) {
             MethodInfo method = returnAgnosticCandidates.get(0);
             signatureToMethodUri.put(raw, method.getMethodUri());
-            return Optional.of(CallGraphEdge.resolved(method.getMethodUri(), raw, declaringClass,
+            return Optional.of(CallGraphEdge.resolved(method.getMethodUri(), raw, declaringType,
                     methodName, "resolved_return_mismatch_unique"));
         }
         if (returnAgnosticCandidates.size() > 1) {
-            return Optional.of(CallGraphEdge.ambiguous(raw, declaringClass, methodName,
+            return Optional.of(CallGraphEdge.ambiguous(raw, declaringType, methodName,
                     methodUris(returnAgnosticCandidates), "multiple_source_methods_match_name_and_parameters"));
         }
 
@@ -389,7 +389,7 @@ public class CallGraphGenerator {
         if (sameNameCandidates.size() == 1 && parametersCompatibleForSingleCandidate(sig, sameNameCandidates.get(0))) {
             MethodInfo method = sameNameCandidates.get(0);
             signatureToMethodUri.put(raw, method.getMethodUri());
-            return Optional.of(CallGraphEdge.resolved(method.getMethodUri(), raw, declaringClass,
+            return Optional.of(CallGraphEdge.resolved(method.getMethodUri(), raw, declaringType,
                     methodName, "resolved_parameter_normalized_unique"));
         }
         if (sameNameCandidates.size() > 1) {
@@ -399,11 +399,11 @@ public class CallGraphGenerator {
             if (compatible.size() == 1) {
                 MethodInfo method = compatible.get(0);
                 signatureToMethodUri.put(raw, method.getMethodUri());
-                return Optional.of(CallGraphEdge.resolved(method.getMethodUri(), raw, declaringClass,
+                return Optional.of(CallGraphEdge.resolved(method.getMethodUri(), raw, declaringType,
                         methodName, "resolved_parameter_normalized_unique"));
             }
             if (compatible.size() > 1) {
-                return Optional.of(CallGraphEdge.ambiguous(raw, declaringClass, methodName,
+                return Optional.of(CallGraphEdge.ambiguous(raw, declaringType, methodName,
                         methodUris(compatible), "multiple_source_methods_match_normalized_parameters"));
             }
         }
@@ -419,46 +419,46 @@ public class CallGraphGenerator {
     }
 
     private String unresolvedReason(MethodSignature sig) {
-        String declaringClass = sig.getDeclClassType() != null ? sig.getDeclClassType().toString() : "";
+        String declaringType = sig.getDeclClassType() != null ? sig.getDeclClassType().toString() : "";
         String methodName = sig.getName();
-        if (declaringClass.startsWith("sootup.dummy.InvokeDynamic")) {
+        if (declaringType.startsWith("sootup.dummy.InvokeDynamic")) {
             return "invokedynamic_or_lambda_bytecode_artifact";
         }
-        if (isJdkOrPlatformClass(declaringClass)) {
+        if (isJdkOrPlatformType(declaringType)) {
             return "jdk_or_platform_method_outside_project_source";
         }
-        if (declaringClass.matches(".*\\$\\d+(\\D.*)?$")) {
-            return "anonymous_or_local_class_bytecode";
+        if (declaringType.matches(".*\\$\\d+(\\D.*)?$")) {
+            return "anonymous_or_local_type_bytecode";
         }
-        if (outerSourceClass(declaringClass).isPresent()) {
-            return "nested_bytecode_class_without_unique_source_method";
+        if (outerSourceType(declaringType).isPresent()) {
+            return "nested_bytecode_type_without_unique_source_method";
         }
-        if (projectSourceClasses.contains(declaringClass)) {
+        if (projectSourceTypes.contains(declaringType)) {
             return sourceMethodsByKey.keySet().stream()
-                    .anyMatch(key -> key.className().equals(declaringClass) && key.methodName().equals(methodName))
+                    .anyMatch(key -> key.typeName().equals(declaringType) && key.methodName().equals(methodName))
                     ? "project_method_name_present_but_signature_not_unique_or_compatible"
-                    : projectMethodAbsentReason(sig, declaringClass, methodName);
+                    : projectMethodAbsentReason(sig, declaringType, methodName);
         }
         return "external_or_unmodeled_bytecode_method";
     }
 
-    private String projectMethodAbsentReason(MethodSignature sig, String declaringClass, String methodName) {
+    private String projectMethodAbsentReason(MethodSignature sig, String declaringType, String methodName) {
         if (isSyntheticMethodName(methodName)) {
-            return "project_class_present_method_absent_synthetic_or_compiler_method";
+            return "project_type_present_method_absent_synthetic_or_compiler_method";
         }
-        SourceClassSummary summary = sourceClassSummaries.get(declaringClass);
+        SourceTypeSummary summary = sourceTypeSummaries.get(declaringType);
         if (summary != null) {
-            if (summary.kind() == SourceClassKind.ENUM && isEnumGeneratedMethod(methodName, sig)) {
-                return "project_class_present_method_absent_enum_generated_method";
+            if (summary.kind() == SourceTypeKind.ENUM && isEnumGeneratedMethod(methodName, sig)) {
+                return "project_type_present_method_absent_enum_generated_method";
             }
-            if (summary.kind() == SourceClassKind.RECORD && summary.recordComponents().contains(methodName)) {
-                return "project_class_present_method_absent_record_component_accessor";
+            if (summary.kind() == SourceTypeKind.RECORD && summary.recordComponents().contains(methodName)) {
+                return "project_type_present_method_absent_record_component_accessor";
             }
         }
-        if (bytecodeMethodNameExists(declaringClass, methodName)) {
-            return "project_class_present_method_absent_bytecode_method_not_selected";
+        if (bytecodeMethodNameExists(declaringType, methodName)) {
+            return "project_type_present_method_absent_bytecode_method_not_selected";
         }
-        return "project_class_present_method_absent_no_matching_bytecode_method";
+        return "project_type_present_method_absent_no_matching_bytecode_method";
     }
 
     private static boolean isSyntheticMethodName(String methodName) {
@@ -478,15 +478,15 @@ public class CallGraphGenerator {
                 && "java.lang.String".equals(normalizeType(sig.getParameterTypes().get(0).toString()));
     }
 
-    private boolean bytecodeMethodNameExists(String declaringClass, String methodName) {
-        if (methodsByClass == null || methodName == null) {
+    private boolean bytecodeMethodNameExists(String declaringType, String methodName) {
+        if (methodsByType == null || methodName == null) {
             return false;
         }
-        return methodsByClass.getOrDefault(declaringClass, List.of()).stream()
+        return methodsByType.getOrDefault(declaringType, List.of()).stream()
                 .anyMatch(method -> methodName.equals(method.getName()));
     }
 
-    private String targetKindFor(String raw, String declaringClass, String methodName) {
+    private String targetKindFor(String raw, String declaringType, String methodName) {
         if (raw.contains("sootup.dummy.InvokeDynamic")) {
             return "invokedynamic_method";
         }
@@ -495,63 +495,63 @@ public class CallGraphGenerator {
                 || methodName.contains("$default$"))) {
             return "synthetic_or_compiler_method";
         }
-        if (isJdkOrPlatformClass(declaringClass)) {
+        if (isJdkOrPlatformType(declaringType)) {
             return "jdk_method";
         }
-        if (projectSourceClasses.contains(declaringClass) || outerSourceClass(declaringClass).isPresent()) {
+        if (projectSourceTypes.contains(declaringType) || outerSourceType(declaringType).isPresent()) {
             return "unresolved_project_method";
         }
         return "external_method";
     }
 
-    private Optional<String> outerSourceClass(String declaringClass) {
-        String current = declaringClass;
+    private Optional<String> outerSourceType(String declaringType) {
+        String current = declaringType;
         while (current.contains("$")) {
             current = current.substring(0, current.lastIndexOf('$'));
-            if (projectSourceClasses.contains(current)) {
+            if (projectSourceTypes.contains(current)) {
                 return Optional.of(current);
             }
         }
         return Optional.empty();
     }
 
-    private static boolean isJdkOrPlatformClass(String declaringClass) {
-        return declaringClass != null
-                && (declaringClass.startsWith("java.")
-                || declaringClass.startsWith("javax.")
-                || declaringClass.startsWith("jdk.")
-                || declaringClass.startsWith("sun.")
-                || declaringClass.startsWith("com.sun.")
-                || declaringClass.startsWith("org.w3c.dom.")
-                || declaringClass.startsWith("org.xml.sax."));
+    private static boolean isJdkOrPlatformType(String declaringType) {
+        return declaringType != null
+                && (declaringType.startsWith("java.")
+                || declaringType.startsWith("javax.")
+                || declaringType.startsWith("jdk.")
+                || declaringType.startsWith("sun.")
+                || declaringType.startsWith("com.sun.")
+                || declaringType.startsWith("org.w3c.dom.")
+                || declaringType.startsWith("org.xml.sax."));
     }
 
-    // ---- Class hierarchy queries ----
+    // ---- Type hierarchy queries ----
 
-    public ClassHierarchyInfo getClassHierarchy(String fullyQualifiedClassName) {
+    public TypeHierarchyInfo getTypeHierarchy(String fullyQualifiedTypeName) {
         if (!initialized || view == null) return null;
-        if (hierarchyCache.containsKey(fullyQualifiedClassName)) {
-            return hierarchyCache.get(fullyQualifiedClassName);
+        if (hierarchyCache.containsKey(fullyQualifiedTypeName)) {
+            return hierarchyCache.get(fullyQualifiedTypeName);
         }
 
         try {
-            List<SootMethod> methods = methodsByClass.get(fullyQualifiedClassName);
+            List<SootMethod> methods = methodsByType.get(fullyQualifiedTypeName);
             if (methods == null || methods.isEmpty()) return null;
 
             // Get the class from the view
             JavaSootClass targetClass = null;
             for (JavaSootClass sc : view.getClasses().collect(Collectors.toList())) {
-                if (sc.getType().toString().equals(fullyQualifiedClassName)) {
+                if (sc.getType().toString().equals(fullyQualifiedTypeName)) {
                     targetClass = sc;
                     break;
                 }
             }
             if (targetClass == null) return null;
 
-            String className = fullyQualifiedClassName;
-            int lastDot = className.lastIndexOf('.');
-            String simpleName = lastDot >= 0 ? className.substring(lastDot + 1) : className;
-            String packageName = lastDot >= 0 ? className.substring(0, lastDot) : "";
+            String typeName = fullyQualifiedTypeName;
+            int lastDot = typeName.lastIndexOf('.');
+            String simpleName = lastDot >= 0 ? typeName.substring(lastDot + 1) : typeName;
+            String packageName = lastDot >= 0 ? typeName.substring(0, lastDot) : "";
 
             // Transitive superclasses
             List<String> superclasses = new ArrayList<>();
@@ -590,9 +590,9 @@ public class CallGraphGenerator {
                 } catch (Exception ignored) {}
             }
 
-            ClassHierarchyInfo info = new ClassHierarchyInfo(
-                    className, simpleName, packageName, superclasses, interfaces, directSubclasses);
-            hierarchyCache.put(fullyQualifiedClassName, info);
+            TypeHierarchyInfo info = new TypeHierarchyInfo(
+                    typeName, simpleName, packageName, superclasses, interfaces, directSubclasses);
+            hierarchyCache.put(fullyQualifiedTypeName, info);
             return info;
         } catch (Exception e) {
             return null;
@@ -633,22 +633,22 @@ public class CallGraphGenerator {
     // ---- Method matching ----
 
     private MethodSignature findMethodSignature(MethodInfo method) {
-        String className = method.getClassname();
+        String typeName = method.getTypeName();
         String methodName = method.getMethodName();
 
-        List<String> bytecodeClassNames = bytecodeClassNamesForSourceClass(className);
-        if (bytecodeClassNames.isEmpty()) return null;
+        List<String> bytecodeTypeNames = bytecodeTypeNamesForSourceType(typeName);
+        if (bytecodeTypeNames.isEmpty()) return null;
 
         SourceMethodKey expected = SourceMethodKey.from(method);
         List<SootMethod> exactMatches = new ArrayList<>();
         List<SootMethod> returnAgnosticMatches = new ArrayList<>();
 
-        for (String bytecodeClassName : bytecodeClassNames) {
-            for (SootMethod m : methodsByClass.getOrDefault(bytecodeClassName, List.of())) {
+        for (String bytecodeTypeName : bytecodeTypeNames) {
+            for (SootMethod m : methodsByType.getOrDefault(bytecodeTypeName, List.of())) {
                 MethodSignature signature = m.getSignature();
                 BytecodeMethodKey bytecodeKey = BytecodeMethodKey.from(signature, true);
-                if (!expected.sameClassNameParams(bytecodeKey)
-                        && !(uniqueOwnerFallback(className, bytecodeClassName)
+                if (!expected.sameTypeNameParams(bytecodeKey)
+                        && !(uniqueOwnerFallback(typeName, bytecodeTypeName)
                         && expected.sameMethodNameParams(bytecodeKey))) {
                     continue;
                 }
@@ -665,12 +665,12 @@ public class CallGraphGenerator {
         if (exactMatches.isEmpty() && returnAgnosticMatches.size() == 1) {
             return returnAgnosticMatches.get(0).getSignature();
         }
-        return parseSourceBackedSignature(method, bytecodeClassNames.size() == 1 ? bytecodeClassNames.get(0) : className);
+        return parseSourceBackedSignature(method, bytecodeTypeNames.size() == 1 ? bytecodeTypeNames.get(0) : typeName);
     }
 
-    private static MethodSignature parseSourceBackedSignature(MethodInfo method, String bytecodeClassName) {
+    private static MethodSignature parseSourceBackedSignature(MethodInfo method, String bytecodeTypeName) {
         try {
-            String owner = normalizeClassName(bytecodeClassName);
+            String owner = normalizeTypeName(bytecodeTypeName);
             String methodName = bytecodeMethodName(method);
             String returnType = normalizeType(method.getErasedReturnType());
             if ("<init>".equals(methodName)) {
@@ -684,46 +684,46 @@ public class CallGraphGenerator {
         }
     }
 
-    private static boolean uniqueOwnerFallback(String sourceClassName, String bytecodeClassName) {
-        return !normalizeClassName(sourceClassName).equals(normalizeClassName(bytecodeClassName));
+    private static boolean uniqueOwnerFallback(String sourceTypeName, String bytecodeTypeName) {
+        return !normalizeTypeName(sourceTypeName).equals(normalizeTypeName(bytecodeTypeName));
     }
 
-    private List<String> bytecodeClassNamesForSourceClass(String sourceClassName) {
-        if (sourceClassName == null || sourceClassName.isBlank() || methodsByClass == null || methodsByClass.isEmpty()) {
+    private List<String> bytecodeTypeNamesForSourceType(String sourceTypeName) {
+        if (sourceTypeName == null || sourceTypeName.isBlank() || methodsByType == null || methodsByType.isEmpty()) {
             return List.of();
         }
-        if (methodsByClass.containsKey(sourceClassName)) {
-            return List.of(sourceClassName);
+        if (methodsByType.containsKey(sourceTypeName)) {
+            return List.of(sourceTypeName);
         }
-        String normalizedSource = normalizeClassName(sourceClassName);
-        List<String> exactNormalized = methodsByClass.keySet().stream()
-                .filter(name -> normalizeClassName(name).equals(normalizedSource))
+        String normalizedSource = normalizeTypeName(sourceTypeName);
+        List<String> exactNormalized = methodsByType.keySet().stream()
+                .filter(name -> normalizeTypeName(name).equals(normalizedSource))
                 .sorted()
                 .toList();
         if (!exactNormalized.isEmpty()) {
             return exactNormalized;
         }
-        String simpleSource = simpleBytecodeClassName(sourceClassName);
-        List<String> simpleMatches = methodsByClass.keySet().stream()
-                .filter(name -> simpleBytecodeClassName(name).equals(simpleSource))
+        String simpleSource = simpleBytecodeTypeName(sourceTypeName);
+        List<String> simpleMatches = methodsByType.keySet().stream()
+                .filter(name -> simpleBytecodeTypeName(name).equals(simpleSource))
                 .sorted()
                 .toList();
         return simpleMatches.size() == 1 ? simpleMatches : List.of();
     }
 
-    private static String normalizeClassName(String className) {
-        if (className == null) {
+    private static String normalizeTypeName(String typeName) {
+        if (typeName == null) {
             return "";
         }
-        return className.replace('/', '.')
+        return typeName.replace('/', '.')
                 .replace("L;", "")
                 .replaceAll("^L", "")
                 .replaceAll("^class\\s+", "")
                 .trim();
     }
 
-    private static String simpleBytecodeClassName(String className) {
-        String value = normalizeClassName(className);
+    private static String simpleBytecodeTypeName(String typeName) {
+        String value = normalizeTypeName(typeName);
         int dot = value.lastIndexOf('.');
         return dot >= 0 ? value.substring(dot + 1) : value;
     }
@@ -745,7 +745,7 @@ public class CallGraphGenerator {
         return true;
     }
 
-    private record SourceMethodKey(String className, String methodName,
+    private record SourceMethodKey(String typeName, String methodName,
                                    List<String> parameterTypes, String returnType) {
         private SourceMethodKey {
             parameterTypes = parameterTypes == null ? List.of() : List.copyOf(parameterTypes);
@@ -753,23 +753,23 @@ public class CallGraphGenerator {
         }
 
         private static SourceMethodKey from(MethodInfo method) {
-            return new SourceMethodKey(method.getClassname(), bytecodeMethodName(method),
+            return new SourceMethodKey(method.getTypeName(), bytecodeMethodName(method),
                     sourceParameterTypes(method),
                     normalizeType(method.getErasedReturnType()));
         }
 
         private static SourceMethodKey from(BytecodeMethodKey key) {
-            return new SourceMethodKey(key.className(), key.methodName(), key.parameterTypes(), key.returnType());
+            return new SourceMethodKey(key.typeName(), key.methodName(), key.parameterTypes(), key.returnType());
         }
 
-        private boolean sameClassNameParams(BytecodeMethodKey key) {
-            return className.equals(key.className())
+        private boolean sameTypeNameParams(BytecodeMethodKey key) {
+            return typeName.equals(key.typeName())
                     && methodName.equals(key.methodName())
                     && parameterTypes.equals(key.parameterTypes());
         }
 
-        private boolean sameClassName(BytecodeMethodKey key) {
-            return className.equals(key.className()) && methodName.equals(key.methodName());
+        private boolean sameTypeName(BytecodeMethodKey key) {
+            return typeName.equals(key.typeName()) && methodName.equals(key.methodName());
         }
 
         private boolean sameMethodNameParams(BytecodeMethodKey key) {
@@ -777,31 +777,31 @@ public class CallGraphGenerator {
         }
     }
 
-    private record SourceMethodShapeKey(String className, String methodName, List<String> parameterTypes) {
+    private record SourceMethodShapeKey(String typeName, String methodName, List<String> parameterTypes) {
         private SourceMethodShapeKey {
             parameterTypes = parameterTypes == null ? List.of() : List.copyOf(parameterTypes);
         }
 
         private static SourceMethodShapeKey from(SourceMethodKey key) {
-            return new SourceMethodShapeKey(key.className(), key.methodName(), key.parameterTypes());
+            return new SourceMethodShapeKey(key.typeName(), key.methodName(), key.parameterTypes());
         }
 
         private static SourceMethodShapeKey from(BytecodeMethodKey key) {
-            return new SourceMethodShapeKey(key.className(), key.methodName(), key.parameterTypes());
+            return new SourceMethodShapeKey(key.typeName(), key.methodName(), key.parameterTypes());
         }
     }
 
-    private record SourceMethodNameKey(String className, String methodName) {
+    private record SourceMethodNameKey(String typeName, String methodName) {
         private static SourceMethodNameKey from(SourceMethodKey key) {
-            return new SourceMethodNameKey(key.className(), key.methodName());
+            return new SourceMethodNameKey(key.typeName(), key.methodName());
         }
 
         private static SourceMethodNameKey from(BytecodeMethodKey key) {
-            return new SourceMethodNameKey(key.className(), key.methodName());
+            return new SourceMethodNameKey(key.typeName(), key.methodName());
         }
     }
 
-    private record BytecodeMethodKey(String className, String methodName,
+    private record BytecodeMethodKey(String typeName, String methodName,
                                      List<String> parameterTypes, String returnType) {
         private BytecodeMethodKey {
             parameterTypes = parameterTypes == null ? List.of() : List.copyOf(parameterTypes);
@@ -819,64 +819,64 @@ public class CallGraphGenerator {
         }
     }
 
-    private enum SourceClassKind {
+    private enum SourceTypeKind {
         CLASS, INTERFACE, ENUM, RECORD, ANNOTATION, UNKNOWN
     }
 
-    private record SourceClassSummary(SourceClassKind kind, Set<String> recordComponents) {
-        private static SourceClassSummary from(List<MethodInfo> methods) {
+    private record SourceTypeSummary(SourceTypeKind kind, Set<String> recordComponents) {
+        private static SourceTypeSummary from(List<MethodInfo> methods) {
             return from(methods, readSourceFile(firstSourceFile(methods)));
         }
 
-        private static SourceClassSummary from(List<MethodInfo> methods, String source) {
+        private static SourceTypeSummary from(List<MethodInfo> methods, String source) {
             if (methods == null || methods.isEmpty()) {
-                return new SourceClassSummary(SourceClassKind.UNKNOWN, Set.of());
+                return new SourceTypeSummary(SourceTypeKind.UNKNOWN, Set.of());
             }
             if (source == null) {
-                return new SourceClassSummary(SourceClassKind.UNKNOWN, Set.of());
+                return new SourceTypeSummary(SourceTypeKind.UNKNOWN, Set.of());
             }
             try {
-                String simpleName = simpleClassName(methods.get(0).getClassname());
-                SourceClassKind kind = inferSourceClassKind(source, simpleName);
-                Set<String> components = kind == SourceClassKind.RECORD
+                String simpleName = simpleTypeName(methods.get(0).getTypeName());
+                SourceTypeKind kind = inferSourceTypeKind(source, simpleName);
+                Set<String> components = kind == SourceTypeKind.RECORD
                         ? inferRecordComponents(source, simpleName)
                         : Set.of();
-                return new SourceClassSummary(kind, components);
+                return new SourceTypeSummary(kind, components);
             } catch (Exception ignored) {
-                return new SourceClassSummary(SourceClassKind.UNKNOWN, Set.of());
+                return new SourceTypeSummary(SourceTypeKind.UNKNOWN, Set.of());
             }
         }
 
-        private static String simpleClassName(String className) {
-            if (className == null || className.isBlank()) {
+        private static String simpleTypeName(String typeName) {
+            if (typeName == null || typeName.isBlank()) {
                 return "";
             }
-            String simple = className.substring(className.lastIndexOf('.') + 1);
+            String simple = typeName.substring(typeName.lastIndexOf('.') + 1);
             int nested = simple.lastIndexOf('$');
             return nested >= 0 ? simple.substring(nested + 1) : simple;
         }
 
-        private static SourceClassKind inferSourceClassKind(String source, String simpleName) {
+        private static SourceTypeKind inferSourceTypeKind(String source, String simpleName) {
             if (source == null || simpleName == null || simpleName.isBlank()) {
-                return SourceClassKind.UNKNOWN;
+                return SourceTypeKind.UNKNOWN;
             }
             String name = java.util.regex.Pattern.quote(simpleName);
             if (containsDeclaration(source, "@interface", name, "\\b")) {
-                return SourceClassKind.ANNOTATION;
+                return SourceTypeKind.ANNOTATION;
             }
             if (containsDeclaration(source, "enum", name, "\\b")) {
-                return SourceClassKind.ENUM;
+                return SourceTypeKind.ENUM;
             }
             if (containsDeclaration(source, "record", name, "\\s*\\(")) {
-                return SourceClassKind.RECORD;
+                return SourceTypeKind.RECORD;
             }
             if (containsDeclaration(source, "interface", name, "\\b")) {
-                return SourceClassKind.INTERFACE;
+                return SourceTypeKind.INTERFACE;
             }
             if (containsDeclaration(source, "class", name, "\\b")) {
-                return SourceClassKind.CLASS;
+                return SourceTypeKind.CLASS;
             }
-            return SourceClassKind.UNKNOWN;
+            return SourceTypeKind.UNKNOWN;
         }
 
         private static boolean containsDeclaration(String source, String keyword, String quotedName,

@@ -14,10 +14,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -67,11 +69,13 @@ public class JsonGeneratorTest {
         MethodContext context = new MethodContext.Builder()
                 .methodUri("1")
                 .methodName("testMethod")
-                .classname("com.example.MyClass")
+                .typeName("com.example.MyClass")
                 .methodBody("@Override\npublic void testMethod() { }")
                 .javadoc("Test method")
-                .classHierarchy("MyClass extends BaseClass")
-                .addClassMethod("otherMethod", "void")
+                .typeJavadoc("Test type")
+                .typeHierarchy("MyClass extends BaseClass")
+                .sameTypeMethods(List.of("otherMethod()", "testMethod()"))
+                .addTypeMethod("otherMethod", "void")
                 .linesOfCode(2)
                 .cyclomatic(1)
                 .build();
@@ -87,6 +91,16 @@ public class JsonGeneratorTest {
         assertEquals("Test method", root.path("MUT").path("javadoc").asText());
         assertTrue("Method code should include annotations/body", root.path("MUT").path("code").asText().contains("@Override"));
         assertTrue("Method code should include body", root.path("MUT").path("code").asText().contains("testMethod()"));
+        JsonNode mut = root.path("MUT");
+        assertEquals("Test type", mut.path("type_javadoc").asText());
+        assertEquals("MyClass extends BaseClass",
+                mut.path("type_hierarchy").path("hierarchy_detail").asText());
+        assertFalse(mut.has("class_javadoc"));
+        assertFalse(mut.has("class_hierarchy"));
+        JsonNode sourceContext = root.path("MUT").path("source_context");
+        assertEquals(List.of("otherMethod()", "testMethod()"),
+                MAPPER.convertValue(sourceContext.path("same_type_methods"), List.class));
+        assertFalse(sourceContext.has("sibling_methods"));
     }
 
     @Test
@@ -117,12 +131,12 @@ public class JsonGeneratorTest {
         contexts.put("1", new MethodContext.Builder()
                 .methodUri("1")
                 .methodName("method1")
-                .classname("com.example.MyClass")
+                .typeName("com.example.MyClass")
                 .build());
         contexts.put("2", new MethodContext.Builder()
                 .methodUri("2")
                 .methodName("method2")
-                .classname("com.example.MyClass")
+                .typeName("com.example.MyClass")
                 .build());
 
         Path jsonl = testOutputDir.resolve("method_contexts.jsonl");
@@ -139,7 +153,7 @@ public class JsonGeneratorTest {
         MethodContext context = new MethodContext.Builder()
                 .methodUri("1")
                 .methodName("testMethod")
-                .classname("com.example.MyClass")
+                .typeName("com.example.MyClass")
                 .build();
 
         Path jsonl = testOutputDir.resolve("method_contexts.jsonl");
@@ -155,7 +169,7 @@ public class JsonGeneratorTest {
         MethodContext context = new MethodContext.Builder()
                 .methodUri("1")
                 .methodName("testMethod")
-                .classname("com.example.MyClass")
+                .typeName("com.example.MyClass")
                 .build();
 
         generator.generateJsonLinesFile(Map.of("1", context), testOutputDir.resolve("method_contexts.jsonl"));
@@ -170,7 +184,7 @@ public class JsonGeneratorTest {
         MethodContext context = new MethodContext.Builder()
                 .methodUri("1")
                 .methodName("testMethod")
-                .classname("com.example.MyClass")
+                .typeName("com.example.MyClass")
                 .build();
 
         generator.generateJsonLinesFile(Map.of("1", context), testOutputDir.resolve("method_contexts.jsonl"));
@@ -187,7 +201,7 @@ public class JsonGeneratorTest {
         CallGraphResult callGraph = new CallGraphResult.Builder()
                 .methodUri("1")
                 .methodName("testMethod")
-                .classname("com.example.MyClass")
+                .typeName("com.example.MyClass")
                 .addCaller(CallGraphEdge.resolved(
                         "src/main/java/com/example/Main.java#com.example.Main.main(java.lang.String[]):void",
                         "<com.example.Main: void main(java.lang.String[])>",
@@ -203,7 +217,7 @@ public class JsonGeneratorTest {
         MethodContext context = new MethodContext.Builder()
                 .methodUri("1")
                 .methodName("testMethod")
-                .classname("com.example.MyClass")
+                .typeName("com.example.MyClass")
                 .callGraph(callGraph)
                 .build();
 
@@ -226,6 +240,8 @@ public class JsonGeneratorTest {
                 "src/main/java/com/example/Main.java#com.example.Main.main(java.lang.String[]):void",
                 resolved.path("method_uri").asText());
         assertEquals("project_method", resolved.path("target_kind").asText());
+        assertEquals("com.example.Main", resolved.path("declaring_type").asText());
+        assertFalse(resolved.has("declaring_class"));
 
         JsonNode unresolved = root.path("callees").get(0);
         assertEquals("Unresolved edges must not fake a source method URI", "",

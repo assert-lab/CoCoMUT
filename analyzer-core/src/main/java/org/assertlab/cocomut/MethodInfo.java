@@ -9,7 +9,7 @@ import java.util.Objects;
  */
 public class MethodInfo {
     private final String methodUri;
-    private final String classname;
+    private final String typeName;
     private final String methodName;
     private final String methodSignature;
     private final Path sourceFile;
@@ -25,7 +25,7 @@ public class MethodInfo {
 
     private MethodInfo(Builder builder) {
         this.methodUri = Objects.requireNonNull(builder.methodUri, "methodUri cannot be null");
-        this.classname = Objects.requireNonNull(builder.classname, "classname cannot be null");
+        this.typeName = Objects.requireNonNull(builder.typeName, "typeName cannot be null");
         this.methodName = Objects.requireNonNull(builder.methodName, "methodName cannot be null");
         this.methodSignature = Objects.requireNonNull(builder.methodSignature, "methodSignature cannot be null");
         this.sourceFile = Objects.requireNonNull(builder.sourceFile, "sourceFile cannot be null");
@@ -44,8 +44,8 @@ public class MethodInfo {
         return methodUri;
     }
 
-    public String getClassname() {
-        return classname;
+    public String getTypeName() {
+        return typeName;
     }
 
     public String getMethodName() {
@@ -100,7 +100,7 @@ public class MethodInfo {
     public String toString() {
         return "MethodInfo{" +
                 "methodUri='" + methodUri + '\'' +
-                ", classname='" + classname + '\'' +
+                ", typeName='" + typeName + '\'' +
                 ", methodName='" + methodName + '\'' +
                 ", sourceFile=" + sourceFile +
                 ", lineNumber=" + lineNumber +
@@ -120,13 +120,13 @@ public class MethodInfo {
         if (o == null || getClass() != o.getClass()) return false;
         MethodInfo that = (MethodInfo) o;
         return Objects.equals(methodUri, that.methodUri) &&
-                Objects.equals(classname, that.classname) &&
+                Objects.equals(typeName, that.typeName) &&
                 Objects.equals(methodName, that.methodName);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(methodUri, classname, methodName);
+        return Objects.hash(methodUri, typeName, methodName);
     }
 
     /**
@@ -134,7 +134,7 @@ public class MethodInfo {
      */
     public static class Builder {
         private String methodUri;
-        private String classname;
+        private String typeName;
         private String methodName;
         private String methodSignature;
         private Path sourceFile;
@@ -153,8 +153,8 @@ public class MethodInfo {
             return this;
         }
 
-        public Builder classname(String classname) {
-            this.classname = classname;
+        public Builder typeName(String typeName) {
+            this.typeName = typeName;
             return this;
         }
 

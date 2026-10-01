@@ -27,7 +27,7 @@ final class RequestFingerprint {
         node.put("scope", request.scope().toString());
         node.set("source_sets", MAPPER.valueToTree(request.sourceSets().stream().sorted().toList()));
         node.set("packages", MAPPER.valueToTree(request.packages().stream().sorted().toList()));
-        node.set("classes", MAPPER.valueToTree(request.classes().stream().sorted().toList()));
+        node.set("types", MAPPER.valueToTree(request.types().stream().sorted().toList()));
         node.set("methods", MAPPER.valueToTree(request.methods().stream().sorted().toList()));
         node.set("visibilities", MAPPER.valueToTree(request.visibilities().stream().sorted().toList()));
         node.set("include_paths", MAPPER.valueToTree(request.includePathGlobs().stream().sorted().toList()));

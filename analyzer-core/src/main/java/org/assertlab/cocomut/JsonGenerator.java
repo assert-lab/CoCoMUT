@@ -20,7 +20,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  * Phase 5 of the method context extraction pipeline.
  *
  * Generates JSONL rows for methods using real data from the pipeline:
- * - MUT node with signature, line_number, parameters, code, javadoc, class hierarchy
+ * - MUT node with signature, line_number, parameters, code, Javadoc, and type hierarchy
  * - Callers array: normalized call-edge objects with method_uri for resolved project methods
  * - Callees array: same structure as callers
  * - Metadata: tool, algorithm, counts, generation time
@@ -112,8 +112,8 @@ public class JsonGenerator {
 
         // MUT (Method Under Test) node
         ObjectNode mutNode = buildMethodNode(context);
-        if (context.hasClassJavadoc()) {
-            mutNode.put("class_javadoc", context.getClassJavadoc());
+        if (context.hasTypeJavadoc()) {
+            mutNode.put("type_javadoc", context.getTypeJavadoc());
         }
         json.set("MUT", mutNode);
 
@@ -135,7 +135,7 @@ public class JsonGenerator {
         metadata.put("caller_count", cg != null ? cg.getCallerCount() : 0);
         metadata.put("callee_count", cg != null ? cg.getCalleeCount() : 0);
         metadata.put("generation_time_ms", cg != null ? cg.getGenerationTime() : 0);
-        metadata.put("class_hierarchy_included", true);
+        metadata.put("type_hierarchy_included", true);
         ObjectNode callGraphNode = objectMapper.createObjectNode();
         boolean hasEdges = cg != null && (cg.getCallerCount() > 0 || cg.getCalleeCount() > 0);
         callGraphNode.put("available", hasEdges);
@@ -185,7 +185,7 @@ public class JsonGenerator {
         node.put("signature", context.getSignature());
         node.put("return_type", context.getReturnType());
         node.put("erased_return_type", context.getErasedReturnType());
-        node.put("qualified_name", context.getClassname() + "." + context.getMethodName());
+        node.put("qualified_name", context.getTypeName() + "." + context.getMethodName());
         node.put("line_number", context.getLineNumber());
 
         node.set("parameters", context.getParameterDetails().isEmpty()
@@ -203,20 +203,20 @@ public class JsonGenerator {
 
         node.put("javadoc", context.hasJavadoc() ? context.getJavadoc() : "");
 
-        // Class hierarchy
-        ObjectNode classHierarchy = objectMapper.createObjectNode();
-        String className = context.getClassname();
-        int lastDot = className.lastIndexOf('.');
-        classHierarchy.put("simple_name", lastDot >= 0 ? className.substring(lastDot + 1) : className);
-        classHierarchy.put("package_name", lastDot >= 0 ? className.substring(0, lastDot) : "");
-        classHierarchy.put("hierarchy_detail", context.getClassHierarchy());
-        classHierarchy.put("resolution", context.getHierarchyResolution());
-        node.set("class_hierarchy", classHierarchy);
+        // Type hierarchy
+        ObjectNode typeHierarchy = objectMapper.createObjectNode();
+        String typeName = context.getTypeName();
+        int lastDot = typeName.lastIndexOf('.');
+        typeHierarchy.put("simple_name", lastDot >= 0 ? typeName.substring(lastDot + 1) : typeName);
+        typeHierarchy.put("package_name", lastDot >= 0 ? typeName.substring(0, lastDot) : "");
+        typeHierarchy.put("hierarchy_detail", context.getTypeHierarchy());
+        typeHierarchy.put("resolution", context.getHierarchyResolution());
+        node.set("type_hierarchy", typeHierarchy);
 
         ObjectNode sourceContext = objectMapper.createObjectNode();
         sourceContext.set("field_reads", objectMapper.valueToTree(context.getFieldReads()));
         sourceContext.set("field_writes", objectMapper.valueToTree(context.getFieldWrites()));
-        sourceContext.set("sibling_methods", objectMapper.valueToTree(context.getSiblingMethods()));
+        sourceContext.set("same_type_methods", objectMapper.valueToTree(context.getSameTypeMethods()));
         sourceContext.set("overload_group", objectMapper.valueToTree(context.getOverloadGroup()));
         node.set("source_context", sourceContext);
 
@@ -236,7 +236,7 @@ public class JsonGenerator {
             edgeNode.put("target_uri", edge.targetUri());
             edgeNode.put("target_kind", edge.targetKind());
             edgeNode.put("raw_signature", edge.rawSignature());
-            edgeNode.put("declaring_class", edge.declaringClass());
+            edgeNode.put("declaring_type", edge.declaringType());
             edgeNode.put("method_name", edge.methodName());
             edgeNode.put("resolution", edge.resolution());
             edgeNode.put("context_in_output", edge.resolved() && allContexts.containsKey(edge.methodUri()));

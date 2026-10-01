@@ -90,8 +90,7 @@ src/main/java/org/example/Bar.java#org.example.Bar
 src/main/java/org/example/Color.java#org.example.Color
 ```
 
-For user-facing CLI ergonomics, `--class-uri` can be an alias for `--type-uri`,
-but the canonical model should stay `type_uri`.
+The CLI and serialized model consistently use `type_uri`.
 
 ## Package URIs
 
@@ -119,12 +118,11 @@ Current CLI selection supports both filters and first-class target URIs:
 ```text
 --project      repository root
 --package      package-name filter
---class        type/class-name filter
+--type         type-name filter
 --method       method-name or method-URI substring filter
 --target-uri   method:URI|type:URI|package:URI|project:URI
 --method-uri   exact method URI
 --type-uri     exact type URI
---class-uri    alias for --type-uri
 --package-uri  exact package URI
 ```
 
@@ -226,8 +224,8 @@ field_uri            present for resolved project fields
 type_uri             present for resolved project types
 referenced_method    compact source/Javadoc context for resolved project methods
 field_javadoc        full field Javadoc for resolved project fields
-class_javadoc        full class/type Javadoc for resolved project types
-external_class       present for external symbols
+type_javadoc        full type Javadoc for resolved project types
+external_type       present for external symbols
 external_member      present for external member symbols
 candidate_method_uris present when overload resolution is ambiguous
 ```
@@ -253,13 +251,13 @@ parameters, return type, thrown exceptions, annotations, source set, and source
 line. CoCoMUT does not recursively embed that referenced method's callers/callees
 inside the Javadoc reference object, to avoid unbounded nested output.
 
-For project-local class/type and field references, CoCoMUT stores the full
-available Javadoc text as `class_javadoc` or `field_javadoc`. External
+For project-local type and field references, CoCoMUT stores the full
+available Javadoc text as `type_javadoc` or `field_javadoc`. External
 JDK/library symbols remain symbol-only.
 
-## Same-Class vs Typed-Class Member References
+## Same-Type vs Type-Qualified Member References
 
-Same-class references omit the class:
+Same-type references omit the declaring type:
 
 ```java
 @see #isBlank(CharSequence)
@@ -267,7 +265,7 @@ Same-class references omit the class:
 
 CoCoMUT resolves this against the declaring type of the documented method.
 
-Typed-class references name the class/type:
+Type-qualified references name the declaring type:
 
 ```java
 @see StringUtils#isBlank(CharSequence)
@@ -372,7 +370,7 @@ or dependency symbols are available:
 {
   "kind": "field_reference",
   "resolution": "external_symbol",
-  "external_class": "java.util.regex.Pattern",
+  "external_type": "java.util.regex.Pattern",
   "external_member": "DOTALL"
 }
 ```

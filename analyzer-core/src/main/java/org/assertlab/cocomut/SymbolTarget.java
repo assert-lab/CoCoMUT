@@ -57,7 +57,7 @@ public record SymbolTarget(Kind kind, String uri) {
         return switch (prefix) {
             case "project" -> project(uri);
             case "method", "method_uri" -> method(uri);
-            case "type", "class", "type_uri", "class_uri" -> type(uri);
+            case "type", "type_uri" -> type(uri);
             case "package", "package_uri" -> packageTarget(uri);
             default -> throw new IllegalArgumentException("Unsupported target kind: " + prefix);
         };

@@ -5,7 +5,7 @@ import java.util.List;
 
 public record SourceMethod(
         String methodUri,
-        String className,
+        String typeName,
         String methodName,
         String signature,
         Path sourceFile,

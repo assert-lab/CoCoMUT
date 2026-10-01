@@ -82,7 +82,7 @@ public final class ContextRequest {
     private final Integer maxSourceFiles;
     private final Set<String> sourceSets;
     private final Set<String> packages;
-    private final Set<String> classes;
+    private final Set<String> types;
     private final Set<String> methods;
     private final Set<String> visibilities;
     private final Set<String> includePathGlobs;
@@ -111,7 +111,7 @@ public final class ContextRequest {
         this.maxSourceFiles = builder.maxSourceFiles;
         this.sourceSets = Collections.unmodifiableSet(new LinkedHashSet<>(builder.sourceSets));
         this.packages = Collections.unmodifiableSet(new LinkedHashSet<>(builder.packages));
-        this.classes = Collections.unmodifiableSet(new LinkedHashSet<>(builder.classes));
+        this.types = Collections.unmodifiableSet(new LinkedHashSet<>(builder.types));
         this.methods = Collections.unmodifiableSet(new LinkedHashSet<>(builder.methods));
         this.visibilities = Collections.unmodifiableSet(new LinkedHashSet<>(builder.visibilities));
         this.includePathGlobs = Collections.unmodifiableSet(new LinkedHashSet<>(builder.includePathGlobs));
@@ -169,8 +169,8 @@ public final class ContextRequest {
         return packages;
     }
 
-    public Set<String> classes() {
-        return classes;
+    public Set<String> types() {
+        return types;
     }
 
     public Set<String> methods() {
@@ -249,7 +249,7 @@ public final class ContextRequest {
         private Integer maxSourceFiles;
         private Set<String> sourceSets = new LinkedHashSet<>();
         private Set<String> packages = new LinkedHashSet<>();
-        private Set<String> classes = new LinkedHashSet<>();
+        private Set<String> types = new LinkedHashSet<>();
         private Set<String> methods = new LinkedHashSet<>();
         private Set<String> visibilities = new LinkedHashSet<>();
         private Set<String> includePathGlobs = new LinkedHashSet<>();
@@ -330,18 +330,14 @@ public final class ContextRequest {
             return this;
         }
 
-        public Builder classes(Set<String> classes) {
-            this.classes = normalizeNonBlank(classes);
-            return this;
-        }
-
-        public Builder className(String className) {
-            addNonBlank(this.classes, className);
+        public Builder types(Set<String> types) {
+            this.types = normalizeNonBlank(types);
             return this;
         }
 
         public Builder typeName(String typeName) {
-            return className(typeName);
+            addNonBlank(this.types, typeName);
+            return this;
         }
 
         public Builder methods(Set<String> methods) {
@@ -415,10 +411,6 @@ public final class ContextRequest {
                 this.targets.add(SymbolTarget.type(typeUri));
             }
             return this;
-        }
-
-        public Builder classUri(String classUri) {
-            return typeUri(classUri);
         }
 
         public Builder packageUri(String packageUri) {

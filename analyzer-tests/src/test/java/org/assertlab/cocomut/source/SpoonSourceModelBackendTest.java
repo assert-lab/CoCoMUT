@@ -108,7 +108,7 @@ public class SpoonSourceModelBackendTest {
             MethodContext context = new MethodContext.Builder()
                     .methodUri("Sample.java#Sample.value():java.lang.String")
                     .methodName("value")
-                    .classname("Sample")
+                    .typeName("Sample")
                     .signature("value():java.lang.String")
                     .returnType("java.lang.String")
                     .javadocMetadata(metadata)

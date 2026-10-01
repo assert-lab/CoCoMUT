@@ -7,23 +7,23 @@ public record SourceContext(
         SourceMethod method,
         String methodBody,
         String javadoc,
-        String classJavadoc,
-        String classHierarchy,
+        String typeJavadoc,
+        String typeHierarchy,
         String hierarchyResolution,
-        Map<String, String> classMethods,
+        Map<String, String> typeMethods,
         List<String> fieldReads,
         List<String> fieldWrites,
-        List<String> siblingMethods,
+        List<String> sameTypeMethods,
         List<String> overloadGroup,
         List<String> dynamicFeatures,
         Map<String, Object> javadocMetadata,
         Map<String, Object> documentationMetrics,
         String sourceBackendMode) {
     public SourceContext {
-        classMethods = classMethods != null ? Map.copyOf(classMethods) : Map.of();
+        typeMethods = typeMethods != null ? Map.copyOf(typeMethods) : Map.of();
         fieldReads = fieldReads != null ? List.copyOf(fieldReads) : List.of();
         fieldWrites = fieldWrites != null ? List.copyOf(fieldWrites) : List.of();
-        siblingMethods = siblingMethods != null ? List.copyOf(siblingMethods) : List.of();
+        sameTypeMethods = sameTypeMethods != null ? List.copyOf(sameTypeMethods) : List.of();
         overloadGroup = overloadGroup != null ? List.copyOf(overloadGroup) : List.of();
         dynamicFeatures = dynamicFeatures != null ? List.copyOf(dynamicFeatures) : List.of();
         javadocMetadata = javadocMetadata != null ? Map.copyOf(javadocMetadata) : Map.of();

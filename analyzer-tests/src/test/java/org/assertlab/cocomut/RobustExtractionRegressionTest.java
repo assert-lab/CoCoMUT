@@ -94,7 +94,7 @@ public class RobustExtractionRegressionTest {
                     .scope(ContextRequest.Scope.ALL)
                     .outputDirectory(output)
                     .packages(Set.of("demo.api"))
-                    .classes(Set.of("PublicApi"))
+                    .types(Set.of("PublicApi"))
                     .methods(Set.of("keep"))
                     .visibilities(Set.of("public"))
                     .includePathGlobs(Set.of("src/main/java/**/*.java"))
