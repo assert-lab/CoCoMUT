@@ -232,6 +232,18 @@ public class OrchestratorTest {
             assertTrue(report.usableRecordsEmitted());
             assertEquals(Boolean.TRUE, report.asMap().get("phase_3_degraded"));
             assertTrue(Files.isRegularFile(report.jsonlFile()));
+            assertTrue(report.failureCodes().contains("CALL_GRAPH_UNAVAILABLE"));
+            @SuppressWarnings("unchecked")
+            Map<String, Object> diagnostic = (Map<String, Object>) report.asMap().get("phase_3_initialization");
+            assertNotNull("Initialization evidence must survive generator disposal", diagnostic);
+            assertEquals("failed", diagnostic.get("status"));
+            assertEquals("class_loading", diagnostic.get("stage"));
+            assertNotNull(diagnostic.get("exception_class"));
+            assertNotNull(diagnostic.get("message"));
+            assertTrue(String.valueOf(report.asMap().get("phase_3_warning"))
+                    .contains(String.valueOf(diagnostic.get("exception_class"))));
+            assertTrue(((Number) report.asMap().get("phase_3_max_heap_bytes")).longValue() > 0);
+            assertReportAndManifestPersistDiagnostics(report.asMap());
         } finally {
             deleteRecursively(project);
         }
@@ -389,6 +401,153 @@ public class OrchestratorTest {
                 Orchestrator.failureCodeForUnhandledFailureForTest(5));
         assertEquals(FailureCode.ERROR,
                 Orchestrator.failureCodeForUnhandledFailureForTest(0));
+    }
+
+    @Test
+    public void resourceClassificationUsesCausesWithoutTreatingOrdinaryErrorsAsExhaustion() {
+        for (int phase : new int[] {0, 1, 2, 3, 4, 5}) {
+            assertEquals(FailureCode.ANALYSIS_RESOURCE_EXHAUSTED,
+                    Orchestrator.failureCodeForUnhandledFailureForTest(phase, new OutOfMemoryError("heap")));
+            assertEquals(FailureCode.ANALYSIS_RESOURCE_EXHAUSTED,
+                    Orchestrator.failureCodeForUnhandledFailureForTest(phase,
+                            new IllegalStateException("wrapped", new StackOverflowError("stack"))));
+        }
+        assertEquals(FailureCode.CALL_GRAPH_UNAVAILABLE,
+                Orchestrator.failureCodeForUnhandledFailureForTest(3, new IllegalArgumentException("bytecode")));
+        assertEquals(FailureCode.CALL_GRAPH_UNAVAILABLE,
+                Orchestrator.failureCodeForUnhandledFailureForTest(3, new AssertionError("invariant")));
+        assertEquals(FailureCode.CALL_GRAPH_UNAVAILABLE,
+                Orchestrator.failureCodeForUnhandledFailureForTest(3, new LinkageError("incompatible class")));
+        RuntimeException first = new RuntimeException("first");
+        RuntimeException second = new RuntimeException("second", first);
+        first.initCause(second);
+        assertEquals("Cyclic cause chains must terminate", FailureCode.CALL_GRAPH_UNAVAILABLE,
+                Orchestrator.failureCodeForUnhandledFailureForTest(3, first));
+    }
+
+    @Test
+    public void initializationOutOfMemoryRemainsTerminalAndPersistsResourceCode() throws Exception {
+        assertTerminalCallGraphResourceFailure(new OutOfMemoryError("simulated heap shortage"), true);
+    }
+
+    @Test
+    public void generationOutOfMemoryRemainsTerminalAndPersistsResourceCode() throws Exception {
+        assertTerminalCallGraphResourceFailure(new OutOfMemoryError("simulated heap shortage"), false);
+    }
+
+    @Test
+    public void wrappedGenerationResourceFailureIsNotConvertedToPartial() throws Exception {
+        assertTerminalCallGraphResourceFailure(
+                new IllegalStateException("library wrapper", new OutOfMemoryError("simulated heap shortage")), false);
+    }
+
+    @Test
+    public void wrappedInitializationResourceFailureIsNotConvertedToPartial() throws Exception {
+        assertTerminalCallGraphResourceFailure(
+                new IllegalStateException("library wrapper", new OutOfMemoryError("simulated heap shortage")), true);
+    }
+
+    @Test
+    public void generationStackOverflowRemainsTerminalAndPersistsResourceCode() throws Exception {
+        assertTerminalCallGraphResourceFailure(new StackOverflowError("simulated stack shortage"), false);
+    }
+
+    @Test
+    public void ordinaryGenerationFailureRetainsRowsAndReportsTheException() throws Exception {
+        Path output = Files.createTempDirectory("cocomut-callgraph-generation-failure-");
+        try {
+            ContextRequest request = ContextRequest.builder().projectRoot(testProjectPath)
+                    .sourceSet("main").outputDirectory(output).build();
+            ProjectMetadata metadata = new ProjectAnalyzer(testProjectPath).analyze();
+            Orchestrator partial = new Orchestrator(request, metadata, null, (project, algorithm) ->
+                    new CallGraphGenerator(project, algorithm) {
+                        @Override
+                        public Map<String, CallGraphResult> generateForMethods(java.util.List<MethodInfo> universe,
+                                                                               java.util.List<MethodInfo> focal) {
+                            throw new IllegalArgumentException("forced graph-generation failure");
+                        }
+                    });
+            assertFalse(partial.execute());
+            ExtractionReport report = new ExtractionReport(partial.getExecutionReport());
+            assertTrue(report.partial());
+            assertTrue(report.usableRecordsEmitted());
+            assertTrue(report.failureCodes().contains("CALL_GRAPH_UNAVAILABLE"));
+            assertEquals("java.lang.IllegalArgumentException", report.asMap().get("phase_3_exception_class"));
+            assertEquals("forced graph-generation failure", report.asMap().get("phase_3_exception_message"));
+            assertTrue(String.valueOf(report.asMap().get("phase_3_warning"))
+                    .contains("java.lang.IllegalArgumentException"));
+            assertReportAndManifestPersistDiagnostics(report.asMap());
+        } finally {
+            deleteRecursively(output);
+        }
+    }
+
+    private void assertTerminalCallGraphResourceFailure(Throwable failure, boolean duringInitialization) throws Exception {
+        Path output = Files.createTempDirectory("cocomut-callgraph-resource-");
+        try {
+            ContextRequest request = ContextRequest.builder().projectRoot(testProjectPath)
+                    .sourceSet("main").outputDirectory(output).build();
+            ProjectMetadata metadata = new ProjectAnalyzer(testProjectPath).analyze();
+            Orchestrator exhausted = new Orchestrator(request, metadata, null, (project, algorithm) ->
+                    new CallGraphGenerator(project, algorithm) {
+                        @Override
+                        public boolean initialize() {
+                            if (duringInitialization) throwSimulatedFailure(failure);
+                            return super.initialize();
+                        }
+
+                        @Override
+                        public Map<String, CallGraphResult> generateForMethods(java.util.List<MethodInfo> universe,
+                                                                               java.util.List<MethodInfo> focal) {
+                            throwSimulatedFailure(failure);
+                            throw new AssertionError("unreachable");
+                        }
+                    });
+            assertFalse(exhausted.execute());
+            ExtractionReport report = new ExtractionReport(exhausted.getExecutionReport());
+            assertEquals("ERROR", report.status());
+            assertEquals(Integer.valueOf(3), report.failedAtPhase());
+            assertFalse("Resource exhaustion must not emit a successful or partial dataset", report.usableRecordsEmitted());
+            assertTrue(report.methodsIdentified() > 0);
+            assertEquals(java.util.List.of("ANALYSIS_RESOURCE_EXHAUSTED"), report.failureCodes());
+            Throwable resource = failure instanceof Error ? failure : failure.getCause();
+            assertEquals(resource.getClass().getName(), report.asMap().get("error_type"));
+            assertTrue(String.valueOf(report.asMap().get("phase_3_error")).contains(resource.getMessage()));
+            assertTrue(String.valueOf(report.asMap().get("error_stacktrace")).contains(resource.getClass().getName()));
+            assertEquals(Boolean.FALSE, report.asMap().get("phase_3_available"));
+            assertTrue(((Number) report.asMap().get("phase_3_max_heap_bytes")).longValue() > 0);
+            assertNotNull(report.asMap().get("phase_1_project_bytecode_locations"));
+            assertNotNull(report.asMap().get("phase_1_dependency_jars"));
+            assertReportAndManifestPersistDiagnostics(report.asMap());
+        } finally {
+            deleteRecursively(output);
+        }
+    }
+
+    private static void throwSimulatedFailure(Throwable failure) {
+        if (failure instanceof Error error) throw error;
+        throw (RuntimeException) failure;
+    }
+
+    private static void assertReportAndManifestPersistDiagnostics(Map<String, Object> report) throws Exception {
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var reportNode = mapper.readTree(Path.of(String.valueOf(report.get("extraction_report_file"))).toFile());
+        var manifestNode = mapper.readTree(Path.of(String.valueOf(report.get("extraction_manifest_file"))).toFile());
+        for (String key : java.util.List.of("status", "failure_codes", "failed_at_phase", "error_type", "phase_3_error",
+                "phase_3_initialization", "phase_3_max_heap_bytes", "phase_3_exception_class", "phase_3_exception_message")) {
+            if (report.containsKey(key)) {
+                assertEquals("Persisted report must agree with in-memory diagnostics for " + key,
+                        mapper.valueToTree(report.get(key)), reportNode.path(key));
+                assertEquals("Manifest must retain report diagnostics for " + key,
+                        reportNode.path(key), manifestNode.path("execution").path(key));
+            }
+        }
+        Path schemaPath = Path.of(System.getProperty("user.dir")).getParent()
+                .resolve("schemas/extraction-manifest.schema.json");
+        var schema = com.networknt.schema.JsonSchemaFactory
+                .getInstance(com.networknt.schema.SpecVersion.VersionFlag.V202012)
+                .getSchema(mapper.readTree(schemaPath.toFile()));
+        assertTrue("Failure manifests must conform to the current schema", schema.validate(manifestNode).isEmpty());
     }
 
     @Test

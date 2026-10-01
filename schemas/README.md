@@ -238,6 +238,22 @@ The manifest is intentionally separate from the JSONL rows. Dataset rows remain
 method-centric, while repository revision, build policy, and artifact hashes are
 auditable at extraction-run granularity.
 
+The manifest's `execution` object retains the extraction report fields.
+Optional `phase_3_initialization` evidence has `status` (`success`,
+`no_bytecode`, `failed`) and `stage` (`input_locations`, `java_view`,
+`class_loading`). Failed attempts include `exception_class` and `message`
+(empty when the exception has no message). `classpath_entry` is present only
+when the failing input-location construction identifies a path reliably.
+`phase_3_max_heap_bytes` records the runtime heap limit. Exceptions during
+graph generation after initialization use `phase_3_exception_class` and
+`phase_3_exception_message` (nullable), plus the readable `phase_3_error`.
+These are compatible optional additions under schema version `0.5.0`.
+
+Recoverable call-graph failures use `PARTIAL` and `CALL_GRAPH_UNAVAILABLE`,
+retaining source rows. Resource exhaustion uses `ERROR` and
+`ANALYSIS_RESOURCE_EXHAUSTED` while preserving the failed phase and error
+type/message; it is distinct from missing bytecode or incompatible bytecode.
+
 Each hash entry has `{role, sha256, status, errors}`. `sha256` is a 64-character
 hex digest when `status` is `ok`; it is `null` for `empty`, `missing`, or
 `error`. Artifact hashes do not include host-specific absolute paths. The

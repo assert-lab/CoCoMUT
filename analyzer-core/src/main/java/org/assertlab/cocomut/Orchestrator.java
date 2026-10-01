@@ -70,6 +70,8 @@ final class Orchestrator {
     private List<MethodInfo> analysisUniverseMethods;
     private List<MethodInfo> methodInfos;
     private CallGraphGenerator callGraphGenerator;
+    private java.util.function.BiFunction<ProjectMetadata, CallGraphGenerator.Algorithm, CallGraphGenerator>
+            callGraphGeneratorFactory = CallGraphGenerator::new;
     private Map<String, CallGraphResult> callGraphResults;
     private Map<String, MethodContext> methodContexts;
     private Map<String, String> contextExtractionFailures = new LinkedHashMap<>();
@@ -118,6 +120,13 @@ final class Orchestrator {
     Orchestrator(ContextRequest request, ProjectMetadata metadata, RunSnapshot runSnapshot) {
         this(request, metadata);
         this.runSnapshot = runSnapshot;
+    }
+
+    // Package-private dependency seam for deterministic failures without exhausting the test JVM.
+    Orchestrator(ContextRequest request, ProjectMetadata metadata, RunSnapshot runSnapshot,
+                 java.util.function.BiFunction<ProjectMetadata, CallGraphGenerator.Algorithm, CallGraphGenerator> factory) {
+        this(request, metadata, runSnapshot);
+        this.callGraphGeneratorFactory = Objects.requireNonNull(factory, "factory cannot be null");
     }
 
     Orchestrator setCallGraphAlgorithm(CallGraphGenerator.Algorithm algorithm) {
@@ -243,14 +252,27 @@ final class Orchestrator {
         executionReport.put("error_type", failure.getClass().getName());
         executionReport.put("error_message", throwableSummary(failure));
         executionReport.put("error_stacktrace", stackTracePrefix(failure, 80));
-        failureCodes.add(failureCodeForUnhandledFailure(phase));
+        failureCodes.add(failureCodeForUnhandledFailure(phase, failure));
+        if (phase == 3) {
+            recordCallGraphInitializationDiagnostic();
+            executionReport.put("phase_3_available", false);
+            executionReport.put("phase_3_algorithm", callGraphAlgorithm.toString());
+            executionReport.put("phase_3_effective_algorithm", callGraphAlgorithm.toString());
+        }
     }
 
     static FailureCode failureCodeForUnhandledFailureForTest(int phase) {
-        return failureCodeForUnhandledFailure(phase);
+        return failureCodeForUnhandledFailure(phase, null);
     }
 
-    private static FailureCode failureCodeForUnhandledFailure(int phase) {
+    static FailureCode failureCodeForUnhandledFailureForTest(int phase, Throwable failure) {
+        return failureCodeForUnhandledFailure(phase, failure);
+    }
+
+    private static FailureCode failureCodeForUnhandledFailure(int phase, Throwable failure) {
+        if (ResourceFailures.find(failure) != null) {
+            return FailureCode.ANALYSIS_RESOURCE_EXHAUSTED;
+        }
         return switch (phase) {
             case 1 -> FailureCode.METADATA_RESOLUTION_FAILED;
             case 2 -> FailureCode.SOURCE_ANALYSIS_FAILED;
@@ -440,22 +462,31 @@ final class Orchestrator {
      * Phase 3: Build call graph once and store for reuse in Phase 4.
      */
     private boolean executePhase3() {
+        executionReport.put("phase_3_max_heap_bytes", Runtime.getRuntime().maxMemory());
         try {
             CallGraphGenerator.Algorithm effectiveAlgorithm = callGraphAlgorithm;
-            callGraphGenerator = new CallGraphGenerator(projectMetadata, effectiveAlgorithm);
-            if (!callGraphGenerator.initialize()) {
+            callGraphGenerator = callGraphGeneratorFactory.apply(projectMetadata, effectiveAlgorithm);
+            boolean initialized = callGraphGenerator.initialize();
+            recordCallGraphInitializationDiagnostic();
+            if (!initialized) {
+                CallGraphGenerator.InitializationDiagnostic diagnostic = callGraphGenerator.getInitializationDiagnostic();
                 callGraphResults = new HashMap<>();
                 callGraphGenerator = null;
                 partialWithoutFailure = true;
+                failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
                 executionReport.put("phase_3_available", false);
                 executionReport.put("phase_3_degraded", true);
                 executionReport.put("phase_3_algorithm", callGraphAlgorithm.toString());
                 executionReport.put("phase_3_effective_algorithm", effectiveAlgorithm.toString());
                 executionReport.put("phase_3_warning",
-                        "Static bytecode analysis could not be initialized; "
+                        "Static bytecode analysis could not be initialized"
+                                + (diagnostic == null ? "" : ": "
+                                        + (diagnostic.exceptionClass() == null ? "" : diagnostic.exceptionClass() + ": ")
+                                        + Objects.toString(diagnostic.message(), diagnostic.status())) + "; "
                                 + "records will be emitted without caller/callee context.");
                 executionReport.put("phase_3_call_graph_artifact_exists", false);
                 executionReport.put("phase_3_call_graphs_generated", 0);
+                executionReport.put("phase_3_focal_methods_matched_to_bytecode", 0);
                 executionReport.put("phase_3_non_empty_call_graphs", 0);
                 executionReport.put("phase_3_call_edges_generated", 0);
                 return true;
@@ -511,16 +542,23 @@ final class Orchestrator {
             }
             return true;
         } catch (Exception e) {
+            ResourceFailures.rethrowIfPresent(e);
+            recordCallGraphInitializationDiagnostic();
             callGraphGenerator = null;
             callGraphResults = new HashMap<>();
             partialWithoutFailure = true;
+            failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
             executionReport.put("phase_3_available", false);
             executionReport.put("phase_3_degraded", true);
             executionReport.put("phase_3_algorithm", callGraphAlgorithm.toString());
             executionReport.put("phase_3_effective_algorithm", callGraphAlgorithm.toString());
             executionReport.put("phase_3_warning",
-                    "Static bytecode analysis failed: " + e.getMessage()
+                    "Static bytecode analysis failed: " + throwableSummary(e)
                             + "; records will be emitted without caller/callee context.");
+            executionReport.put("phase_3_error", throwableSummary(e));
+            executionReport.put("phase_3_exception_class", e.getClass().getName());
+            executionReport.put("phase_3_exception_message", e.getMessage());
+            System.err.println("[Orchestrator] " + executionReport.get("phase_3_warning"));
             executionReport.put("phase_3_call_graph_artifact_exists", false);
             executionReport.put("phase_3_call_graphs_generated", 0);
             executionReport.put("phase_3_focal_methods_matched_to_bytecode", 0);
@@ -528,6 +566,13 @@ final class Orchestrator {
             executionReport.put("phase_3_call_edges_generated", 0);
             return true;
         }
+    }
+
+    private void recordCallGraphInitializationDiagnostic() {
+        if (callGraphGenerator == null || callGraphGenerator.getInitializationDiagnostic() == null) {
+            return;
+        }
+        executionReport.put("phase_3_initialization", callGraphGenerator.getInitializationDiagnostic().asMap());
     }
 
     static boolean requiresPartialForBytecodeMatching(long matchedMethods, long selectedMethods) {
