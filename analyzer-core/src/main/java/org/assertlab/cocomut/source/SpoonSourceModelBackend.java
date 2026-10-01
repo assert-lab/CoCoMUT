@@ -498,6 +498,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 erasedReturnType,
                 parameters,
                 annotations(executable),
+                methodModifiers(executable),
                 thrownExceptions(executable),
                 sourceSet(project, sourceFile),
                 executable instanceof CtConstructor<?>));
@@ -3477,6 +3478,16 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         } catch (Exception e) {
             return annotation.toString();
         }
+    }
+
+    private static List<String> methodModifiers(CtExecutable<?> executable) {
+        List<String> result = new ArrayList<>(executable instanceof CtModifiable modifiable
+                ? modifiers(modifiable) : List.of());
+        // Spoon stores the interface default keyword separately from ModifierKind.
+        if (executable instanceof CtMethod<?> method && method.isDefaultMethod()) {
+            result.add("default");
+        }
+        return result.stream().distinct().sorted().toList();
     }
 
     private static List<String> modifiers(CtModifiable modifiable) {

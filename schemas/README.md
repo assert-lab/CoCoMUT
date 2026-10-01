@@ -43,6 +43,7 @@ return_type               Source return type
 erased_return_type        Erased return type used in method_uri
 qualified_name            Qualified declaring type plus method name
 parameters                Parameter objects with name, source type, erased_type, modifiers, annotations
+modifiers                 Sorted method/constructor modifiers, including implicit source-model modifiers
 annotations               Method annotations
 throws                    Declared thrown exception types
 code                      Method/constructor source without leading Javadoc; annotations are kept

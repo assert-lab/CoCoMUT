@@ -191,6 +191,7 @@ public class JsonGenerator {
         node.set("parameters", context.getParameterDetails().isEmpty()
                 ? buildParameterArray(context.getSignature())
                 : objectMapper.valueToTree(context.getParameterDetails()));
+        node.set("modifiers", objectMapper.valueToTree(context.getModifiers()));
         node.set("annotations", objectMapper.valueToTree(context.getAnnotations()));
         node.set("throws", objectMapper.valueToTree(context.getThrownExceptions()));
 

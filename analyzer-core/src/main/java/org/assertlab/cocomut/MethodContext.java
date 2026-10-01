@@ -30,6 +30,7 @@ public class MethodContext {
     private final int linesOfCode;
     private final int cyclomatic;             // lexical branch-keyword estimate
     private final List<String> annotations;
+    private final List<String> modifiers;
     private final List<String> thrownExceptions;
     private final List<String> fieldReads;
     private final List<String> fieldWrites;
@@ -61,6 +62,7 @@ public class MethodContext {
         this.callGraph = builder.callGraph;
         this.linesOfCode = builder.linesOfCode;
         this.cyclomatic = builder.cyclomatic;
+        this.modifiers = List.copyOf(builder.modifiers);
         this.annotations = Collections.unmodifiableList(new ArrayList<>(builder.annotations));
         this.thrownExceptions = Collections.unmodifiableList(new ArrayList<>(builder.thrownExceptions));
         this.fieldReads = Collections.unmodifiableList(new ArrayList<>(builder.fieldReads));
@@ -143,6 +145,10 @@ public class MethodContext {
 
     public int getCyclomatic() {
         return cyclomatic;
+    }
+
+    public List<String> getModifiers() {
+        return modifiers;
     }
 
     public List<String> getAnnotations() {
@@ -242,6 +248,7 @@ public class MethodContext {
         private int linesOfCode = 0;
         private int cyclomatic = 1;
         private List<String> annotations = List.of();
+        private List<String> modifiers = List.of();
         private List<String> thrownExceptions = List.of();
         private List<String> fieldReads = List.of();
         private List<String> fieldWrites = List.of();
@@ -356,6 +363,11 @@ public class MethodContext {
 
         public Builder cyclomatic(int cyclomatic) {
             this.cyclomatic = cyclomatic;
+            return this;
+        }
+
+        public Builder modifiers(List<String> modifiers) {
+            this.modifiers = modifiers != null ? List.copyOf(modifiers) : List.of();
             return this;
         }
 

@@ -34,6 +34,7 @@
         "qualified_name": {"type": "string"},
         "line_number": {"type": "integer"},
         "parameters": {"type": "array"},
+        "modifiers": {"type": "array", "items": {"type": "string"}, "uniqueItems": true, "description": "Method or constructor modifiers, sorted alphabetically; includes implicit modifiers exposed by the source model."},
         "annotations": {"type": "array"},
         "throws": {"type": "array"},
         "lines_of_code": {
