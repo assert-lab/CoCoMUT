@@ -1,6 +1,7 @@
 package org.assertlab.cocomut.source;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -27,6 +28,75 @@ import spoon.reflect.declaration.CtMethod;
 import spoon.support.compiler.VirtualFile;
 
 public class SpoonSourceModelBackendTest {
+
+    @Test
+    public void isolatesHierarchyFailureFromSuccessfulOptionalComponents() throws Exception {
+        Path root = Files.createTempDirectory("cocomut-hierarchy-failure");
+        Path source = Files.createDirectories(root.resolve("src/main/java"));
+        Files.writeString(source.resolve("Sample.java"), """
+                public class Sample {
+                    int count;
+                    /** Focal documentation stays available. */
+                    public int read() { return count; }
+                    public void write() { count = 1; }
+                }
+                """);
+        ProjectMetadata metadata = new ProjectMetadata.Builder().projectName("hierarchy-failure")
+                .projectPath(root).buildSystem("generic").javaVersion("17")
+                .sourceRoot(source).sourceRoots(List.of(source)).build();
+        try (SourceAnalysisSession session = new SpoonSourceModelBackend().open(ProjectModel.from(metadata))) {
+            SourceMethod focal = session.methods().stream().filter(m -> m.methodName().equals("read"))
+                    .findFirst().orElseThrow();
+            // Fault a real Spoon model after discovery, before optional enrichment.
+            var parsedField = session.getClass().getDeclaredField("parsed");
+            parsedField.setAccessible(true);
+            Object parsed = parsedField.get(session);
+            var executablesAccessor = parsed.getClass().getDeclaredMethod("executablesByUri");
+            executablesAccessor.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            Map<String, spoon.reflect.declaration.CtExecutable<?>> executables =
+                    (Map<String, spoon.reflect.declaration.CtExecutable<?>>) executablesAccessor.invoke(parsed);
+            var executable = executables.get(focal.methodUri());
+            var owner = executable.getParent(spoon.reflect.declaration.CtType.class);
+            var failingOwner = (spoon.reflect.declaration.CtType<?>) java.lang.reflect.Proxy.newProxyInstance(
+                    owner.getClass().getClassLoader(), new Class<?>[]{spoon.reflect.declaration.CtType.class},
+                    (proxy, method, arguments) -> {
+                        if (method.getName().equals("getSuperclass")) {
+                            throw new IllegalStateException("MissingBase cannot be found");
+                        }
+                        try { return method.invoke(owner, arguments); }
+                        catch (java.lang.reflect.InvocationTargetException failure) { throw failure.getCause(); }
+                    });
+            executable.setParent(failingOwner);
+            SourceContext context = session.extractContext(focal.methodUri()).orElseThrow();
+            assertEquals(focal.methodUri(), context.method().methodUri());
+            assertTrue(context.methodBody().contains("return count"));
+            assertTrue(context.javadoc().contains("Focal documentation"));
+            assertEquals("unavailable", context.hierarchyResolution());
+            EnrichmentDiagnostic hierarchy = context.enrichmentDiagnostics().stream()
+                    .filter(d -> d.component().equals("type_hierarchy")).findFirst().orElseThrow();
+            assertEquals(IllegalStateException.class.getName(), hierarchy.exceptionClass());
+            assertEquals("MissingBase cannot be found", hierarchy.message());
+            assertTrue(context.sameTypeMethods().stream().anyMatch(m -> m.startsWith("write(")));
+            assertFalse(context.fieldReads().isEmpty());
+        } finally {
+            try (var paths = Files.walk(root)) {
+                for (Path path : paths.sorted(java.util.Comparator.reverseOrder()).toList()) Files.delete(path);
+            }
+        }
+    }
+
+    @Test
+    public void doesNotRecoverResourceExhaustionAsOptionalEnrichment() {
+        List<EnrichmentDiagnostic> diagnostics = new java.util.ArrayList<>();
+        try {
+            SpoonSourceModelBackend.enrich("type_hierarchy", diagnostics,
+                    () -> { throw new OutOfMemoryError("synthetic failure"); }, "");
+            org.junit.Assert.fail("Resource errors must propagate");
+        } catch (OutOfMemoryError expected) {
+            assertTrue(diagnostics.isEmpty());
+        }
+    }
 
     @Test
     public void exposesSortedMethodAndConstructorModifiers() throws Exception {

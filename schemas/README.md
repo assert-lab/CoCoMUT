@@ -43,6 +43,8 @@ return_type               Source return type
 erased_return_type        Erased return type used in method_uri
 qualified_name            Qualified declaring type plus method name
 parameters                Parameter objects with name, source type, erased_type, modifiers, annotations
+enrichment_status         complete or partial optional enrichment; complete does not imply fully resolved symbols
+enrichment_diagnostics    Unavailable components with exception_class and concise message
 modifiers                 Sorted method/constructor modifiers, including implicit source-model modifiers
 annotations               Method annotations
 throws                    Declared thrown exception types
@@ -405,3 +407,7 @@ metadata.schema_version
 
 If a field is renamed, removed, or changes meaning before a release, update this
 README, the schema file, the emitter, and sample output together.
+
+For optional enrichment failure semantics and component-to-field mappings, see
+[the symbol model](../docs/symbol-model.md). Preserved rows still count as context
+failures in the extraction report and method-context failure artifact.

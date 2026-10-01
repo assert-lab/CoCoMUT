@@ -98,43 +98,89 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return Optional.empty();
         }
 
+        // The declaration and source text are mandatory. Resolve optional evidence
+        // independently so a missing related type cannot discard a selected row.
         CtType<?> owner = executable.getParent(CtType.class);
         String methodBody = sourceSlice(executable);
-        CommentAttempt parsedComment = docCommentAttempt(executable);
+        List<EnrichmentDiagnostic> diagnostics = new ArrayList<>();
+        CommentAttempt parsedComment = enrich("parsed_javadoc", diagnostics, () -> {
+            String text = executable.getDocComment();
+            return new CommentAttempt(text != null ? text.trim() : "", false);
+        }, new CommentAttempt("", true));
         RawCommentAttempt rawComment = rawDocCommentAttempt(parsed, executable);
         String parsedJavadoc = parsedComment.text();
         String rawJavadoc = rawComment.text().orElse(parsedJavadoc);
-        // Raw source is a lossless fallback when Spoon can model the method but
-        // cannot expose its comment through the typed Javadoc representation.
-        // Spoon 11 also drops the optional supertype from {@inheritDoc Type}.
+        // Raw source preserves comments when Spoon cannot expose them, including
+        // the explicit supertype target that Spoon drops from inheritDoc tags.
         String javadoc = parsedJavadoc.isBlank() || hasExplicitInheritDocTarget(rawJavadoc)
-                ? rawJavadoc
-                : parsedJavadoc;
-        List<JavadocElement> javadocElements = spoonJavadocElements(executable);
-        String typeJavadoc = owner != null ? docComment(owner) : "";
-        String typeHierarchy = owner != null ? typeHierarchy(owner) : "";
-        String hierarchyResolution = hierarchyResolution(owner);
-        TypeContext typeContext = owner != null
-                ? typeContext(parsed, owner, method.methodName(), method.signature(), method.constructor())
-                : TypeContext.empty();
+                ? rawJavadoc : parsedJavadoc;
+        List<JavadocElement> elements = enrich("javadoc_elements", diagnostics,
+                () -> JavadocParser.forElement(executable), List.of());
+        String typeJavadoc = enrich("type_javadoc", diagnostics,
+                () -> {
+                    String text = owner != null ? owner.getDocComment() : "";
+                    return text != null ? text.trim() : "";
+                }, "");
+        String typeHierarchy = enrich("type_hierarchy", diagnostics,
+                () -> owner != null ? typeHierarchy(owner) : "", "");
+        String hierarchyResolution = diagnostics.stream().anyMatch(d -> d.component().equals("type_hierarchy"))
+                ? "unavailable" : enrich("hierarchy_resolution", diagnostics, () -> {
+                    if (owner == null) return "missing";
+                    boolean unresolvedSuperclass = owner.getSuperclass() != null
+                            && owner.getSuperclass().getDeclaration() == null;
+                    boolean unresolvedInterface = owner.getSuperInterfaces().stream()
+                            .anyMatch(ref -> ref.getDeclaration() == null);
+                    return unresolvedSuperclass || unresolvedInterface ? "partial" : "resolved";
+                }, "unavailable");
+        TypeContext typeContext = enrich("type_context", diagnostics,
+                () -> owner != null
+                        ? typeContext(parsed, owner, method.methodName(), method.signature(), method.constructor())
+                        : TypeContext.empty(), TypeContext.empty());
+        List<String> reads = enrich("field_reads", diagnostics, () -> fieldReads(executable), List.of());
+        List<String> writes = enrich("field_writes", diagnostics, () -> fieldWrites(executable), List.of());
+        List<String> dynamic = enrich("dynamic_features", diagnostics, () -> dynamicFeatures(executable), List.of());
+        boolean elementsUnavailable = diagnostics.stream().anyMatch(d -> d.component().equals("javadoc_elements"));
+        if (elementsUnavailable) {
+            EnrichmentDiagnostic cause = diagnostics.stream().filter(d -> d.component().equals("javadoc_elements"))
+                    .findFirst().orElseThrow();
+            diagnostics.add(new EnrichmentDiagnostic("javadoc_metadata", cause.exceptionClass(), cause.message()));
+            diagnostics.add(new EnrichmentDiagnostic("documentation_metrics", cause.exceptionClass(), cause.message()));
+        }
+        Map<String, Object> metadata = elementsUnavailable ? unavailableEvidence() : enrich("javadoc_metadata", diagnostics,
+                () -> javadocMetadata(parsed, owner, executable, method, elements, javadoc, rawJavadoc,
+                        parsedComment, rawComment, diagnostics), unavailableEvidence());
+        Map<String, Object> metrics = elementsUnavailable ? unavailableEvidence() : enrich("documentation_metrics", diagnostics,
+                () -> documentationMetrics(method, elements, javadoc), unavailableEvidence());
+        return Optional.of(new SourceContext(method, methodBody, javadoc, typeJavadoc,
+                typeHierarchy, hierarchyResolution, typeContext.typeMethods(), reads, writes,
+                typeContext.sameTypeMethods(), typeContext.overloadGroup(), dynamic,
+                metadata, metrics, parsed.mode(), diagnostics));
+    }
 
-        return Optional.of(new SourceContext(
-                method,
-                methodBody,
-                javadoc,
-                typeJavadoc,
-                typeHierarchy,
-                hierarchyResolution,
-                typeContext.typeMethods(),
-                fieldReads(executable),
-                fieldWrites(executable),
-                typeContext.sameTypeMethods(),
-                typeContext.overloadGroup(),
-                dynamicFeatures(executable),
-                javadocMetadata(parsed, owner, executable, method, javadocElements, javadoc, rawJavadoc,
-                        parsedComment, rawComment),
-                documentationMetrics(method, javadocElements, javadoc),
-                parsed.mode()));
+    private static Map<String, Object> unavailableEvidence() {
+        return Map.of("availability", "unavailable");
+    }
+
+    static <T> T enrich(String component, List<EnrichmentDiagnostic> diagnostics,
+                        java.util.function.Supplier<T> operation, T unavailable) {
+        try {
+            return operation.get();
+        } catch (RuntimeException failure) {
+            diagnostics.add(EnrichmentDiagnostic.from(component, failure));
+            return unavailable;
+        }
+    }
+
+    private Optional<SourceContext> extractDeclarationContext(ParsedProject parsed, String methodUri) {
+        CtExecutable<?> executable = parsed.executablesByUri().get(methodUri);
+        SourceMethod method = parsed.methodsByUri().get(methodUri);
+        if (executable == null || method == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new SourceContext(method, sourceSlice(executable),
+                rawDocComment(parsed, executable).orElseGet(() -> docComment(executable)), "", "", "unavailable", Map.of(),
+                List.of(), List.of(), List.of(), List.of(), List.of(), unavailableEvidence(), unavailableEvidence(),
+                parsed.mode(), List.of()));
     }
 
     private ParsedProject parse(ProjectModel project) throws IOException {
@@ -162,6 +208,11 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         @Override
         public Optional<SourceContext> extractContext(String methodUri) {
             return SpoonSourceModelBackend.this.extractContext(parsed, methodUri);
+        }
+
+        @Override
+        public Optional<SourceContext> extractDeclarationContext(String methodUri) {
+            return SpoonSourceModelBackend.this.extractDeclarationContext(parsed, methodUri);
         }
 
         @Override
@@ -885,10 +936,12 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                                                        List<JavadocElement> elements,
                                                        String javadoc, String rawJavadoc,
                                                        CommentAttempt parsedComment,
-                                                       RawCommentAttempt rawComment) {
+                                                       RawCommentAttempt rawComment,
+                                                       List<EnrichmentDiagnostic> diagnostics) {
         Map<String, Object> metadata = new LinkedHashMap<>();
         String normalized = javadoc == null ? "" : javadoc.strip();
-        List<Map<String, Object>> references = javadocReferences(parsed, owner, elements, normalized);
+        List<Map<String, Object>> references = enrich("javadoc_references", diagnostics,
+                () -> javadocReferences(parsed, owner, elements, normalized), List.of());
         boolean usesInheritDoc = containsInheritDoc(
                 rawJavadoc == null || rawJavadoc.isBlank() ? normalized : rawJavadoc);
         boolean preserveExplicitTarget = hasExplicitInheritDocTarget(rawJavadoc);
@@ -911,12 +964,22 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 stringValue(declaredStructuredTags.get("parser")),
                 stringValue(declaredStructuredTags.get("parse_confidence")),
                 extractionFailed ? "source_javadoc_extraction_failed" : "");
-        InheritedJavadocResolver.Resolution inherited = executable instanceof CtMethod<?> ctMethod
+        InheritedJavadocResolver.Resolution inherited = enrich("inherited_javadoc", diagnostics,
+                () -> executable instanceof CtMethod<?> ctMethod
                 ? InheritedJavadocResolver.resolve(ctMethod, usesInheritDoc, declaredDocumentation,
                 candidate -> inheritedDocumentation(parsed, candidate),
                 SpoonSourceModelBackend::resolveJavadocTypeName,
                 SourceBackends.javadocInheritancePolicy())
-                : InheritedJavadocResolver.Resolution.notApplicable(executable, declaredDocumentation);
+                : InheritedJavadocResolver.Resolution.notApplicable(executable, declaredDocumentation), null);
+        if (inherited == null) {
+            Map<String, Object> effective = Map.of(
+                    "description", Map.of("text", "", "source", "indeterminate",
+                            "inheritance_mode", "unknown", "resolution", "indeterminate"),
+                    "type_params", List.of(), "params", List.of(), "return", List.of(),
+                    "throws", List.of(), "resolution", "partial");
+            inherited = new InheritedJavadocResolver.Resolution("indeterminate", false, List.of(),
+                    effective, 0, 0, false);
+        }
         metadata.put("since", structuredList(declaredStructuredTags, "since"));
         metadata.put("see", referenceTargetsByTag(references, "see"));
         metadata.put("inline_links", inlineReferenceTargets(references));
