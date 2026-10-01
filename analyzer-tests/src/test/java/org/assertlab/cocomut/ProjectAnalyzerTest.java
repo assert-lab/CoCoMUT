@@ -52,6 +52,41 @@ public class ProjectAnalyzerTest {
     }
 
     @Test
+    public void collectsEachReactorClasspathAndCleansOutputs() throws Exception {
+        Assume.assumeFalse(System.getProperty("os.name", "").toLowerCase().contains("win"));
+        Path project = Files.createTempDirectory("cocomut-reactor-classpath-");
+        try {
+            Files.writeString(project.resolve("pom.xml"), "<project><modules><module>child</module></modules></project>");
+            Files.createDirectories(project.resolve("child"));
+            Files.writeString(project.resolve("child/pom.xml"), "<project/>");
+            Files.createDirectories(project.resolve(".mvn/wrapper"));
+            Files.writeString(project.resolve(".mvn/wrapper/maven-wrapper.properties"), "distributionUrl=unused\n");
+            Path first = Files.createFile(project.resolve("first.jar"));
+            Path second = Files.createFile(project.resolve("second.jar"));
+            Path wrapper = project.resolve("mvnw");
+            Files.writeString(wrapper, """
+                    #!/bin/sh
+                    for argument in "$@"; do
+                      case "$argument" in -Dmdep.outputFile=*) output=${argument#*=} ;; esac
+                    done
+                    case "$output" in /*) exit 9 ;; esac
+                    printf '%s' "$PWD/first.jar" > "$output"
+                    printf '%s' "$PWD/second.jar:$PWD/first.jar" > "child/$output"
+                    """);
+            assertTrue(wrapper.toFile().setExecutable(true));
+            ProjectAnalyzer reactor = new ProjectAnalyzer(project);
+            Method method = ProjectAnalyzer.class.getDeclaredMethod("buildMavenClasspath");
+            method.setAccessible(true);
+            assertEquals(List.of(first, second), method.invoke(reactor));
+            try (var files = Files.walk(project)) {
+                assertFalse(files.anyMatch(path -> path.getFileName().toString().startsWith(".cocomut-maven-classpath-")));
+            }
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void detectsParenthesizedMinimumJdkRequirement() {
         assertEquals(21, ProjectAnalyzer.requiredJavaVersion(
                 "To build this project JDK 21 (or greater) is required. Please install it."));
