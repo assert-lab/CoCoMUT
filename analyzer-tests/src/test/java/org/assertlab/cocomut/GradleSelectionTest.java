@@ -66,6 +66,14 @@ public class GradleSelectionTest {
             assertTrue(Files.isRegularFile(root.resolve("build/classes/main/demo/OldExample.class")));
             assertTrue(metadata.getGradleModelReport().buildPlan().compilationTasks().contains(":classes"));
             assertTrue(metadata.getGradleModelReport().succeeded());
+            assertTrue(metadata.getGradleModelReport().buildPlan().sourceSets().stream()
+                    .anyMatch(ss -> ss.sourceSet().equals("main")
+                            && ss.sources().contains(root.resolve("src/main/java"))));
+            assertTrue("Native metadata must retain the legacy Java source set and its runtime classpath",
+                    metadata.getModuleSourceSets().stream().anyMatch(ss -> ss.sourceSet().equals("main")
+                            && ss.sources().contains(root.resolve("src/main/java"))
+                            && ss.outputs().contains(root.resolve("build/classes/main"))
+                            && ss.classpath().contains(root.resolve("build/classes/main"))));
         } finally { remove(root); }
     }
 

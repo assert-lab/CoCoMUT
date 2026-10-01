@@ -150,7 +150,7 @@ public record GradleBuildPlan(Map<String, String> projects,
                     rootProject.allprojects.each { p ->
                         projects[p.path] = p.projectDir.canonicalPath
                         if (!gradle.ext.cocomutSkippedProjects.containsKey(p.path)) {
-                            def sets = p.extensions.findByName('sourceSets')
+                            def sets = p.extensions.findByName('sourceSets') ?: (p.hasProperty('sourceSets') ? p.sourceSets : null)
                             if (sets != null) sets.each { ss ->
                                 if (ss.name == 'main' || (%s && ss.name == 'test')) {
                                     def outputs
