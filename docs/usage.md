@@ -274,6 +274,44 @@ terminal failure. API callers can use `ExtractionReport.partial()` and
 `ExtractionReport.usableRecordsEmitted()` instead of inferring usability from
 string status fields.
 
+If static bytecode analysis cannot initialize or generate a graph, CoCoMUT keeps
+source records and reports `PARTIAL` with `CALL_GRAPH_UNAVAILABLE`.
+`phase_3_initialization` records the latest initialization attempt: `status`
+(`success`, `no_bytecode`, or `failed`), `stage` (`input_locations`, `java_view`,
+or `class_loading`), and the exception class/message on failure. A failing
+`classpath_entry` is included only when input-location construction identifies
+it; failures while JavaView loads classes do not guess an entry. The exception
+is also logged and included in `phase_3_warning`. Graph-generation exceptions
+after successful initialization use `phase_3_exception_class` and
+`phase_3_exception_message` alongside `phase_3_error`.
+
+Out-of-memory and stack-overflow failures, including wrapped causes, remain
+terminal `ERROR` results with `ANALYSIS_RESOURCE_EXHAUSTED`, `failed_at_phase`,
+and the original resource exception. They do not continue as partial
+extractions. `phase_3_max_heap_bytes` records the runtime maximum heap; combine
+it with the existing `phase_1_project_bytecode_locations` and
+`phase_1_dependency_jars` counts when investigating resource pressure.
+The report and manifest retain these diagnostics when reporting can complete;
+they cannot guarantee artifact persistence if the JVM cannot recover enough
+resources to write files.
+
+An illustrative initialization-failure report excerpt is:
+
+```json
+{
+  "status": "PARTIAL",
+  "failure_codes": ["CALL_GRAPH_UNAVAILABLE"],
+  "phase_3_available": false,
+  "phase_3_initialization": {
+    "status": "failed",
+    "stage": "class_loading",
+    "exception_class": "java.lang.IllegalArgumentException",
+    "message": "Unsupported class file major version"
+  },
+  "phase_3_max_heap_bytes": 2147483648
+}
+```
+
 For documentation datasets, prefer a precise source-set and scope:
 
 ```bash
