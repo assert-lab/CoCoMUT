@@ -3,6 +3,7 @@ package org.assertlab.cocomut.adapter;
 import org.assertlab.cocomut.BuildToolExecutable;
 import org.assertlab.cocomut.ContextRequest;
 import org.assertlab.cocomut.GradleModelReport;
+import org.assertlab.cocomut.GradleBuildPlan;
 import org.assertlab.cocomut.ModuleSourceSet;
 import org.assertlab.cocomut.ProjectAnalyzer;
 import org.assertlab.cocomut.BuildJavaSelection;
@@ -44,6 +45,7 @@ public class GradleProjectAdapter implements ProjectAdapter {
     private static final String JAVA_PREFIX = "ANALYZER_JAVA:";
     private static final String DIAGNOSTIC_PREFIX = "ANALYZER_DIAGNOSTIC:";
     private static final String PROJECT_PREFIX = "ANALYZER_PROJECT:";
+    private static final String SKIPPED_PROJECT_PREFIX = "ANALYZER_SKIPPED_PROJECT:";
     private static final String SOURCESET_PREFIX = "ANALYZER_SOURCESET:";
     private static final String SOURCESET_SOURCE_PREFIX = "ANALYZER_SS_SOURCE:";
     private static final String SOURCESET_OUTPUT_PREFIX = "ANALYZER_SS_OUTPUT:";
@@ -82,7 +84,7 @@ public class GradleProjectAdapter implements ProjectAdapter {
         if (base.isBuildBlocked()) {
             System.out.println("[GradleProjectAdapter] build preflight blocked; Gradle metadata task not executed");
             return ProjectMetadata.Builder.from(base)
-                    .gradleModelReport(GradleModelReport.skipped("build preflight blocked"))
+                    .gradleModelReport(GradleModelReport.skipped("build preflight blocked").withBuildPlan(base.getGradleModelReport().buildPlan()))
                     .build();
         }
         if (request.skipBuild()) {
@@ -94,7 +96,7 @@ public class GradleProjectAdapter implements ProjectAdapter {
         if (base.isBuildAttempted() && !base.isBuildSucceeded()) {
             System.out.println("[GradleProjectAdapter] project build failed; Gradle metadata task not executed");
             return ProjectMetadata.Builder.from(base)
-                    .gradleModelReport(GradleModelReport.skipped("project build did not succeed"))
+                    .gradleModelReport(GradleModelReport.skipped("project build did not succeed").withBuildPlan(base.getGradleModelReport().buildPlan()))
                     .build();
         }
 
@@ -107,7 +109,7 @@ public class GradleProjectAdapter implements ProjectAdapter {
             System.out.println("[GradleProjectAdapter] native classpath resolution "
                     + "unavailable — using base metadata");
             return ProjectMetadata.Builder.from(base)
-                    .gradleModelReport(nativeModel.report())
+                    .gradleModelReport(nativeModel.report().withBuildPlan(base.getGradleModelReport().buildPlan()))
                     .moduleSourceSets(nativeModel.moduleSourceSets())
                     .build();
         }
@@ -118,15 +120,23 @@ public class GradleProjectAdapter implements ProjectAdapter {
         System.out.printf("[GradleProjectAdapter] resolved %d classpath entries via Gradle%n",
                 merged.size());
 
+        GradleBuildPlan plan = base.getGradleModelReport().buildPlan().projects().isEmpty()
+                ? nativeModel.report().buildPlan() : base.getGradleModelReport().buildPlan();
+        merged.removeIf(path -> !plan.includes(path));
         Set<Path> sourceRoots = new LinkedHashSet<>(nativeModel.sourceRoots());
         Set<Path> testSourceRoots = new LinkedHashSet<>(nativeModel.testSourceRoots());
         Set<Path> mainOutputs = new LinkedHashSet<>(nativeModel.mainOutputs());
         mainOutputs.addAll(base.getMainClassOutputs());
+        mainOutputs.removeIf(path -> !plan.includes(path));
         Set<Path> testOutputs = new LinkedHashSet<>(nativeModel.testOutputs());
         testOutputs.addAll(base.getTestClassOutputs());
+        testOutputs.removeIf(path -> !plan.includes(path));
         sourceRoots.addAll(sourceRootsForOutputs(mainOutputs, false));
         testSourceRoots.addAll(sourceRootsForOutputs(testOutputs, true));
+        sourceRoots.removeIf(path -> !plan.includes(path));
+        testSourceRoots.removeIf(path -> !plan.includes(path));
         Set<Path> dependencies = new LinkedHashSet<>(base.getDependencyClasspath());
+        dependencies.removeIf(path -> !plan.includes(path));
         Set<Path> projectOutputs = new LinkedHashSet<>();
         projectOutputs.addAll(mainOutputs);
         projectOutputs.addAll(testOutputs);
@@ -154,7 +164,7 @@ public class GradleProjectAdapter implements ProjectAdapter {
                 .mainClassOutputs(new ArrayList<>(mainOutputs))
                 .testClassOutputs(new ArrayList<>(testOutputs))
                 .dependencyClasspath(new ArrayList<>(dependencies))
-                .gradleModelReport(nativeModel.report())
+                .gradleModelReport(nativeModel.report().withBuildPlan(plan))
                 .moduleSourceSets(nativeModel.moduleSourceSets())
                 .compiles(base.isBuildSucceeded())
                 .compileStatus(compileStatus(base, bytecodeAvailable))
@@ -327,6 +337,8 @@ public class GradleProjectAdapter implements ProjectAdapter {
                 diagnostics.add("model output exceeded the 16 MB bounded record limit");
             }
             Map<String, ModuleSourceSetBuilder> sourceSetBuilders = new LinkedHashMap<>();
+            Map<String, String> projects = new LinkedHashMap<>();
+            Map<String, String> skippedProjects = new LinkedHashMap<>();
             int resolvedProjects = 0;
             for (String line : modelRecords.toString().split("\\R")) {
                 if (line.startsWith(CP_PREFIX)) {
@@ -349,6 +361,11 @@ public class GradleProjectAdapter implements ProjectAdapter {
                     }
                 } else if (line.startsWith(PROJECT_PREFIX)) {
                     resolvedProjects++;
+                    String[] parts = line.substring(PROJECT_PREFIX.length()).split("\\t", 2);
+                    if (parts.length == 2) projects.put(parts[0], parts[1]);
+                } else if (line.startsWith(SKIPPED_PROJECT_PREFIX)) {
+                    String[] parts = line.substring(SKIPPED_PROJECT_PREFIX.length()).split("\\t", 2);
+                    if (parts.length == 2) skippedProjects.put(parts[0], parts[1]);
                 } else if (line.startsWith(DIAGNOSTIC_PREFIX)) {
                     diagnostics.add(line.substring(DIAGNOSTIC_PREFIX.length()).trim());
                 } else if (line.startsWith(SOURCESET_PREFIX)) {
@@ -366,7 +383,8 @@ public class GradleProjectAdapter implements ProjectAdapter {
             }
             GradleModelReport report = new GradleModelReport(true, true, false, !diagnostics.isEmpty(),
                     resolvedProjects, diagnostics,
-                    diagnostics.stream().filter(value -> value.startsWith("classpath:")).toList());
+                    diagnostics.stream().filter(value -> value.startsWith("classpath:")).toList(),
+                    new GradleBuildPlan(projects, skippedProjects, List.of(), List.of()));
             List<ModuleSourceSet> sourceSets = sourceSetBuilders.values().stream()
                     .map(ModuleSourceSetBuilder::build)
                     .toList();
@@ -459,10 +477,15 @@ public class GradleProjectAdapter implements ProjectAdapter {
         String sourceSetNames = includeTests ? "['main', 'test']" : "['main']";
         String script =
                 "gradle.projectsEvaluated {\n" +
-                "    rootProject.tasks.register('analyzerPrintClasspath') {\n" +
+                "    rootProject.tasks.create('analyzerPrintClasspath') {\n" +
                 "        doLast {\n" +
                 "            rootProject.allprojects.each { p ->\n" +
-                "                println '" + PROJECT_PREFIX + "' + p.path\n" +
+                "                println '" + PROJECT_PREFIX + "' + p.path + '\\t' + p.projectDir.canonicalPath\n" +
+                "                if (gradle.ext.cocomutSkippedProjects.containsKey(p.path)) {\n" +
+                "                    println '" + SKIPPED_PROJECT_PREFIX + "' + p.path + '\\t' + gradle.ext.cocomutSkippedProjects[p.path]\n" +
+                "                    println '" + DIAGNOSTIC_PREFIX + "skippedAndroid:' + p.path + ':' + gradle.ext.cocomutSkippedProjects[p.path]\n" +
+                "                    return\n" +
+                "                }\n" +
                 "                def names = " + configurationNames + "\n" +
                 "                def sourceSetNames = " + sourceSetNames + "\n" +
                 "                def files = [] as LinkedHashSet\n" +
@@ -479,7 +502,7 @@ public class GradleProjectAdapter implements ProjectAdapter {
                 "                    try { sourceCompat = javaExt.sourceCompatibility?.toString() } catch (Throwable ignored) { }\n" +
                 "                    println '" + JAVA_PREFIX + "' + (toolchain ?: sourceCompat ?: '')\n" +
                 "                    try {\n" +
-                "                        javaExt.sourceSets.each { ss ->\n" +
+                "                        p.extensions.findByName('sourceSets').each { ss ->\n" +
                 "                            if (sourceSetNames.contains(ss.name)) {\n" +
                 "                                def javaLevel = (toolchain ?: sourceCompat ?: '')\n" +
                 "                                println '" + SOURCESET_PREFIX + "' + p.path + '\\t' + ss.name + '\\t' + javaLevel\n" +
@@ -513,7 +536,7 @@ public class GradleProjectAdapter implements ProjectAdapter {
                 "    }\n" +
                 "}\n";
         Path tmp = Files.createTempFile("analyzer-init", ".gradle");
-        Files.writeString(tmp, script, StandardCharsets.UTF_8);
+        Files.writeString(tmp, GradleBuildPlan.selectionScript(projectPath) + script, StandardCharsets.UTF_8);
         return tmp;
     }
 

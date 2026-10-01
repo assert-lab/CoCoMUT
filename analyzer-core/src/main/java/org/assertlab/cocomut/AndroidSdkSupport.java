@@ -122,7 +122,7 @@ final class AndroidSdkSupport {
 
     static Set<String> declaredComponents(Path root) {
         Set<String> components = new LinkedHashSet<>();
-        try (var walk = Files.walk(root, 5)) {
+        try (var walk = Files.list(root)) {
             for (Path file : walk.filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().matches("build\\.gradle(?:\\.kts)?"))
                     .toList()) {
@@ -140,7 +140,7 @@ final class AndroidSdkSupport {
     }
 
     static boolean isAndroidProject(Path root) {
-        try (var walk = Files.walk(root, 5)) {
+        try (var walk = Files.list(root)) {
             for (Path file : walk.filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().matches("build\\.gradle(?:\\.kts)?"))
                     .toList()) {
@@ -171,9 +171,15 @@ final class AndroidSdkSupport {
     }
 
     private static boolean hasAndroidPlugin(String text) {
-        return Pattern.compile("(?m)\\bid\\s*(?:\\(|\\s+)['\"]com\\.android\\.(?:application|library|test|dynamic-feature)['\"]")
-                .matcher(text).find()
-                || Pattern.compile("(?m)\\bapply\\s*(?:\\(|\\s+)plugin\\s*(?:=|:)\\s*['\"]com\\.android\\.(?:application|library|test|dynamic-feature)['\"]")
+        Matcher ids = Pattern.compile("(?m)\\bid\\s*(?:\\(|\\s+)['\"]com\\.android\\.(?:application|library|test|dynamic-feature)['\"]")
+                .matcher(text);
+        while (ids.find()) {
+            String suffix = text.substring(ids.end()).replaceFirst(
+                    "^\\s*\\)?\\s*(?:version\\s*(?:\\([^)]*\\)|['\"][^'\"]*['\"]))?\\s*", "");
+            // Declaring a plugin for reuse does not apply it to this project.
+            if (!Pattern.compile("^apply\\s*(?:\\(\\s*)?false\\b").matcher(suffix).find()) return true;
+        }
+        return Pattern.compile("(?m)\\bapply\\s*(?:\\(|\\s+)plugin\\s*(?:=|:)\\s*['\"]com\\.android\\.(?:application|library|test|dynamic-feature)['\"]")
                 .matcher(text).find();
     }
 
