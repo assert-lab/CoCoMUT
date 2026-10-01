@@ -234,38 +234,46 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     }
 
     private ParsedModels parseModels(ProjectModel project) throws IOException {
+        List<SourceModelAttempt> attempts = new ArrayList<>();
         Integer maxSourceFiles = maxSourceFiles();
-        if (maxSourceFiles != null) {
-            return parseJavaFilesWithLimit(allSourceRoots(project),
-                    complianceLevel(project.javaVersion()), maxSourceFiles, project);
+        ParsedModels parsed;
+        try {
+            parsed = maxSourceFiles != null
+                    ? parseJavaFilesWithLimit(allSourceRoots(project),
+                            complianceLevel(project.javaVersion()), maxSourceFiles, project, attempts)
+                    : parseCtModels(project, attempts);
+        } catch (RuntimeException | LinkageError | AssertionError failure) {
+            throw new SourceModelBuildException(failure, attempts);
         }
-
-        return parseCtModels(project);
+        SourceParseStats stats = parsed.stats();
+        return new ParsedModels(parsed.models(), parsed.mode(),
+                new SourceParseStats(stats.discovered(), stats.parsed(), stats.failedFiles(),
+                        parsed.mode(), attempts));
     }
 
-    private ParsedModels parseCtModels(ProjectModel project) throws IOException {
+    private ParsedModels parseCtModels(ProjectModel project, List<SourceModelAttempt> attempts) throws IOException {
         List<Path> roots = allSourceRoots(project);
         List<Path> javaFiles = javaFiles(roots, 0);
         if (roots.isEmpty()) {
-            ModelBuild built = buildModel(List.of(), complianceLevel(project.javaVersion()), project);
+            ModelBuild built = buildModel(List.of(), complianceLevel(project.javaVersion()), project, attempts);
             return new ParsedModels(List.of(built.model()), built.mode(), SourceParseStats.empty());
         }
 
         try {
-            ModelBuild built = buildModel(roots, complianceLevel(project.javaVersion()), project);
+            ModelBuild built = buildModel(roots, complianceLevel(project.javaVersion()), project, attempts);
             return new ParsedModels(List.of(built.model()), built.mode(),
                     new SourceParseStats(javaFiles.size(), javaFiles.size(), List.of()));
-        } catch (RuntimeException combinedFailure) {
+        } catch (RuntimeException | LinkageError | AssertionError combinedFailure) {
             List<CtModel> models = new ArrayList<>();
             List<String> modes = new ArrayList<>();
             List<Path> failedFiles = new ArrayList<>();
             for (Path root : roots) {
                 try {
-                    ModelBuild built = buildModel(List.of(root), complianceLevel(project.javaVersion()), project);
+                    ModelBuild built = buildModel(List.of(root), complianceLevel(project.javaVersion()), project, attempts);
                     models.add(built.model());
                     modes.add(built.mode());
-                } catch (RuntimeException rootFailure) {
-                    ParsedModels parsedRoot = parseJavaFilesIndividually(root, complianceLevel(project.javaVersion()), project);
+                } catch (RuntimeException | LinkageError | AssertionError rootFailure) {
+                    ParsedModels parsedRoot = parseJavaFilesIndividually(root, complianceLevel(project.javaVersion()), project, attempts);
                     models.addAll(parsedRoot.models());
                     modes.add(parsedRoot.mode());
                     failedFiles.addAll(parsedRoot.stats().failedFiles());
@@ -280,10 +288,10 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     }
 
     private ParsedModels parseJavaFilesWithLimit(List<Path> roots, int complianceLevel, int maxSourceFiles,
-                                                  ProjectModel project)
+                                                  ProjectModel project, List<SourceModelAttempt> attempts)
             throws IOException {
         if (roots.isEmpty()) {
-            ModelBuild built = buildModel(List.of(), complianceLevel, project);
+            ModelBuild built = buildModel(List.of(), complianceLevel, project, attempts);
             return new ParsedModels(List.of(built.model()), built.mode() + "_limited", SourceParseStats.empty());
         }
         List<CtModel> models = new ArrayList<>();
@@ -292,15 +300,15 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         List<Path> failedFiles = new ArrayList<>();
         for (Path file : files) {
             try {
-                ModelBuild built = buildModel(List.of(file), complianceLevel, project);
+                ModelBuild built = buildModel(List.of(file), complianceLevel, project, attempts);
                 models.add(built.model());
                 modes.add(built.mode());
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException | LinkageError | AssertionError ignored) {
                 failedFiles.add(file);
             }
         }
         if (models.isEmpty()) {
-            ModelBuild built = buildModel(List.of(), complianceLevel, project);
+            ModelBuild built = buildModel(List.of(), complianceLevel, project, attempts);
             models = List.of(built.model());
             modes.add(built.mode());
         }
@@ -315,17 +323,17 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return roots.stream().distinct().toList();
     }
 
-    private ParsedModels parseJavaFilesIndividually(Path root, int complianceLevel, ProjectModel project) throws IOException {
+    private ParsedModels parseJavaFilesIndividually(Path root, int complianceLevel, ProjectModel project, List<SourceModelAttempt> attempts) throws IOException {
         List<CtModel> models = new ArrayList<>();
         List<String> modes = new ArrayList<>();
         List<Path> files = javaFiles(List.of(root), 0);
         List<Path> failedFiles = new ArrayList<>();
         for (Path file : files) {
             try {
-                ModelBuild built = buildModel(List.of(file), complianceLevel, project);
+                ModelBuild built = buildModel(List.of(file), complianceLevel, project, attempts);
                 models.add(built.model());
                 modes.add(built.mode());
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException | LinkageError | AssertionError ignored) {
                 failedFiles.add(file);
             }
         }
@@ -353,40 +361,43 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return files;
     }
 
-    private ModelBuild buildModel(List<Path> inputs, int complianceLevel, ProjectModel project) {
-        Throwable initialFailure;
-        try {
-            return new ModelBuild(launcher(inputs, complianceLevel, project, true).buildModel(), "classpath");
-        } catch (RuntimeException | LinkageError failure) {
-            initialFailure = failure;
-        }
-
-        if (complianceLevel != 17) {
-            try {
-                return new ModelBuild(launcher(inputs, 17, project, true).buildModel(), "classpath");
-            } catch (RuntimeException | LinkageError ignored) {
-                // Retry without classpath below.
+    private ModelBuild buildModel(List<Path> inputs, int complianceLevel, ProjectModel project,
+                                  List<SourceModelAttempt> attempts) {
+        Throwable initialFailure = null;
+        int[] levels = complianceLevel == 17 ? new int[] {17} : new int[] {complianceLevel, 17};
+        for (boolean useClasspath : new boolean[] {true, false}) {
+            for (int level : levels) {
+                String mode = useClasspath ? "classpath" : "no_classpath";
+                List<String> inputNames = inputs.stream().map(path -> diagnosticPath(project, path)).toList();
+                int entries = useClasspath ? classpathEntries(project).size() : 0;
+                try {
+                    CtModel model = launcher(inputs, level, project, useClasspath).buildModel();
+                    attempts.add(new SourceModelAttempt(inputNames, mode, complianceLevel, level,
+                            entries, "success", "", ""));
+                    return new ModelBuild(model, mode);
+                } catch (RuntimeException | LinkageError | AssertionError failure) {
+                    if (initialFailure == null) initialFailure = failure;
+                    attempts.add(new SourceModelAttempt(inputNames, mode, complianceLevel, level,
+                            entries, "failed", failure.getClass().getName(), diagnosticMessage(project, failure)));
+                }
             }
         }
+        if (initialFailure instanceof RuntimeException runtimeFailure) throw runtimeFailure;
+        throw (Error) initialFailure;
+    }
 
-        try {
-            return new ModelBuild(launcher(inputs, complianceLevel, project, false).buildModel(), "no_classpath");
-        } catch (RuntimeException | LinkageError ignored) {
-            // Retry Java 17 no-classpath mode below when the project declares another level.
-        }
+    private static String diagnosticPath(ProjectModel project, Path path) {
+        Path root = project.projectPath().toAbsolutePath().normalize();
+        Path input = path.toAbsolutePath().normalize();
+        return (input.startsWith(root) ? root.relativize(input) : input).toString().replace('\\', '/');
+    }
 
-        if (complianceLevel != 17) {
-            try {
-                return new ModelBuild(launcher(inputs, 17, project, false).buildModel(), "no_classpath");
-            } catch (RuntimeException | LinkageError ignored) {
-                // Preserve the first failure, which best describes the requested analysis mode.
-            }
-        }
-
-        if (initialFailure instanceof RuntimeException runtimeFailure) {
-            throw runtimeFailure;
-        }
-        throw (LinkageError) initialFailure;
+    private static String diagnosticMessage(ProjectModel project, Throwable failure) {
+        String message = Objects.toString(failure.getMessage(), "");
+        message = message.replace(project.projectPath().toAbsolutePath().toString(), "<project>")
+                .replace(System.getProperty("user.home", "\u0000"), "<home>")
+                .replaceAll("[\\p{Cntrl}]", " ");
+        return message.length() > 2000 ? message.substring(0, 2000) : message;
     }
 
     static String mergedMode(List<String> modes) {
@@ -1094,7 +1105,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         CtType<?> declaration;
         try {
             declaration = reference.getTypeDeclaration();
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException | LinkageError | AssertionError ignored) {
             declaration = null;
         }
         if (declaration == null) {
@@ -1155,7 +1166,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                     }
                 });
             }
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException | LinkageError | AssertionError ignored) {
             // Incomplete import metadata leaves the source spelling unresolved.
         }
         return new ImportNameResolution(explicit, onDemand);
@@ -1198,7 +1209,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                     }
                     pending.addAll(declaration.getSuperInterfaces());
                 }
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException | LinkageError | AssertionError ignored) {
                 // A shadow type can still be matched by its existing reference.
             }
         }

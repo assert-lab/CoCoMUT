@@ -190,6 +190,56 @@ public class OrchestratorTest {
     }
 
     @Test
+    public void sourceClasspathFallbackReportsAttemptsAndStrictFailureWithArtifacts() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-source-classpath-");
+        try {
+            Path root = Files.createDirectories(project.resolve("src/main/java/example"));
+            Path stub = project.resolve("External.java");
+            Path classes = Files.createDirectories(project.resolve("classes"));
+            Files.writeString(stub, "package missing; public class External {} ");
+            Path source = root.resolve("Sample.java");
+            Files.writeString(source, "package example; public class Sample extends missing.External { public int value() { return 1; } }");
+            assertEquals(0, javax.tools.ToolProvider.getSystemJavaCompiler().run(null, null, null,
+                    "-d", classes.toString(), stub.toString(), source.toString()));
+            Files.delete(classes.resolve("missing/External.class"));
+            Files.delete(stub);
+            ProjectMetadata metadata = new ProjectMetadata.Builder()
+                    .projectName("source-classpath").projectPath(project).buildSystem("none").javaVersion("17")
+                    .sourceRoot(root.getParent()).sourceRoots(java.util.List.of(root.getParent()))
+                    .classpath(java.util.List.of(classes)).mainClassOutputs(java.util.List.of(classes))
+                    .compiles(true).compileStatus("PRECOMPILED BYTECODE")
+                    .bytecodeAvailable(true).analysisCanProceed(true).build();
+            for (boolean mixed : new boolean[] {false, true}) {
+                if (mixed) Files.writeString(root.resolve("Control.java"), "package example; public class Control { public int ok() { return 2; } }");
+                for (boolean strict : new boolean[] {false, true}) {
+                    Path output = project.resolve((strict ? "strict" : "default") + (mixed ? "-mixed" : ""));
+                    Orchestrator extraction = new Orchestrator(ContextRequest.builder()
+                            .projectRoot(project).scope(ContextRequest.Scope.ALL)
+                            .sourceSets(java.util.Set.of("main")).outputDirectory(output)
+                            .requireSourceClasspath(strict).maxSourceFiles(mixed ? 2 : null).build(), metadata);
+                    assertFalse(extraction.execute());
+                    ExtractionReport report = new ExtractionReport(extraction.getExecutionReport());
+                    assertEquals(strict ? "FAILED" : "PARTIAL", report.asMap().get("status"));
+                    assertEquals(mixed ? "mixed_limited" : "no_classpath", report.asMap().get("source_backend_mode"));
+                    assertEquals(false, report.asMap().get("source_classpath_requirement_satisfied"));
+                    assertTrue(report.usableRecordsEmitted());
+                    assertTrue(Files.isRegularFile(report.jsonlFile()));
+                    @SuppressWarnings("unchecked")
+                    var attempts = (java.util.List<java.util.Map<String, Object>>) report.asMap().get("source_model_attempts");
+                    assertTrue(attempts.stream().anyMatch(attempt -> "failed".equals(attempt.get("outcome"))
+                            && String.valueOf(attempt.get("exception_class")).contains("ModelBuildingException")));
+                    assertEquals("no_classpath", attempts.get(attempts.size() - 1).get("mode"));
+                    assertEquals(strict ? 1 : 2, org.assertlab.cocomut.cli.CoCoMUTCommand.exitCodeFor(report));
+                    var saved = new com.fasterxml.jackson.databind.ObjectMapper().readTree(output.resolve("extraction_report.json").toFile());
+                    assertEquals(strict ? "FAILED" : "PARTIAL", saved.path("status").asText());
+                }
+            }
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void degradedCallGraphStillEmitsJsonlAndReportsPartial() throws Exception {
         Path project = Files.createTempDirectory("cocomut-degraded-call-graph-");
         try {
