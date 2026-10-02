@@ -120,7 +120,7 @@ public record GradleBuildPlan(Map<String, String> projects,
                             def testTask = p.tasks.findByName('testClasses') ?: p.tasks.findByName('compileTestJava')
                             if (mainTask != null) selectedTasks.add(mainTask)
                             if (%s && testTask != null) selectedTasks.add(testTask)
-                            if (%s && mainTask != null && testTask == null) unavailable.add(p.path + ':test')
+                            if (%s && mainTask != null && testTask == null && (p.tasks.findByName('compileJava') != null || (p.extensions.findByName('sourceSets') != null))) unavailable.add(p.path + ':test')
                         }
                     }
                     def plan = [projects: projects, skippedProjects: gradle.ext.cocomutSkippedProjects,

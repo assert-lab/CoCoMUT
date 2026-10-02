@@ -179,6 +179,25 @@ public class GradleSelectionTest {
         } finally { remove(root); }
     }
 
+    @Test
+    public void lifecycleAggregatorDoesNotRequireTestSources() throws Exception {
+        Path root = fixture();
+        try {
+            Files.writeString(root.resolve("settings.gradle"), "include 'child'\n");
+            Files.writeString(root.resolve("build.gradle"), "apply plugin: 'base'\n");
+            Path child = Files.createDirectories(root.resolve("child"));
+            Files.writeString(child.resolve("build.gradle"), "apply plugin: 'java'\n");
+            source(child, "Example");
+            Path tests = Files.createDirectories(child.resolve("src/test/java/demo"));
+            Files.writeString(tests.resolve("TestExample.java"), "package demo; public class TestExample {}\n");
+            ProjectMetadata metadata = analyze(root);
+            assertTrue(metadata.getBuildOutputTail(), metadata.isBuildSucceeded());
+            assertTrue(metadata.getGradleModelReport().buildPlan().unavailableSourceSets().isEmpty());
+            assertFalse(metadata.getGradleModelReport().partial());
+            assertTrue(Files.exists(child.resolve("build/classes/java/test/demo/TestExample.class")));
+        } finally { remove(root); }
+    }
+
     private static ProjectMetadata analyze(Path root) throws Exception {
         return new GradleProjectAdapter(root).toMetadata(ContextRequest.builder().projectRoot(root)
                 .sourceSets(Set.of("main", "test")).allowUnsandboxedBuild().build());
