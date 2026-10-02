@@ -178,9 +178,13 @@ repository-controlled build logic on the host. To build during extraction, pass
 `--allow-build` or `--externally-sandboxed-build`.
 
 For Maven and Gradle projects, an allowed phase-1 build compiles without running
-tests. A main-only request uses main compilation (`mvn compile` or Gradle
-`classes`). Requests that include test source sets use test compilation
-(`mvn test-compile` or Gradle `testClasses`). CoCoMUT does not invoke `clean`:
+tests. Maven uses `compile` for main-only requests and `test-compile` when test
+source sets are requested. Gradle discovers actual project tasks first, using
+available main compilation tasks (`classes`, `compileJava`, or `assemble`) and
+test compilation tasks (`testClasses` or `compileTestJava`). Missing test tasks
+do not prevent main compilation; unavailable requested test source sets are
+reported as partial. Gradle Test tasks are disabled in the compilation graph.
+CoCoMUT does not invoke `clean`:
 prepared artifacts are not deleted before analysis. Project class output
 directories and dependency JARs are collected after that build from the project
 build tool, not by scanning arbitrary global dependency caches. Dependency JARs
@@ -226,17 +230,28 @@ directories, and CPU, memory, process, wall-clock, and network limits. Use
 `--externally-sandboxed-build` only when that external protection is actually in
 place; CoCoMUT records the policy but does not provide a container itself.
 
-Android SDK provisioning is disabled by default. If CoCoMUT detects explicitly
-declared missing Android components, it reports
-`BUILD_FAILED_ANDROID_SDK_UNAVAILABLE` before invoking Gradle. Set
+Android SDK provisioning is disabled by default. Preflight examines the chosen
+root project's own build file. Missing declared root Android components produce
+`BUILD_FAILED_ANDROID_SDK_UNAVAILABLE`. Actual child Gradle projects with explicit
+Android plugin declarations and unavailable SDKs are excluded before their build
+files are evaluated, allowing independent JVM projects to compile. Both the
+compilation invocation and metadata query use this policy. The report's
+`phase_1_gradle_model.buildPlan` (manifest `build.gradle_model.buildPlan`) records
+project directories, skipped project reasons, compilation tasks, and unavailable
+requested source sets. Skips yield `MODEL_RESOLUTION_PARTIAL`; stale source and
+class outputs from skipped projects do not enter extraction. Set
 `COCOMUT_ALLOW_ANDROID_SDK_PROVISIONING=true` only inside an externally
 controlled disposable environment to allow `sdkmanager` to install those exact
 declared components. This action is recorded in `phase_1_build_attempts` and in
 the manifest.
-Detection requires an explicit Android Gradle plugin declaration. Text in
+Child-project exclusion does not install SDK components. Detection requires an
+explicit Android Gradle plugin declaration in that project's build file. Text in
 comments, dependencies, or strings is not preflight evidence. When SDK
-components are computed dynamically, CoCoMUT does not guess them and lets
-Gradle report the requirement.
+components are computed dynamically, CoCoMUT does not guess their versions. A
+child Android project is skipped when no SDK root is configured; otherwise
+Gradle checks dynamic requirements. Plugins applied by shared convention scripts
+or parent configuration may still fail during Gradle configuration; those failures
+remain explicit build failures.
 
 When provisioning is disabled or unavailable, no process is reported as
 executed: `phase_1_build_attempted=false` and `phase_1_build_blocked=true`.

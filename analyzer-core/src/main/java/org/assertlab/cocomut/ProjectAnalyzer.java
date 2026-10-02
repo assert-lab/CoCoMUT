@@ -58,6 +58,8 @@ public class ProjectAnalyzer {
     private BuildJavaSelection buildJavaSelection = new BuildJavaSelection(null, "inherited", "inherited_environment");
     private final List<BuildAttempt> buildAttempts = new ArrayList<>();
     private List<Path> buildRootCandidates = List.of();
+    private GradleBuildPlan gradleBuildPlan = GradleBuildPlan.empty();
+    private String gradleBuildPlanDiagnostic = "";
 
     /**
      * Create a ProjectAnalyzer for the given project path
@@ -172,6 +174,9 @@ public class ProjectAnalyzer {
             if (includeTests) testSourceRoots = mergePaths(testSourceRoots, findGeneratedSourceRoots(true));
             sourceRoot = !sourceRoots.isEmpty() ? sourceRoots.get(0) : sourceRoot;
         }
+        sourceRoots = sourceRoots.stream().filter(gradleBuildPlan::includes).toList();
+        testSourceRoots = testSourceRoots.stream().filter(gradleBuildPlan::includes).toList();
+        sourceRoot = sourceRoots.isEmpty() ? sourceRoot : sourceRoots.get(0);
         List<Path> discoveredMainOutputs = explicitMode(explicitProjectBytecode)
                 ? List.of()
                 : existingMainClassOutputDirs(detectedBuildSystem);
@@ -182,9 +187,9 @@ public class ProjectAnalyzer {
                 ? List.of()
                 : existingProjectArtifactJars(detectedBuildSystem);
         List<Path> mainClassOutputs = mergePaths(discoveredMainOutputs,
-                existingClassDirs(explicitClassOutputDirs));
+                existingClassDirs(explicitClassOutputDirs)).stream().filter(gradleBuildPlan::includes).toList();
         List<Path> testClassOutputs = mergePaths(discoveredTestOutputs,
-                existingClassDirs(explicitTestClassOutputDirs));
+                existingClassDirs(explicitTestClassOutputDirs)).stream().filter(gradleBuildPlan::includes).toList();
         List<Path> dependencyClasspath = mergePaths(buildDependencyClasspath(detectedBuildSystem),
                 existingJars(explicitDependencyJars),
                 existingJarsFromClasspathFile(classpathFileEntries),
@@ -233,6 +238,9 @@ public class ProjectAnalyzer {
                 .buildJavaVersion(buildJavaSelection.version())
                 .buildJavaEvidence(buildJavaSelection.evidence())
                 .buildAttempts(buildAttempts)
+                .gradleModelReport(new GradleModelReport(false, false, false, !gradleBuildPlanDiagnostic.isBlank(), 0,
+                        gradleBuildPlanDiagnostic.isBlank() ? List.of() : List.of(gradleBuildPlanDiagnostic),
+                        List.of(), gradleBuildPlan))
                 .buildSkipped(buildPolicy == ContextRequest.BuildPolicy.DENY_BUILD)
                 .buildSandboxed(buildPolicy == ContextRequest.BuildPolicy.EXTERNALLY_SANDBOXED_BUILD)
                 .buildPolicy(buildPolicy)
@@ -921,6 +929,7 @@ public class ProjectAnalyzer {
             return lastBuildResult;
         }
 
+        GradleBuildPlan.Invocation gradleInvocation = null;
         try {
             boolean isWindows = System.getProperty("os.name", "")
                     .toLowerCase()
@@ -951,9 +960,9 @@ public class ProjectAnalyzer {
                 command = mavenCommand;
             } else if ("gradle".equals(buildSystem)) {
                 String gradle = executableWithWrapper("gradle", isWindows);
-                command = List.of(gradle, "--no-daemon",
-                        gradleBuildTask(androidPreparation.androidProject(), includeTests),
-                        "-x", "test", "-q");
+                gradleInvocation = GradleBuildPlan.compileInvocation(effectiveBuildRoot, includeTests);
+                command = List.of(gradle, "--no-daemon", "--init-script", gradleInvocation.script().toString(),
+                        "cocomutCompileSelected", "-q");
             } else {
                 lastBuildResult = BuildResult.notAttempted(NO_ROOT_BUILD_DESCRIPTOR);
                 return lastBuildResult;
@@ -971,18 +980,6 @@ public class ProjectAnalyzer {
                         result.output() + "\n[CoCoMUT retried Maven package because only declared reactor artifacts were missing]\n"
                                 + packaged.output(), packaged.timedOut(), packaged.terminalOutput());
             }
-            if ("gradle".equals(buildSystem) && !includeTests && result.exitCode() != 0
-                    && !result.timedOut() && result.terminalOutput().contains("Task 'classes' not found")) {
-                List<String> assembleCommand = new ArrayList<>(command);
-                assembleCommand.set(assembleCommand.indexOf("classes"), "assemble");
-                CommandResult assembled = retryForRequestedJava(assembleCommand,
-                        runWithTransientRetries(assembleCommand));
-                result = new CommandResult(assembled.exitCode(),
-                        result.output()
-                                + "\n[CoCoMUT retried Gradle assemble because the aggregator has no classes task]\n"
-                                + assembled.output(),
-                        assembled.timedOut(), assembled.terminalOutput());
-            }
             lastBuildResult = new BuildResult(true, result.exitCode(), result.exitCode() == 0,
                     result.timedOut(), result.timedOut() ? "BUILD TIMED OUT" : (result.exitCode() == 0 ? "BUILD SUCCESS" : "BUILD FAILED"),
                     diagnosticTail(result.output()),
@@ -999,6 +996,19 @@ public class ProjectAnalyzer {
                     "BUILD FAILED: " + e.getClass().getSimpleName(), e.getMessage() == null ? "" : e.getMessage(),
                     BuildFailureReason.BUILD_FAILED_UNKNOWN_ERROR, false);
             return lastBuildResult;
+        } finally {
+            if (gradleInvocation != null) {
+                try {
+                    gradleBuildPlan = gradleInvocation.read();
+                    if (lastBuildResult.succeeded() && gradleBuildPlan.projects().isEmpty()) {
+                        gradleBuildPlanDiagnostic = "Gradle compilation returned without a project/task build plan";
+                    }
+                } catch (IOException e) {
+                    gradleBuildPlanDiagnostic = "Gradle build plan unavailable: " + e.getMessage();
+                } finally {
+                    try { gradleInvocation.close(); } catch (IOException ignored) { }
+                }
+            }
         }
     }
 
@@ -1040,11 +1050,6 @@ public class ProjectAnalyzer {
                     .append(result.output());
         }
         return new CommandResult(result.exitCode(), attempts.toString(), result.timedOut(), result.terminalOutput());
-    }
-
-    static String gradleBuildTask(boolean androidProject, boolean includeTests) {
-        if (includeTests) return "testClasses";
-        return androidProject ? "assemble" : "classes";
     }
 
     private static String diagnosticTail(String raw) {

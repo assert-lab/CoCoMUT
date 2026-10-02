@@ -106,7 +106,8 @@ public enum BuildFailureReason {
         if (containsAny(text, "pluginresolutionexception", "could not find goal", "failed to apply plugin",
                 "plugin with id") || (text.contains("plugin") && text.contains("incompatible")))
             return BUILD_FAILED_PLUGIN_INCOMPATIBLE;
-        if (containsAny(text, "task 'classes' not found", "task 'testclasses' not found"))
+        if (containsAny(text, "task 'classes' not found", "task 'testclasses' not found",
+                "cocomut: no compatible compilation task is available"))
             return BUILD_FAILED_BUILD_TASK_UNAVAILABLE;
         if (text.contains("spotless") && text.contains("limits you to google-java-format"))
             return BUILD_FAILED_PLUGIN_INCOMPATIBLE;
