@@ -142,6 +142,13 @@ public class GradleProjectAdapter implements ProjectAdapter {
         testOutputs.removeIf(path -> !plan.includes(path));
         if (request.sourceRoots().isEmpty()) sourceRoots.addAll(plan.sourceRoots(mainOutputs, false));
         if (request.testSourceRoots().isEmpty()) testSourceRoots.addAll(plan.sourceRoots(testOutputs, true));
+        // Generated compilation inputs may be attached directly to compileJava rather than sourceSets.
+        if (request.sourceRoots().isEmpty()) base.getSourceRoots().stream()
+                .filter(path -> org.assertlab.cocomut.source.SourceRootPolicy.isGenerated(projectPath, path))
+                .forEach(sourceRoots::add);
+        if (request.testSourceRoots().isEmpty()) base.getTestSourceRoots().stream()
+                .filter(path -> org.assertlab.cocomut.source.SourceRootPolicy.isGenerated(projectPath, path))
+                .forEach(testSourceRoots::add);
         sourceRoots.removeIf(path -> !plan.includes(path));
         testSourceRoots.removeIf(path -> !plan.includes(path));
         Set<Path> dependencies = new LinkedHashSet<>(base.getDependencyClasspath());

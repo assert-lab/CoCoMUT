@@ -12,8 +12,17 @@ import static org.junit.Assert.*;
 
 public class GeneratedSourcePopulationTest {
     @Test
+    public void checkoutAncestorsDoNotDefineGeneratedProvenance() {
+        Path project = Path.of("/tmp/target/generated-projects/subject");
+        assertFalse(SourceRootPolicy.isGenerated(project, project.resolve("src/main/java/Foo.java")));
+        assertTrue(SourceRootPolicy.isGenerated(project, project.resolve("module/target/generated-sources/Foo.java")));
+        assertFalse(SourceRootPolicy.isGenerated(project, project.resolve("../other/target/generated-sources/Foo.java")));
+    }
+
+    @Test
     public void generatedInputsResolveDocumentationButAreNotDefaultFocalRows() throws Exception {
-        Path root = Files.createTempDirectory("cocomut-generated-population-");
+        Path container = Files.createTempDirectory("cocomut-generated-population-");
+        Path root = Files.createDirectories(container.resolve("target/generated-projects/subject"));
         try {
             Path original = Files.createDirectories(root.resolve("src/main/java/demo"));
             Path generated = Files.createDirectories(root.resolve("target/generated-sources/javacc/demo"));
@@ -61,7 +70,7 @@ public class GeneratedSourcePopulationTest {
 
             Orchestrator explicit = pipeline(root, metadata, "explicit", Set.of(), List.of(root.resolve("target/generated-sources/javacc")));
             assertTrue(rows(explicit).contains("demo.GeneratedParent"));
-        } finally { remove(root); }
+        } finally { remove(container); }
     }
 
     @Test
@@ -90,11 +99,11 @@ public class GeneratedSourcePopulationTest {
 
     @Test
     public void provenanceUsesBuildDirectoriesInsteadOfNamesContainingGenerated() {
-        assertTrue(SourceRootPolicy.isGenerated(Path.of("module/target/generated-sources/javacc/Foo.java")));
-        assertTrue(SourceRootPolicy.isGenerated(Path.of("module/target/generated-test-sources/test/Foo.java")));
-        assertTrue(SourceRootPolicy.isGenerated(Path.of("module/build/generated/source/buildConfig/Foo.java")));
-        assertFalse(SourceRootPolicy.isGenerated(Path.of("src/main/java/demo/GeneratedHelper.java")));
-        assertFalse(SourceRootPolicy.isGenerated(Path.of("generated-api/src/main/java/demo/Foo.java")));
+        assertTrue(SourceRootPolicy.isGenerated(Path.of("."), Path.of("module/target/generated-sources/javacc/Foo.java")));
+        assertTrue(SourceRootPolicy.isGenerated(Path.of("."), Path.of("module/target/generated-test-sources/test/Foo.java")));
+        assertTrue(SourceRootPolicy.isGenerated(Path.of("."), Path.of("module/build/generated/source/buildConfig/Foo.java")));
+        assertFalse(SourceRootPolicy.isGenerated(Path.of("."), Path.of("src/main/java/demo/GeneratedHelper.java")));
+        assertFalse(SourceRootPolicy.isGenerated(Path.of("."), Path.of("generated-api/src/main/java/demo/Foo.java")));
     }
 
     private static Orchestrator pipeline(Path root, ProjectMetadata metadata, String output,

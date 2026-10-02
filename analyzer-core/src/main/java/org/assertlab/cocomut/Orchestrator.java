@@ -568,7 +568,7 @@ final class Orchestrator {
         List<MethodInfo> selectedModules = methods.stream()
                 .filter(method -> plan.includes(method.getSourceFile())).toList();
         List<MethodInfo> focal = selectedModules.stream().filter(method ->
-                !org.assertlab.cocomut.source.SourceRootPolicy.isGenerated(method.getSourceFile())
+                !org.assertlab.cocomut.source.SourceRootPolicy.isGenerated(projectPath, method.getSourceFile())
                         || sourceSets.contains("generated")
                         || explicitlyRequestedGeneratedRoot(method.getSourceFile())).toList();
         executionReport.put("phase_2_unselected_module_methods_excluded", methods.size() - selectedModules.size());
@@ -579,7 +579,7 @@ final class Orchestrator {
 
     private boolean explicitlyRequestedGeneratedRoot(Path file) {
         return java.util.stream.Stream.concat(explicitSourceRoots.stream(), explicitTestSourceRoots.stream())
-                .filter(org.assertlab.cocomut.source.SourceRootPolicy::isGenerated)
+                .filter(path -> org.assertlab.cocomut.source.SourceRootPolicy.isGenerated(projectPath, path))
                 .anyMatch(root -> file.toAbsolutePath().normalize().startsWith(root.toAbsolutePath().normalize()));
     }
 
@@ -592,7 +592,7 @@ final class Orchestrator {
             filtered = filtered.stream()
                     .filter(method -> sourceSets.contains(method.getSourceSet())
                             || (sourceSets.contains("generated")
-                                && org.assertlab.cocomut.source.SourceRootPolicy.isGenerated(method.getSourceFile())))
+                                && org.assertlab.cocomut.source.SourceRootPolicy.isGenerated(projectPath, method.getSourceFile())))
                     .toList();
             executionReport.put("phase_2_source_set_filter", String.join(",", sourceSets));
             executionReport.put("phase_2_source_set_filter_before", before);
@@ -994,7 +994,7 @@ final class Orchestrator {
         selection.put("source_sets", sourceSets.isEmpty() ? List.of("all") : sourceSets.stream().sorted().toList());
         selection.put("generated_sources", "explicit_only");
         selection.put("explicit_generated_roots", java.util.stream.Stream.concat(explicitSourceRoots.stream(), explicitTestSourceRoots.stream())
-                .filter(org.assertlab.cocomut.source.SourceRootPolicy::isGenerated)
+                .filter(path -> org.assertlab.cocomut.source.SourceRootPolicy.isGenerated(projectPath, path))
                 .map(Path::toString).sorted().toList());
         selection.put("packages", packageFilters.stream().sorted().toList());
         selection.put("types", typeFilters.stream().sorted().toList());

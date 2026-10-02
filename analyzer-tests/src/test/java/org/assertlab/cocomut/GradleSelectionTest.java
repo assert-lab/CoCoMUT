@@ -122,6 +122,9 @@ public class GradleSelectionTest {
                     throw new GradleException('Excluded Android build file must not execute')
                     """);
             source(mobile, "AndroidExample");
+            Path generatedMobile = Files.createDirectories(mobile.resolve("build/generated/direct/demo"));
+            Files.writeString(generatedMobile.resolve("GeneratedMobile.java"),
+                    "package demo; public class GeneratedMobile { public int value(){return 3;} }\n");
             Path stale = Files.createDirectories(mobile.resolve("build/classes/java/main/demo"));
             Files.write(stale.resolve("AndroidExample.class"), new byte[] {1});
             ProjectMetadata metadata = analyze(root);
@@ -197,12 +200,48 @@ public class GradleSelectionTest {
             Files.writeString(child.resolve("build.gradle"), "apply plugin: 'java'\n");
             source(child, "Example");
             Path tests = Files.createDirectories(child.resolve("src/test/java/demo"));
-            Files.writeString(tests.resolve("TestExample.java"), "package demo; public class TestExample {}\n");
+            Files.writeString(tests.resolve("TestExample.java"), "package demo; public class TestExample { public int value(){return 2;} }\n");
             ProjectMetadata metadata = analyze(root);
             assertTrue(metadata.getBuildOutputTail(), metadata.isBuildSucceeded());
             assertTrue(metadata.getGradleModelReport().buildPlan().unavailableSourceSets().isEmpty());
             assertFalse(metadata.getGradleModelReport().partial());
             assertTrue(Files.exists(child.resolve("build/classes/java/test/demo/TestExample.class")));
+            Orchestrator pipeline = new Orchestrator(ContextRequest.builder().projectRoot(root)
+                    .sourceSets(Set.of("main", "test")).scope(ContextRequest.Scope.ALL)
+                    .outputDirectory(root.resolve("analysis-output")).build(), metadata);
+            pipeline.execute();
+            assertEquals("SUCCESS", pipeline.getExecutionReport().get("status"));
+            String rows = Files.readString(Path.of(pipeline.getExecutionReport().get("phase_5_jsonl_file").toString()));
+            assertTrue(rows.contains("demo.Example"));
+            assertTrue(rows.contains("demo.TestExample"));
+        } finally { remove(root); }
+    }
+
+    @Test
+    public void nativeModelKeepsGeneratedInputsAddedDirectlyToCompileTask() throws Exception {
+        Path root = fixture();
+        try {
+            Files.writeString(root.resolve("settings.gradle"), "rootProject.name='generated-input'\n");
+            Files.writeString(root.resolve("build.gradle"), "apply plugin: 'java'\ncompileJava.source(fileTree('build/generated/direct'))\n");
+            source(root, "Original");
+            Path generated = Files.createDirectories(root.resolve("build/generated/direct/demo"));
+            Files.writeString(generated.resolve("Generated.java"),
+                    "package demo; public class Generated { public int value(){return 2;} }\n");
+            ProjectMetadata metadata = analyze(root);
+            assertTrue(metadata.getBuildOutputTail(), metadata.isBuildSucceeded());
+            assertTrue(metadata.getGradleModelReport().succeeded());
+            assertTrue(Files.exists(root.resolve("build/classes/java/main/demo/Generated.class")));
+            assertTrue(metadata.getSourceRoots().stream().anyMatch(path -> generated.startsWith(path)));
+            assertTrue(new MethodIdentifier(metadata).identify().stream()
+                    .anyMatch(method -> method.getTypeName().equals("demo.Generated")));
+            Orchestrator pipeline = new Orchestrator(ContextRequest.builder().projectRoot(root)
+                    .sourceSet("generated").scope(ContextRequest.Scope.ALL)
+                    .outputDirectory(root.resolve("generated-output")).build(), metadata);
+            pipeline.execute();
+            assertEquals("SUCCESS", pipeline.getExecutionReport().get("status"));
+            String rows = Files.readString(Path.of(pipeline.getExecutionReport().get("phase_5_jsonl_file").toString()));
+            assertTrue(rows.contains("demo.Generated"));
+            assertFalse(rows.contains("demo.Original"));
         } finally { remove(root); }
     }
 

@@ -662,7 +662,7 @@ public class ProjectAnalyzer {
         if (!gradleBuildPlan.sourceSets().isEmpty()) {
             // A declared source set is authoritative even when an unused conventional directory exists.
             return mergePaths(recovered, existing.stream()
-                    .filter(org.assertlab.cocomut.source.SourceRootPolicy::isGenerated).toList());
+                    .filter(path -> org.assertlab.cocomut.source.SourceRootPolicy.isGenerated(projectPath, path)).toList());
         }
         // Replace a broad last-resort repository scan with positively recovered module roots.
         List<Path> retained = existing.stream()
@@ -755,7 +755,7 @@ public class ProjectAnalyzer {
         try (var walk = Files.walk(projectPath, 10)) {
             for (Path dir : walk.filter(Files::isDirectory).toList()) {
                 String normalized = projectPath.relativize(dir).toString().replace('\\', '/');
-                boolean generated = org.assertlab.cocomut.source.SourceRootPolicy.isGenerated(dir);
+                boolean generated = org.assertlab.cocomut.source.SourceRootPolicy.isGenerated(projectPath, dir);
                 boolean testRoot = normalized.contains("generated-test-sources")
                         || normalized.contains("/test/") || normalized.endsWith("/test");
                 if (generated && testRoot == tests && containsJavaFiles(dir)) roots.add(dir);
