@@ -970,7 +970,7 @@ public class ProjectAnalyzer {
                 String gradle = executableWithWrapper("gradle", isWindows);
                 command = List.of(gradle, "--no-daemon",
                         gradleBuildTask(androidPreparation.androidProject(), includeTests),
-                        "-x", "test", "--build-cache", "-q");
+                        "-x", "test", "-q");
             } else {
                 lastBuildResult = BuildResult.notAttempted(NO_ROOT_BUILD_DESCRIPTOR);
                 return lastBuildResult;
@@ -1371,7 +1371,23 @@ public class ProjectAnalyzer {
         pb.directory(effectiveBuildRoot.toFile());
         pb.redirectErrorStream(true);
         buildJavaSelection.apply(pb);
-        Process process = pb.start();
+        Process process;
+        try {
+            process = pb.start();
+        } catch (IOException e) {
+            // A launch failure is still an attempted command. Retain its executable
+            // and classify the OS diagnostic through the same path as build output.
+            String diagnostic = e.getMessage() == null ? e.toString() : e.getMessage();
+            if (BuildFailureReason.classify(diagnostic, false, false)
+                    == BuildFailureReason.BUILD_FAILED_REQUIRED_TOOL_UNAVAILABLE
+                    && (command.get(0).equals("gradle") || command.get(0).equals("gradle.cmd"))) {
+                diagnostic += "\nNo usable repository Gradle wrapper was found; system command "
+                        + command.get(0) + " is unavailable.";
+            }
+            CommandResult result = new CommandResult(-1, diagnostic, false, diagnostic);
+            if (recordAttempt) recordBuildAttempt(action, command, result);
+            return result;
+        }
         BoundedDiagnosticBuffer output = new BoundedDiagnosticBuffer(1_000_000, 128_000);
         Thread drainer = new Thread(() -> {
             try (var input = process.getInputStream()) {

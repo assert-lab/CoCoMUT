@@ -187,6 +187,12 @@ build tool, not by scanning arbitrary global dependency caches. Dependency JARs
 help resolve types and call targets but do not satisfy the project-bytecode
 requirement by themselves.
 
+Gradle execution prefers a complete, executable repository wrapper and does not
+force `--build-cache`, preserving compatibility with older pinned wrappers.
+When no usable wrapper exists and system Gradle cannot be launched, the build
+fails with `BUILD_FAILED_REQUIRED_TOOL_UNAVAILABLE`. Build attempts retain the
+selected command and the report explains the missing wrapper/system tool.
+
 If an attempted build fails, CoCoMUT fails the extraction even when stale
 bytecode is present. Pre-existing bytecode is accepted only when no build was
 attempted and no preflight requirement blocked execution, for example
