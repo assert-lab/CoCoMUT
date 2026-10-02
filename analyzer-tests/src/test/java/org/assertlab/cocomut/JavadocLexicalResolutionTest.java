@@ -138,11 +138,11 @@ public class JavadocLexicalResolutionTest {
                         + "; public class Outer { public static class Inner {} }");
             }
             write(root, "T.java", "public class T {}");
-            write(root, "Outer.java", "public class Outer { public static class Inner {} }");
+            write(root, "Outer.java", "public class Outer { public static class Inner { public static class Deep {} } }");
             write(root, "none/Focal.java", """
                     package none;
                     public class Focal {
-                        /** {@link Outer.Inner} {@link T} {@link Broken..Name} */ public void focal() {}
+                        /** {@link Outer.Inner} {@link Outer.Inner.Deep} {@link T} {@link Broken..Name} */ public void focal() {}
                     }
                     """);
             write(root, "ambiguous/Focal.java", """
@@ -155,7 +155,9 @@ public class JavadocLexicalResolutionTest {
                     """);
             compile(root);
             for (String type : List.of("none.Focal", "ambiguous.Focal")) {
-                for (var ref : refs(context(root, type))) {
+                var references = refs(context(root, type));
+                assertEquals("none.Focal".equals(type) ? 4 : 1, references.size());
+                for (var ref : references) {
                     assertNotEquals("project", ref.get("reference_domain"));
                     assertFalse(ref.containsKey("type_uri"));
                 }

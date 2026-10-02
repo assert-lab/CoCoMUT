@@ -3252,7 +3252,11 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 continue;
             }
             String base = projectNestedTypeName(parsed, prefix);
-            if (!base.isBlank()) {
+            CtType<?> declaration = parsed.typesByQualifiedName().get(base);
+            // A dotted prefix can itself be a nested unnamed-package type.
+            // Check the declaration's package before accepting any prefix.
+            if (declaration != null && declaration.getPackage() != null
+                    && !declaration.getPackage().getQualifiedName().isBlank()) {
                 return memberTypePath(parsed, base, sourceName.substring(separator));
             }
         }
