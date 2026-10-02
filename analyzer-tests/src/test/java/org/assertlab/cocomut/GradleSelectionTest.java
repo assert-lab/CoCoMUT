@@ -245,6 +245,61 @@ public class GradleSelectionTest {
         } finally { remove(root); }
     }
 
+    @Test
+    public void assembleCompilationWithoutTestTaskReportsMissingTests() throws Exception {
+        verifyAssembleCompilation("""
+                import org.gradle.api.tasks.compile.JavaCompile
+                tasks.create('assemble', JavaCompile) {
+                    sourceCompatibility = '17'
+                    targetCompatibility = '17'
+                    source = fileTree('src/main/java')
+                    classpath = files()
+                    destinationDirectory.set(file('build/classes/java/main'))
+                }
+                """);
+    }
+
+    @Test
+    public void actionlessAssembleDelegatingToAntReportsMissingTests() throws Exception {
+        verifyAssembleCompilation("""
+                apply plugin: 'base'
+                task compileSources {
+                    doLast {
+                        mkdir 'build/classes/java/main'
+                        ant.javac(srcdir: 'src/main/java', destdir: 'build/classes/java/main',
+                                  source: '17', target: '17', includeantruntime: false)
+                    }
+                }
+                assemble.dependsOn compileSources
+                """);
+    }
+
+    private void verifyAssembleCompilation(String buildScript) throws Exception {
+        Path root = fixture();
+        try {
+            Files.writeString(root.resolve("settings.gradle"), "rootProject.name='assemble-compile'\n");
+            Files.writeString(root.resolve("build.gradle"), buildScript);
+            source(root, "Example");
+            Path tests = Files.createDirectories(root.resolve("src/test/java/demo"));
+            Files.writeString(tests.resolve("TestExample.java"),
+                    "package demo; public class TestExample { public int value(){return 2;} }\n");
+            ProjectMetadata metadata = analyze(root);
+            assertTrue(metadata.getBuildOutputTail(), metadata.isBuildSucceeded());
+            assertTrue(Files.exists(root.resolve("build/classes/java/main/demo/Example.class")));
+            assertFalse(Files.exists(root.resolve("build/classes/java/test/demo/TestExample.class")));
+            assertTrue(metadata.getGradleModelReport().buildPlan().unavailableSourceSets().contains("::test"));
+            Orchestrator pipeline = new Orchestrator(ContextRequest.builder().projectRoot(root)
+                    .sourceSets(Set.of("main", "test")).scope(ContextRequest.Scope.ALL)
+                    .outputDirectory(root.resolve("analysis-output")).build(), metadata);
+            pipeline.execute();
+            assertEquals("PARTIAL", pipeline.getExecutionReport().get("status"));
+            assertTrue(pipeline.getExecutionReport().get("failure_codes").toString().contains("MODEL_RESOLUTION_PARTIAL"));
+            String rows = Files.readString(Path.of(pipeline.getExecutionReport().get("phase_5_jsonl_file").toString()));
+            assertTrue(rows.contains("demo.Example"));
+            assertFalse(rows.contains("demo.TestExample"));
+        } finally { remove(root); }
+    }
+
     private static ProjectMetadata analyze(Path root) throws Exception {
         return new GradleProjectAdapter(root).toMetadata(ContextRequest.builder().projectRoot(root)
                 .sourceSets(Set.of("main", "test")).allowUnsandboxedBuild().build());
