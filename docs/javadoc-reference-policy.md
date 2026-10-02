@@ -92,16 +92,21 @@ the fallback object is still emitted for coverage and auditability, marked with
 
 Typed Spoon member references supply method/field identity and parameter types.
 For type links, CoCoMUT resolves the reliable source spelling in lexical Java
-scope, including visible outer types in `Outer.Inner`. Lexical declarations
-and inherited member types take precedence over imports. An explicit import
+scope, including visible outer types in `Outer.Inner`. Each class scope checks
+its declared types, type parameters, and inherited member types before lookup
+moves to an enclosing class. Each dotted member segment is then resolved through
+that type's declared and inherited members; an inherited member keeps its actual
+declaring type in the canonical identity. Lexical declarations and inherited
+member types take precedence over imports. An explicit import
 precedes same-package and on-demand imports; ambiguous on-demand outer names
 remain unresolved. Binary `$` notation is assigned only after resolving the
 outer type. A project-wide simple-name match cannot establish visibility.
 These rules apply to typed references and both text fallback paths.
 
-Method, constructor, and visible enclosing-type parameters take precedence over
-project type declarations. A reference to one is retained as non-project
-evidence, for example:
+Method and constructor type parameters take precedence in their own declaration
+scope. An enclosing type parameter applies only when a nearer class scope has
+not already resolved the name to a declared or inherited member type. A reference
+to a visible type parameter is retained as non-project evidence, for example:
 
 ```json
 {

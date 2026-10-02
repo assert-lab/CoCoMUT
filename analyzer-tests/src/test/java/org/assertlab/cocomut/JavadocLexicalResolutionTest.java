@@ -138,6 +138,7 @@ public class JavadocLexicalResolutionTest {
                         + "; public class Outer { public static class Inner {} }");
             }
             write(root, "T.java", "public class T {}");
+            write(root, "Outer.java", "public class Outer { public static class Inner {} }");
             write(root, "none/Focal.java", """
                     package none;
                     public class Focal {
@@ -223,6 +224,94 @@ public class JavadocLexicalResolutionTest {
                     assertFalse(ref.containsKey("type_uri"));
                 }
             }
+        } finally {
+            delete(root);
+        }
+    }
+
+    @Test
+    public void inheritedTypeInChildPrecedesEnclosingDeclaration() throws Exception {
+        Path root = Files.createTempDirectory("cocomut-inherited-before-enclosing");
+        try {
+            write(root, "demo/Base.java", "package demo; public class Base { public static class N {} }");
+            write(root, "demo/Outer.java", """
+                    package demo;
+                    public class Outer {
+                        public static class N {}
+                        public class Child extends Base {
+                            /** {@link N} */ public void focal() {}
+                        }
+                    }
+                    """);
+            compile(root);
+            assertType(root, "demo.Outer$Child", "N", "demo.Base$N");
+        } finally {
+            delete(root);
+        }
+    }
+
+    @Test
+    public void nearerMemberTypeShadowsEnclosingTypeParameter() throws Exception {
+        Path root = Files.createTempDirectory("cocomut-member-before-enclosing-parameter");
+        try {
+            write(root, "demo/Outer.java", """
+                    package demo;
+                    public class Outer<T> {
+                        public class Child {
+                            public class T {}
+                            /** {@link T} */ public void focal() {}
+                        }
+                    }
+                    """);
+            compile(root);
+            assertType(root, "demo.Outer$Child", "T", "demo.Outer$Child$T");
+        } finally {
+            delete(root);
+        }
+    }
+
+    @Test
+    public void dottedSegmentsResolveInheritedMembersAtEveryStep() throws Exception {
+        Path root = Files.createTempDirectory("cocomut-inherited-dotted-segments");
+        try {
+            write(root, "lib/More.java", "package lib; public class More { public static class Deep {} }");
+            write(root, "lib/Base.java", "package lib; public class Base { public static class Inner extends More {} }");
+            write(root, "lib/Outer.java", "package lib; public class Outer extends Base {}");
+            write(root, "explicit/Focal.java", """
+                    package explicit;
+                    import lib.Outer;
+                    public class Focal {
+                        /** {@link Outer.Inner} {@link Outer.Inner.Deep} */ public void focal() {}
+                    }
+                    """);
+            write(root, "wildcard/Focal.java", """
+                    package wildcard;
+                    import lib.*;
+                    public class Focal {
+                        /** {@link Outer.Inner} */ public void focal() {}
+                    }
+                    """);
+            write(root, "lib/Focal.java", """
+                    package lib;
+                    public class Focal {
+                        /** {@link Outer.Inner} {@link lib.Outer.Inner.Deep} */ public void focal() {}
+                    }
+                    """);
+            write(root, "enclosing/Outer.java", """
+                    package enclosing;
+                    public class Outer extends lib.Base {
+                        public class Child {
+                            /** {@link Outer.Inner.Deep} */ public void focal() {}
+                        }
+                    }
+                    """);
+            compile(root);
+            assertType(root, "explicit.Focal", "Outer.Inner", "lib.Base$Inner");
+            assertType(root, "explicit.Focal", "Outer.Inner.Deep", "lib.More$Deep");
+            assertType(root, "wildcard.Focal", "Outer.Inner", "lib.Base$Inner");
+            assertType(root, "lib.Focal", "Outer.Inner", "lib.Base$Inner");
+            assertType(root, "lib.Focal", "lib.Outer.Inner.Deep", "lib.More$Deep");
+            assertType(root, "enclosing.Outer$Child", "Outer.Inner.Deep", "lib.More$Deep");
         } finally {
             delete(root);
         }

@@ -2473,9 +2473,9 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         boolean methodParameter = focal instanceof CtFormalTypeDeclarer declarer
                 && declarer.getFormalCtTypeParameters().stream()
                 .anyMatch(parameter -> leading.equals(parameter.getSimpleName()));
-        boolean typeParameter = enclosingTypes(owner).stream()
-                .flatMap(type -> type.getFormalCtTypeParameters().stream())
-                .anyMatch(parameter -> leading.equals(parameter.getSimpleName()));
+        var lexical = scopedReferenceTypeName(owner, leading);
+        boolean typeParameter = lexical.status() == InheritedJavadocResolver.TypeNameResolutionStatus.RESOLVED
+                && lexical.canonicalName().startsWith("type-parameter:");
         if (!methodParameter && !typeParameter) {
             return false;
         }
@@ -3185,6 +3185,86 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return details;
     }
 
+    // Finish each class scope (including inherited members) before looking
+    // outward. An enclosing type parameter cannot shadow a nearer member type.
+    private static InheritedJavadocResolver.TypeNameResolution scopedReferenceTypeName(
+            CtType<?> owner, String leading) {
+        for (CtType<?> scope : enclosingTypes(owner)) {
+            if (leading.equals(scope.getSimpleName())) {
+                return InheritedJavadocResolver.TypeNameResolution.resolved(scope.getQualifiedName());
+            }
+            CtType<?> declared = scope.getNestedType(leading);
+            if (declared != null) {
+                return InheritedJavadocResolver.TypeNameResolution.resolved(declared.getQualifiedName());
+            }
+            if (scope.getFormalCtTypeParameters().stream()
+                    .anyMatch(parameter -> leading.equals(parameter.getSimpleName()))) {
+                return InheritedJavadocResolver.TypeNameResolution.resolved("type-parameter:" + leading);
+            }
+            Set<String> inherited = inheritedMemberTypeNames(scope, leading);
+            if (inherited.size() == 1) {
+                return InheritedJavadocResolver.TypeNameResolution.resolved(inherited.iterator().next());
+            }
+            if (inherited.size() > 1) {
+                return InheritedJavadocResolver.TypeNameResolution.ambiguous();
+            }
+        }
+        return InheritedJavadocResolver.TypeNameResolution.unresolved();
+    }
+
+    private static String memberTypePath(ParsedProject parsed, String base, String suffix) {
+        if (base.isBlank()) {
+            return "";
+        }
+        String current = base;
+        if (suffix.isBlank()) {
+            return projectNestedTypeName(parsed, current);
+        }
+        for (String segment : suffix.substring(1).split("\\.", -1)) {
+            CtType<?> declaration = parsed.typesByQualifiedName().get(current);
+            if (declaration == null || segment.isBlank()) {
+                return "";
+            }
+            CtType<?> direct = declaration.getNestedType(segment);
+            if (direct != null) {
+                current = direct.getQualifiedName();
+            } else {
+                Set<String> inherited = inheritedMemberTypeNames(declaration, segment);
+                if (inherited.size() != 1) {
+                    return "";
+                }
+                current = inherited.iterator().next();
+            }
+        }
+        return projectNestedTypeName(parsed, current);
+    }
+
+    private static String qualifiedReferenceTypeName(ParsedProject parsed, String spelling) {
+        String sourceName = spelling.replace('$', '.');
+        // Identify the package-qualified outer declaration, then resolve each
+        // member segment semantically; inherited members keep their true owner.
+        for (int separator = sourceName.indexOf('.'); separator >= 0;
+             separator = sourceName.indexOf('.', separator + 1)) {
+            String prefix = sourceName.substring(0, separator);
+            // A bare prefix would be an unnamed-package type, not a
+            // package-qualified declaration visible from this source scope.
+            if (!prefix.contains(".")) {
+                continue;
+            }
+            String base = projectNestedTypeName(parsed, prefix);
+            if (!base.isBlank()) {
+                return memberTypePath(parsed, base, sourceName.substring(separator));
+            }
+        }
+        String canonical = projectNestedTypeName(parsed, sourceName);
+        CtType<?> declaration = parsed.typesByQualifiedName().get(canonical);
+        if (sourceName.contains(".") && declaration != null
+                && (declaration.getPackage() == null || declaration.getPackage().getQualifiedName().isBlank())) {
+            return "";
+        }
+        return canonical;
+    }
+
     private static String resolveTypeName(ParsedProject parsed, CtType<?> owner, String rawType) {
         String target = rawType == null ? "" : rawType.trim();
         if (target.isBlank()) {
@@ -3192,37 +3272,36 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
         target = target.replaceAll("<.*>", "");
         if (owner == null) {
-            return target.contains(".") ? projectNestedTypeName(parsed, target) : "";
+            return target.contains(".") ? qualifiedReferenceTypeName(parsed, target) : "";
         }
         // Resolve the outer source name first. Only then map member-type
         // suffixes to canonical binary identities; never search by simple name.
         String[] parts = target.replace('$', '.').split("\\.", 2);
         String leading = parts[0];
         String suffix = parts.length == 2 ? "." + parts[1] : "";
-        InheritedJavadocResolver.TypeNameResolution lexical = lexicalTypeName(owner, leading);
+        var lexical = scopedReferenceTypeName(owner, leading);
         if (lexical.status() == InheritedJavadocResolver.TypeNameResolutionStatus.RESOLVED) {
-            return projectNestedTypeName(parsed, lexical.canonicalName() + suffix);
+            return lexical.canonicalName().startsWith("type-parameter:") ? ""
+                    : memberTypePath(parsed, lexical.canonicalName(), suffix);
         }
-        Set<String> inherited = inheritedMemberTypeNames(owner, leading);
-        if (!inherited.isEmpty()) {
-            return inherited.size() == 1
-                    ? projectNestedTypeName(parsed, inherited.iterator().next() + suffix) : "";
+        if (lexical.status() == InheritedJavadocResolver.TypeNameResolutionStatus.AMBIGUOUS) {
+            return "";
         }
         ImportContext imports = importContext(parsed, owner);
         String explicit = imports.explicit().get(leading);
         if (explicit != null) {
-            return projectNestedTypeName(parsed, explicit + suffix);
+            return memberTypePath(parsed, qualifiedReferenceTypeName(parsed, explicit), suffix);
         }
         String ownerPackage = owner.getPackage() != null ? owner.getPackage().getQualifiedName() : "";
         String samePackage = ownerPackage.isBlank() ? leading : ownerPackage + "." + leading;
-        String resolved = projectNestedTypeName(parsed, samePackage);
+        String resolved = qualifiedReferenceTypeName(parsed, samePackage);
         if (!resolved.isBlank()) {
-            return projectNestedTypeName(parsed, resolved + suffix);
+            return memberTypePath(parsed, resolved, suffix);
         }
         Set<String> onDemand = new LinkedHashSet<>();
         String javaLang = "java.lang." + leading;
         for (String wildcard : imports.wildcard()) {
-            String candidate = projectNestedTypeName(parsed, wildcard + "." + leading);
+            String candidate = qualifiedReferenceTypeName(parsed, wildcard + "." + leading);
             if (!candidate.isBlank()) {
                 onDemand.add(candidate);
             }
@@ -3232,11 +3311,11 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
         if (!onDemand.isEmpty()) {
             return onDemand.size() == 1
-                    ? projectNestedTypeName(parsed, onDemand.iterator().next() + suffix) : "";
+                    ? memberTypePath(parsed, onDemand.iterator().next(), suffix) : "";
         }
         // A fully qualified spelling is valid without an import. Bare names
         // are deliberately excluded, including unnamed-package pseudo-types.
-        return target.contains(".") ? projectNestedTypeName(parsed, target) : "";
+        return target.contains(".") ? qualifiedReferenceTypeName(parsed, target) : "";
     }
 
     private static String projectTypeName(ParsedProject parsed, CtType<?> owner, CtTypeReference<?> type) {
