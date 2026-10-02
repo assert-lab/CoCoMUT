@@ -716,6 +716,12 @@ final class Orchestrator {
         executionReport.put("source_files_discovered", stats.discovered());
         executionReport.put("source_files_parsed", stats.parsed());
         executionReport.put("source_files_failed", stats.failed());
+        executionReport.put("source_files_recovered", stats.recoveredFiles().size());
+        executionReport.put("recovered_source_files", stats.recoveredFiles().stream()
+                .map(this::relativePathString).toList());
+        if (!stats.recoveredFiles().isEmpty()) {
+            failureCodes.add(FailureCode.SOURCE_MODEL_RECOVERED);
+        }
         if (stats.failed() > 0) {
             failureCodes.add(FailureCode.SOURCE_PARSE_FAILED);
             Path failures = writeFailedSourceFiles(stats.failedFiles());

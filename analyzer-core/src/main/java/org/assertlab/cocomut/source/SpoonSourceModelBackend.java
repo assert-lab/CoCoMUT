@@ -34,6 +34,7 @@ import spoon.support.compiler.VirtualFile;
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -245,10 +246,76 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         } catch (RuntimeException | LinkageError | AssertionError failure) {
             throw new SourceModelBuildException(failure, attempts);
         }
+        parsed = reconcileSourceDeclarations(project, parsed, attempts, maxSourceFiles);
         SourceParseStats stats = parsed.stats();
         return new ParsedModels(parsed.models(), parsed.mode(),
                 new SourceParseStats(stats.discovered(), stats.parsed(), stats.failedFiles(),
-                        parsed.mode(), attempts));
+                        parsed.mode(), attempts, stats.recoveredFiles()));
+    }
+
+    private ParsedModels reconcileSourceDeclarations(ProjectModel project, ParsedModels parsed,
+            List<SourceModelAttempt> attempts, Integer maxSourceFiles) throws IOException {
+        int compliance = complianceLevel(project.javaVersion());
+        List<Path> files = javaFiles(allSourceRoots(project), maxSourceFiles == null ? 0 : maxSourceFiles);
+        List<CtModel> models = new ArrayList<>(parsed.models());
+        List<String> modes = new ArrayList<>(List.of(parsed.mode()));
+        Set<Path> failedFiles = new LinkedHashSet<>();
+        List<Path> recoveredFiles = new ArrayList<>();
+        var represented = SourceDeclarationAudit.executables(models);
+        for (Path file : files) {
+            Path normalized = file.toAbsolutePath().normalize();
+            SourceDeclarationAudit.SourceFile source;
+            try {
+                source = SourceDeclarationAudit.read(file, compliance, Charset.defaultCharset());
+            } catch (IOException failure) {
+                // An unreadable compilation unit must not discard other models
+                // or the attempt diagnostics already collected for this session.
+                failedFiles.add(file);
+                attempts.add(new SourceModelAttempt(List.of(diagnosticPath(project, file)), parsed.mode(),
+                        compliance, compliance, 0, "failed", failure.getClass().getName(),
+                        diagnosticMessage(project, failure), "declaration_audit", "source_read_failed"));
+                continue;
+            }
+            int missing = SourceDeclarationAudit.missing(source, represented.getOrDefault(normalized, List.of()));
+            if (!source.syntaxFailure().isEmpty()) {
+                failedFiles.add(file);
+                attempts.add(new SourceModelAttempt(List.of(diagnosticPath(project, file)), parsed.mode(),
+                        compliance, compliance, 0, "failed", "", source.syntaxFailure(),
+                        "declaration_audit", "source_syntax_error"));
+            } else if (missing > 0) {
+                attempts.add(new SourceModelAttempt(List.of(diagnosticPath(project, file)), parsed.mode(),
+                        compliance, compliance, 0, "incomplete", "",
+                        "Missing " + missing + " of " + source.declarations().size() + " source declarations",
+                        "declaration_audit", "source_declarations_missing"));
+                try {
+                    ModelBuild recovered = buildModel(List.of(file), compliance, project, attempts);
+                    var recoveredMethods = SourceDeclarationAudit.executables(List.of(recovered.model()));
+                    int stillMissing = SourceDeclarationAudit.missing(source,
+                            recoveredMethods.getOrDefault(normalized, List.of()));
+                    if (stillMissing == 0) {
+                        // Prefer the complete isolated model's declarations when
+                        // the combined model contains only part of this file.
+                        models.add(0, recovered.model());
+                        modes.add(recovered.mode());
+                        recoveredFiles.add(file);
+                    } else {
+                        failedFiles.add(file);
+                        attempts.add(new SourceModelAttempt(List.of(diagnosticPath(project, file)), recovered.mode(),
+                                compliance, compliance, 0, "failed", "",
+                                "Isolated recovery still lacks " + stillMissing + " source declarations",
+                                "declaration_audit", "source_declarations_missing"));
+                    }
+                } catch (RuntimeException | LinkageError | AssertionError failure) {
+                    failedFiles.add(file);
+                }
+            } else if (parsed.stats().failedFiles().contains(file)) {
+                failedFiles.add(file);
+            }
+        }
+        String mode = mergedMode(modes) + (maxSourceFiles == null ? "" : "_limited");
+        return new ParsedModels(models, mode,
+                new SourceParseStats(files.size(), files.size() - failedFiles.size(), new ArrayList<>(failedFiles),
+                        mode, List.of(), recoveredFiles));
     }
 
     private ParsedModels parseCtModels(ProjectModel project, List<SourceModelAttempt> attempts) throws IOException {
@@ -342,7 +409,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     }
 
     private static List<Path> javaFiles(List<Path> roots, int limit) throws IOException {
-        List<Path> files = new ArrayList<>();
+        Set<Path> files = new LinkedHashSet<>();
         for (Path root : roots) {
             if (!Files.exists(root)) {
                 continue;
@@ -352,13 +419,13 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                         .sorted()
                         .toList()) {
                     if (limit > 0 && files.size() >= limit) {
-                        return files;
+                        return List.copyOf(files);
                     }
-                    files.add(file);
+                    files.add(file.toAbsolutePath().normalize());
                 }
             }
         }
-        return files;
+        return List.copyOf(files);
     }
 
     private ModelBuild buildModel(List<Path> inputs, int complianceLevel, ProjectModel project,
@@ -401,8 +468,8 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     }
 
     static String mergedMode(List<String> modes) {
-        boolean classpath = modes.stream().anyMatch(mode -> mode.startsWith("classpath"));
-        boolean noClasspath = modes.stream().anyMatch(mode -> mode.startsWith("no_classpath"));
+        boolean classpath = modes.stream().anyMatch(mode -> mode.startsWith("classpath") || mode.startsWith("mixed"));
+        boolean noClasspath = modes.stream().anyMatch(mode -> mode.startsWith("no_classpath") || mode.startsWith("mixed"));
         if (classpath && noClasspath) {
             return "mixed";
         }
@@ -417,6 +484,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         launcher.getEnvironment().setIgnoreSyntaxErrors(true);
         launcher.getEnvironment().setShouldCompile(false);
         launcher.getEnvironment().setComplianceLevel(complianceLevel);
+        launcher.getEnvironment().setEncoding(Charset.defaultCharset());
         List<String> classpath = useClasspath ? classpathEntries(project) : List.of();
         if (!classpath.isEmpty()) {
             launcher.getEnvironment().setSourceClasspath(classpath.toArray(String[]::new));
@@ -462,7 +530,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
         try {
             Matcher matcher = Pattern.compile("(?m)^\\s*import\\s+(static\\s+)?([\\w.*]+)\\s*;")
-                    .matcher(Files.readString(sourceFile, StandardCharsets.UTF_8));
+                    .matcher(Files.readString(sourceFile, Charset.defaultCharset()));
             while (matcher.find()) {
                 String imported = matcher.group(2);
                 if (imported.endsWith(".*")) {
@@ -584,7 +652,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return "";
         }
         try {
-            String source = Files.readString(position.getFile().toPath(), StandardCharsets.UTF_8);
+            String source = Files.readString(position.getFile().toPath(), Charset.defaultCharset());
             int start = Math.max(0, position.getSourceStart());
             int end = Math.min(source.length(), position.getSourceEnd() + 1);
             if (end > start) {
@@ -670,7 +738,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             Path sourceFile = position.getFile().toPath().toAbsolutePath().normalize();
             String source = parsed.sourceTextByFile().get(sourceFile);
             if (source == null) {
-                source = Files.readString(sourceFile, StandardCharsets.UTF_8);
+                source = Files.readString(sourceFile, Charset.defaultCharset());
                 parsed.sourceTextByFile().put(sourceFile, source);
             }
             int start = Math.max(0, Math.min(position.getSourceStart(), source.length()));
@@ -1598,7 +1666,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return false;
         }
         try {
-            return Files.readString(sourceFile, StandardCharsets.UTF_8).contains(text);
+            return Files.readString(sourceFile, Charset.defaultCharset()).contains(text);
         } catch (IOException e) {
             return false;
         }

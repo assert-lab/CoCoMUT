@@ -432,3 +432,11 @@ local project/home prefixes removed and are capped at 2,000 characters.
 No-classpath/mixed models produce `SOURCE_CLASSPATH_DEGRADED`; strict requests
 also produce `SOURCE_CLASSPATH_REQUIRED` and a failed run. These report additions
 retain the existing method-context and manifest schema versions.
+
+Source declaration auditing adds `source_files_recovered` (count) and
+`recovered_source_files` (project-relative paths). Recovered model loss produces
+`SOURCE_MODEL_RECOVERED`/PARTIAL. Unrecoverable coverage or syntax failures are
+counted in `source_files_failed` and `failed_source_files.jsonl`. Attempt entries
+now expose `stage` (`model_build` or `declaration_audit`) and `diagnostic_code`;
+audit codes are separate from Java `exception_class` names. Existing schema
+versions remain unchanged.
