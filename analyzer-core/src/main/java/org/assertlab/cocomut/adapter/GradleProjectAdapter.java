@@ -36,7 +36,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class GradleProjectAdapter implements ProjectAdapter {
 
-    private static final long GRADLE_TIMEOUT_MIN = 4;
+    private static final long GRADLE_TIMEOUT_SECONDS = 240;
     private static final String CP_PREFIX = "ANALYZER_CP:";
     private static final String SOURCE_PREFIX = "ANALYZER_SOURCE:";
     private static final String TEST_SOURCE_PREFIX = "ANALYZER_TEST_SOURCE:";
@@ -52,9 +52,16 @@ public class GradleProjectAdapter implements ProjectAdapter {
     private static final String SOURCESET_CP_PREFIX = "ANALYZER_SS_CP:";
 
     private final Path projectPath;
+    private final long modelTimeoutSeconds;
 
     public GradleProjectAdapter(Path projectPath) {
+        this(projectPath, GRADLE_TIMEOUT_SECONDS);
+    }
+
+    GradleProjectAdapter(Path projectPath, long modelTimeoutSeconds) {
+        if (modelTimeoutSeconds <= 0) throw new IllegalArgumentException("model timeout must be positive");
         this.projectPath = projectPath;
+        this.modelTimeoutSeconds = modelTimeoutSeconds;
     }
 
     /** Matches Groovy or Kotlin DSL Gradle build files. */
@@ -110,7 +117,7 @@ public class GradleProjectAdapter implements ProjectAdapter {
                     + "unavailable — using base metadata");
             return ProjectMetadata.Builder.from(base)
                     .gradleModelReport(nativeModel.report().withBuildPlan(base.getGradleModelReport().buildPlan()))
-                    .moduleSourceSets(nativeModel.moduleSourceSets())
+                    .moduleSourceSets(base.getModuleSourceSets())
                     .build();
         }
 
@@ -123,16 +130,25 @@ public class GradleProjectAdapter implements ProjectAdapter {
         GradleBuildPlan plan = base.getGradleModelReport().buildPlan().projects().isEmpty()
                 ? nativeModel.report().buildPlan() : base.getGradleModelReport().buildPlan();
         merged.removeIf(path -> !plan.includes(path));
-        Set<Path> sourceRoots = new LinkedHashSet<>(nativeModel.sourceRoots());
-        Set<Path> testSourceRoots = new LinkedHashSet<>(nativeModel.testSourceRoots());
+        Set<Path> sourceRoots = new LinkedHashSet<>(request.sourceRoots().isEmpty()
+                ? nativeModel.sourceRoots() : base.getSourceRoots());
+        Set<Path> testSourceRoots = new LinkedHashSet<>(request.testSourceRoots().isEmpty()
+                ? nativeModel.testSourceRoots() : base.getTestSourceRoots());
         Set<Path> mainOutputs = new LinkedHashSet<>(nativeModel.mainOutputs());
         mainOutputs.addAll(base.getMainClassOutputs());
         mainOutputs.removeIf(path -> !plan.includes(path));
         Set<Path> testOutputs = new LinkedHashSet<>(nativeModel.testOutputs());
         testOutputs.addAll(base.getTestClassOutputs());
         testOutputs.removeIf(path -> !plan.includes(path));
-        sourceRoots.addAll(sourceRootsForOutputs(mainOutputs, false));
-        testSourceRoots.addAll(sourceRootsForOutputs(testOutputs, true));
+        if (request.sourceRoots().isEmpty()) sourceRoots.addAll(plan.sourceRoots(mainOutputs, false));
+        if (request.testSourceRoots().isEmpty()) testSourceRoots.addAll(plan.sourceRoots(testOutputs, true));
+        // Generated compilation inputs may be attached directly to compileJava rather than sourceSets.
+        if (request.sourceRoots().isEmpty()) base.getSourceRoots().stream()
+                .filter(path -> org.assertlab.cocomut.source.SourceRootPolicy.isGenerated(projectPath, path))
+                .forEach(sourceRoots::add);
+        if (request.testSourceRoots().isEmpty()) base.getTestSourceRoots().stream()
+                .filter(path -> org.assertlab.cocomut.source.SourceRootPolicy.isGenerated(projectPath, path))
+                .forEach(testSourceRoots::add);
         sourceRoots.removeIf(path -> !plan.includes(path));
         testSourceRoots.removeIf(path -> !plan.includes(path));
         Set<Path> dependencies = new LinkedHashSet<>(base.getDependencyClasspath());
@@ -176,30 +192,7 @@ public class GradleProjectAdapter implements ProjectAdapter {
     }
 
     static List<Path> sourceRootsForOutputs(Iterable<Path> outputs, boolean tests) {
-        Set<Path> roots = new LinkedHashSet<>();
-        for (Path output : outputs) {
-            if (output == null) continue;
-            Path current = output.toAbsolutePath().normalize();
-            while (current != null && current.getFileName() != null
-                    && !"build".equals(current.getFileName().toString())) {
-                current = current.getParent();
-            }
-            Path module = current == null ? null : current.getParent();
-            if (module == null) continue;
-            Path sourceRoot = module.resolve(tests ? "src/test/java" : "src/main/java");
-            if (Files.isDirectory(sourceRoot) && containsJavaSource(sourceRoot)) {
-                roots.add(sourceRoot.toAbsolutePath().normalize());
-            }
-        }
-        return new ArrayList<>(roots);
-    }
-
-    private static boolean containsJavaSource(Path root) {
-        try (var walk = Files.walk(root)) {
-            return walk.anyMatch(path -> Files.isRegularFile(path) && path.toString().endsWith(".java"));
-        } catch (IOException ignored) {
-            return false;
-        }
+        return GradleBuildPlan.empty().sourceRoots(outputs, tests);
     }
 
     private static java.util.Map<String, String> artifactOrigins(ProjectMetadata base,
@@ -316,7 +309,7 @@ public class GradleProjectAdapter implements ProjectAdapter {
             drainer.setDaemon(true);
             drainer.start();
 
-            if (!process.waitFor(GRADLE_TIMEOUT_MIN, TimeUnit.MINUTES)) {
+            if (!process.waitFor(modelTimeoutSeconds, TimeUnit.SECONDS)) {
                 terminateAndWait(process);
                 drainer.join();
                 return GradleModel.failed(true, "Gradle model task timed out");
@@ -490,33 +483,37 @@ public class GradleProjectAdapter implements ProjectAdapter {
                 "                def sourceSetNames = " + sourceSetNames + "\n" +
                 "                def files = [] as LinkedHashSet\n" +
                 "                names.each { n ->\n" +
-                "                    def cp = p.configurations.findByName(n)\n" +
+                "                    def legacyNames = [runtimeClasspath: 'runtime', compileClasspath: 'compile', testRuntimeClasspath: 'testRuntime', testCompileClasspath: 'testCompile']\n" +
+                "                    def cp = p.configurations.findByName(n) ?: p.configurations.findByName(legacyNames[n])\n" +
                 "                    if (cp != null) { try { files.addAll(cp.resolve()) } catch (Exception e) { println '" + DIAGNOSTIC_PREFIX + "classpath:' + p.path + ':' + n + ':' + e.class.simpleName } }\n" +
                 "                }\n" +
                 "                files.each { println '" + CP_PREFIX + "' + it.absolutePath }\n" +
                 "                def javaExt = p.extensions.findByName('java')\n" +
-                "                if (javaExt != null) {\n" +
+                "                def javaSourceSets = p.extensions.findByName('sourceSets') ?: (p.hasProperty('sourceSets') ? p.sourceSets : null)\n" +
+                "                if (javaSourceSets != null) {\n" +
                 "                    def toolchain = null\n" +
-                "                    try { toolchain = javaExt.toolchain?.languageVersion?.orNull?.asInt()?.toString() } catch (Throwable ignored) { }\n" +
+                "                    try { toolchain = javaExt?.toolchain?.languageVersion?.orNull?.asInt()?.toString() } catch (Throwable ignored) { }\n" +
                 "                    def sourceCompat = null\n" +
-                "                    try { sourceCompat = javaExt.sourceCompatibility?.toString() } catch (Throwable ignored) { }\n" +
+                "                    try { sourceCompat = (javaExt != null ? javaExt.sourceCompatibility : p.sourceCompatibility)?.toString() } catch (Throwable ignored) { }\n" +
                 "                    println '" + JAVA_PREFIX + "' + (toolchain ?: sourceCompat ?: '')\n" +
                 "                    try {\n" +
-                "                        p.extensions.findByName('sourceSets').each { ss ->\n" +
+                "                        javaSourceSets.each { ss ->\n" +
                 "                            if (sourceSetNames.contains(ss.name)) {\n" +
                 "                                def javaLevel = (toolchain ?: sourceCompat ?: '')\n" +
                 "                                println '" + SOURCESET_PREFIX + "' + p.path + '\\t' + ss.name + '\\t' + javaLevel\n" +
                 "                                ss.allJava.srcDirs.each { d -> if (d.exists()) println((ss.name == 'test' ? '" + TEST_SOURCE_PREFIX + "' : '" + SOURCE_PREFIX + "') + d.absolutePath) }\n" +
                 "                                ss.allJava.srcDirs.each { d -> if (d.exists()) println '" + SOURCESET_SOURCE_PREFIX + "' + p.path + '\\t' + ss.name + '\\t' + d.absolutePath }\n" +
-                "                                ss.output.classesDirs.files.each { d -> if (d.exists()) println((ss.name == 'test' ? '" + TEST_OUTPUT_PREFIX + "' : '" + OUTPUT_PREFIX + "') + d.absolutePath) }\n" +
-                "                                ss.output.classesDirs.files.each { d -> if (d.exists()) println '" + SOURCESET_OUTPUT_PREFIX + "' + p.path + '\\t' + ss.name + '\\t' + d.absolutePath }\n" +
+                "                                def classDirs\n" +
+                "                                try { classDirs = ss.output.classesDirs.files } catch (MissingPropertyException ignored) { classDirs = [ss.output.classesDir] }\n" +
+                "                                classDirs.each { d -> if (d.exists()) println((ss.name == 'test' ? '" + TEST_OUTPUT_PREFIX + "' : '" + OUTPUT_PREFIX + "') + d.absolutePath) }\n" +
+                "                                classDirs.each { d -> if (d.exists()) println '" + SOURCESET_OUTPUT_PREFIX + "' + p.path + '\\t' + ss.name + '\\t' + d.absolutePath }\n" +
                 "                                def ssCp = [] as LinkedHashSet\n" +
                 "                                try { ssCp.addAll(ss.compileClasspath.files) } catch (Throwable e) { println '" + DIAGNOSTIC_PREFIX + "sourceSetClasspath:' + p.path + ':' + ss.name + ':compile:' + e.class.simpleName }\n" +
                 "                                try { ssCp.addAll(ss.runtimeClasspath.files) } catch (Throwable e) { println '" + DIAGNOSTIC_PREFIX + "sourceSetClasspath:' + p.path + ':' + ss.name + ':runtime:' + e.class.simpleName }\n" +
                 "                                ssCp.each { f -> if (f.exists()) println '" + SOURCESET_CP_PREFIX + "' + p.path + '\\t' + ss.name + '\\t' + f.absolutePath }\n" +
                 "                            }\n" +
                 "                        }\n" +
-                "                    } catch (Throwable ignored) { }\n" +
+                "                    } catch (Exception e) { println '" + DIAGNOSTIC_PREFIX + "sourceSet:' + p.path + ':' + e.class.simpleName }\n" +
                 "                }\n" +
                 "                def androidExt = p.extensions.findByName('android')\n" +
                 "                if (androidExt != null) {\n" +

@@ -337,6 +337,7 @@ final class Orchestrator {
             projectModel = ProjectModel.from(projectMetadata);
             executionReport.put("phase_1_source_available", projectModel.sourceAvailable());
             executionReport.put("phase_1_source_roots", projectModel.sourceRoots().size());
+            executionReport.put("phase_1_source_root_roles", org.assertlab.cocomut.source.SourceRootPolicy.roles(projectMetadata));
             executionReport.put("phase_1_test_source_roots", projectModel.testSourceRoots().size());
             executionReport.put("phase_1_class_output_dirs", projectModel.classOutputDirs().size());
             executionReport.put("phase_1_main_class_outputs", projectMetadata.getMainClassOutputs().size());
@@ -416,7 +417,7 @@ final class Orchestrator {
             MethodIdentifier identifier = new MethodIdentifier(projectMetadata);
 
             analysisUniverseMethods = identifier.identify(sourceSession);
-            methodInfos = filterScope(analysisUniverseMethods);
+            methodInfos = filterScope(filterSourcePopulation(analysisUniverseMethods));
             methodInfos = filterMethods(methodInfos);
             methodInfos = limitMethods(methodInfos);
 
@@ -562,6 +563,26 @@ final class Orchestrator {
         }
     }
 
+    private List<MethodInfo> filterSourcePopulation(List<MethodInfo> methods) {
+        var plan = projectMetadata.getGradleModelReport().buildPlan();
+        List<MethodInfo> selectedModules = methods.stream()
+                .filter(method -> plan.includes(method.getSourceFile())).toList();
+        List<MethodInfo> focal = selectedModules.stream().filter(method ->
+                !org.assertlab.cocomut.source.SourceRootPolicy.isGenerated(projectPath, method.getSourceFile())
+                        || sourceSets.contains("generated")
+                        || explicitlyRequestedGeneratedRoot(method.getSourceFile())).toList();
+        executionReport.put("phase_2_unselected_module_methods_excluded", methods.size() - selectedModules.size());
+        executionReport.put("phase_2_generated_methods_excluded", selectedModules.size() - focal.size());
+        executionReport.put("phase_2_generated_population_policy", "explicit_only");
+        return focal;
+    }
+
+    private boolean explicitlyRequestedGeneratedRoot(Path file) {
+        return java.util.stream.Stream.concat(explicitSourceRoots.stream(), explicitTestSourceRoots.stream())
+                .filter(path -> org.assertlab.cocomut.source.SourceRootPolicy.isGenerated(projectPath, path))
+                .anyMatch(root -> file.toAbsolutePath().normalize().startsWith(root.toAbsolutePath().normalize()));
+    }
+
     private List<MethodInfo> filterMethods(List<MethodInfo> methods) {
         List<MethodInfo> filtered = methods;
         if (sourceSets == null || sourceSets.isEmpty()) {
@@ -569,7 +590,9 @@ final class Orchestrator {
         } else {
             int before = filtered.size();
             filtered = filtered.stream()
-                    .filter(method -> sourceSets.contains(method.getSourceSet()))
+                    .filter(method -> sourceSets.contains(method.getSourceSet())
+                            || (sourceSets.contains("generated")
+                                && org.assertlab.cocomut.source.SourceRootPolicy.isGenerated(projectPath, method.getSourceFile())))
                     .toList();
             executionReport.put("phase_2_source_set_filter", String.join(",", sourceSets));
             executionReport.put("phase_2_source_set_filter_before", before);
@@ -969,6 +992,10 @@ final class Orchestrator {
         Map<String, Object> selection = new LinkedHashMap<>();
         selection.put("scope", scope.toString().toLowerCase(Locale.ROOT));
         selection.put("source_sets", sourceSets.isEmpty() ? List.of("all") : sourceSets.stream().sorted().toList());
+        selection.put("generated_sources", "explicit_only");
+        selection.put("explicit_generated_roots", java.util.stream.Stream.concat(explicitSourceRoots.stream(), explicitTestSourceRoots.stream())
+                .filter(path -> org.assertlab.cocomut.source.SourceRootPolicy.isGenerated(projectPath, path))
+                .map(Path::toString).sorted().toList());
         selection.put("packages", packageFilters.stream().sorted().toList());
         selection.put("types", typeFilters.stream().sorted().toList());
         selection.put("methods", methodFilters.stream().sorted().toList());
@@ -1078,6 +1105,7 @@ final class Orchestrator {
         request.put("project_name", projectName());
         request.put("scope", scope.toString());
         request.put("source_sets", sourceSets.stream().sorted().toList());
+        request.put("generated_sources", "explicit_only");
         request.put("packages", packageFilters.stream().sorted().toList());
         request.put("types", typeFilters.stream().sorted().toList());
         request.put("methods", methodFilters.stream().sorted().toList());

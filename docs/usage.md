@@ -307,12 +307,42 @@ For documentation datasets, prefer a precise source-set and scope:
 `--source-set main` excludes public methods found under source roots that
 CoCoMUT classifies as test, generated, example, integration-test, or unknown.
 Use `--source-set all` or omit the flag to preserve the default behavior.
+Generated declarations under `target/generated-*` and `build/generated` within
+the analyzed project are excluded from the default focal population, including `--source-set all`.
+Checkout ancestors do not affect this classification. Generated roots discovered
+after compilation remain source-model inputs for symbol resolution and inherited
+documentation even when attached directly to Gradle compilation tasks. Skipped
+modules remain excluded.
+Use `--source-set generated` to select generated declarations, or
+`--source-set main,generated` to include them alongside production methods.
+Explicitly supplied generated source roots also opt their declarations into the
+focal population, subject to the other requested filters.
+The compilation source-set label (`main`/`test`) and generated provenance are
+separate: a generated declaration registered in main remains labeled `main`.
+The generated selector uses build-directory provenance as well as source-set labels.
+`artifacts.source_root_roles` in the manifest classifies input roots, while
+`phase_2_generated_methods_excluded` counts omitted generated focal declarations.
+For example:
+
+```json
+"source_root_roles": {
+  "src/main/java": "original",
+  "target/generated-sources/javacc": "generated"
+}
+```
+
 `--source-set test` uses standard test source roots such as `src/test/java` and
 the matching test bytecode when the build produces it.
 
 Maven source roots are derived from declared modules plus conventional roots.
-Gradle source roots are authoritative only when Gradle model resolution is
-allowed and succeeds. Custom Gradle source sets are preserved in manifest
+Allowed Gradle compilation retains declared main/test roots in
+`build.gradle_model.buildPlan.sourceSets` before task execution. If the later
+metadata query fails or times out, those roots remain available. Conventional
+roots can also be recovered from matching module class-output directories;
+when a declared source set is known, its custom roots take precedence over
+conventions. Recovery respects actual selected projects and skips unavailable
+Android projects. Explicit source-root requests retain their boundaries.
+Custom Gradle source sets are preserved in manifest
 module/source-set metadata, but output filtering is still normalized through
 CoCoMUT's public source-set labels (`main`, `test`, `integration_test`,
 `generated`, `example`, `unknown`).

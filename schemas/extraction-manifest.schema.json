@@ -27,7 +27,13 @@
     "tool_git": { "$ref": "#/$defs/gitInfo" },
     "request_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
     "jsonl_file": { "type": ["string", "null"] },
-    "selection": { "type": "object" },
+    "selection": {
+      "type": "object",
+      "properties": {
+        "generated_sources": { "const": "explicit_only" },
+        "explicit_generated_roots": { "type": "array", "items": { "type": "string" } }
+      }
+    },
     "javadoc_inheritance": {
       "type": "object",
       "required": ["policy_id", "specification_version", "implementation_version", "defaulted", "granularity", "mode"],
@@ -151,7 +157,8 @@
                 "projects": { "type": "object", "additionalProperties": { "type": "string" } },
                 "skippedProjects": { "type": "object", "additionalProperties": { "type": "string" } },
                 "compilationTasks": { "type": "array", "items": { "type": "string" } },
-                "unavailableSourceSets": { "type": "array", "items": { "type": "string" } }
+                "unavailableSourceSets": { "type": "array", "items": { "type": "string" } },
+                "sourceSets": { "$ref": "#/properties/artifacts/properties/module_source_sets" }
               }
             }
           }
@@ -180,6 +187,7 @@
       ],
       "properties": {
         "source_roots": { "$ref": "#/$defs/pathArray" },
+        "source_root_roles": { "type": "object", "additionalProperties": { "enum": ["original", "generated"] } },
         "test_source_roots": { "$ref": "#/$defs/pathArray" },
         "main_class_outputs": { "$ref": "#/$defs/pathArray" },
         "test_class_outputs": { "$ref": "#/$defs/pathArray" },
