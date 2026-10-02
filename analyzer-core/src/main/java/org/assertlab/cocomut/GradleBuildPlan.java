@@ -120,7 +120,28 @@ public record GradleBuildPlan(Map<String, String> projects,
                             def testTask = p.tasks.findByName('testClasses') ?: p.tasks.findByName('compileTestJava')
                             if (mainTask != null) selectedTasks.add(mainTask)
                             if (%s && testTask != null) selectedTasks.add(testTask)
-                            if (%s && mainTask != null && testTask == null && (p.tasks.findByName('compileJava') != null || (p.extensions.findByName('sourceSets') != null))) unavailable.add(p.path + ':test')
+                            if (%s && mainTask != null && testTask == null) {
+                                def javaSourceSets = p.extensions.findByName('sourceSets') ?: (p.hasProperty('sourceSets') ? p.sourceSets : null)
+                                // Exempt only an actionless lifecycle task with no local compilation or Java inputs.
+                                def lifecycleOnly = (mainTask.name == 'assemble' && mainTask.actions.isEmpty()
+                                        && p.tasks.withType(org.gradle.api.tasks.compile.AbstractCompile).isEmpty()
+                                        && javaSourceSets == null)
+                                if (lifecycleOnly) {
+                                    def ownJava = p.fileTree(p.projectDir) {
+                                        include '**/*.java'
+                                        exclude '**/.git/**', '**/.gradle/**', '**/build/**', '**/target/**'
+                                    }
+                                    def projectDir = p.projectDir.canonicalFile.toPath()
+                                    rootProject.allprojects.each { child ->
+                                        def childDir = child.projectDir.canonicalFile.toPath()
+                                        if (child != p && childDir != projectDir && childDir.startsWith(projectDir)) {
+                                            ownJava.exclude(projectDir.relativize(childDir).toString().replace(File.separatorChar, '/' as char) + '/**')
+                                        }
+                                    }
+                                    lifecycleOnly = ownJava.isEmpty()
+                                }
+                                if (!lifecycleOnly) unavailable.add(p.path + ':test')
+                            }
                         }
                     }
                     def plan = [projects: projects, skippedProjects: gradle.ext.cocomutSkippedProjects,
