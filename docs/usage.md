@@ -269,6 +269,11 @@ and keeps the available caller/callee edges. This is not a call-graph failure:
 it means per-method bytecode matching is incomplete for the selected focal set.
 If zero selected methods match project bytecode, CoCoMUT reports `PARTIAL`
 instead: the source records remain usable, but method-level call context is not.
+Maven dependency classpaths are collected from the files written by the active
+reactor, including modules activated through profiles. Each module writes to a
+coordinate-specific file in a private temporary directory, which is removed
+after success or failure.
+
 Source modeling first attempts classpath-aware Spoon analysis. If it must use
 `no_classpath` or combine classpath and no-classpath models (`mixed`), the run is
 `PARTIAL` with `SOURCE_CLASSPATH_DEGRADED`, even if compilation and call-graph
