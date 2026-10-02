@@ -120,6 +120,62 @@ public class SourceModelCompletenessTest {
         } finally { remove(project); }
     }
 
+    @Test
+    public void auditUsesConfiguredEncoding() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-source-encoding-");
+        try {
+            Path file = project.resolve("Encoded.java");
+            var encoding = java.nio.charset.StandardCharsets.ISO_8859_1;
+            Files.writeString(file, "class Encoded { /** café */ void retained() {} }", encoding);
+            var audit = SourceDeclarationAudit.read(file, 17, encoding);
+            spoon.Launcher launcher = new spoon.Launcher();
+            launcher.getEnvironment().setEncoding(encoding);
+            launcher.getEnvironment().setComplianceLevel(17);
+            launcher.getEnvironment().setNoClasspath(true);
+            launcher.addInputResource(file.toString());
+            var model = launcher.buildModel();
+            assertEquals("", audit.syntaxFailure());
+            assertEquals(1, audit.declarations().size());
+            assertEquals(0, SourceDeclarationAudit.missing(audit,
+                    SourceDeclarationAudit.executables(List.of(model)).get(file.toAbsolutePath().normalize())));
+        } finally { remove(project); }
+    }
+
+    @Test
+    public void backendUsesJvmSourceEncoding() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-jvm-source-encoding-");
+        try {
+            Files.writeString(project.resolve("Encoded.java"),
+                    "class Encoded { /** café */ void retained() {} }", java.nio.charset.Charset.defaultCharset());
+            try (var session = SourceBackends.spoon().open(project(project, "17"))) {
+                assertEquals(1, session.methods().size());
+                assertEquals(1, session.parseStats().parsed());
+                assertEquals(0, session.parseStats().failed());
+            }
+        } finally { remove(project); }
+    }
+
+    @Test
+    public void decodingFailureRetainsUsableFilesAndAttemptDiagnostics() throws Exception {
+        Path project = Files.createTempDirectory("cocomut-source-read-failure-");
+        try {
+            Path broken = project.resolve("Encoded.java");
+            Files.write(broken, new byte[] { (byte) 0xc3, (byte) 0x28 });
+            Files.writeString(project.resolve("Usable.java"), "class Usable { void retained() {} }");
+            try (var session = SourceBackends.spoon().open(project(project, "17"))) {
+                assertTrue(session.methods().stream().anyMatch(method -> method.methodUri().contains("retained")));
+                assertEquals(2, session.parseStats().discovered());
+                assertEquals(List.of(broken), session.parseStats().failedFiles());
+                assertTrue(session.parseStats().modelAttempts().stream().anyMatch(attempt ->
+                        attempt.stage().equals("declaration_audit")
+                                && attempt.diagnosticCode().equals("source_read_failed")
+                                && attempt.exceptionClass().endsWith("MalformedInputException")));
+                assertTrue(session.parseStats().modelAttempts().stream().anyMatch(attempt ->
+                        attempt.outcome().equals("success")));
+            }
+        } finally { remove(project); }
+    }
+
     private static Set<String> targetUris(SourceAnalysisSession session) throws Exception {
         return session.methods().stream().filter(method -> !method.constructor()
                 && method.methodUri().startsWith("ControllerMetricsConstant.java#"))

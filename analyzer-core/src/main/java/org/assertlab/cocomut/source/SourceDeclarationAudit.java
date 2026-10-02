@@ -19,6 +19,7 @@ import spoon.reflect.declaration.CtMethod;
 import spoon.reflect.visitor.filter.TypeFilter;
 
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -33,7 +34,7 @@ final class SourceDeclarationAudit {
         SourceFile { declarations = List.copyOf(declarations); }
     }
 
-    static SourceFile read(Path file, int compliance) throws IOException {
+    static SourceFile read(Path file, int compliance, Charset encoding) throws IOException {
         Map<String, String> options = new HashMap<>();
         String level = compliance == 8 ? "1.8" : Integer.toString(compliance);
         options.put(CompilerOptions.OPTION_Source, level);
@@ -42,8 +43,8 @@ final class SourceDeclarationAudit {
         Parser parser = new Parser(new ProblemReporter(
                 DefaultErrorHandlingPolicies.proceedWithAllProblems(), new CompilerOptions(options),
                 new DefaultProblemFactory(java.util.Locale.ROOT)), true);
-        CompilationUnit input = new CompilationUnit(Files.readString(file).toCharArray(),
-                file.toString(), "UTF-8");
+        CompilationUnit input = new CompilationUnit(Files.readString(file, encoding).toCharArray(),
+                file.toString(), encoding.name());
         CompilationResult result = new CompilationResult(input, 0, 1, 100);
         CompilationUnitDeclaration unit = parser.parse(input, result);
         List<Declaration> declarations = new ArrayList<>();

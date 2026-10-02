@@ -34,6 +34,7 @@ import spoon.support.compiler.VirtualFile;
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -263,7 +264,18 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         var represented = SourceDeclarationAudit.executables(models);
         for (Path file : files) {
             Path normalized = file.toAbsolutePath().normalize();
-            var source = SourceDeclarationAudit.read(file, compliance);
+            SourceDeclarationAudit.SourceFile source;
+            try {
+                source = SourceDeclarationAudit.read(file, compliance, Charset.defaultCharset());
+            } catch (IOException failure) {
+                // An unreadable compilation unit must not discard other models
+                // or the attempt diagnostics already collected for this session.
+                failedFiles.add(file);
+                attempts.add(new SourceModelAttempt(List.of(diagnosticPath(project, file)), parsed.mode(),
+                        compliance, compliance, 0, "failed", failure.getClass().getName(),
+                        diagnosticMessage(project, failure), "declaration_audit", "source_read_failed"));
+                continue;
+            }
             int missing = SourceDeclarationAudit.missing(source, represented.getOrDefault(normalized, List.of()));
             if (!source.syntaxFailure().isEmpty()) {
                 failedFiles.add(file);
@@ -472,6 +484,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         launcher.getEnvironment().setIgnoreSyntaxErrors(true);
         launcher.getEnvironment().setShouldCompile(false);
         launcher.getEnvironment().setComplianceLevel(complianceLevel);
+        launcher.getEnvironment().setEncoding(Charset.defaultCharset());
         List<String> classpath = useClasspath ? classpathEntries(project) : List.of();
         if (!classpath.isEmpty()) {
             launcher.getEnvironment().setSourceClasspath(classpath.toArray(String[]::new));
@@ -517,7 +530,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
         try {
             Matcher matcher = Pattern.compile("(?m)^\\s*import\\s+(static\\s+)?([\\w.*]+)\\s*;")
-                    .matcher(Files.readString(sourceFile, StandardCharsets.UTF_8));
+                    .matcher(Files.readString(sourceFile, Charset.defaultCharset()));
             while (matcher.find()) {
                 String imported = matcher.group(2);
                 if (imported.endsWith(".*")) {
@@ -639,7 +652,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return "";
         }
         try {
-            String source = Files.readString(position.getFile().toPath(), StandardCharsets.UTF_8);
+            String source = Files.readString(position.getFile().toPath(), Charset.defaultCharset());
             int start = Math.max(0, position.getSourceStart());
             int end = Math.min(source.length(), position.getSourceEnd() + 1);
             if (end > start) {
@@ -725,7 +738,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             Path sourceFile = position.getFile().toPath().toAbsolutePath().normalize();
             String source = parsed.sourceTextByFile().get(sourceFile);
             if (source == null) {
-                source = Files.readString(sourceFile, StandardCharsets.UTF_8);
+                source = Files.readString(sourceFile, Charset.defaultCharset());
                 parsed.sourceTextByFile().put(sourceFile, source);
             }
             int start = Math.max(0, Math.min(position.getSourceStart(), source.length()));
@@ -1653,7 +1666,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return false;
         }
         try {
-            return Files.readString(sourceFile, StandardCharsets.UTF_8).contains(text);
+            return Files.readString(sourceFile, Charset.defaultCharset()).contains(text);
         } catch (IOException e) {
             return false;
         }
