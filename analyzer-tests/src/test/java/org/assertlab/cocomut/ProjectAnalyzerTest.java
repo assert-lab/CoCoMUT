@@ -53,10 +53,23 @@ public class ProjectAnalyzerTest {
 
     @Test
     public void collectsEachReactorClasspathAndCleansOutputs() throws Exception {
+        assertReactorClasspathCollection(false, false);
+    }
+
+    @Test
+    public void collectsProfileModuleOutputsAndCleansThemAfterFailure() throws Exception {
+        assertReactorClasspathCollection(true, false);
+        assertReactorClasspathCollection(true, true);
+    }
+
+    private void assertReactorClasspathCollection(boolean profile, boolean fail) throws Exception {
         Assume.assumeFalse(System.getProperty("os.name", "").toLowerCase().contains("win"));
         Path project = Files.createTempDirectory("cocomut-reactor-classpath-");
         try {
-            Files.writeString(project.resolve("pom.xml"), "<project><modules><module>child</module></modules></project>");
+            String modules = "<modules><module>child</module></modules>";
+            Files.writeString(project.resolve("pom.xml"), "<project>" + (profile
+                    ? "<profiles><profile><id>extra</id><activation><activeByDefault>true</activeByDefault></activation>"
+                        + modules + "</profile></profiles>" : modules) + "</project>");
             Files.createDirectories(project.resolve("child"));
             Files.writeString(project.resolve("child/pom.xml"), "<project/>");
             Files.createDirectories(project.resolve(".mvn/wrapper"));
@@ -69,18 +82,20 @@ public class ProjectAnalyzerTest {
                     for argument in "$@"; do
                       case "$argument" in -Dmdep.outputFile=*) output=${argument#*=} ;; esac
                     done
-                    case "$output" in /*) exit 9 ;; esac
-                    printf '%s' "$PWD/first.jar" > "$output"
-                    printf '%s' "$PWD/second.jar:$PWD/first.jar" > "child/$output"
-                    """);
+                    case "$output" in /*) ;; *) exit 9 ;; esac
+                    directory=${output%%/\\${project.groupId}*}
+                    printf '%s' "$directory" > output-directory.txt
+                    mkdir -p "$directory/p/00-root" "$directory/p/01-child"
+                    printf '%s' "$PWD/first.jar" > "$directory/p/00-root/1.txt"
+                    printf '%s' "$PWD/second.jar:$PWD/first.jar" > "$directory/p/01-child/1.txt"
+                    """ + (fail ? "exit 1\n" : ""));
             assertTrue(wrapper.toFile().setExecutable(true));
             ProjectAnalyzer reactor = new ProjectAnalyzer(project);
             Method method = ProjectAnalyzer.class.getDeclaredMethod("buildMavenClasspath");
             method.setAccessible(true);
-            assertEquals(List.of(first, second), method.invoke(reactor));
-            try (var files = Files.walk(project)) {
-                assertFalse(files.anyMatch(path -> path.getFileName().toString().startsWith(".cocomut-maven-classpath-")));
-            }
+            assertEquals(fail ? List.of() : List.of(first, second), method.invoke(reactor));
+            Path outputDirectory = Path.of(Files.readString(project.resolve("output-directory.txt")));
+            assertFalse("All module outputs must be removed even after Maven failure", Files.exists(outputDirectory));
         } finally {
             deleteRecursively(project);
         }

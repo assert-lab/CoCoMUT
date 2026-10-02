@@ -13,7 +13,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -871,16 +870,16 @@ public class ProjectAnalyzer {
         boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
         String mvn = executableWithWrapper("mvn", isWindows);
         List<String> command;
-        // A relative name gives each reactor module its own output file; an
-        // absolute path makes modules overwrite one another's dependencies.
-        String outputName = ".cocomut-maven-classpath-" + UUID.randomUUID() + ".txt";
-        List<Path> reactorDirectories = new ArrayList<>();
-        reactorDirectories.add(effectiveBuildRoot);
-        reactorDirectories.addAll(collectMavenModuleDirs(effectiveBuildRoot));
+        // Maven evaluates these project expressions separately for each active
+        // reactor module, including profile and externally located modules.
+        // Own the output directory so discovery/cleanup need no POM inventory.
+        Path outputs = Files.createTempDirectory("cocomut-maven-classpaths-");
+        String outputFile = outputs.resolve("${project.groupId}")
+                .resolve("${project.artifactId}").resolve("${project.version}.txt").toString();
         try {
             CommandResult result;
             command = List.of(mvn, "-q", "-DincludeScope=" + (includeTests ? "test" : "compile"),
-                    "-Dmdep.outputFile=" + outputName,
+                    "-Dmdep.outputFile=" + outputFile,
                     "dependency:build-classpath");
             try {
                 result = runCommand(command, true, "maven_dependency_classpath");
@@ -896,16 +895,19 @@ public class ProjectAnalyzer {
                 return List.of();
             }
             Set<Path> entries = new LinkedHashSet<>();
-            for (Path directory : reactorDirectories) {
-                Path output = directory.resolve(outputName);
-                if (Files.isRegularFile(output)) {
+            // Sort module-coordinate paths for a deterministic union; each
+            // module's own classpath order is retained.
+            try (var files = Files.walk(outputs)) {
+                for (Path output : files.filter(Files::isRegularFile).sorted().toList()) {
                     entries.addAll(parsePathList(Files.readString(output, StandardCharsets.UTF_8)));
                 }
             }
             return new ArrayList<>(entries);
         } finally {
-            for (Path directory : reactorDirectories) {
-                Files.deleteIfExists(directory.resolve(outputName));
+            try (var files = Files.walk(outputs)) {
+                for (Path output : files.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                    Files.deleteIfExists(output);
+                }
             }
         }
     }
