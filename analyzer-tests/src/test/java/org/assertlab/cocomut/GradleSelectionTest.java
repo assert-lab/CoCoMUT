@@ -189,12 +189,20 @@ public class GradleSelectionTest {
             Files.writeString(child.resolve("build.gradle"), "apply plugin: 'java'\n");
             source(child, "Example");
             Path tests = Files.createDirectories(child.resolve("src/test/java/demo"));
-            Files.writeString(tests.resolve("TestExample.java"), "package demo; public class TestExample {}\n");
+            Files.writeString(tests.resolve("TestExample.java"), "package demo; public class TestExample { public int value(){return 2;} }\n");
             ProjectMetadata metadata = analyze(root);
             assertTrue(metadata.getBuildOutputTail(), metadata.isBuildSucceeded());
             assertTrue(metadata.getGradleModelReport().buildPlan().unavailableSourceSets().isEmpty());
             assertFalse(metadata.getGradleModelReport().partial());
             assertTrue(Files.exists(child.resolve("build/classes/java/test/demo/TestExample.class")));
+            Orchestrator pipeline = new Orchestrator(ContextRequest.builder().projectRoot(root)
+                    .sourceSets(Set.of("main", "test")).scope(ContextRequest.Scope.ALL)
+                    .outputDirectory(root.resolve("analysis-output")).build(), metadata);
+            pipeline.execute();
+            assertEquals("SUCCESS", pipeline.getExecutionReport().get("status"));
+            String rows = Files.readString(Path.of(pipeline.getExecutionReport().get("phase_5_jsonl_file").toString()));
+            assertTrue(rows.contains("demo.Example"));
+            assertTrue(rows.contains("demo.TestExample"));
         } finally { remove(root); }
     }
 
