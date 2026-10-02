@@ -307,9 +307,12 @@ For documentation datasets, prefer a precise source-set and scope:
 `--source-set main` excludes public methods found under source roots that
 CoCoMUT classifies as test, generated, example, integration-test, or unknown.
 Use `--source-set all` or omit the flag to preserve the default behavior.
-Generated declarations under `target/generated-*` and `build/generated` are
-excluded from the default focal population, including `--source-set all`.
-They remain source-model inputs for symbol resolution and inherited documentation.
+Generated declarations under `target/generated-*` and `build/generated` within
+the analyzed project are excluded from the default focal population, including `--source-set all`.
+Checkout ancestors do not affect this classification. Generated roots discovered
+after compilation remain source-model inputs for symbol resolution and inherited
+documentation even when attached directly to Gradle compilation tasks. Skipped
+modules remain excluded.
 Use `--source-set generated` to select generated declarations, or
 `--source-set main,generated` to include them alongside production methods.
 Explicitly supplied generated source roots also opt their declarations into the
