@@ -269,10 +269,90 @@ and keeps the available caller/callee edges. This is not a call-graph failure:
 it means per-method bytecode matching is incomplete for the selected focal set.
 If zero selected methods match project bytecode, CoCoMUT reports `PARTIAL`
 instead: the source records remain usable, but method-level call context is not.
+Maven dependency classpaths are collected from the files written by the active
+reactor, including modules activated through profiles. Each module writes to a
+coordinate-specific file in a private temporary directory, which is removed
+after success or failure.
+
+Source modeling first attempts classpath-aware Spoon analysis. If it must use
+`no_classpath` or combine classpath and no-classpath models (`mixed`), the run is
+`PARTIAL` with `SOURCE_CLASSPATH_DEGRADED`, even if compilation and call-graph
+construction succeeded. `extraction_report.json` records `source_backend_mode`
+and `source_model_attempts`; the log records the attempts too. Each attempt
+contains input paths, requested/effective Java compliance, mode, classpath-entry
+count, outcome, and sanitized exception class/message. Failed attempts remain
+visible after recovery.
+
+Source modeling also inventories source method/constructor declarations with
+ECJ, independently of Spoon's type construction. If a combined model loses
+any declaration, CoCoMUT retries that file alone and checks coverage again.
+`source_files_recovered` and `recovered_source_files` identify successful
+recoveries; `SOURCE_MODEL_RECOVERED` marks the run `PARTIAL` because context
+comes from separate models. Syntax errors or unrecovered declarations count as
+failed files, appear in `failed_source_files.jsonl`, and produce
+`SOURCE_PARSE_FAILED`. Files with no executable declarations remain valid.
+Overlapping roots are counted once per source file. This audit checks source
+syntax and model coverage; it does not replace a successful project build.
+
+`source_model_attempts` distinguishes `model_build` and `declaration_audit`
+stages. Audit events include a `diagnostic_code` (`source_syntax_error`,
+`source_declarations_missing`, or `source_read_failed`); `exception_class` is reserved for actual thrown
+exceptions. The audit does not use a classpath, so its entry count is zero.
+Read/decoding failures mark only the affected file as failed; other files and
+previous model attempts remain available. Spoon, the audit, and Java source-text
+reads use the JVM default charset consistently. For legacy encodings, start the
+JVM with the matching `-Dfile.encoding`, for example `ISO-8859-1`; output files
+retain their documented encoding. Maven's compiler encoding is not inferred.
+
+Use `--require-source-classpath` (API: `requireSourceClasspath(true)`) when
+classpath-backed source evidence is required. A final `no_classpath` or `mixed`
+model then makes the run `FAILED` with `SOURCE_CLASSPATH_REQUIRED` and exit 1.
+Extraction continues to retain partial JSONL, report, and manifest for inspection.
+The report's `source_classpath_requirement_satisfied` states whether the source
+model meets that requirement; it does not guarantee every symbol resolves.
+
 The CLI exits with status `2` for `PARTIAL`, `0` for `SUCCESS`, and `1` for a
 terminal failure. API callers can use `ExtractionReport.partial()` and
 `ExtractionReport.usableRecordsEmitted()` instead of inferring usability from
 string status fields.
+
+If static bytecode analysis cannot initialize or generate a graph, CoCoMUT keeps
+source records and reports `PARTIAL` with `CALL_GRAPH_UNAVAILABLE`.
+`phase_3_initialization` records the latest initialization attempt: `status`
+(`success`, `no_bytecode`, or `failed`), `stage` (`input_locations`, `java_view`,
+or `class_loading`), and the exception class/message on failure. A failing
+`classpath_entry` is included only when input-location construction identifies
+it; failures while JavaView loads classes do not guess an entry. The exception
+is also logged and included in `phase_3_warning`. Graph-generation exceptions
+after successful initialization use `phase_3_exception_class` and
+`phase_3_exception_message` alongside `phase_3_error`.
+
+Out-of-memory and stack-overflow failures, including wrapped causes, remain
+terminal `ERROR` results with `ANALYSIS_RESOURCE_EXHAUSTED`, `failed_at_phase`,
+and the original resource exception. They do not continue as partial
+extractions. `phase_3_max_heap_bytes` records the runtime maximum heap; combine
+it with the existing `phase_1_project_bytecode_locations` and
+`phase_1_dependency_jars` counts when investigating resource pressure.
+The report and manifest retain these diagnostics when reporting can complete;
+they cannot guarantee artifact persistence if the JVM cannot recover enough
+resources to write files.
+
+An illustrative initialization-failure report excerpt is:
+
+```json
+{
+  "status": "PARTIAL",
+  "failure_codes": ["CALL_GRAPH_UNAVAILABLE"],
+  "phase_3_available": false,
+  "phase_3_initialization": {
+    "status": "failed",
+    "stage": "class_loading",
+    "exception_class": "java.lang.IllegalArgumentException",
+    "message": "Unsupported class file major version"
+  },
+  "phase_3_max_heap_bytes": 2147483648
+}
+```
 
 For documentation datasets, prefer a precise source-set and scope:
 

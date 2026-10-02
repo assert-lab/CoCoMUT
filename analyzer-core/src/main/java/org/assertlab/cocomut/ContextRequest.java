@@ -99,6 +99,7 @@ public final class ContextRequest {
     private final List<Path> testSourceRoots;
     private final JavadocInheritancePolicy javadocInheritancePolicy;
     private final boolean javadocInheritancePolicyDefaulted;
+    private final boolean requireSourceClasspath;
 
     private ContextRequest(Builder builder) {
         this.projectRoot = Objects.requireNonNull(builder.projectRoot, "projectRoot cannot be null")
@@ -107,6 +108,7 @@ public final class ContextRequest {
         this.scope = Objects.requireNonNull(builder.scope, "scope cannot be null");
         this.callGraphAlgorithm = Objects.requireNonNull(builder.callGraphAlgorithm,
                 "callGraphAlgorithm cannot be null");
+        this.requireSourceClasspath = builder.requireSourceClasspath;
         this.maxMethods = builder.maxMethods;
         this.maxSourceFiles = builder.maxSourceFiles;
         this.sourceSets = Collections.unmodifiableSet(new LinkedHashSet<>(builder.sourceSets));
@@ -233,6 +235,10 @@ public final class ContextRequest {
         return testSourceRoots;
     }
 
+    public boolean requireSourceClasspath() {
+        return requireSourceClasspath;
+    }
+
     public JavadocInheritancePolicy javadocInheritancePolicy() {
         return javadocInheritancePolicy;
     }
@@ -267,6 +273,12 @@ public final class ContextRequest {
         private JavadocInheritancePolicy javadocInheritancePolicy =
                 JavadocInheritancePolicy.JDK25_STANDARD_DOCLET;
         private boolean javadocInheritancePolicyDefaulted = true;
+        private boolean requireSourceClasspath;
+
+        public Builder requireSourceClasspath(boolean required) {
+            this.requireSourceClasspath = required;
+            return this;
+        }
 
         public Builder projectRoot(Path projectRoot) {
             this.projectRoot = projectRoot;

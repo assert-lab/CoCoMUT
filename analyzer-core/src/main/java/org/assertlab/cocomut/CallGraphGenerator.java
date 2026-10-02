@@ -40,6 +40,21 @@ public class CallGraphGenerator {
     private final Algorithm algorithm;
     private final Map<String, CallGraphResult> cache;
     private boolean initialized;
+    private InitializationDiagnostic initializationDiagnostic;
+
+    /** Plain initialization evidence, independent of SootUp implementation types. */
+    public record InitializationDiagnostic(String status, String stage, String exceptionClass,
+                                           String message, String classpathEntry) {
+        public Map<String, Object> asMap() {
+            Map<String, Object> diagnostic = new LinkedHashMap<>();
+            diagnostic.put("status", status);
+            diagnostic.put("stage", stage);
+            if (exceptionClass != null) diagnostic.put("exception_class", exceptionClass);
+            if (message != null) diagnostic.put("message", message);
+            if (classpathEntry != null) diagnostic.put("classpath_entry", classpathEntry);
+            return Collections.unmodifiableMap(diagnostic);
+        }
+    }
 
     // SootUp state
     private JavaView view;
@@ -114,6 +129,9 @@ public class CallGraphGenerator {
     public boolean initialize() {
         if (initialized) return true;
 
+        initializationDiagnostic = null;
+        String stage = "input_locations";
+        String classpathEntry = null;
         try {
             Set<String> seenPaths = new LinkedHashSet<>();
             List<AnalysisInputLocation> inputLocations = new ArrayList<>();
@@ -127,6 +145,7 @@ public class CallGraphGenerator {
                 bytecodeClasspath.addAll(projectMetadata.getClasspath());
             }
             for (Path cp : bytecodeClasspath) {
+                classpathEntry = cp.toAbsolutePath().toString();
                 if ((cp.toFile().isDirectory() && containsClassFiles(cp))
                         || (cp.toString().endsWith(".jar") && Files.isRegularFile(cp))) {
                     if (seenPaths.add(cp.toAbsolutePath().toString())) {
@@ -134,16 +153,21 @@ public class CallGraphGenerator {
                     }
                 }
             }
+            classpathEntry = null;
 
             if (inputLocations.isEmpty()) {
+                initializationDiagnostic = new InitializationDiagnostic("no_bytecode", stage, null,
+                        "No usable bytecode locations found", null);
                 System.err.println("[CallGraphGenerator] no bytecode locations found under " + projectMetadata.getProjectPath());
                 return false;
             }
 
+            stage = "java_view";
             view = new JavaView(inputLocations);
 
             methodsByType = new HashMap<>();
 
+            stage = "class_loading";
             for (JavaSootClass sootClass : view.getClasses().sequential().collect(Collectors.toList())) {
                 String typeName = sootClass.getType().toString();
                 List<SootMethod> methods = new ArrayList<>();
@@ -154,8 +178,17 @@ public class CallGraphGenerator {
             }
 
             initialized = true;
+            initializationDiagnostic = new InitializationDiagnostic("success", stage, null, null, null);
             return true;
-        } catch (Exception e) {
+        } catch (Exception | OutOfMemoryError | StackOverflowError e) {
+            initializationDiagnostic = new InitializationDiagnostic("failed", stage,
+                    e.getClass().getName(), Objects.toString(e.getMessage(), ""), classpathEntry);
+            // Release partially loaded state before reporting/rethrowing resource errors.
+            view = null;
+            methodsByType = null;
+            ResourceFailures.rethrowIfPresent(e);
+            System.err.println("[CallGraphGenerator] initialization failed at " + stage + ": "
+                    + e.getClass().getName() + (e.getMessage() == null ? "" : ": " + e.getMessage()));
             return false;
         }
     }
@@ -212,6 +245,7 @@ public class CallGraphGenerator {
             cache.put(cacheKey, result);
             return result;
         } catch (Exception e) {
+            ResourceFailures.rethrowIfPresent(e);
             return null;
         }
     }
@@ -1051,15 +1085,13 @@ public class CallGraphGenerator {
         return "<clinit>".equals(sig.getName());
     }
 
-    private static boolean containsClassFiles(Path dir) {
+    private static boolean containsClassFiles(Path dir) throws java.io.IOException {
         // Walk the full subtree: deeply-nested packages (e.g. commons-numbers'
         // org/apache/commons/numbers/<module>/) push .class files past any small
         // fixed depth, so a bounded walk would wrongly report "no classes".
         // anyMatch short-circuits on the first .class, so this stays cheap.
         try (var stream = Files.walk(dir)) {
             return stream.anyMatch(p -> p.toString().endsWith(".class"));
-        } catch (Exception e) {
-            return false;
         }
     }
 
@@ -1083,6 +1115,11 @@ public class CallGraphGenerator {
 
     public boolean isInitialized() {
         return initialized;
+    }
+
+    /** The latest initialization attempt; null until initialization is attempted. */
+    public InitializationDiagnostic getInitializationDiagnostic() {
+        return initializationDiagnostic;
     }
 
     public Algorithm getAlgorithm() {

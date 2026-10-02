@@ -870,11 +870,16 @@ public class ProjectAnalyzer {
         boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
         String mvn = executableWithWrapper("mvn", isWindows);
         List<String> command;
-        Path output = Files.createTempFile("cocomut-maven-classpath", ".txt");
+        // Maven evaluates these project expressions separately for each active
+        // reactor module, including profile and externally located modules.
+        // Own the output directory so discovery/cleanup need no POM inventory.
+        Path outputs = Files.createTempDirectory("cocomut-maven-classpaths-");
+        String outputFile = outputs.resolve("${project.groupId}")
+                .resolve("${project.artifactId}").resolve("${project.version}.txt").toString();
         try {
             CommandResult result;
             command = List.of(mvn, "-q", "-DincludeScope=" + (includeTests ? "test" : "compile"),
-                    "-Dmdep.outputFile=" + output.toAbsolutePath(),
+                    "-Dmdep.outputFile=" + outputFile,
                     "dependency:build-classpath");
             try {
                 result = runCommand(command, true, "maven_dependency_classpath");
@@ -886,12 +891,24 @@ public class ProjectAnalyzer {
                         new CommandResult(-1, "process start failed: " + e.getMessage(), false));
                 return List.of();
             }
-            if (result.exitCode() != 0 || !Files.isRegularFile(output)) {
+            if (result.exitCode() != 0) {
                 return List.of();
             }
-            return parsePathList(Files.readString(output, StandardCharsets.UTF_8));
+            Set<Path> entries = new LinkedHashSet<>();
+            // Sort module-coordinate paths for a deterministic union; each
+            // module's own classpath order is retained.
+            try (var files = Files.walk(outputs)) {
+                for (Path output : files.filter(Files::isRegularFile).sorted().toList()) {
+                    entries.addAll(parsePathList(Files.readString(output, StandardCharsets.UTF_8)));
+                }
+            }
+            return new ArrayList<>(entries);
         } finally {
-            Files.deleteIfExists(output);
+            try (var files = Files.walk(outputs)) {
+                for (Path output : files.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                    Files.deleteIfExists(output);
+                }
+            }
         }
     }
 

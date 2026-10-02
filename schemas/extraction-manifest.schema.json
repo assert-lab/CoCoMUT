@@ -41,7 +41,15 @@
       },
       "additionalProperties": false
     },
-    "execution": { "type": "object" },
+    "execution": {
+      "type": "object",
+      "properties": {
+        "phase_3_initialization": { "$ref": "#/$defs/callGraphInitializationDiagnostic" },
+        "phase_3_max_heap_bytes": { "type": "integer", "minimum": 1 },
+        "phase_3_exception_class": { "type": "string" },
+        "phase_3_exception_message": { "type": ["string", "null"] }
+      }
+    },
     "project": {
       "type": "object",
       "additionalProperties": false,
@@ -214,6 +222,20 @@
     }
   },
   "$defs": {
+    "callGraphInitializationDiagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "stage"],
+      "properties": {
+        "status": { "enum": ["success", "no_bytecode", "failed"] },
+        "stage": { "enum": ["input_locations", "java_view", "class_loading"] },
+        "exception_class": { "type": "string", "minLength": 1 },
+        "message": { "type": "string" },
+        "classpath_entry": { "type": "string", "minLength": 1 }
+      },
+      "if": { "properties": { "status": { "const": "failed" } } },
+      "then": { "required": ["exception_class", "message"] }
+    },
     "pathArray": {
       "type": "array",
       "items": { "type": "string" }

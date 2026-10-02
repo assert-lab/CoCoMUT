@@ -146,6 +146,7 @@ public class SpoonSourceModelBackendTest {
         assertEquals("classpath", SpoonSourceModelBackend.mergedMode(List.of("classpath")));
         assertEquals("no_classpath", SpoonSourceModelBackend.mergedMode(List.of("no_classpath")));
         assertEquals("mixed", SpoonSourceModelBackend.mergedMode(List.of("classpath", "no_classpath")));
+        assertEquals("mixed", SpoonSourceModelBackend.mergedMode(List.of("mixed_limited", "classpath")));
     }
 
     @Test

@@ -11,6 +11,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNull;
 import org.junit.Before;
 import org.junit.Test;
 import sootup.core.signatures.MethodSignature;
@@ -55,6 +56,7 @@ public class CallGraphGeneratorTest {
     public void testCallGraphGeneratorCreation() {
         assertNotNull("Generator should be created", generator);
         assertFalse("Should not be initialized yet", generator.isInitialized());
+        assertNull(generator.getInitializationDiagnostic());
     }
 
     @Test
@@ -62,6 +64,82 @@ public class CallGraphGeneratorTest {
         boolean initialized = generator.initialize();
         assertTrue("Should initialize successfully", initialized);
         assertTrue("Should be marked as initialized", generator.isInitialized());
+        assertEquals("success", generator.getInitializationDiagnostic().status());
+    }
+
+    @Test
+    public void initializationRetainsClassLoadingExceptionAndClearsItAfterRetry() throws Exception {
+        Path project = java.nio.file.Files.createTempDirectory("cocomut-callgraph-invalid-class-");
+        try {
+            Path classes = project.resolve("classes");
+            java.nio.file.Files.createDirectories(classes);
+            Path invalid = classes.resolve("Broken.class");
+            java.nio.file.Files.write(invalid, new byte[] {0, 1, 2, 3});
+            CallGraphGenerator broken = new CallGraphGenerator(new ProjectMetadata.Builder()
+                    .projectName("invalid-bytecode").projectPath(project)
+                    .buildSystem("none").javaVersion("17").sourceRoot(project)
+                    .mainClassOutputs(List.of(classes)).build());
+
+            assertFalse(broken.initialize());
+            assertFalse(broken.isInitialized());
+            CallGraphGenerator.InitializationDiagnostic diagnostic = broken.getInitializationDiagnostic();
+            assertNotNull(diagnostic);
+            assertEquals("failed", diagnostic.status());
+            assertEquals("class_loading", diagnostic.stage());
+            assertNotNull("Exception class must survive initialize()", diagnostic.exceptionClass());
+            assertNotNull("Exception message must survive initialize()", diagnostic.message());
+            assertNull("Do not guess which JavaView input failed", diagnostic.classpathEntry());
+
+            java.nio.file.Files.delete(invalid);
+            compile(project, classes, "example.Valid", "package example; public class Valid { public void ok() {} }");
+            assertTrue("A failed attempt must not poison a subsequent initialization", broken.initialize());
+            assertEquals("success", broken.getInitializationDiagnostic().status());
+            assertNull(broken.getInitializationDiagnostic().exceptionClass());
+            assertNull(broken.getInitializationDiagnostic().message());
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void noBytecodeHasAnExplicitReasonWithoutInventingAnException() throws Exception {
+        Path project = java.nio.file.Files.createTempDirectory("cocomut-callgraph-no-bytecode-");
+        try {
+            CallGraphGenerator empty = new CallGraphGenerator(new ProjectMetadata.Builder()
+                    .projectName("no-bytecode").projectPath(project)
+                    .buildSystem("none").javaVersion("17").sourceRoot(project).build());
+            assertFalse(empty.initialize());
+            assertEquals("no_bytecode", empty.getInitializationDiagnostic().status());
+            assertEquals("input_locations", empty.getInitializationDiagnostic().stage());
+            assertNull(empty.getInitializationDiagnostic().exceptionClass());
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
+    public void invalidJarRetainsTheKnownInputLocation() throws Exception {
+        Path project = java.nio.file.Files.createTempDirectory("cocomut-callgraph-invalid-jar-");
+        try {
+            Path jar = project.resolve("broken.jar");
+            java.nio.file.Files.writeString(jar, "This is not a ZIP archive");
+            CallGraphGenerator invalid = new CallGraphGenerator(new ProjectMetadata.Builder()
+                    .projectName("invalid-jar").projectPath(project)
+                    .buildSystem("none").javaVersion("17").sourceRoot(project)
+                    .projectArtifactJars(List.of(jar)).build());
+            assertFalse(invalid.initialize());
+            CallGraphGenerator.InitializationDiagnostic diagnostic = invalid.getInitializationDiagnostic();
+            assertEquals("failed", diagnostic.status());
+            assertNotNull(diagnostic.exceptionClass());
+            // Only input-location construction can identify a specific element reliably.
+            if ("input_locations".equals(diagnostic.stage())) {
+                assertEquals(jar.toAbsolutePath().toString(), diagnostic.classpathEntry());
+            } else {
+                assertNull(diagnostic.classpathEntry());
+            }
+        } finally {
+            deleteRecursively(project);
+        }
     }
 
     @Test
