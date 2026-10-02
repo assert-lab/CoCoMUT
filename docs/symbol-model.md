@@ -388,3 +388,10 @@ This is a product boundary, not a parser failure. External documentation
 retrieval is build-environment sensitive, often depends on missing source
 artifacts, and can make mined datasets harder to interpret. If this is added
 later, it should be an explicit optional mode with separate provenance.
+
+Method and constructor contexts expose `modifiers` as an alphabetically sorted array
+of Java modifier names (for example, `["public", "static"]`). The source model
+includes implicit modifiers, such as interface method visibility. Package-private
+declarations have no visibility keyword in this array. Parameter modifiers remain
+in `parameters[].modifiers`. The field is also present in embedded caller/callee
+method contexts; the schema version remains unchanged.

@@ -29,6 +29,41 @@ import spoon.support.compiler.VirtualFile;
 public class SpoonSourceModelBackendTest {
 
     @Test
+    public void exposesSortedMethodAndConstructorModifiers() throws Exception {
+        Path root = Files.createTempDirectory("cocomut-modifiers");
+        Path source = Files.createDirectories(root.resolve("src/main/java"));
+        Files.writeString(source.resolve("Sample.java"), """
+                public class Sample {
+                    protected Sample() {}
+                    public static final synchronized void run() {}
+                    private native void nativeCall();
+                    void local() {}
+                }
+                interface Contract {
+                    void implicit();
+                    default void implemented() {}
+                }
+                """);
+        ProjectMetadata metadata = new ProjectMetadata.Builder()
+                .projectName("modifiers").projectPath(root).buildSystem("generic")
+                .javaVersion("17").sourceRoot(source).sourceRoots(List.of(source)).build();
+        try (SourceAnalysisSession session = new SpoonSourceModelBackend().open(ProjectModel.from(metadata))) {
+            Map<String, List<String>> actual = new LinkedHashMap<>();
+            for (SourceMethod method : session.methods()) {
+                actual.put(method.methodName(), method.modifiers());
+                assertEquals(method.modifiers(), session.extractContext(method.methodUri()).orElseThrow()
+                        .method().modifiers());
+            }
+            assertEquals(List.of("final", "public", "static", "synchronized"), actual.get("run"));
+            assertEquals(List.of("protected"), actual.get("Sample"));
+            assertEquals(List.of("native", "private"), actual.get("nativeCall"));
+            assertEquals(List.of(), actual.get("local"));
+            assertTrue(actual.get("implicit").containsAll(List.of("abstract", "public")));
+            assertTrue(actual.get("implemented").contains("default"));
+        }
+    }
+
+    @Test
     public void reportsTheEffectiveModeAcrossParsedModels() {
         assertEquals("classpath", SpoonSourceModelBackend.mergedMode(List.of("classpath")));
         assertEquals("no_classpath", SpoonSourceModelBackend.mergedMode(List.of("no_classpath")));

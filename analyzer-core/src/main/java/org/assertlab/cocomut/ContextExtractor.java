@@ -112,6 +112,7 @@ public class ContextExtractor {
                 .callGraph(callGraph)
                 .linesOfCode(countLinesOfCode(methodBody))
                 .cyclomatic(calculateCyclomaticComplexity(methodBody))
+                .modifiers(sourceMethod.modifiers())
                 .annotations(sourceMethod.annotations())
                 .thrownExceptions(sourceMethod.thrownExceptions())
                 .fieldReads(sourceContext.fieldReads())
