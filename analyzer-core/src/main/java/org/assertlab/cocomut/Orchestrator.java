@@ -77,6 +77,8 @@ final class Orchestrator {
     private Map<String, String> contextExtractionFailures = new LinkedHashMap<>();
     private final Set<FailureCode> failureCodes = new LinkedHashSet<>();
     private boolean partialWithoutFailure;
+    private boolean requireSourceClasspath;
+    private boolean sourceClasspathRejected;
     private ExtractionManifest.GitInfo gitAtStart;
 
     Orchestrator(Path projectPath) {
@@ -108,6 +110,7 @@ final class Orchestrator {
         this.explicitClasspathFiles = request.classpathFiles();
         this.explicitSourceRoots = request.sourceRoots();
         this.explicitTestSourceRoots = request.testSourceRoots();
+        this.requireSourceClasspath = request.requireSourceClasspath();
         this.javadocInheritancePolicy = request.javadocInheritancePolicy();
         this.javadocInheritancePolicyDefaulted = request.javadocInheritancePolicyDefaulted();
     }
@@ -213,7 +216,10 @@ final class Orchestrator {
             currentPhase = 5;
             if (!executePhase5()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 5); return false; }
 
-            if (failureCodes.isEmpty() && !partialWithoutFailure) {
+            if (sourceClasspathRejected) {
+                executionReport.put("status", "FAILED");
+                failureCodes.add(FailureCode.SOURCE_CLASSPATH_REQUIRED);
+            } else if (failureCodes.isEmpty() && !partialWithoutFailure) {
                 executionReport.put("status", "SUCCESS");
                 success = true;
             } else {
@@ -682,9 +688,31 @@ final class Orchestrator {
 
     private void openSourceSession() throws java.io.IOException {
         SourceModelBackend backend = SourceBackends.spoon();
-        sourceSession = backend.open(projectModel);
+        try {
+            sourceSession = backend.open(projectModel);
+        } catch (org.assertlab.cocomut.source.SourceModelBuildException failure) {
+            executionReport.put("source_model_attempts", failure.attempts().stream()
+                    .map(org.assertlab.cocomut.source.SourceModelAttempt::asMap).toList());
+            executionReport.put("source_backend_mode", "unavailable");
+            executionReport.put("require_source_classpath", requireSourceClasspath);
+            executionReport.put("source_classpath_requirement_satisfied", false);
+            throw failure;
+        }
         executionReport.put("source_backend", backend.name());
         var stats = sourceSession.parseStats();
+        executionReport.put("source_backend_mode", stats.mode());
+        executionReport.put("source_model_attempts", stats.modelAttempts().stream()
+                .map(org.assertlab.cocomut.source.SourceModelAttempt::asMap).toList());
+        executionReport.put("require_source_classpath", requireSourceClasspath);
+        for (var attempt : stats.modelAttempts()) {
+            System.out.println("Source model attempt: " + attempt.asMap());
+        }
+        boolean degraded = !stats.mode().startsWith("classpath");
+        if (degraded) {
+            failureCodes.add(FailureCode.SOURCE_CLASSPATH_DEGRADED);
+            sourceClasspathRejected = requireSourceClasspath;
+        }
+        executionReport.put("source_classpath_requirement_satisfied", !degraded);
         executionReport.put("source_files_discovered", stats.discovered());
         executionReport.put("source_files_parsed", stats.parsed());
         executionReport.put("source_files_failed", stats.failed());
@@ -1134,6 +1162,7 @@ final class Orchestrator {
         request.put("max_source_files", maxSourceFiles);
         request.put("call_graph", callGraphAlgorithm.toString());
         request.put("build_policy", buildPolicy.toString());
+        request.put("require_source_classpath", requireSourceClasspath);
         request.put("javadoc_inheritance_policy", javadocInheritancePolicy.id());
         request.put("javadoc_inheritance_specification_version",
                 javadocInheritancePolicy.specificationVersion());

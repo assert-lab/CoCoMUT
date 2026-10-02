@@ -6,8 +6,15 @@ import java.util.List;
 public record SourceParseStats(
         int discovered,
         int parsed,
-        List<Path> failedFiles) {
+        List<Path> failedFiles,
+        String mode,
+        List<SourceModelAttempt> modelAttempts) {
+    public SourceParseStats(int discovered, int parsed, List<Path> failedFiles) {
+        this(discovered, parsed, failedFiles, "classpath", List.of());
+    }
+
     public SourceParseStats {
+        modelAttempts = modelAttempts != null ? List.copyOf(modelAttempts) : List.of();
         failedFiles = failedFiles != null ? List.copyOf(failedFiles) : List.of();
     }
 

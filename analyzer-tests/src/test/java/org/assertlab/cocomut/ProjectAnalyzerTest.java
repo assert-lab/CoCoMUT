@@ -52,6 +52,56 @@ public class ProjectAnalyzerTest {
     }
 
     @Test
+    public void collectsEachReactorClasspathAndCleansOutputs() throws Exception {
+        assertReactorClasspathCollection(false, false);
+    }
+
+    @Test
+    public void collectsProfileModuleOutputsAndCleansThemAfterFailure() throws Exception {
+        assertReactorClasspathCollection(true, false);
+        assertReactorClasspathCollection(true, true);
+    }
+
+    private void assertReactorClasspathCollection(boolean profile, boolean fail) throws Exception {
+        Assume.assumeFalse(System.getProperty("os.name", "").toLowerCase().contains("win"));
+        Path project = Files.createTempDirectory("cocomut-reactor-classpath-");
+        try {
+            String modules = "<modules><module>child</module></modules>";
+            Files.writeString(project.resolve("pom.xml"), "<project>" + (profile
+                    ? "<profiles><profile><id>extra</id><activation><activeByDefault>true</activeByDefault></activation>"
+                        + modules + "</profile></profiles>" : modules) + "</project>");
+            Files.createDirectories(project.resolve("child"));
+            Files.writeString(project.resolve("child/pom.xml"), "<project/>");
+            Files.createDirectories(project.resolve(".mvn/wrapper"));
+            Files.writeString(project.resolve(".mvn/wrapper/maven-wrapper.properties"), "distributionUrl=unused\n");
+            Path first = Files.createFile(project.resolve("first.jar"));
+            Path second = Files.createFile(project.resolve("second.jar"));
+            Path wrapper = project.resolve("mvnw");
+            Files.writeString(wrapper, """
+                    #!/bin/sh
+                    for argument in "$@"; do
+                      case "$argument" in -Dmdep.outputFile=*) output=${argument#*=} ;; esac
+                    done
+                    case "$output" in /*) ;; *) exit 9 ;; esac
+                    directory=${output%%/\\${project.groupId}*}
+                    printf '%s' "$directory" > output-directory.txt
+                    mkdir -p "$directory/p/00-root" "$directory/p/01-child"
+                    printf '%s' "$PWD/first.jar" > "$directory/p/00-root/1.txt"
+                    printf '%s' "$PWD/second.jar:$PWD/first.jar" > "$directory/p/01-child/1.txt"
+                    """ + (fail ? "exit 1\n" : ""));
+            assertTrue(wrapper.toFile().setExecutable(true));
+            ProjectAnalyzer reactor = new ProjectAnalyzer(project);
+            Method method = ProjectAnalyzer.class.getDeclaredMethod("buildMavenClasspath");
+            method.setAccessible(true);
+            assertEquals(fail ? List.of() : List.of(first, second), method.invoke(reactor));
+            Path outputDirectory = Path.of(Files.readString(project.resolve("output-directory.txt")));
+            assertFalse("All module outputs must be removed even after Maven failure", Files.exists(outputDirectory));
+        } finally {
+            deleteRecursively(project);
+        }
+    }
+
+    @Test
     public void detectsParenthesizedMinimumJdkRequirement() {
         assertEquals(21, ProjectAnalyzer.requiredJavaVersion(
                 "To build this project JDK 21 (or greater) is required. Please install it."));

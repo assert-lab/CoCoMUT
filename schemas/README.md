@@ -420,3 +420,15 @@ metadata.schema_version
 
 If a field is renamed, removed, or changes meaning before a release, update this
 README, the schema file, the emitter, and sample output together.
+
+### Source-model diagnostics in the extraction report
+
+The report retains `source_backend_mode`, `source_model_attempts`,
+`require_source_classpath`, and `source_classpath_requirement_satisfied`.
+Attempt objects contain `inputs` (project-relative paths), `mode`,
+`requested_compliance`, `effective_compliance`, `classpath_entries`, `outcome`,
+`exception_class`, and `message`. Exception messages have control characters and
+local project/home prefixes removed and are capped at 2,000 characters.
+No-classpath/mixed models produce `SOURCE_CLASSPATH_DEGRADED`; strict requests
+also produce `SOURCE_CLASSPATH_REQUIRED` and a failed run. These report additions
+retain the existing method-context and manifest schema versions.

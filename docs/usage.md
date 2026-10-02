@@ -269,6 +269,27 @@ and keeps the available caller/callee edges. This is not a call-graph failure:
 it means per-method bytecode matching is incomplete for the selected focal set.
 If zero selected methods match project bytecode, CoCoMUT reports `PARTIAL`
 instead: the source records remain usable, but method-level call context is not.
+Maven dependency classpaths are collected from the files written by the active
+reactor, including modules activated through profiles. Each module writes to a
+coordinate-specific file in a private temporary directory, which is removed
+after success or failure.
+
+Source modeling first attempts classpath-aware Spoon analysis. If it must use
+`no_classpath` or combine classpath and no-classpath models (`mixed`), the run is
+`PARTIAL` with `SOURCE_CLASSPATH_DEGRADED`, even if compilation and call-graph
+construction succeeded. `extraction_report.json` records `source_backend_mode`
+and `source_model_attempts`; the log records the attempts too. Each attempt
+contains input paths, requested/effective Java compliance, mode, classpath-entry
+count, outcome, and sanitized exception class/message. Failed attempts remain
+visible after recovery.
+
+Use `--require-source-classpath` (API: `requireSourceClasspath(true)`) when
+classpath-backed source evidence is required. A final `no_classpath` or `mixed`
+model then makes the run `FAILED` with `SOURCE_CLASSPATH_REQUIRED` and exit 1.
+Extraction continues to retain partial JSONL, report, and manifest for inspection.
+The report's `source_classpath_requirement_satisfied` states whether the source
+model meets that requirement; it does not guarantee every symbol resolves.
+
 The CLI exits with status `2` for `PARTIAL`, `0` for `SUCCESS`, and `1` for a
 terminal failure. API callers can use `ExtractionReport.partial()` and
 `ExtractionReport.usableRecordsEmitted()` instead of inferring usability from
