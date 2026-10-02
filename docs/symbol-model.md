@@ -433,3 +433,11 @@ serialization itself fails. Resource errors propagate rather than producing
 apparently usable rows. Source-classpath acceptance remains independent of this
 policy: retaining a row does not upgrade `no_classpath` or `mixed` evidence.
 The schema version remains 0.5.0.
+
+Malformed tags that make Spoon's Javadoc parser throw `AssertionError` are
+recoverable parser failures. The row retains its code and focal comment;
+`javadoc_elements` records the exception, and dependent Javadoc metadata and
+documentation metrics are explicitly unavailable. Assertion recovery is limited
+to the parser boundary. The shared `ResourceFailures` guard checks cause chains
+before recovery, so direct or wrapped `OutOfMemoryError` and `StackOverflowError`
+remain terminal across enrichment, declaration fallback, and call-graph context.

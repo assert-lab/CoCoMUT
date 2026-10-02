@@ -6,7 +6,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public record EnrichmentDiagnostic(String component,
                                    @JsonProperty("exception_class") String exceptionClass,
                                    String message) {
-    public static EnrichmentDiagnostic from(String component, Exception failure) {
+    public static EnrichmentDiagnostic from(String component, Throwable failure) {
         String message = failure.getMessage();
         message = message == null ? "" : message.replaceAll("[\\r\\n]+", " ");
         if (message.length() > 1000) {

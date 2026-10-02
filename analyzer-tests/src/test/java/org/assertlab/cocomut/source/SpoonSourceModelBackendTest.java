@@ -88,13 +88,21 @@ public class SpoonSourceModelBackendTest {
 
     @Test
     public void doesNotRecoverResourceExhaustionAsOptionalEnrichment() {
-        List<EnrichmentDiagnostic> diagnostics = new java.util.ArrayList<>();
-        try {
-            SpoonSourceModelBackend.enrich("type_hierarchy", diagnostics,
-                    () -> { throw new OutOfMemoryError("synthetic failure"); }, "");
-            org.junit.Assert.fail("Resource errors must propagate");
-        } catch (OutOfMemoryError expected) {
-            assertTrue(diagnostics.isEmpty());
+        for (Error resource : List.of(new OutOfMemoryError("synthetic OOM"),
+                new StackOverflowError("synthetic stack overflow"))) {
+            for (boolean wrapped : List.of(false, true)) {
+                List<EnrichmentDiagnostic> diagnostics = new java.util.ArrayList<>();
+                try {
+                    SpoonSourceModelBackend.enrich("type_hierarchy", diagnostics, () -> {
+                        if (wrapped) throw new IllegalStateException("wrapper", resource);
+                        throw resource;
+                    }, "");
+                    org.junit.Assert.fail("Resource errors must propagate");
+                } catch (Error expected) {
+                    org.junit.Assert.assertSame(resource, expected);
+                    assertTrue(diagnostics.isEmpty());
+                }
+            }
         }
     }
 

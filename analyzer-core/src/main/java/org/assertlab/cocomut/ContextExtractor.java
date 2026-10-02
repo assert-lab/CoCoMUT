@@ -82,6 +82,7 @@ public class ContextExtractor {
                     "target_declaration", "", "Selected declaration is unavailable in the source session")));
             return null;
         } catch (Exception e) {
+            ResourceFailures.rethrowIfPresent(e);
             var diagnostic = EnrichmentDiagnostic.from("source_enrichment", e);
             failures.put(methodUri, List.of(diagnostic));
             try {
@@ -105,6 +106,7 @@ public class ContextExtractor {
                     return context;
                 }
             } catch (Exception declarationFailure) {
+                ResourceFailures.rethrowIfPresent(declarationFailure);
                 failures.put(methodUri, List.of(diagnostic,
                         EnrichmentDiagnostic.from("target_declaration", declarationFailure)));
             }
@@ -124,6 +126,7 @@ public class ContextExtractor {
                 callGraph = callGraphGenerator.getCachedResult(method.getMethodUri());
             }
         } catch (RuntimeException failure) {
+            ResourceFailures.rethrowIfPresent(failure);
             diagnostics.add(EnrichmentDiagnostic.from("call_graph", failure));
         }
         String methodBody = sourceContext.methodBody();

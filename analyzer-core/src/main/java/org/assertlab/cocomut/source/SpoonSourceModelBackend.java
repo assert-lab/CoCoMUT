@@ -1,5 +1,7 @@
 package org.assertlab.cocomut.source;
 
+import org.assertlab.cocomut.ResourceFailures;
+
 import spoon.Launcher;
 import spoon.javadoc.api.StandardJavadocTagType;
 import spoon.javadoc.api.elements.JavadocBlockTag;
@@ -114,8 +116,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         // the explicit supertype target that Spoon drops from inheritDoc tags.
         String javadoc = parsedJavadoc.isBlank() || hasExplicitInheritDocTarget(rawJavadoc)
                 ? rawJavadoc : parsedJavadoc;
-        List<JavadocElement> elements = enrich("javadoc_elements", diagnostics,
-                () -> JavadocParser.forElement(executable), List.of());
+        List<JavadocElement> elements = parseJavadocElements(executable, diagnostics);
         String typeJavadoc = enrich("type_javadoc", diagnostics,
                 () -> {
                     String text = owner != null ? owner.getDocComment() : "";
@@ -161,11 +162,26 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return Map.of("availability", "unavailable");
     }
 
+    private static List<JavadocElement> parseJavadocElements(
+            CtExecutable<?> executable, List<EnrichmentDiagnostic> diagnostics) {
+        try {
+            return enrich("javadoc_elements", diagnostics,
+                    () -> JavadocParser.forElement(executable), List.of());
+        } catch (AssertionError failure) {
+            // Spoon uses explicit AssertionError for malformed tags even without -ea.
+            // This is a parser failure; VM resource errors remain terminal.
+            ResourceFailures.rethrowIfPresent(failure);
+            diagnostics.add(EnrichmentDiagnostic.from("javadoc_elements", failure));
+            return List.of();
+        }
+    }
+
     static <T> T enrich(String component, List<EnrichmentDiagnostic> diagnostics,
                         java.util.function.Supplier<T> operation, T unavailable) {
         try {
             return operation.get();
         } catch (RuntimeException failure) {
+            ResourceFailures.rethrowIfPresent(failure);
             diagnostics.add(EnrichmentDiagnostic.from(component, failure));
             return unavailable;
         }
@@ -694,6 +710,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             String doc = element.getDocComment();
             return new CommentAttempt(doc != null ? doc.trim() : "", false);
         } catch (Exception e) {
+            ResourceFailures.rethrowIfPresent(e);
             return new CommentAttempt("", true);
         }
     }
@@ -730,6 +747,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return new RawCommentAttempt(
                     Optional.of(cleanRawJavadoc(source.substring(open, close + 2))), false);
         } catch (Exception ignored) {
+            ResourceFailures.rethrowIfPresent(ignored);
             return new RawCommentAttempt(Optional.empty(), true);
         }
     }
@@ -2150,6 +2168,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         try {
             return JavadocParser.forElement(element);
         } catch (RuntimeException | AssertionError | StackOverflowError ignored) {
+            ResourceFailures.rethrowIfPresent(ignored);
             return List.of();
         }
     }
