@@ -179,6 +179,8 @@ public class JsonGenerator {
 
     private ObjectNode buildMethodNode(MethodContext context) {
         ObjectNode node = objectMapper.createObjectNode();
+        node.put("enrichment_status", context.getEnrichmentDiagnostics().isEmpty() ? "complete" : "partial");
+        node.set("enrichment_diagnostics", objectMapper.valueToTree(context.getEnrichmentDiagnostics()));
         node.put("method_uri", context.getMethodUri());
         node.put("method_name", context.getMethodName());
         node.put("source_set", context.getSourceSet());

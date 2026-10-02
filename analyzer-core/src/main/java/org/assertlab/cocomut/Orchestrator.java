@@ -1,5 +1,6 @@
 package org.assertlab.cocomut;
 
+import org.assertlab.cocomut.source.EnrichmentDiagnostic;
 import org.assertlab.cocomut.source.ProjectModel;
 import org.assertlab.cocomut.source.SourceAnalysisSession;
 import org.assertlab.cocomut.source.SourceBackends;
@@ -74,6 +75,7 @@ final class Orchestrator {
             callGraphGeneratorFactory = CallGraphGenerator::new;
     private Map<String, CallGraphResult> callGraphResults;
     private Map<String, MethodContext> methodContexts;
+    private Map<String, List<EnrichmentDiagnostic>> contextExtractionDiagnostics = Map.of();
     private Map<String, String> contextExtractionFailures = new LinkedHashMap<>();
     private final Set<FailureCode> failureCodes = new LinkedHashSet<>();
     private boolean partialWithoutFailure;
@@ -592,6 +594,7 @@ final class Orchestrator {
         try {
             ContextExtractor extractor = new ContextExtractor(projectMetadata, callGraphGenerator, sourceSession);
             methodContexts = extractor.extractContextForMethods(methodInfos);
+            contextExtractionDiagnostics = extractor.getExtractionFailures();
             contextExtractionFailures = missingContextFailures(methodInfos, methodContexts);
 
             executionReport.put("phase_4_contexts_extracted", methodContexts.size());
@@ -866,7 +869,8 @@ final class Orchestrator {
         Map<String, String> failures = new LinkedHashMap<>();
         Set<String> extracted = actual != null ? actual.keySet() : Set.of();
         for (MethodInfo method : expected) {
-            if (!extracted.contains(method.getMethodUri())) {
+            if (!extracted.contains(method.getMethodUri())
+                    || !actual.get(method.getMethodUri()).getEnrichmentDiagnostics().isEmpty()) {
                 failures.put(method.getMethodUri(), "CONTEXT_EXTRACTION_FAILED");
             }
         }
@@ -891,6 +895,15 @@ final class Orchestrator {
                 node.put("signature", method.getMethodSignature());
                 node.put("source_file", method.getSourceFile().toString());
                 node.put("line_number", method.getLineNumber());
+                MethodContext context = methodContexts.get(method.getMethodUri());
+                if (context != null) {
+                    node.put("row_preserved", true);
+                    node.set("enrichment_diagnostics", OBJECT_MAPPER.valueToTree(context.getEnrichmentDiagnostics()));
+                } else {
+                    node.put("row_preserved", false);
+                    node.set("enrichment_diagnostics", OBJECT_MAPPER.valueToTree(
+                            contextExtractionDiagnostics.getOrDefault(method.getMethodUri(), List.of())));
+                }
                 writer.write(OBJECT_MAPPER.writeValueAsString(node));
                 writer.newLine();
             }

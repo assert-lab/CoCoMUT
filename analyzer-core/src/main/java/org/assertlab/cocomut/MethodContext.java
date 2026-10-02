@@ -1,5 +1,6 @@
 package org.assertlab.cocomut;
 
+import org.assertlab.cocomut.source.EnrichmentDiagnostic;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -43,6 +44,7 @@ public class MethodContext {
     private final String sourceBackendMode;
     private final String hierarchyResolution;
     private final String sourceSet;
+    private final List<EnrichmentDiagnostic> enrichmentDiagnostics;
 
     private MethodContext(Builder builder) {
         this.methodUri = Objects.requireNonNull(builder.methodUri, "methodUri cannot be null");
@@ -75,6 +77,7 @@ public class MethodContext {
         this.sourceBackend = builder.sourceBackend != null ? builder.sourceBackend : "";
         this.sourceBackendMode = builder.sourceBackendMode != null ? builder.sourceBackendMode : "";
         this.hierarchyResolution = builder.hierarchyResolution != null ? builder.hierarchyResolution : "";
+        this.enrichmentDiagnostics = List.copyOf(builder.enrichmentDiagnostics);
         this.sourceSet = builder.sourceSet != null ? builder.sourceSet : "unknown";
     }
 
@@ -203,6 +206,10 @@ public class MethodContext {
         return sourceSet;
     }
 
+    public List<EnrichmentDiagnostic> getEnrichmentDiagnostics() {
+        return enrichmentDiagnostics;
+    }
+
     public boolean hasJavadoc() {
         return javadoc != null && !javadoc.isEmpty();
     }
@@ -261,6 +268,7 @@ public class MethodContext {
         private String sourceBackendMode = "";
         private String hierarchyResolution = "";
         private String sourceSet = "unknown";
+        private List<EnrichmentDiagnostic> enrichmentDiagnostics = List.of();
 
         public Builder methodUri(String methodUri) {
             this.methodUri = methodUri;
@@ -428,6 +436,11 @@ public class MethodContext {
 
         public Builder hierarchyResolution(String hierarchyResolution) {
             this.hierarchyResolution = hierarchyResolution;
+            return this;
+        }
+
+        public Builder enrichmentDiagnostics(List<EnrichmentDiagnostic> diagnostics) {
+            this.enrichmentDiagnostics = diagnostics != null ? List.copyOf(diagnostics) : List.of();
             return this;
         }
 

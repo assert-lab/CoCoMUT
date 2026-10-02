@@ -5,7 +5,7 @@ import java.util.IdentityHashMap;
 import java.util.Set;
 
 /** Resource failures must not be converted into recoverable analysis warnings. */
-final class ResourceFailures {
+public final class ResourceFailures {
     private ResourceFailures() {}
 
     static Error find(Throwable failure) {
@@ -20,7 +20,7 @@ final class ResourceFailures {
         return null;
     }
 
-    static void rethrowIfPresent(Throwable failure) {
+    public static void rethrowIfPresent(Throwable failure) {
         Error resourceFailure = find(failure);
         if (resourceFailure != null) {
             throw resourceFailure;

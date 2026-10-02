@@ -25,6 +25,11 @@ public interface SourceAnalysisSession extends AutoCloseable {
 
     Optional<SourceContext> extractContext(String methodUri) throws IOException;
 
+    /** Recover source-backed declaration evidence without resolving optional context. */
+    default Optional<SourceContext> extractDeclarationContext(String methodUri) throws IOException {
+        return Optional.empty();
+    }
+
     default SourceParseStats parseStats() {
         return SourceParseStats.empty();
     }

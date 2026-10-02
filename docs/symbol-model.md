@@ -395,3 +395,49 @@ includes implicit modifiers, such as interface method visibility. Package-privat
 declarations have no visibility keyword in this array. Parameter modifiers remain
 in `parameters[].modifiers`. The field is also present in embedded caller/callee
 method contexts; the schema version remains unchanged.
+
+Optional source enrichment failures preserve selected method rows. Each method
+context has `enrichment_status` (`complete` or `partial`) and an
+`enrichment_diagnostics` array containing `component`, `exception_class`, and a
+single-line `message` limited to 1,000 characters. `complete` means no enrichment
+exception occurred; it does not guarantee all symbols or Javadoc links resolved.
+
+A listed component is unavailable. Its empty placeholders must not be interpreted
+as a successfully computed empty result. Entire unavailable Javadoc metadata or
+documentation metrics use `{"availability":"unavailable"}`. Components map to
+fields as follows:
+
+| Component | Unavailable evidence |
+| --- | --- |
+| `parsed_javadoc` | Spoon's parsed focal comment; raw focal Javadoc can remain available |
+| `javadoc_elements` | Parsed Javadoc elements and dependent metadata/metrics |
+| `type_javadoc` | Declaring-type Javadoc |
+| `type_hierarchy` | Hierarchy detail; `type_hierarchy.resolution` is `unavailable` |
+| `hierarchy_resolution` | Hierarchy resolution status; hierarchy detail can remain available |
+| `type_context` | Same-type method index, same-type methods, overload group |
+| `field_reads`, `field_writes` | Corresponding source-context field references |
+| `dynamic_features` | Dynamic-feature analysis |
+| `javadoc_references` | Javadoc link/reference analysis; declared tags remain available |
+| `inherited_javadoc` | Inherited candidates and effective tags; declared tags remain available and inheritance resolution is `indeterminate` |
+| `javadoc_metadata` | Whole metadata component when an earlier metadata step fails |
+| `documentation_metrics` | Documentation metrics |
+| `call_graph` | Cached per-method call-graph evidence |
+| `source_enrichment` | All optional enrichment after declaration recovery; source identity, parameters, modifiers, code, raw focal Javadoc, and lexical metrics remain available |
+| `target_declaration` | Declaration recovery failed; a row may be absent |
+
+`method_context_failures.jsonl` records these diagnostics together with
+`row_preserved`. `phase_4_context_failures` counts affected methods, including
+preserved rows. Such runs retain `CONTEXT_EXTRACTION_FAILED` and report `PARTIAL`.
+Row counts match the selected population unless declaration recovery or JSON
+serialization itself fails. Resource errors propagate rather than producing
+apparently usable rows. Source-classpath acceptance remains independent of this
+policy: retaining a row does not upgrade `no_classpath` or `mixed` evidence.
+The schema version remains 0.5.0.
+
+Malformed tags that make Spoon's Javadoc parser throw `AssertionError` are
+recoverable parser failures. The row retains its code and focal comment;
+`javadoc_elements` records the exception, and dependent Javadoc metadata and
+documentation metrics are explicitly unavailable. Assertion recovery is limited
+to the parser boundary. The shared `ResourceFailures` guard checks cause chains
+before recovery, so direct or wrapped `OutOfMemoryError` and `StackOverflowError`
+remain terminal across enrichment, declaration fallback, and call-graph context.
