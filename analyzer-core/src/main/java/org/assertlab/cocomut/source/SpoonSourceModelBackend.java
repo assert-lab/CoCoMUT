@@ -158,7 +158,70 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return Optional.of(new SourceContext(method, methodBody, javadoc, typeJavadoc,
                 typeHierarchy, hierarchyResolution, typeContext.typeMethods(), reads, writes,
                 typeContext.sameTypeMethods(), typeContext.overloadGroup(), dynamic,
-                metadata, metrics, parsed.mode(), diagnostics));
+                metadata, metrics, parsed.mode(), diagnostics,
+                enrich("source_callees", diagnostics, () -> sourceCallees(parsed, executable), List.of())));
+    }
+
+    private static List<SourceCallee> sourceCallees(ParsedProject parsed, CtExecutable<?> focal) {
+        Map<String, SourceCallee> declarations = new LinkedHashMap<>();
+        for (spoon.reflect.code.CtAbstractInvocation<?> invocation : focal.getElements(
+                new TypeFilter<>(spoon.reflect.code.CtAbstractInvocation.class))) {
+            if (invocation.isImplicit() || !belongsToExecutable(invocation, focal)) continue;
+            CtExecutableReference<?> reference = invocation.getExecutable();
+            SourceCallee callee;
+            try {
+                callee = sourceCallee(parsed, reference);
+            } catch (RuntimeException failure) {
+                ResourceFailures.rethrowIfPresent(failure);
+                callee = new SourceCallee("unresolved", "", "", "", "", invocation.toString(),
+                        "unresolved", "source_resolution_failed:" + failure.getClass().getName());
+            }
+            // Deduplicate proven declarations only. Unresolved expressions do not
+            // establish that two references denote the same declaration.
+            String key = callee.targetUri().isBlank() ? "unresolved:" + declarations.size() : callee.targetUri();
+            declarations.putIfAbsent(key, callee);
+        }
+        return List.copyOf(declarations.values());
+    }
+
+    private static boolean belongsToExecutable(CtElement element, CtExecutable<?> focal) {
+        for (CtElement parent = element.getParent(); parent != null; parent = parent.getParent()) {
+            if (parent == focal) return true;
+            // Include expressions in lambdas, but exclude nested class/method bodies.
+            if (parent instanceof CtType<?> || parent instanceof CtMethod<?> || parent instanceof CtConstructor<?>) return false;
+            if (!parent.isParentInitialized()) break;
+        }
+        return false;
+    }
+
+    private static SourceCallee sourceCallee(ParsedProject parsed, CtExecutableReference<?> reference) {
+        String owner = reference.getDeclaringType() != null ? reference.getDeclaringType().getQualifiedName() : "";
+        String name = reference.getSimpleName();
+        String signature = reference.getSignature();
+        CtExecutable<?> declaration = reference.getExecutableDeclaration();
+        if (declaration != null) {
+            CtType<?> type = declaration.getParent(CtType.class);
+            if (type != null) {
+                owner = type.getQualifiedName();
+                name = methodName(declaration, type);
+                signature = identitySignature(name, parameters(declaration),
+                        erasedReturnType(declaration, returnType(declaration)));
+                Optional<Path> file = sourceFile(declaration);
+                if (file.isPresent()) {
+                    String uri = methodUri(parsed.projectRoot(), file.get(), owner, signature);
+                    if (parsed.methodsByUri().containsKey(uri)) {
+                        return new SourceCallee("project_method", uri, uri, owner, name, signature, "resolved", "");
+                    }
+                } else if (declaration instanceof spoon.reflect.declaration.CtShadowable shadow && shadow.isShadow()) {
+                    String kind = owner.startsWith("java.") || owner.startsWith("javax.") || owner.startsWith("jdk.")
+                            ? "jdk_method" : "external_method";
+                    return new SourceCallee(kind, "", "java:" + owner + "#" + signature,
+                            owner, name, signature, "resolved_external", "");
+                }
+            }
+        }
+        return new SourceCallee("unresolved", "", "", owner, name, signature, "unresolved",
+                declaration != null && declaration.isImplicit() ? "implicit_declaration" : "source_declaration_unavailable");
     }
 
     private static Map<String, Object> unavailableEvidence() {
@@ -199,7 +262,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return Optional.of(new SourceContext(method, sourceSlice(executable),
                 rawDocComment(parsed, executable).orElseGet(() -> docComment(executable)), "", "", "unavailable", Map.of(),
                 List.of(), List.of(), List.of(), List.of(), List.of(), unavailableEvidence(), unavailableEvidence(),
-                parsed.mode(), List.of()));
+                parsed.mode(), List.of(), List.of()));
     }
 
     private ParsedProject parse(ProjectModel project) throws IOException {

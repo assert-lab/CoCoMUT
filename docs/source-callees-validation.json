@@ -1,0 +1,220 @@
+{
+  "subject_commit": "5ffcf3c2bce34c95207ef2746229a40a932afeee",
+  "subject_file_sha256": "046f2872476f3df233ddd58ce74df7fb681e163be49c5627a156bc261cda5723",
+  "jar_sha256": "f5e4e6ae080a06ea563aa1322f864ec2f2f29e421ed9a5ebeb8c075032a1f0ef",
+  "source_counts": {
+    "explicit_method_invocations": 21,
+    "constructor_expressions": 2
+  },
+  "status": "SUCCESS",
+  "source_backend_mode": "classpath",
+  "source_callee_count": 20,
+  "metadata_callee_count": 20,
+  "graph_target_count": 82,
+  "graph_artifact_sha256": "0c7664da64518cef06edb1d1c6c1e25e6e25c6de378e146c06ad739a9e6552e3",
+  "unboxing_in_graph": true,
+  "unboxing_in_source_callees": false,
+  "callees": [
+    {
+      "kind": "project_method",
+      "method_uri": "src/main/java/org/joda/time/format/DateTimeFormatter.java#org.joda.time.format.DateTimeFormatter.requireParser():org.joda.time.format.InternalParser",
+      "target_uri": "src/main/java/org/joda/time/format/DateTimeFormatter.java#org.joda.time.format.DateTimeFormatter.requireParser():org.joda.time.format.InternalParser",
+      "declaring_type": "org.joda.time.format.DateTimeFormatter",
+      "method_name": "requireParser",
+      "signature": "requireParser():org.joda.time.format.InternalParser",
+      "resolution": "resolved",
+      "context_in_output": false
+    },
+    {
+      "kind": "jdk_method",
+      "method_uri": "",
+      "target_uri": "java:java.lang.IllegalArgumentException#IllegalArgumentException(java.lang.String):void",
+      "declaring_type": "java.lang.IllegalArgumentException",
+      "method_name": "IllegalArgumentException",
+      "signature": "IllegalArgumentException(java.lang.String):void",
+      "resolution": "resolved_external",
+      "context_in_output": false
+    },
+    {
+      "kind": "project_method",
+      "method_uri": "src/main/java/org/joda/time/ReadableInstant.java#org.joda.time.ReadableInstant.getMillis():long",
+      "target_uri": "src/main/java/org/joda/time/ReadableInstant.java#org.joda.time.ReadableInstant.getMillis():long",
+      "declaring_type": "org.joda.time.ReadableInstant",
+      "method_name": "getMillis",
+      "signature": "getMillis():long",
+      "resolution": "resolved",
+      "context_in_output": false
+    },
+    {
+      "kind": "project_method",
+      "method_uri": "src/main/java/org/joda/time/ReadableInstant.java#org.joda.time.ReadableInstant.getChronology():org.joda.time.Chronology",
+      "target_uri": "src/main/java/org/joda/time/ReadableInstant.java#org.joda.time.ReadableInstant.getChronology():org.joda.time.Chronology",
+      "declaring_type": "org.joda.time.ReadableInstant",
+      "method_name": "getChronology",
+      "signature": "getChronology():org.joda.time.Chronology",
+      "resolution": "resolved",
+      "context_in_output": false
+    },
+    {
+      "kind": "project_method",
+      "method_uri": "src/main/java/org/joda/time/DateTimeField.java#org.joda.time.DateTimeField.get(long):int",
+      "target_uri": "src/main/java/org/joda/time/DateTimeField.java#org.joda.time.DateTimeField.get(long):int",
+      "declaring_type": "org.joda.time.DateTimeField",
+      "method_name": "get",
+      "signature": "get(long):int",
+      "resolution": "resolved",
+      "context_in_output": false
+    },
+    {
+      "kind": "project_method",
+      "method_uri": "src/main/java/org/joda/time/Chronology.java#org.joda.time.Chronology.year():org.joda.time.DateTimeField",
+      "target_uri": "src/main/java/org/joda/time/Chronology.java#org.joda.time.Chronology.year():org.joda.time.DateTimeField",
+      "declaring_type": "org.joda.time.Chronology",
+      "method_name": "year",
+      "signature": "year():org.joda.time.DateTimeField",
+      "resolution": "resolved",
+      "context_in_output": false
+    },
+    {
+      "kind": "project_method",
+      "method_uri": "src/main/java/org/joda/time/DateTimeUtils.java#org.joda.time.DateTimeUtils.getChronology(org.joda.time.Chronology):org.joda.time.Chronology",
+      "target_uri": "src/main/java/org/joda/time/DateTimeUtils.java#org.joda.time.DateTimeUtils.getChronology(org.joda.time.Chronology):org.joda.time.Chronology",
+      "declaring_type": "org.joda.time.DateTimeUtils",
+      "method_name": "getChronology",
+      "signature": "getChronology(org.joda.time.Chronology):org.joda.time.Chronology",
+      "resolution": "resolved",
+      "context_in_output": false
+    },
+    {
+      "kind": "project_method",
+      "method_uri": "src/main/java/org/joda/time/DateTimeZone.java#org.joda.time.DateTimeZone.getOffset(long):int",
+      "target_uri": "src/main/java/org/joda/time/DateTimeZone.java#org.joda.time.DateTimeZone.getOffset(long):int",
+      "declaring_type": "org.joda.time.DateTimeZone",
+      "method_name": "getOffset",
+      "signature": "getOffset(long):int",
+      "resolution": "resolved",
+      "context_in_output": false
+    },
+    {
+      "kind": "project_method",
+      "method_uri": "src/main/java/org/joda/time/Chronology.java#org.joda.time.Chronology.getZone():org.joda.time.DateTimeZone",
+      "target_uri": "src/main/java/org/joda/time/Chronology.java#org.joda.time.Chronology.getZone():org.joda.time.DateTimeZone",
+      "declaring_type": "org.joda.time.Chronology",
+      "method_name": "getZone",
+      "signature": "getZone():org.joda.time.DateTimeZone",
+      "resolution": "resolved",
+      "context_in_output": false
+    },
+    {
+      "kind": "project_method",
+      "method_uri": "src/main/java/org/joda/time/format/DateTimeFormatter.java#org.joda.time.format.DateTimeFormatter.selectChronology(org.joda.time.Chronology):org.joda.time.Chronology",
+      "target_uri": "src/main/java/org/joda/time/format/DateTimeFormatter.java#org.joda.time.format.DateTimeFormatter.selectChronology(org.joda.time.Chronology):org.joda.time.Chronology",
+      "declaring_type": "org.joda.time.format.DateTimeFormatter",
+      "method_name": "selectChronology",
+      "signature": "selectChronology(org.joda.time.Chronology):org.joda.time.Chronology",
+      "resolution": "resolved",
+      "context_in_output": false
+    },
+    {
+      "kind": "project_method",
+      "method_uri": "src/main/java/org/joda/time/format/DateTimeParserBucket.java#org.joda.time.format.DateTimeParserBucket.DateTimeParserBucket(long,org.joda.time.Chronology,java.util.Locale,java.lang.Integer,int):void",
+      "target_uri": "src/main/java/org/joda/time/format/DateTimeParserBucket.java#org.joda.time.format.DateTimeParserBucket.DateTimeParserBucket(long,org.joda.time.Chronology,java.util.Locale,java.lang.Integer,int):void",
+      "declaring_type": "org.joda.time.format.DateTimeParserBucket",
+      "method_name": "DateTimeParserBucket",
+      "signature": "DateTimeParserBucket(long,org.joda.time.Chronology,java.util.Locale,java.lang.Integer,int):void",
+      "resolution": "resolved",
+      "context_in_output": false
+    },
+    {
+      "kind": "project_method",
+      "method_uri": "src/main/java/org/joda/time/format/InternalParser.java#org.joda.time.format.InternalParser.parseInto(org.joda.time.format.DateTimeParserBucket,java.lang.CharSequence,int):int",
+      "target_uri": "src/main/java/org/joda/time/format/InternalParser.java#org.joda.time.format.InternalParser.parseInto(org.joda.time.format.DateTimeParserBucket,java.lang.CharSequence,int):int",
+      "declaring_type": "org.joda.time.format.InternalParser",
+      "method_name": "parseInto",
+      "signature": "parseInto(org.joda.time.format.DateTimeParserBucket,java.lang.CharSequence,int):int",
+      "resolution": "resolved",
+      "context_in_output": false
+    },
+    {
+      "kind": "project_method",
+      "method_uri": "src/main/java/org/joda/time/ReadWritableInstant.java#org.joda.time.ReadWritableInstant.setMillis(long):void",
+      "target_uri": "src/main/java/org/joda/time/ReadWritableInstant.java#org.joda.time.ReadWritableInstant.setMillis(long):void",
+      "declaring_type": "org.joda.time.ReadWritableInstant",
+      "method_name": "setMillis",
+      "signature": "setMillis(long):void",
+      "resolution": "resolved",
+      "context_in_output": false
+    },
+    {
+      "kind": "project_method",
+      "method_uri": "src/main/java/org/joda/time/format/DateTimeParserBucket.java#org.joda.time.format.DateTimeParserBucket.computeMillis(boolean,java.lang.String):long",
+      "target_uri": "src/main/java/org/joda/time/format/DateTimeParserBucket.java#org.joda.time.format.DateTimeParserBucket.computeMillis(boolean,java.lang.String):long",
+      "declaring_type": "org.joda.time.format.DateTimeParserBucket",
+      "method_name": "computeMillis",
+      "signature": "computeMillis(boolean,java.lang.String):long",
+      "resolution": "resolved",
+      "context_in_output": false
+    },
+    {
+      "kind": "project_method",
+      "method_uri": "src/main/java/org/joda/time/format/DateTimeParserBucket.java#org.joda.time.format.DateTimeParserBucket.getOffsetInteger():java.lang.Integer",
+      "target_uri": "src/main/java/org/joda/time/format/DateTimeParserBucket.java#org.joda.time.format.DateTimeParserBucket.getOffsetInteger():java.lang.Integer",
+      "declaring_type": "org.joda.time.format.DateTimeParserBucket",
+      "method_name": "getOffsetInteger",
+      "signature": "getOffsetInteger():java.lang.Integer",
+      "resolution": "resolved",
+      "context_in_output": false
+    },
+    {
+      "kind": "project_method",
+      "method_uri": "src/main/java/org/joda/time/DateTimeZone.java#org.joda.time.DateTimeZone.forOffsetMillis(int):org.joda.time.DateTimeZone",
+      "target_uri": "src/main/java/org/joda/time/DateTimeZone.java#org.joda.time.DateTimeZone.forOffsetMillis(int):org.joda.time.DateTimeZone",
+      "declaring_type": "org.joda.time.DateTimeZone",
+      "method_name": "forOffsetMillis",
+      "signature": "forOffsetMillis(int):org.joda.time.DateTimeZone",
+      "resolution": "resolved",
+      "context_in_output": false
+    },
+    {
+      "kind": "project_method",
+      "method_uri": "src/main/java/org/joda/time/Chronology.java#org.joda.time.Chronology.withZone(org.joda.time.DateTimeZone):org.joda.time.Chronology",
+      "target_uri": "src/main/java/org/joda/time/Chronology.java#org.joda.time.Chronology.withZone(org.joda.time.DateTimeZone):org.joda.time.Chronology",
+      "declaring_type": "org.joda.time.Chronology",
+      "method_name": "withZone",
+      "signature": "withZone(org.joda.time.DateTimeZone):org.joda.time.Chronology",
+      "resolution": "resolved",
+      "context_in_output": false
+    },
+    {
+      "kind": "project_method",
+      "method_uri": "src/main/java/org/joda/time/format/DateTimeParserBucket.java#org.joda.time.format.DateTimeParserBucket.getZone():org.joda.time.DateTimeZone",
+      "target_uri": "src/main/java/org/joda/time/format/DateTimeParserBucket.java#org.joda.time.format.DateTimeParserBucket.getZone():org.joda.time.DateTimeZone",
+      "declaring_type": "org.joda.time.format.DateTimeParserBucket",
+      "method_name": "getZone",
+      "signature": "getZone():org.joda.time.DateTimeZone",
+      "resolution": "resolved",
+      "context_in_output": false
+    },
+    {
+      "kind": "project_method",
+      "method_uri": "src/main/java/org/joda/time/ReadWritableInstant.java#org.joda.time.ReadWritableInstant.setChronology(org.joda.time.Chronology):void",
+      "target_uri": "src/main/java/org/joda/time/ReadWritableInstant.java#org.joda.time.ReadWritableInstant.setChronology(org.joda.time.Chronology):void",
+      "declaring_type": "org.joda.time.ReadWritableInstant",
+      "method_name": "setChronology",
+      "signature": "setChronology(org.joda.time.Chronology):void",
+      "resolution": "resolved",
+      "context_in_output": false
+    },
+    {
+      "kind": "project_method",
+      "method_uri": "src/main/java/org/joda/time/ReadWritableInstant.java#org.joda.time.ReadWritableInstant.setZone(org.joda.time.DateTimeZone):void",
+      "target_uri": "src/main/java/org/joda/time/ReadWritableInstant.java#org.joda.time.ReadWritableInstant.setZone(org.joda.time.DateTimeZone):void",
+      "declaring_type": "org.joda.time.ReadWritableInstant",
+      "method_name": "setZone",
+      "signature": "setZone(org.joda.time.DateTimeZone):void",
+      "resolution": "resolved",
+      "context_in_output": false
+    }
+  ],
+  "artifact_root": "ale@100.85.158.27:~/agent-runs/cocomut-remaining/"
+}

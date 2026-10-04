@@ -23,7 +23,7 @@ Stable top-level sections:
 ```text
 MUT                       Focal method/source method
 callers                   Caller context from SootUp call graph
-callees                   Callee context from SootUp call graph
+callees                   Deduplicated source-referenced declarations, plus unresolved references
 metadata                  Schema, backend, method identity, and call graph metadata
 provenance                Extraction source and confidence information
 documentation_metrics     Parser-derived Javadoc quality flags and parser provenance
@@ -451,3 +451,32 @@ counted in `source_files_failed` and `failed_source_files.jsonl`. Attempt entrie
 now expose `stage` (`model_build` or `declaration_audit`) and `diagnostic_code`;
 audit codes are separate from Java `exception_class` names. Existing schema
 versions remain unchanged.
+
+## Source callees and graph targets
+
+`callees` contains declarations referenced by explicit method invocations and
+constructor calls in the focal source body, including lambda expressions but
+excluding nested class/method bodies. Implicit bytecode calls (such as unboxing)
+and method-reference expressions are not added as invocations. For an `Animal`
+receiver, `animal.speak()` refers to its resolved source declaration, without
+expanding it to overriding Dog/Cat implementations. Inherited methods retain
+their actual declaring type.
+
+Resolved declarations are deduplicated by `target_uri`. Project declarations
+retain their `method_uri`; resolved external declarations use `java:` target
+identities and `resolution=resolved_external`, with no project method URI.
+Unresolved references have empty identities, `resolution=unresolved` and an
+explicit reason; they are not deduplicated by guessed identity. A compiler-created
+project constructor with no explicit source declaration remains unresolved.
+
+`metadata.callee_count` equals the exported list length, not the number of call
+expressions. Source callees remain available when graph analysis is unavailable.
+Failures of source-callee enrichment are recorded under `source_callees` in the
+existing enrichment diagnostics; an empty list with that diagnostic means unknown.
+
+`metadata.call_graph.callee_count` retains its distinct graph-target meaning.
+RTA targets remain in the separate `Output_CallGraph_RTA.txt` artifact. The graph
+uses the existing concrete-project-method entry-point universe; its candidates
+are not proof of runtime feasibility. Callers retain graph semantics. Detailed
+call-site/dispatch associations are deferred. This intentionally changes the
+meaning of `callees` while retaining the approved schema version 0.5.0.

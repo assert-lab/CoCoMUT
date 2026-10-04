@@ -92,7 +92,8 @@
     },
     "callees": {
       "type": "array",
-      "items": {"$ref": "#/$defs/callGraphEdge"}
+      "description": "Deduplicated source-referenced declarations, including explicit constructors; unresolved references stay explicit. Not RTA targets.",
+      "items": {"$ref": "#/$defs/sourceCallee"}
     },
     "metadata": {
       "type": "object",
@@ -110,7 +111,8 @@
         "source_backend_mode": {"type": "string"},
         "method_identity": {"type": "string"},
         "type_resolution": {"type": "string"},
-        "call_graph": {"type": "object"}
+        "callee_count": {"type": "integer", "minimum": 0, "description": "Length of the exported source callee list, not a call-expression count."},
+        "call_graph": {"type": "object", "description": "Static graph provenance; nested callee_count counts distinct bytecode targets."}
       },
       "additionalProperties": true
     },
@@ -327,6 +329,46 @@
         "diagnostic": {"type": "string"}
       },
       "additionalProperties": false
+    },
+    "sourceCallee": {
+      "type": "object",
+      "required": [
+        "kind",
+        "method_uri",
+        "target_uri",
+        "declaring_type",
+        "method_name",
+        "signature",
+        "resolution"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "method_uri": {
+          "type": "string"
+        },
+        "target_uri": {
+          "type": "string",
+          "description": "Resolved source method URI, or java: external declaration identity; empty when unresolved. Never a guessed bytecode identity."
+        },
+        "declaring_type": {
+          "type": "string"
+        },
+        "method_name": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "string"
+        },
+        "resolution": {
+          "type": "string"
+        },
+        "unresolved_reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
     },
     "callGraphEdge": {
       "type": "object",
