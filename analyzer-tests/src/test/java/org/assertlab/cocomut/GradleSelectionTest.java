@@ -181,10 +181,34 @@ public class GradleSelectionTest {
 
     @Test
     public void lifecycleAggregatorDoesNotRequireTestSources() throws Exception {
+        verifyLifecycleAggregator(null);
+    }
+
+    @Test
+    public void buildSrcDoesNotMakeAggregatorRequireTestSources() throws Exception {
+        verifyLifecycleAggregator("buildSrc");
+    }
+
+    @Test
+    public void includedBuildDoesNotMakeAggregatorRequireTestSources() throws Exception {
+        verifyLifecycleAggregator("build-logic");
+    }
+
+    private void verifyLifecycleAggregator(String separateBuild) throws Exception {
         Path root = fixture();
         try {
             Files.writeString(root.resolve("settings.gradle"), "include 'child'\n");
             Files.writeString(root.resolve("build.gradle"), "apply plugin: 'base'\n");
+            if (separateBuild != null) {
+                Path logic = Files.createDirectories(root.resolve(separateBuild));
+                Files.writeString(logic.resolve("build.gradle"), "apply plugin: 'java'\n");
+                Files.writeString(logic.resolve("settings.gradle"), "rootProject.name='logic'\n");
+                source(logic, "BuildHelper");
+                if (!separateBuild.equals("buildSrc")) {
+                    Files.writeString(root.resolve("settings.gradle"),
+                            "include 'child'\nincludeBuild '" + separateBuild + "'\n");
+                }
+            }
             Path child = Files.createDirectories(root.resolve("child"));
             Files.writeString(child.resolve("build.gradle"), "apply plugin: 'java'\n");
             source(child, "Example");
@@ -203,6 +227,10 @@ public class GradleSelectionTest {
             String rows = Files.readString(Path.of(pipeline.getExecutionReport().get("phase_5_jsonl_file").toString()));
             assertTrue(rows.contains("demo.Example"));
             assertTrue(rows.contains("demo.TestExample"));
+            assertFalse(rows.contains("demo.BuildHelper"));
+            if ("buildSrc".equals(separateBuild)) {
+                assertTrue(Files.exists(root.resolve("buildSrc/build/classes/java/main/demo/BuildHelper.class")));
+            }
         } finally { remove(root); }
     }
 
