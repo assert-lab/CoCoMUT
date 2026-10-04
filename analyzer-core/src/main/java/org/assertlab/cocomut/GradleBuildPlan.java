@@ -176,10 +176,14 @@ public record GradleBuildPlan(Map<String, String> projects,
                                         exclude '**/.git/**', '**/.gradle/**', '**/build/**', '**/target/**'
                                     }
                                     def projectDir = p.projectDir.canonicalFile.toPath()
-                                    rootProject.allprojects.each { child ->
-                                        def childDir = child.projectDir.canonicalFile.toPath()
-                                        if (child != p && childDir != projectDir && childDir.startsWith(projectDir)) {
-                                            ownJava.exclude(projectDir.relativize(childDir).toString().replace(File.separatorChar, '/' as char) + '/**')
+                                    // buildSrc and included builds own their sources independently of this project's model.
+                                    def otherRoots = rootProject.allprojects.findAll { it != p }.collect { it.projectDir }
+                                    otherRoots.add(new File(rootProject.projectDir, 'buildSrc'))
+                                    otherRoots.addAll(gradle.includedBuilds.collect { it.projectDir })
+                                    otherRoots.each { otherRoot ->
+                                        def otherDir = otherRoot.canonicalFile.toPath()
+                                        if (otherDir != projectDir && otherDir.startsWith(projectDir)) {
+                                            ownJava.exclude(projectDir.relativize(otherDir).toString().replace(File.separatorChar, '/' as char) + '/**')
                                         }
                                     }
                                     lifecycleOnly = ownJava.isEmpty()
