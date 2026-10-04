@@ -55,6 +55,24 @@ class Fixture {
         assert not clean["missing"] and not clean["ambiguous"] and not clean["parse_failures"], clean
         print("PASS: annotated/tabbed declarations, same-line overloads, private methods and nested constructors")
 
+        # Replay the actual model inputs, retaining compliance rather than inventing
+        # a manifest with the runner JDK's version (the original issue #50 mistake).
+        replay_manifest = json.loads(manifest.read_text())
+        replay_manifest["project"]["java_version"] = "8"
+        replay = root / "replay-manifest.json"
+        replay.write_text(json.dumps(replay_manifest))
+        replay_uris = []
+        for attempt in range(2):
+            destination = root / f"replay-{attempt}"
+            run(java + [str(scripts / "SourcePopulationProbe.java"), str(replay), str(destination)])
+            summary = json.loads((destination / "source-population.json").read_text())
+            assert summary["source_model_inputs"]["java_version"] == "8"
+            assert summary["source_model_inputs"]["source_roots"] == [str(source)]
+            replay_uris.append({json.loads(line)["method_uri"]
+                                for line in (destination / "methods.jsonl").read_text().splitlines()})
+        assert replay_uris[0] == replay_uris[1] and len(replay_uris[0]) == 10
+        print("PASS: repeated manifest replay retains compliance and identical URI sets")
+
         discovered = root / "discovered"
         run(java + [str(scripts / "SourcePopulationProbe.java"), str(manifest),
                     str(discovered), "--discover-main"])

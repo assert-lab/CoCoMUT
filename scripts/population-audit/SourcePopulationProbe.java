@@ -53,7 +53,8 @@ public class SourcePopulationProbe {
         String commit = git(root, "rev-parse", "HEAD");
         String statusBefore = git(root, "status", "--porcelain");
         long start = System.currentTimeMillis();
-        try (var session = SourceBackends.spoon().open(ProjectModel.from(metadata))) {
+        ProjectModel model = ProjectModel.from(metadata);
+        try (var session = SourceBackends.spoon().open(model)) {
             Map<String,Object> summary = new LinkedHashMap<>();
             var stats = session.parseStats();
             summary.put("project_commit", manifest.path("project").path("git").path("commit").asText());
@@ -63,6 +64,13 @@ public class SourcePopulationProbe {
             summary.put("source_root_mode", args.length > 2 ? "adapter_skip_build_discovery" : "archived_manifest");
             summary.put("runtime_java_version", System.getProperty("java.version"));
             summary.put("java_version", metadata.getJavaVersion());
+            summary.put("source_model_inputs", Map.of(
+                    "java_version", model.javaVersion(),
+                    "source_roots", model.sourceRoots().stream().map(Path::toString).toList(),
+                    "test_source_roots", model.testSourceRoots().stream().map(Path::toString).toList(),
+                    "class_outputs", model.classOutputDirs().stream().map(Path::toString).toList(),
+                    "project_jars", model.projectArtifactJars().stream().map(Path::toString).toList(),
+                    "dependency_classpath", model.dependencyClasspath().stream().map(Path::toString).toList()));
             summary.put("discovered", stats.discovered());
             summary.put("parsed", stats.parsed());
             summary.put("failed", stats.failed());
