@@ -99,7 +99,46 @@ The repository-list gap is resolved. Exact source revisions for the original
 CoCoMUT comparison and its javac/JavaParser results remain unverified. The saved
 OE25 outputs use schema 0.3.0 and lack original-run commit receipts; a separate
 evaluation archive contains 20 pinned subjects. Published dataset versions must
-not be silently substituted for the actual extraction revisions. Keep #25 open
-for the 25-project audit and reconciliation of its 7,469 within-file losses plus
-4,264 declarations in 402 omitted files; the named later reproductions above
-are verified independently.
+not be silently substituted for the actual extraction revisions. The full saved-cohort audit below resolves current population coverage. Its results must remain distinct from the historical 7,469 within-file losses plus 4,264 declarations in 402 omitted files.
+
+## Full saved OE25 cohort audit
+
+The 25 saved checkouts were mirrored at their actual Git commits, with all 8,503 original Java-file hashes verified before and after analysis. All checkouts remained clean. These revisions differ from the public release table; the [full receipt](oe25-population-audit.json) records both versions and exact commits.
+
+Current automatic main-root discovery and full CLI extraction (`--skip-build --scope all --source-set main`, no method limit) preserve **50,232/50,232** selected declarations. Seven projects contain another **3,523** declarations outside the default reactor/source roots. Explicitly supplying these roots produces **53,755/53,755** declarations and JSONL rows across the full cohort, with no declaration-count deficit, duplicate rows, ambiguous declaration matches or javac parse failures. Commons Numbers has two missing and two unexpected URIs in the probe-to-CLI set comparison: both pairs concern anonymous-class `get()` methods at lines 536 and 556 of `GammaContinuedFractionPerformance.java`. Their declaring-type numbering and nested return-type spelling differ. This discrepancy is retained in [#50](https://github.com/assert-lab/CoCoMUT/issues/50); equal counts alone do not establish exact row identity. This sensitivity check does not change the default population policy.
+
+| Repository | Default rows | Broad rows | Roots outside default selection |
+|---|---:|---:|---|
+| AsyncHttpClient/async-http-client | 2,136 | 2,136 | None |
+| JodaOrg/joda-time | 4,283 | 4,283 | None |
+| apache/commons-bcel | 3,884 | 3,884 | None |
+| apache/commons-beanutils | 1,003 | 1,003 | None |
+| apache/commons-collections | 4,886 | 4,886 | None |
+| apache/commons-configuration | 3,129 | 3,129 | None |
+| apache/commons-dbutils | 546 | 546 | None |
+| apache/commons-geometry | 3,167 | 3,495 | examples profile |
+| apache/commons-imaging | 2,532 | 2,532 | None |
+| apache/commons-jcs | 2,387 | 2,725 | sandbox profile |
+| apache/commons-jexl | 2,313 | 2,313 | None |
+| apache/commons-lang | 4,489 | 4,489 | None |
+| apache/commons-net | 1,938 | 1,938 | None |
+| apache/commons-numbers | 895 | 2,310 | examples profile and standalone complex-streams module |
+| apache/commons-pool | 847 | 847 | None |
+| apache/commons-rng | 1,581 | 2,790 | examples profile |
+| apache/commons-validator | 770 | 770 | None |
+| apache/commons-vfs | 2,882 | 3,035 | include-sandbox profile |
+| apache/commons-weaver | 395 | 467 | src/it/sample fixture builds |
+| jhy/jsoup | 2,177 | 2,177 | None |
+| kevinsawicki/http-request | 202 | 202 | None |
+| perwendel/spark | 872 | 872 | None |
+| scribejava/scribejava | 1,205 | 1,205 | None |
+| springside/springside4 | 1,221 | 1,229 | standalone modules/jmh |
+| stleary/JSON-java | 492 | 492 | None |
+
+Six default runs report SUCCESS and nineteen PARTIAL; the explicit-root runs retain their recorded degraded statuses. Population completeness therefore does not imply resolved classpaths or complete call graphs. Existing bytecode was reused. Joda-Time and HTTP Request were compiled directly with JDK 8; SpringSide completed native Maven `package -DskipTests -Dmaven.javadoc.skip=true`; JSON-java used its existing `target/classes` through `--class-output`. This is not a fresh-build acceptance test for every repository.
+
+The saved schema-0.3.0 ENTRY_POINTS output has 39,159 rows. Of these, 39,154 current URIs match exactly. Five anonymous-class URIs changed; each has one current declaration at the exact original file, line and name. The receipt preserves both identities rather than rewriting them. There are 14,601 current-only URIs and a net increase of 14,596 rows. Of the current-only URIs, 12,352 occur in previously represented files; the remainder occur in 304 previously unrepresented files. These are saved-output comparisons, not the original 7,469 + 4,264 historical counts.
+
+The available old report counters total 53,446 declarations before scope filtering and 39,473 afterward, followed by 39,159 emitted rows. The current 53,755-row total is numerically 309 above the former pre-filter count, plus 13,973 formerly filtered declarations and 314 post-selection losses. This arithmetic describes aggregate counts; it does not assign individual new declarations to historical causes without the missing original model.
+
+Durable per-project input manifests, commands, source/model inventories, javac reports, CLI reports/manifests/JSONL, compilation logs, source hashes and reconciliation are under the receipt’s alienserver artifact directory. Focused audit regressions pass on JDK 17 and JDK 26. The saved-cohort population audit is complete; exact reproduction of the historical 11,733 comparison remains unavailable.

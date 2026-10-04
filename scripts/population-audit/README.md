@@ -22,10 +22,9 @@ python3 scripts/population-audit/test_audit.py --jar "$JAR"
 ```
 
 The probe reconstructs source roots and artifact paths from an extraction
-manifest; those paths must still exist. For Gradle, append `--discover` to the
-probe command to exercise current fallback discovery with `--skip-build`, rather
-than reuse the archived source-root list. This does not exercise a fresh Gradle
-build or a successful native Gradle metadata query.
+manifest; those paths must still exist. Append `--discover` to the
+probe command to exercise current adapter discovery with `--skip-build`, rather
+than reuse the archived source-root list. Use `--discover-main` for main-only discovery through the detected project adapter. The probe retains source-set, visibility and generated provenance per declaration. Neither option proves a fresh build or native Gradle metadata success.
 
 The independent inventory includes every tracked `**/src/main/java/**/*.java`,
 every file represented in the model, and all Java files under the supplied roots.
@@ -37,7 +36,7 @@ declarations. An omitted root with no tracked Java files is outside the independ
 tracked-file inventory unless supplied in the roots JSON.
 
 Matching requires the exact relative source path, constructor/name, parameter
-count, and a Spoon source position inside the javac declaration header. It
+count, and a Spoon source position inside the javac declaration header or its associated Javadoc span, obtained from javac DocTrees. It
 handles annotation lines, tabs, multiline signatures and same-line overloads
 without guessing between candidates. Implicit constructors, initializers and
 lambda bodies are not counted as explicit method declarations. Parse failures

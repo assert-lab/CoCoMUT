@@ -62,11 +62,19 @@ public class JavacPopulationAudit {
                 CompilationUnitTree unit = task.parse().iterator().next();
                 String relative = root.relativize(file).toString();
                 SourcePositions positions = Trees.instance(task).getSourcePositions();
+                DocTrees docs = DocTrees.instance(task);
                 List<Map<String,Object>> expected = new ArrayList<>();
-                new TreeScanner<Void,Void>() {
+                new TreePathScanner<Void,Void>() {
                     @Override public Void visitMethod(MethodTree method, Void unused) {
                         long start = positions.getStartPosition(unit, method);
                         if (start >= 0) {
+                            // Some Spoon positions begin inside an attached Javadoc comment.
+                            // Use javac's actual documentation association, not proximity matching.
+                            var comment = docs.getDocCommentTree(getCurrentPath());
+                            if (comment != null) {
+                                long commentStart = docs.getSourcePositions().getStartPosition(unit, comment, comment);
+                                if (commentStart >= 0) start = Math.min(start, commentStart);
+                            }
                             boolean constructor = method.getReturnType() == null;
                             expected.add(Map.of("source_file", relative,
                                     "line", unit.getLineMap().getLineNumber(start),

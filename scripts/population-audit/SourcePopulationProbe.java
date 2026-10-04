@@ -20,8 +20,8 @@ public class SourcePopulationProbe {
         return paths;
     }
     public static void main(String[] args) throws Exception {
-        if (args.length < 2 || args.length > 3 || (args.length == 3 && !args[2].equals("--discover"))) {
-            throw new IllegalArgumentException("Usage: SourcePopulationProbe MANIFEST_JSON OUTPUT_DIRECTORY [--discover]");
+        if (args.length < 2 || args.length > 3 || (args.length == 3 && !Set.of("--discover", "--discover-main").contains(args[2]))) {
+            throw new IllegalArgumentException("Usage: SourcePopulationProbe MANIFEST_JSON OUTPUT_DIRECTORY [--discover|--discover-main]");
         }
         ObjectMapper mapper = new ObjectMapper();
         JsonNode manifest = mapper.readTree(Path.of(args[0]).toFile());
@@ -40,10 +40,11 @@ public class SourcePopulationProbe {
                 .testClassOutputs(paths(artifacts, "test_class_outputs", root))
                 .dependencyClasspath(paths(artifacts, "dependency_classpath", root))
                 .projectArtifactJars(paths(artifacts, "project_jars", root)).build();
-        if (args.length > 2 && args[2].equals("--discover")) {
-            metadata = new org.assertlab.cocomut.adapter.GradleProjectAdapter(root).toMetadata(
+        if (args.length > 2) {
+            metadata = org.assertlab.cocomut.adapter.ProjectAdapter.of(root).toMetadata(
                 ContextRequest.builder().projectRoot(root).scope(ContextRequest.Scope.ALL)
-                    .sourceSets(Set.of("main", "test")).skipBuild(true).build());
+                    .sourceSets(args[2].equals("--discover-main") ? Set.of("main") : Set.of("main", "test"))
+                    .skipBuild(true).build());
         }
         mapper.writerWithDefaultPrettyPrinter().writeValue(output.resolve("source-roots.json").toFile(),
                 Map.of("main", metadata.getSourceRoots().stream().map(Path::toString).toList(),
@@ -59,7 +60,7 @@ public class SourcePopulationProbe {
             summary.put("actual_project_commit", commit);
             summary.put("subject_status_before", statusBefore);
             summary.put("subject_status_after", git(root, "status", "--porcelain"));
-            summary.put("source_root_mode", args.length > 2 ? "gradle_skip_build_discovery" : "archived_manifest");
+            summary.put("source_root_mode", args.length > 2 ? "adapter_skip_build_discovery" : "archived_manifest");
             summary.put("runtime_java_version", System.getProperty("java.version"));
             summary.put("java_version", metadata.getJavaVersion());
             summary.put("discovered", stats.discovered());
@@ -76,7 +77,7 @@ public class SourcePopulationProbe {
             try (var writer = Files.newBufferedWriter(output.resolve("methods.jsonl"))) {
                 for (var method : session.methods()) {
                     writer.write(mapper.writeValueAsString(Map.of("method_uri", method.methodUri(),
-                            "source_file", root.relativize(method.sourceFile()).toString(), "constructor", method.constructor(), "line", method.lineNumber(), "column", method.columnNumber(), "name", method.methodName(), "arity", method.parameters().size())));
+                            "source_file", root.relativize(method.sourceFile()).toString(), "constructor", method.constructor(), "line", method.lineNumber(), "column", method.columnNumber(), "name", method.methodName(), "arity", method.parameters().size(), "source_set", method.sourceSet(), "visibility", method.visibility(), "generated", SourceRootPolicy.isGenerated(root, method.sourceFile()))));
                     writer.newLine();
                 }
             }

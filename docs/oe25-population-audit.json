@@ -1,0 +1,1117 @@
+{
+  "baseline_commit": "bee9d6cbb492fed20d4e02d6dc24580525657e83",
+  "jar_sha256": "2be7e555c5d727c28b43c4ecc8c608832017dbcdb30282551304c0d559d8c8cc",
+  "scope": "explicit methods and constructors in tracked src/main/java, model files and declared roots; all visibility; default generated exclusion",
+  "source_verification": [
+    {
+      "slug": "AsyncHttpClient__async-http-client",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "JodaOrg__joda-time",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "apache__commons-bcel",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "apache__commons-beanutils",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "apache__commons-collections",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "apache__commons-configuration",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "apache__commons-dbutils",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "apache__commons-geometry",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "apache__commons-imaging",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "apache__commons-jcs",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "apache__commons-jexl",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "apache__commons-lang",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "apache__commons-net",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "apache__commons-numbers",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "apache__commons-pool",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "apache__commons-rng",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "apache__commons-validator",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "apache__commons-vfs",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "apache__commons-weaver",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "jhy__jsoup",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "kevinsawicki__http-request",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "perwendel__spark",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "scribejava__scribejava",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "springside__springside4",
+      "changed_original_sources": [],
+      "git_status": ""
+    },
+    {
+      "slug": "stleary__JSON-java",
+      "changed_original_sources": [],
+      "git_status": ""
+    }
+  ],
+  "totals": {
+    "subjects": 25,
+    "default_selected_declarations": 50232,
+    "default_cli_rows": 50232,
+    "broad_declarations": 53755,
+    "broad_cli_rows": 53755,
+    "outside_default_roots": 3523,
+    "default_statuses": {
+      "PARTIAL": 19,
+      "SUCCESS": 6
+    },
+    "archived_rows": 39159,
+    "archived_exact_uri_matches": 39154,
+    "archived_changed_identity_locations": 5,
+    "current_only_uris": 14601,
+    "net_additional_rows": 14596,
+    "current_only_uris_in_previously_emitted_files": 12352,
+    "previously_unrepresented_files": 304
+  },
+  "verification_limits": [
+    "Historical source revisions and original 11733 comparison unavailable; saved revisions differ from public release versions.",
+    "--skip-build reuses existing artifacts; Joda-Time and HTTP Request were compiled directly with JDK8, SpringSide completed native Maven package with tests skipped, JSON-java supplied existing target/classes explicitly.",
+    "Default CLI statuses retain degraded evidence; broad-root sensitivity checks are PARTIAL and do not establish strict classpath or call-graph completeness.",
+    "Five archived URI changes have unique exact file/line/name evidence; identities are retained separately without heuristic canonical rewriting."
+  ],
+  "artifact_root": "ale@100.85.158.27:~/agent-runs/cocomut-issue25-audit/oe25-saved-cohort/",
+  "subjects": [
+    {
+      "slug": "AsyncHttpClient__async-http-client",
+      "repository": "AsyncHttpClient/async-http-client",
+      "commit": "31829fee0f8dea3a4c21543bf1eb0910701d68ec",
+      "pom_version": "3.0.11",
+      "published_version": "2.12.3",
+      "original_java_files": 354,
+      "source_hash_map_sha256": "9768fc1000551b5b76a2571d5ef3e570926d262baac72032e7bf9ceeaafd2ea8",
+      "default_declarations": 2136,
+      "default_cli_rows": 2136,
+      "default_cli_status": "PARTIAL",
+      "default_cli_exit": 2,
+      "broad_declarations": 2136,
+      "broad_cli_rows": 2136,
+      "broad_uri_comparison": {
+        "expected": 2136,
+        "rows": 2136,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 0,
+      "outside_default_reason": null,
+      "historical": {
+        "slug": "AsyncHttpClient__async-http-client",
+        "archived_rows": 1651,
+        "old_only": [],
+        "new_only": 485,
+        "within_previously_emitted_files": 467,
+        "previously_unrepresented_files": 10,
+        "scope_before": 2136,
+        "scope_after": 1651
+      }
+    },
+    {
+      "slug": "JodaOrg__joda-time",
+      "repository": "JodaOrg/joda-time",
+      "commit": "d6ba4f03c242c12feac308ac25b841a8c9457674",
+      "pom_version": "2.14.2",
+      "published_version": "2.11.2",
+      "original_java_files": 330,
+      "source_hash_map_sha256": "aac191c513d57ea17db42e912f602b59f565e4edb93efea6781e9fe84477c8bd",
+      "default_declarations": 4283,
+      "default_cli_rows": 4283,
+      "default_cli_status": "PARTIAL",
+      "default_cli_exit": 2,
+      "broad_declarations": 4283,
+      "broad_cli_rows": 4283,
+      "broad_uri_comparison": {
+        "expected": 4283,
+        "rows": 4283,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 0,
+      "outside_default_reason": null,
+      "historical": {
+        "slug": "JodaOrg__joda-time",
+        "archived_rows": 3535,
+        "old_only": [],
+        "new_only": 748,
+        "within_previously_emitted_files": 712,
+        "previously_unrepresented_files": 5,
+        "scope_before": 4283,
+        "scope_after": 3535
+      }
+    },
+    {
+      "slug": "apache__commons-bcel",
+      "repository": "apache/commons-bcel",
+      "commit": "a6dee1514cf5caf96803988ddca9b61c99726c4a",
+      "pom_version": "6.13.0-SNAPSHOT",
+      "published_version": "6.5.0",
+      "original_java_files": 667,
+      "source_hash_map_sha256": "f1af66d2512b6d98c3a1c1fb8770d1413031eb8e4439b2e940e96260c474217b",
+      "default_declarations": 3884,
+      "default_cli_rows": 3884,
+      "default_cli_status": "PARTIAL",
+      "default_cli_exit": 2,
+      "broad_declarations": 3884,
+      "broad_cli_rows": 3884,
+      "broad_uri_comparison": {
+        "expected": 3884,
+        "rows": 3884,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 0,
+      "outside_default_reason": null,
+      "historical": {
+        "slug": "apache__commons-bcel",
+        "archived_rows": 3322,
+        "old_only": [],
+        "new_only": 562,
+        "within_previously_emitted_files": 539,
+        "previously_unrepresented_files": 8,
+        "scope_before": 3884,
+        "scope_after": 3322
+      }
+    },
+    {
+      "slug": "apache__commons-beanutils",
+      "repository": "apache/commons-beanutils",
+      "commit": "010163e0301d23e036021fd5e83214927e19d72c",
+      "pom_version": "2.0.0-M3-SNAPSHOT",
+      "published_version": "1.9.4",
+      "original_java_files": 293,
+      "source_hash_map_sha256": "69830ba23c29ddb7ea21b29ad8a0218de35ce1e9b6676aa89e6065045679fd41",
+      "default_declarations": 1003,
+      "default_cli_rows": 1003,
+      "default_cli_status": "PARTIAL",
+      "default_cli_exit": 2,
+      "broad_declarations": 1003,
+      "broad_cli_rows": 1003,
+      "broad_uri_comparison": {
+        "expected": 1003,
+        "rows": 1003,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 0,
+      "outside_default_reason": null,
+      "historical": {
+        "slug": "apache__commons-beanutils",
+        "archived_rows": 729,
+        "old_only": [],
+        "new_only": 274,
+        "within_previously_emitted_files": 274,
+        "previously_unrepresented_files": 0,
+        "scope_before": 1003,
+        "scope_after": 729
+      }
+    },
+    {
+      "slug": "apache__commons-collections",
+      "repository": "apache/commons-collections",
+      "commit": "75699fc1c5e388ab06f1196cc9bebb078d30f1b5",
+      "pom_version": "4.6.0-SNAPSHOT",
+      "published_version": "4.4",
+      "original_java_files": 659,
+      "source_hash_map_sha256": "ed31bc05ff31529269ad01cca602603cf207d71c3678bfeed683754312b38405",
+      "default_declarations": 4886,
+      "default_cli_rows": 4886,
+      "default_cli_status": "PARTIAL",
+      "default_cli_exit": 2,
+      "broad_declarations": 4886,
+      "broad_cli_rows": 4886,
+      "broad_uri_comparison": {
+        "expected": 4886,
+        "rows": 4886,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 0,
+      "outside_default_reason": null,
+      "historical": {
+        "slug": "apache__commons-collections",
+        "archived_rows": 3716,
+        "old_only": [],
+        "new_only": 1170,
+        "within_previously_emitted_files": 1004,
+        "previously_unrepresented_files": 10,
+        "scope_before": 4747,
+        "scope_after": 3716
+      }
+    },
+    {
+      "slug": "apache__commons-configuration",
+      "repository": "apache/commons-configuration",
+      "commit": "6a79fe81397058e7c2bb448a116e01d9d378e9df",
+      "pom_version": "2.15.2-SNAPSHOT",
+      "published_version": "2.8.0",
+      "original_java_files": 484,
+      "source_hash_map_sha256": "99574b09e1b21835bc39cd7764b90ea63804914c310aacc9f25cb8e7754d9495",
+      "default_declarations": 3129,
+      "default_cli_rows": 3129,
+      "default_cli_status": "PARTIAL",
+      "default_cli_exit": 2,
+      "broad_declarations": 3129,
+      "broad_cli_rows": 3129,
+      "broad_uri_comparison": {
+        "expected": 3129,
+        "rows": 3129,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 0,
+      "outside_default_reason": null,
+      "historical": {
+        "slug": "apache__commons-configuration",
+        "archived_rows": 2183,
+        "old_only": [],
+        "new_only": 946,
+        "within_previously_emitted_files": 929,
+        "previously_unrepresented_files": 3,
+        "scope_before": 3129,
+        "scope_after": 2183
+      }
+    },
+    {
+      "slug": "apache__commons-dbutils",
+      "repository": "apache/commons-dbutils",
+      "commit": "a1034beb6ee791e3a7b2755af4d1d591162ec57f",
+      "pom_version": "1.9.0-SNAPSHOT",
+      "published_version": "1.7",
+      "original_java_files": 96,
+      "source_hash_map_sha256": "47483d631b09f5389815b519d539e183f08b298fc4c24b4365340da7c796acdc",
+      "default_declarations": 546,
+      "default_cli_rows": 546,
+      "default_cli_status": "SUCCESS",
+      "default_cli_exit": 0,
+      "broad_declarations": 546,
+      "broad_cli_rows": 546,
+      "broad_uri_comparison": {
+        "expected": 546,
+        "rows": 546,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 0,
+      "outside_default_reason": null,
+      "historical": {
+        "slug": "apache__commons-dbutils",
+        "archived_rows": 494,
+        "old_only": [],
+        "new_only": 52,
+        "within_previously_emitted_files": 52,
+        "previously_unrepresented_files": 0,
+        "scope_before": 546,
+        "scope_after": 494
+      }
+    },
+    {
+      "slug": "apache__commons-geometry",
+      "repository": "apache/commons-geometry",
+      "commit": "c2e4dbfa46b2c105fd3b47ae698afbe3b0f32f82",
+      "pom_version": "1.1-SNAPSHOT",
+      "published_version": "1.0",
+      "original_java_files": 482,
+      "source_hash_map_sha256": "0078085fad56c0f43adff5d926a7d3e37928d7d73aadb7f37a47c5d127d8c6bf",
+      "default_declarations": 3167,
+      "default_cli_rows": 3167,
+      "default_cli_status": "PARTIAL",
+      "default_cli_exit": 2,
+      "broad_declarations": 3495,
+      "broad_cli_rows": 3495,
+      "broad_uri_comparison": {
+        "expected": 3495,
+        "rows": 3495,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 328,
+      "outside_default_reason": "examples profile",
+      "historical": {
+        "slug": "apache__commons-geometry",
+        "archived_rows": 2612,
+        "old_only": [],
+        "new_only": 883,
+        "within_previously_emitted_files": 814,
+        "previously_unrepresented_files": 14,
+        "scope_before": 3495,
+        "scope_after": 2612
+      }
+    },
+    {
+      "slug": "apache__commons-imaging",
+      "repository": "apache/commons-imaging",
+      "commit": "5337c5f10a79412a2bd27f9a2c648a9e78c6db71",
+      "pom_version": "1.0.0-alpha7-SNAPSHOT",
+      "published_version": "1.0-alpha3",
+      "original_java_files": 626,
+      "source_hash_map_sha256": "babf007aadc2aafd3da47defaf7374871ff361655b3d16c88716cb6353f235fa",
+      "default_declarations": 2532,
+      "default_cli_rows": 2532,
+      "default_cli_status": "PARTIAL",
+      "default_cli_exit": 2,
+      "broad_declarations": 2532,
+      "broad_cli_rows": 2532,
+      "broad_uri_comparison": {
+        "expected": 2532,
+        "rows": 2532,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 0,
+      "outside_default_reason": null,
+      "historical": {
+        "slug": "apache__commons-imaging",
+        "archived_rows": 1730,
+        "old_only": [],
+        "new_only": 802,
+        "within_previously_emitted_files": 507,
+        "previously_unrepresented_files": 52,
+        "scope_before": 2308,
+        "scope_after": 1730
+      }
+    },
+    {
+      "slug": "apache__commons-jcs",
+      "repository": "apache/commons-jcs",
+      "commit": "08328a901dc6e5bc01667e914f7921517dd59d2b",
+      "pom_version": "4.0.0-SNAPSHOT",
+      "published_version": "3.1",
+      "original_java_files": 558,
+      "source_hash_map_sha256": "6c45d9796b299551d6c661b1104ef7dc5f90b31776991076c3f06fec35996786",
+      "default_declarations": 2387,
+      "default_cli_rows": 2387,
+      "default_cli_status": "PARTIAL",
+      "default_cli_exit": 2,
+      "broad_declarations": 2725,
+      "broad_cli_rows": 2725,
+      "broad_uri_comparison": {
+        "expected": 2725,
+        "rows": 2725,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 338,
+      "outside_default_reason": "sandbox profile",
+      "historical": {
+        "slug": "apache__commons-jcs",
+        "archived_rows": 2140,
+        "old_only": [
+          "commons-jcs4-jcache/src/main/java/org/apache/commons/jcs4/jcache/JCSCache.java#org.apache.commons.jcs4.jcache.JCSCache$20286.hasNext():boolean",
+          "commons-jcs4-jcache/src/main/java/org/apache/commons/jcs4/jcache/JCSCache.java#org.apache.commons.jcs4.jcache.JCSCache$20286.next():Entry",
+          "commons-jcs4-jcache/src/main/java/org/apache/commons/jcs4/jcache/JCSCache.java#org.apache.commons.jcs4.jcache.JCSCache$20286.remove():void"
+        ],
+        "new_only": 588,
+        "within_previously_emitted_files": 574,
+        "previously_unrepresented_files": 7,
+        "scope_before": 2725,
+        "scope_after": 2143,
+        "same_declaration_location_evidence": [
+          {
+            "archived_uri": "commons-jcs4-jcache/src/main/java/org/apache/commons/jcs4/jcache/JCSCache.java#org.apache.commons.jcs4.jcache.JCSCache$20286.hasNext():boolean",
+            "archived_line": 641,
+            "current_candidates": [
+              {
+                "visibility": "public",
+                "arity": 0,
+                "name": "hasNext",
+                "method_uri": "commons-jcs4-jcache/src/main/java/org/apache/commons/jcs4/jcache/JCSCache.java#org.apache.commons.jcs4.jcache.JCSCache$1.hasNext():boolean",
+                "line": 641,
+                "constructor": false,
+                "generated": false,
+                "source_file": "commons-jcs4-jcache/src/main/java/org/apache/commons/jcs4/jcache/JCSCache.java",
+                "source_set": "main",
+                "column": 28
+              }
+            ]
+          },
+          {
+            "archived_uri": "commons-jcs4-jcache/src/main/java/org/apache/commons/jcs4/jcache/JCSCache.java#org.apache.commons.jcs4.jcache.JCSCache$20286.next():Entry",
+            "archived_line": 647,
+            "current_candidates": [
+              {
+                "visibility": "public",
+                "arity": 0,
+                "name": "next",
+                "method_uri": "commons-jcs4-jcache/src/main/java/org/apache/commons/jcs4/jcache/JCSCache.java#org.apache.commons.jcs4.jcache.JCSCache$1.next():org.apache.commons.jcs4.jcache.Entry",
+                "line": 647,
+                "constructor": false,
+                "generated": false,
+                "source_file": "commons-jcs4-jcache/src/main/java/org/apache/commons/jcs4/jcache/JCSCache.java",
+                "source_set": "main",
+                "column": 32
+              }
+            ]
+          },
+          {
+            "archived_uri": "commons-jcs4-jcache/src/main/java/org/apache/commons/jcs4/jcache/JCSCache.java#org.apache.commons.jcs4.jcache.JCSCache$20286.remove():void",
+            "archived_line": 654,
+            "current_candidates": [
+              {
+                "visibility": "public",
+                "arity": 0,
+                "name": "remove",
+                "method_uri": "commons-jcs4-jcache/src/main/java/org/apache/commons/jcs4/jcache/JCSCache.java#org.apache.commons.jcs4.jcache.JCSCache$1.remove():void",
+                "line": 654,
+                "constructor": false,
+                "generated": false,
+                "source_file": "commons-jcs4-jcache/src/main/java/org/apache/commons/jcs4/jcache/JCSCache.java",
+                "source_set": "main",
+                "column": 25
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "slug": "apache__commons-jexl",
+      "repository": "apache/commons-jexl",
+      "commit": "810c5761e77b60c7bd21ac85b02a9f95f8541b89",
+      "pom_version": "3.6.3-SNAPSHOT",
+      "published_version": "3.2.1",
+      "original_java_files": 314,
+      "source_hash_map_sha256": "0a387071b60443015e78f61df725c201a2165dee1fd101288b48ab805e823e6f",
+      "default_declarations": 2313,
+      "default_cli_rows": 2313,
+      "default_cli_status": "PARTIAL",
+      "default_cli_exit": 2,
+      "broad_declarations": 2313,
+      "broad_cli_rows": 2313,
+      "broad_uri_comparison": {
+        "expected": 2313,
+        "rows": 2313,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 0,
+      "outside_default_reason": null,
+      "historical": {
+        "slug": "apache__commons-jexl",
+        "archived_rows": 1242,
+        "old_only": [],
+        "new_only": 1071,
+        "within_previously_emitted_files": 880,
+        "previously_unrepresented_files": 5,
+        "scope_before": 2313,
+        "scope_after": 1242
+      }
+    },
+    {
+      "slug": "apache__commons-lang",
+      "repository": "apache/commons-lang",
+      "commit": "04df64b765d5817c04454e343007cb4c091c5c20",
+      "pom_version": "3.21.0-SNAPSHOT",
+      "published_version": "3.12.0",
+      "original_java_files": 623,
+      "source_hash_map_sha256": "b4281a6ee35d0b86f2bd7074d06588b2ddf622aa4311eb9032cabe6b9db4e72c",
+      "default_declarations": 4489,
+      "default_cli_rows": 4489,
+      "default_cli_status": "SUCCESS",
+      "default_cli_exit": 0,
+      "broad_declarations": 4489,
+      "broad_cli_rows": 4489,
+      "broad_uri_comparison": {
+        "expected": 4489,
+        "rows": 4489,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 0,
+      "outside_default_reason": null,
+      "historical": {
+        "slug": "apache__commons-lang",
+        "archived_rows": 3765,
+        "old_only": [],
+        "new_only": 724,
+        "within_previously_emitted_files": 718,
+        "previously_unrepresented_files": 3,
+        "scope_before": 4489,
+        "scope_after": 3765
+      }
+    },
+    {
+      "slug": "apache__commons-net",
+      "repository": "apache/commons-net",
+      "commit": "628086a973b82b27e6a01d7fe28ec89220dbfec5",
+      "pom_version": "3.13.1-SNAPSHOT",
+      "published_version": "3.8.0",
+      "original_java_files": 318,
+      "source_hash_map_sha256": "f37eb37b2fdb647563961864b1291b6cd9f59466d36a9a2d0159018043688e60",
+      "default_declarations": 1938,
+      "default_cli_rows": 1938,
+      "default_cli_status": "PARTIAL",
+      "default_cli_exit": 2,
+      "broad_declarations": 1938,
+      "broad_cli_rows": 1938,
+      "broad_uri_comparison": {
+        "expected": 1938,
+        "rows": 1938,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 0,
+      "outside_default_reason": null,
+      "historical": {
+        "slug": "apache__commons-net",
+        "archived_rows": 1521,
+        "old_only": [],
+        "new_only": 417,
+        "within_previously_emitted_files": 376,
+        "previously_unrepresented_files": 23,
+        "scope_before": 1938,
+        "scope_after": 1521
+      }
+    },
+    {
+      "slug": "apache__commons-numbers",
+      "repository": "apache/commons-numbers",
+      "commit": "ac3f3fa500b419b5d39e2da26ff890ec19f47eeb",
+      "pom_version": "1.4-SNAPSHOT",
+      "published_version": "1.0",
+      "original_java_files": 273,
+      "source_hash_map_sha256": "8f36bee29962a64aee95eba25b21870f7415cc2557b6083cb19488df26a5ff10",
+      "default_declarations": 895,
+      "default_cli_rows": 895,
+      "default_cli_status": "SUCCESS",
+      "default_cli_exit": 0,
+      "broad_declarations": 2310,
+      "broad_cli_rows": 2310,
+      "broad_uri_comparison": {
+        "expected": 2310,
+        "rows": 2310,
+        "missing": [
+          "commons-numbers-examples/examples-jmh/src/main/java/org/apache/commons/numbers/examples/jmh/gamma/GammaContinuedFractionPerformance.java#org.apache.commons.numbers.examples.jmh.gamma.GammaContinuedFractionPerformance$BaseData$5.get():org.apache.commons.numbers.fraction.GeneralizedContinuedFraction$Coefficient",
+          "commons-numbers-examples/examples-jmh/src/main/java/org/apache/commons/numbers/examples/jmh/gamma/GammaContinuedFractionPerformance.java#org.apache.commons.numbers.examples.jmh.gamma.GammaContinuedFractionPerformance$BaseData$6.get():org.apache.commons.numbers.fraction.GeneralizedContinuedFraction$Coefficient"
+        ],
+        "unexpected": [
+          "commons-numbers-examples/examples-jmh/src/main/java/org/apache/commons/numbers/examples/jmh/gamma/GammaContinuedFractionPerformance.java#org.apache.commons.numbers.examples.jmh.gamma.GammaContinuedFractionPerformance$BaseData$25837.get():org.apache.commons.numbers.fraction.GeneralizedContinuedFraction.Coefficient",
+          "commons-numbers-examples/examples-jmh/src/main/java/org/apache/commons/numbers/examples/jmh/gamma/GammaContinuedFractionPerformance.java#org.apache.commons.numbers.examples.jmh.gamma.GammaContinuedFractionPerformance$BaseData$26610.get():org.apache.commons.numbers.fraction.GeneralizedContinuedFraction.Coefficient"
+        ],
+        "duplicates": 0
+      },
+      "outside_default_roots": 1415,
+      "outside_default_reason": "examples profile and standalone complex-streams module",
+      "historical": {
+        "slug": "apache__commons-numbers",
+        "archived_rows": 1135,
+        "old_only": [
+          "commons-numbers-examples/examples-jmh/src/main/java/org/apache/commons/numbers/examples/jmh/gamma/GammaContinuedFractionPerformance.java#org.apache.commons.numbers.examples.jmh.gamma.GammaContinuedFractionPerformance$BaseData$25837.get():org.apache.commons.numbers.fraction.GeneralizedContinuedFraction.Coefficient",
+          "commons-numbers-examples/examples-jmh/src/main/java/org/apache/commons/numbers/examples/jmh/gamma/GammaContinuedFractionPerformance.java#org.apache.commons.numbers.examples.jmh.gamma.GammaContinuedFractionPerformance$BaseData$26610.get():org.apache.commons.numbers.fraction.GeneralizedContinuedFraction.Coefficient"
+        ],
+        "new_only": 1177,
+        "within_previously_emitted_files": 764,
+        "previously_unrepresented_files": 27,
+        "scope_before": 2310,
+        "scope_after": 1135,
+        "same_declaration_location_evidence": [
+          {
+            "archived_uri": "commons-numbers-examples/examples-jmh/src/main/java/org/apache/commons/numbers/examples/jmh/gamma/GammaContinuedFractionPerformance.java#org.apache.commons.numbers.examples.jmh.gamma.GammaContinuedFractionPerformance$BaseData$25837.get():org.apache.commons.numbers.fraction.GeneralizedContinuedFraction.Coefficient",
+            "archived_line": 536,
+            "current_candidates": [
+              {
+                "constructor": false,
+                "generated": false,
+                "source_file": "commons-numbers-examples/examples-jmh/src/main/java/org/apache/commons/numbers/examples/jmh/gamma/GammaContinuedFractionPerformance.java",
+                "source_set": "main",
+                "column": 44,
+                "visibility": "public",
+                "arity": 0,
+                "name": "get",
+                "method_uri": "commons-numbers-examples/examples-jmh/src/main/java/org/apache/commons/numbers/examples/jmh/gamma/GammaContinuedFractionPerformance.java#org.apache.commons.numbers.examples.jmh.gamma.GammaContinuedFractionPerformance$BaseData$5.get():org.apache.commons.numbers.fraction.GeneralizedContinuedFraction$Coefficient",
+                "line": 536
+              }
+            ]
+          },
+          {
+            "archived_uri": "commons-numbers-examples/examples-jmh/src/main/java/org/apache/commons/numbers/examples/jmh/gamma/GammaContinuedFractionPerformance.java#org.apache.commons.numbers.examples.jmh.gamma.GammaContinuedFractionPerformance$BaseData$26610.get():org.apache.commons.numbers.fraction.GeneralizedContinuedFraction.Coefficient",
+            "archived_line": 556,
+            "current_candidates": [
+              {
+                "constructor": false,
+                "generated": false,
+                "source_file": "commons-numbers-examples/examples-jmh/src/main/java/org/apache/commons/numbers/examples/jmh/gamma/GammaContinuedFractionPerformance.java",
+                "source_set": "main",
+                "column": 44,
+                "visibility": "public",
+                "arity": 0,
+                "name": "get",
+                "method_uri": "commons-numbers-examples/examples-jmh/src/main/java/org/apache/commons/numbers/examples/jmh/gamma/GammaContinuedFractionPerformance.java#org.apache.commons.numbers.examples.jmh.gamma.GammaContinuedFractionPerformance$BaseData$6.get():org.apache.commons.numbers.fraction.GeneralizedContinuedFraction$Coefficient",
+                "line": 556
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "slug": "apache__commons-pool",
+      "repository": "apache/commons-pool",
+      "commit": "e897e175f321718f8fd3999ddc36372ee6c75c29",
+      "pom_version": "3.0.0-SNAPSHOT",
+      "published_version": "2.11.1",
+      "original_java_files": 125,
+      "source_hash_map_sha256": "5d517cb12f48f46ee646adb7a065b8a5d555ae085f2cb246f9a6eefe0ea15891",
+      "default_declarations": 847,
+      "default_cli_rows": 847,
+      "default_cli_status": "PARTIAL",
+      "default_cli_exit": 2,
+      "broad_declarations": 847,
+      "broad_cli_rows": 847,
+      "broad_uri_comparison": {
+        "expected": 847,
+        "rows": 847,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 0,
+      "outside_default_reason": null,
+      "historical": {
+        "slug": "apache__commons-pool",
+        "archived_rows": 607,
+        "old_only": [],
+        "new_only": 240,
+        "within_previously_emitted_files": 135,
+        "previously_unrepresented_files": 3,
+        "scope_before": 754,
+        "scope_after": 607
+      }
+    },
+    {
+      "slug": "apache__commons-rng",
+      "repository": "apache/commons-rng",
+      "commit": "91224cc9e9aa644bfe386541f220e3a256405e41",
+      "pom_version": "1.8-SNAPSHOT",
+      "published_version": "1.4",
+      "original_java_files": 440,
+      "source_hash_map_sha256": "936a82716a7570a574c0669e14a63823cb1442335fae8916827bbf096b71a3b1",
+      "default_declarations": 1581,
+      "default_cli_rows": 1581,
+      "default_cli_status": "SUCCESS",
+      "default_cli_exit": 0,
+      "broad_declarations": 2790,
+      "broad_cli_rows": 2790,
+      "broad_uri_comparison": {
+        "expected": 2790,
+        "rows": 2790,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 1209,
+      "outside_default_reason": "examples profile",
+      "historical": {
+        "slug": "apache__commons-rng",
+        "archived_rows": 1458,
+        "old_only": [],
+        "new_only": 1332,
+        "within_previously_emitted_files": 1216,
+        "previously_unrepresented_files": 21,
+        "scope_before": 2780,
+        "scope_after": 1458
+      }
+    },
+    {
+      "slug": "apache__commons-validator",
+      "repository": "apache/commons-validator",
+      "commit": "a215b29df67ad85c096899b072d812bbe1b012ac",
+      "pom_version": "1.11.0-SNAPSHOT",
+      "published_version": "1.7",
+      "original_java_files": 166,
+      "source_hash_map_sha256": "fd7b5d203415c88055d87a6f24b9d70e73afdebb0848f0c20284b94d6e78afde",
+      "default_declarations": 770,
+      "default_cli_rows": 770,
+      "default_cli_status": "PARTIAL",
+      "default_cli_exit": 2,
+      "broad_declarations": 770,
+      "broad_cli_rows": 770,
+      "broad_uri_comparison": {
+        "expected": 770,
+        "rows": 770,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 0,
+      "outside_default_reason": null,
+      "historical": {
+        "slug": "apache__commons-validator",
+        "archived_rows": 599,
+        "old_only": [],
+        "new_only": 171,
+        "within_previously_emitted_files": 167,
+        "previously_unrepresented_files": 1,
+        "scope_before": 770,
+        "scope_after": 599
+      }
+    },
+    {
+      "slug": "apache__commons-vfs",
+      "repository": "apache/commons-vfs",
+      "commit": "67e2c1e8ed1ab4ce0a371f279442c092e01202a1",
+      "pom_version": "2.11.0-SNAPSHOT",
+      "published_version": "2.9.0",
+      "original_java_files": 596,
+      "source_hash_map_sha256": "1f49fbf061638ba11d7dd5b47712040629d904c431882d648e6efc572e7e39b0",
+      "default_declarations": 2882,
+      "default_cli_rows": 2882,
+      "default_cli_status": "PARTIAL",
+      "default_cli_exit": 2,
+      "broad_declarations": 3035,
+      "broad_cli_rows": 3035,
+      "broad_uri_comparison": {
+        "expected": 3035,
+        "rows": 3035,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 153,
+      "outside_default_reason": "include-sandbox profile",
+      "historical": {
+        "slug": "apache__commons-vfs",
+        "archived_rows": 1953,
+        "old_only": [],
+        "new_only": 1082,
+        "within_previously_emitted_files": 777,
+        "previously_unrepresented_files": 46,
+        "scope_before": 3035,
+        "scope_after": 1953
+      }
+    },
+    {
+      "slug": "apache__commons-weaver",
+      "repository": "apache/commons-weaver",
+      "commit": "d6b1aa0b191452fbbe2182ada00a30902ee1c55d",
+      "pom_version": "2.1-SNAPSHOT",
+      "published_version": "2.0",
+      "original_java_files": 116,
+      "source_hash_map_sha256": "8aa728b654a402337656b1557192bffcc24c89faf102e6294579c2465b0c0d6d",
+      "default_declarations": 395,
+      "default_cli_rows": 395,
+      "default_cli_status": "PARTIAL",
+      "default_cli_exit": 2,
+      "broad_declarations": 467,
+      "broad_cli_rows": 467,
+      "broad_uri_comparison": {
+        "expected": 467,
+        "rows": 467,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 72,
+      "outside_default_reason": "src/it/sample fixture builds",
+      "historical": {
+        "slug": "apache__commons-weaver",
+        "archived_rows": 180,
+        "old_only": [],
+        "new_only": 287,
+        "within_previously_emitted_files": 101,
+        "previously_unrepresented_files": 37,
+        "scope_before": 295,
+        "scope_after": 180
+      }
+    },
+    {
+      "slug": "jhy__jsoup",
+      "repository": "jhy/jsoup",
+      "commit": "a57f14febb20f7887227598193781a290585a39d",
+      "pom_version": "1.23.1-SNAPSHOT",
+      "published_version": "1.15.3",
+      "original_java_files": 195,
+      "source_hash_map_sha256": "9d714a65d3db93f48a8439c1101825ce8c418b7fe7c7792bcc6b9c31dd557b95",
+      "default_declarations": 2177,
+      "default_cli_rows": 2177,
+      "default_cli_status": "PARTIAL",
+      "default_cli_exit": 2,
+      "broad_declarations": 2177,
+      "broad_cli_rows": 2177,
+      "broad_uri_comparison": {
+        "expected": 2177,
+        "rows": 2177,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 0,
+      "outside_default_reason": null,
+      "historical": {
+        "slug": "jhy__jsoup",
+        "archived_rows": 1275,
+        "old_only": [],
+        "new_only": 902,
+        "within_previously_emitted_files": 685,
+        "previously_unrepresented_files": 14,
+        "scope_before": 2177,
+        "scope_after": 1275
+      }
+    },
+    {
+      "slug": "kevinsawicki__http-request",
+      "repository": "kevinsawicki/http-request",
+      "commit": "2d62a3e9da726942a93cf16b6e91c0187e6c0136",
+      "pom_version": "1.0",
+      "published_version": "6.0",
+      "original_java_files": 4,
+      "source_hash_map_sha256": "147566e51bad7d3335a7d955d318d9366fe5146a5cb55933431909d082062617",
+      "default_declarations": 202,
+      "default_cli_rows": 202,
+      "default_cli_status": "SUCCESS",
+      "default_cli_exit": 0,
+      "broad_declarations": 202,
+      "broad_cli_rows": 202,
+      "broad_uri_comparison": {
+        "expected": 202,
+        "rows": 202,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 0,
+      "outside_default_reason": null,
+      "historical": {
+        "slug": "kevinsawicki__http-request",
+        "archived_rows": 170,
+        "old_only": [],
+        "new_only": 32,
+        "within_previously_emitted_files": 32,
+        "previously_unrepresented_files": 0,
+        "scope_before": 202,
+        "scope_after": 170
+      }
+    },
+    {
+      "slug": "perwendel__spark",
+      "repository": "perwendel/spark",
+      "commit": "1973e402f5d4c1442ad34a1d38ed0758079f7773",
+      "pom_version": "2.9.4-SNAPSHOT",
+      "published_version": "2.9.3",
+      "original_java_files": 184,
+      "source_hash_map_sha256": "559c0e8bbca46a92d79ed371849c1237ea59358ae16904c61f78aaca639bbb41",
+      "default_declarations": 872,
+      "default_cli_rows": 872,
+      "default_cli_status": "PARTIAL",
+      "default_cli_exit": 2,
+      "broad_declarations": 872,
+      "broad_cli_rows": 872,
+      "broad_uri_comparison": {
+        "expected": 872,
+        "rows": 872,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 0,
+      "outside_default_reason": null,
+      "historical": {
+        "slug": "perwendel__spark",
+        "archived_rows": 740,
+        "old_only": [],
+        "new_only": 132,
+        "within_previously_emitted_files": 124,
+        "previously_unrepresented_files": 6,
+        "scope_before": 872,
+        "scope_after": 740
+      }
+    },
+    {
+      "slug": "scribejava__scribejava",
+      "repository": "scribejava/scribejava",
+      "commit": "8970e8eeb0aff840d0b223890e9c392ee19218f7",
+      "pom_version": "8.3.4-SNAPSHOT",
+      "published_version": "8.3.1",
+      "original_java_files": 315,
+      "source_hash_map_sha256": "03b31c8b3e36992a7b92ccd545015495bf8bce5275060305fd615bbc19dbf7fb",
+      "default_declarations": 1205,
+      "default_cli_rows": 1205,
+      "default_cli_status": "PARTIAL",
+      "default_cli_exit": 2,
+      "broad_declarations": 1205,
+      "broad_cli_rows": 1205,
+      "broad_uri_comparison": {
+        "expected": 1205,
+        "rows": 1205,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 0,
+      "outside_default_reason": null,
+      "historical": {
+        "slug": "scribejava__scribejava",
+        "archived_rows": 921,
+        "old_only": [],
+        "new_only": 284,
+        "within_previously_emitted_files": 268,
+        "previously_unrepresented_files": 6,
+        "scope_before": 1205,
+        "scope_after": 921
+      }
+    },
+    {
+      "slug": "springside__springside4",
+      "repository": "springside/springside4",
+      "commit": "8950746bb53ce209b4cb5d2d1706712e9c6a0efc",
+      "pom_version": "5.0.0-SNAPSHOT",
+      "published_version": "5.0.0-SNAPSHOT",
+      "original_java_files": 200,
+      "source_hash_map_sha256": "5fbf8c64af391485e0aa48d7b35425828510f93906c8ce9d354a3ae74bcbfdeb",
+      "default_declarations": 1221,
+      "default_cli_rows": 1221,
+      "default_cli_status": "PARTIAL",
+      "default_cli_exit": 2,
+      "broad_declarations": 1229,
+      "broad_cli_rows": 1229,
+      "broad_uri_comparison": {
+        "expected": 1229,
+        "rows": 1229,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 8,
+      "outside_default_reason": "standalone modules/jmh",
+      "historical": {
+        "slug": "springside__springside4",
+        "archived_rows": 1087,
+        "old_only": [],
+        "new_only": 142,
+        "within_previously_emitted_files": 139,
+        "previously_unrepresented_files": 3,
+        "scope_before": 1558,
+        "scope_after": 1398
+      }
+    },
+    {
+      "slug": "stleary__JSON-java",
+      "repository": "stleary/JSON-java",
+      "commit": "4a23fd8d9b57d5f16d9ecf1d2b573fee7c073c4a",
+      "pom_version": "20260522",
+      "published_version": "20220924",
+      "original_java_files": 85,
+      "source_hash_map_sha256": "d1e5f11a6a0cbefda0974c7d1173ad4c76e6d4b4d9fcd2864b2309950b4b0622",
+      "default_declarations": 492,
+      "default_cli_rows": 492,
+      "default_cli_status": "SUCCESS",
+      "default_cli_exit": 0,
+      "broad_declarations": 492,
+      "broad_cli_rows": 492,
+      "broad_uri_comparison": {
+        "expected": 492,
+        "rows": 492,
+        "missing": [],
+        "unexpected": [],
+        "duplicates": 0
+      },
+      "outside_default_roots": 0,
+      "outside_default_reason": null,
+      "historical": {
+        "slug": "stleary__JSON-java",
+        "archived_rows": 394,
+        "old_only": [],
+        "new_only": 98,
+        "within_previously_emitted_files": 98,
+        "previously_unrepresented_files": 0,
+        "scope_before": 492,
+        "scope_after": 394
+      }
+    }
+  ]
+}

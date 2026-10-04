@@ -27,6 +27,7 @@ class Fixture {
 \tpublic void annotated() {}
 \tprivate void hidden() {}
     void over(int value) {} void over(String value) {}
+    /** Default constructor. */
     Fixture() {}
     void container() {class Local {Local(){} void local(){}}}
     enum Mode {ONE; Mode(){} private void modeMethod(){}}
@@ -53,6 +54,18 @@ class Fixture {
         assert clean["declarations"] == clean["matched"] == 10, clean
         assert not clean["missing"] and not clean["ambiguous"] and not clean["parse_failures"], clean
         print("PASS: annotated/tabbed declarations, same-line overloads, private methods and nested constructors")
+
+        discovered = root / "discovered"
+        run(java + [str(scripts / "SourcePopulationProbe.java"), str(manifest),
+                    str(discovered), "--discover-main"])
+        expected_uris = {json.loads(line)["method_uri"]
+                         for line in (output / "methods.jsonl").read_text().splitlines()}
+        discovered_methods = [json.loads(line)
+                              for line in (discovered / "methods.jsonl").read_text().splitlines()]
+        assert {method["method_uri"] for method in discovered_methods} == expected_uris
+        assert all(method["source_set"] == "main" and not method["generated"]
+                   for method in discovered_methods)
+        print("PASS: automatic adapter discovery uses main roots and retains population provenance")
 
         omitted = root / "omitted/src/main/java"
         omitted.mkdir(parents=True)
