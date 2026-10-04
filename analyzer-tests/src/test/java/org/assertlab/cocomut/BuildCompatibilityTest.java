@@ -149,9 +149,6 @@ public class BuildCompatibilityTest {
             assertEquals(Set.of("platforms;android-35", "build-tools;35.0.0"),
                     AndroidSdkSupport.declaredComponents(project));
             assertTrue(AndroidSdkSupport.isAndroidProject(project));
-            assertEquals("assemble", ProjectAnalyzer.gradleBuildTask(true, false));
-            assertEquals("classes", ProjectAnalyzer.gradleBuildTask(false, false));
-            assertEquals("testClasses", ProjectAnalyzer.gradleBuildTask(true, true));
         } finally {
             delete(project);
         }

@@ -210,6 +210,8 @@ build.bytecode_available        Whether project bytecode was found
 build.bytecode_origin           generated_this_run, preexisting, explicit, or none
 build.analysis_can_proceed      Whether extraction has project bytecode to analyze
 build.gradle_model              Gradle model status, diagnostics, and partiality
+build.gradle_model.buildPlan    Actual project directories, skipped project reasons,
+                                compilation tasks, and unavailable requested source sets
 artifacts.*                     Source roots, class outputs, jars, explicit inputs
 artifacts.origins               Per-artifact origin labels such as explicit,
                                 preexisting, generated_this_run, dependency

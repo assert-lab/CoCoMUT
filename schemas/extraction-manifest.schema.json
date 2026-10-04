@@ -149,7 +149,21 @@
         "bytecode_available": { "type": "boolean" },
         "bytecode_origin": { "enum": ["generated_this_run", "preexisting", "explicit", "none"] },
         "analysis_can_proceed": { "type": "boolean" },
-        "gradle_model": { "type": "object" }
+        "gradle_model": {
+          "type": "object",
+          "properties": {
+            "buildPlan": {
+              "type": "object",
+              "required": ["projects", "skippedProjects", "compilationTasks", "unavailableSourceSets"],
+              "properties": {
+                "projects": { "type": "object", "additionalProperties": { "type": "string" } },
+                "skippedProjects": { "type": "object", "additionalProperties": { "type": "string" } },
+                "compilationTasks": { "type": "array", "items": { "type": "string" } },
+                "unavailableSourceSets": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        }
       }
     },
     "artifacts": {
