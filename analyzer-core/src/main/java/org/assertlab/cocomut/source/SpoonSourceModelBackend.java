@@ -664,10 +664,25 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return new ImportContext(explicit, wildcard);
         }
         try {
-            Matcher matcher = Pattern.compile("(?m)^\\s*import\\s+(static\\s+)?([\\w.*]+)\\s*;")
-                    .matcher(Files.readString(sourceFile, Charset.defaultCharset()));
-            while (matcher.find()) {
-                String imported = matcher.group(2);
+            // Tokenize imports so same-line statements work and comment/string
+            // contents cannot introduce phantom imports into lexical resolution.
+            // Use the bundled standalone JDT scanner, without Eclipse platform services.
+            var scanner = new org.eclipse.jdt.internal.core.util.PublicScanner(false, false, false,
+                    org.eclipse.jdt.internal.compiler.classfmt.ClassFileConstants.JDK17,
+                    org.eclipse.jdt.internal.compiler.classfmt.ClassFileConstants.JDK17,
+                    null, null, true, false, false);
+            scanner.setSource(Files.readString(sourceFile, Charset.defaultCharset()).toCharArray());
+            int token;
+            while ((token = scanner.getNextToken()) != org.eclipse.jdt.core.compiler.ITerminalSymbols.TokenNameEOF) {
+                if (token != org.eclipse.jdt.core.compiler.ITerminalSymbols.TokenNameimport) continue;
+                StringBuilder spelling = new StringBuilder();
+                while ((token = scanner.getNextToken()) != org.eclipse.jdt.core.compiler.ITerminalSymbols.TokenNameSEMICOLON
+                        && token != org.eclipse.jdt.core.compiler.ITerminalSymbols.TokenNameEOF) {
+                    if (token != org.eclipse.jdt.core.compiler.ITerminalSymbols.TokenNamestatic) {
+                        spelling.append(scanner.getCurrentTokenSource());
+                    }
+                }
+                String imported = spelling.toString();
                 if (imported.endsWith(".*")) {
                     wildcard.add(imported.substring(0, imported.length() - 2));
                 } else {

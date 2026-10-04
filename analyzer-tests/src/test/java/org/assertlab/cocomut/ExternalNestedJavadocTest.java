@@ -23,7 +23,7 @@ public class ExternalNestedJavadocTest {
             Path sources = root.resolve("src/main/java"); Files.createDirectories(sources);
             Map<String,String> fixtures = new LinkedHashMap<>();
             fixtures.put("Qualified", "/** {@link java.util.Map.Entry} {@link java.util.Map.Missing} */");
-            fixtures.put("Imported", "import java.util.Map; /** {@link Map.Entry} */");
+            fixtures.put("Imported", "/* import missing.Map; */ import java.util.Map; /** {@link Map.Entry} */");
             fixtures.put("Direct", "import java.util.Map.Entry; /** {@link Entry} */");
             fixtures.put("Dependency", "import dep.Outer; /** {@link Outer.Inner.Deep} {@link Outer.Inherited} */");
             fixtures.put("Ambiguous", "import java.util.*; import java.sql.*; /** {@link Date} */");
@@ -33,8 +33,8 @@ public class ExternalNestedJavadocTest {
                 String text = entry.getValue(); int doc = text.indexOf("/**");
                 String generic = entry.getKey().equals("Parameter") ? "<Map>" : "";
                 String nested = entry.getKey().equals("Shadowed") ? "static class Map {}" : "";
-                Files.writeString(sources.resolve(entry.getKey()+".java"), "package demo;\n"
-                        + text.substring(0,doc).replace(";", ";\n") + "public class " + entry.getKey() + generic + " { "
+                Files.writeString(sources.resolve(entry.getKey()+".java"), "package demo; "
+                        + text.substring(0,doc) + "public class " + entry.getKey() + generic + " { "
                         + nested + text.substring(doc) + " public void focal() {} }");
             }
             ProjectMetadata metadata = new ProjectMetadata.Builder().projectName("fixture").projectPath(root).sourceRoot(sources).sourceRoots(List.of(sources))
