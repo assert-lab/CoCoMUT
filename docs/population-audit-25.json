@@ -1,0 +1,219 @@
+{
+  "tool_commit": "bee9d6cbb492fed20d4e02d6dc24580525657e83",
+  "jar_sha256": "2be7e555c5d727c28b43c4ecc8c608832017dbcdb30282551304c0d559d8c8cc",
+  "historical_25_cohort_verified": false,
+  "subjects": [
+    {
+      "repository": "apache__rocketmq",
+      "commit": "e348efa66b08eb645ee123706ea6492fa9a3ad35",
+      "dirty": true,
+      "status_unchanged": true,
+      "source_snapshot_sha256": "8f54326741450fd3d7732deb9649aa4459cf5e3451fb2abdc65230493c77fc47",
+      "source_files_hashed": 2265,
+      "model_discovered": 2265,
+      "model_failed": 0,
+      "model_recovered": 2,
+      "mode": "mixed",
+      "root_mode": "archived_manifest",
+      "audit_files": 2265,
+      "declarations": 24099,
+      "matched": 24099,
+      "missing": [],
+      "ambiguous": [],
+      "parse_failures": [],
+      "cli": {
+        "expected": 21,
+        "rows": 21,
+        "missing": [],
+        "unexpected": [],
+        "status": "PARTIAL",
+        "failure_codes": [
+          "SOURCE_CLASSPATH_DEGRADED",
+          "SOURCE_MODEL_RECOVERED"
+        ]
+      }
+    },
+    {
+      "repository": "spring-cloud__spring-cloud-gateway",
+      "commit": "b45150cad83629d5288072ded77090ad5f7a2039",
+      "dirty": true,
+      "status_unchanged": true,
+      "source_snapshot_sha256": "3ff40cd170c892e35a60fb78268cf59059f5b9f354ec51bc2e8079c1aa5d5d4f",
+      "source_files_hashed": 685,
+      "model_discovered": 685,
+      "model_failed": 0,
+      "model_recovered": 8,
+      "mode": "mixed",
+      "root_mode": "archived_manifest",
+      "audit_files": 685,
+      "declarations": 5577,
+      "matched": 5577,
+      "missing": [],
+      "ambiguous": [],
+      "parse_failures": [],
+      "cli": {
+        "expected": 176,
+        "rows": 176,
+        "non_constructor_methods": 159,
+        "missing": [],
+        "unexpected": [],
+        "status": "PARTIAL",
+        "failure_codes": [
+          "SOURCE_CLASSPATH_DEGRADED",
+          "SOURCE_MODEL_RECOVERED"
+        ]
+      }
+    },
+    {
+      "repository": "remkop__picocli",
+      "commit": "10509c0af89aa3254ca14ba90d9b3b7168e57994",
+      "dirty": true,
+      "status_unchanged": true,
+      "source_snapshot_sha256": "55973a15bf4b44aa299c02a9b4b5a2a999c39570d7c0e464121e274d95a71b69",
+      "source_files_hashed": 356,
+      "model_discovered": 348,
+      "model_failed": 0,
+      "model_recovered": 2,
+      "mode": "mixed",
+      "root_mode": "gradle_skip_build_discovery",
+      "audit_files": 356,
+      "declarations": 6400,
+      "matched": 6388,
+      "missing": [
+        {
+          "source_file": "picocli-examples/annotation-processing/example-gradle-project/src/main/java/com/company/Main.java",
+          "arity": 1,
+          "name": "main",
+          "constructor": false,
+          "header_end_offset": 649,
+          "column": 5,
+          "line": 24,
+          "start_offset": 610
+        },
+        {
+          "source_file": "picocli-examples/annotation-processing/example-gradle-project/src/main/java/com/company/Main.java",
+          "arity": 0,
+          "name": "call",
+          "constructor": false,
+          "header_end_offset": 779,
+          "column": 5,
+          "line": 28,
+          "start_offset": 726
+        },
+        {
+          "source_file": "picocli-examples/annotation-processing/example-maven-project-shading/src/main/java/com/company/Main.java",
+          "arity": 1,
+          "name": "main",
+          "constructor": false,
+          "header_end_offset": 649,
+          "column": 5,
+          "line": 24,
+          "start_offset": 610
+        },
+        {
+          "source_file": "picocli-examples/annotation-processing/example-maven-project-shading/src/main/java/com/company/Main.java",
+          "arity": 0,
+          "name": "call",
+          "constructor": false,
+          "header_end_offset": 779,
+          "column": 5,
+          "line": 28,
+          "start_offset": 726
+        },
+        {
+          "source_file": "picocli-examples/annotation-processing/example-maven-project-simple/src/main/java/com/company/Main.java",
+          "arity": 1,
+          "name": "main",
+          "constructor": false,
+          "header_end_offset": 649,
+          "column": 5,
+          "line": 24,
+          "start_offset": 610
+        },
+        {
+          "source_file": "picocli-examples/annotation-processing/example-maven-project-simple/src/main/java/com/company/Main.java",
+          "arity": 0,
+          "name": "call",
+          "constructor": false,
+          "header_end_offset": 779,
+          "column": 5,
+          "line": 28,
+          "start_offset": 726
+        },
+        {
+          "source_file": "picocli-examples/generate-man-pages/example-gradle-project/src/main/java/com/company/Main.java",
+          "arity": 1,
+          "name": "main",
+          "constructor": false,
+          "header_end_offset": 3571,
+          "column": 5,
+          "line": 67,
+          "start_offset": 3532
+        },
+        {
+          "source_file": "picocli-examples/generate-man-pages/example-gradle-project/src/main/java/com/company/Main.java",
+          "arity": 0,
+          "name": "call",
+          "constructor": false,
+          "header_end_offset": 3701,
+          "column": 5,
+          "line": 71,
+          "start_offset": 3648
+        },
+        {
+          "source_file": "picocli-examples/generate-man-pages/example-maven-project/src/main/java/com/company/Main.java",
+          "arity": 1,
+          "name": "main",
+          "constructor": false,
+          "header_end_offset": 3762,
+          "column": 5,
+          "line": 67,
+          "start_offset": 3723
+        },
+        {
+          "source_file": "picocli-examples/generate-man-pages/example-maven-project/src/main/java/com/company/Main.java",
+          "arity": 0,
+          "name": "call",
+          "constructor": false,
+          "header_end_offset": 3892,
+          "column": 5,
+          "line": 71,
+          "start_offset": 3839
+        },
+        {
+          "source_file": "picocli-tests-jpms-modules/app/src/main/java/picocli/test_jpms/modular_app/JpmsModularApp.java",
+          "arity": 0,
+          "name": "run",
+          "constructor": false,
+          "header_end_offset": 492,
+          "column": 5,
+          "line": 21,
+          "start_offset": 460
+        },
+        {
+          "source_file": "picocli-tests-jpms-modules/app/src/main/java/picocli/test_jpms/modular_app/JpmsModularApp.java",
+          "arity": 1,
+          "name": "main",
+          "constructor": false,
+          "header_end_offset": 610,
+          "column": 5,
+          "line": 26,
+          "start_offset": 570
+        }
+      ],
+      "ambiguous": [],
+      "parse_failures": [],
+      "cli": {
+        "expected": 153,
+        "rows": 153,
+        "files": 7,
+        "missing": [],
+        "unexpected": [],
+        "status": "PARTIAL",
+        "failure_codes": [
+          "SOURCE_CLASSPATH_DEGRADED"
+        ]
+      }
+    }
+  ]
+}
