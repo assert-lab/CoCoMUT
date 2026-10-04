@@ -136,6 +136,10 @@ final class ExtractionManifest {
         List<Path> testSourceRoots = model != null ? model.testSourceRoots() : List.of();
         artifacts.set("source_roots", paths(projectPath, sourceRoots));
         artifacts.set("test_source_roots", paths(projectPath, testSourceRoots));
+        ObjectNode sourceRootRoles = artifacts.putObject("source_root_roles");
+        java.util.stream.Stream.concat(sourceRoots.stream(), testSourceRoots.stream()).sorted().forEach(path ->
+                sourceRootRoles.put(displayPath(projectPath, path),
+                        org.assertlab.cocomut.source.SourceRootPolicy.isGenerated(projectPath, path) ? "generated" : "original"));
         artifacts.set("main_class_outputs", paths(projectPath,
                 metadata != null ? metadata.getMainClassOutputs() : List.of()));
         artifacts.set("test_class_outputs", paths(projectPath,

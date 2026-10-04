@@ -167,8 +167,10 @@ public class ProjectAnalyzer {
         BuildResult buildResult = runBuildIfAllowed(detectedBuildSystem);
         if (buildResult.succeeded()) {
             if ("maven".equals(detectedBuildSystem)) {
-                sourceRoots = mergePaths(sourceRoots, findBuiltMavenSourceRoots(false));
-                if (includeTests) testSourceRoots = mergePaths(testSourceRoots, findBuiltMavenSourceRoots(true));
+                if (explicitSourceRoots.isEmpty()) sourceRoots = mergePaths(sourceRoots, findBuiltMavenSourceRoots(false));
+                if (includeTests && explicitTestSourceRoots.isEmpty()) {
+                    testSourceRoots = mergePaths(testSourceRoots, findBuiltMavenSourceRoots(true));
+                }
             }
             sourceRoots = mergePaths(sourceRoots, findGeneratedSourceRoots(false));
             if (includeTests) testSourceRoots = mergePaths(testSourceRoots, findGeneratedSourceRoots(true));
@@ -190,6 +192,17 @@ public class ProjectAnalyzer {
                 existingClassDirs(explicitClassOutputDirs)).stream().filter(gradleBuildPlan::includes).toList();
         List<Path> testClassOutputs = mergePaths(discoveredTestOutputs,
                 existingClassDirs(explicitTestClassOutputDirs)).stream().filter(gradleBuildPlan::includes).toList();
+        if ("gradle".equals(detectedBuildSystem)) {
+            if (explicitSourceRoots.isEmpty()) {
+                List<Path> recovered = gradleBuildPlan.sourceRoots(mainClassOutputs, false);
+                sourceRoots = mergeRecoveredSourceRoots(sourceRoots, recovered);
+            }
+            if (includeTests && explicitTestSourceRoots.isEmpty()) {
+                testSourceRoots = mergeRecoveredSourceRoots(testSourceRoots,
+                        gradleBuildPlan.sourceRoots(testClassOutputs, true));
+            }
+            sourceRoot = sourceRoots.isEmpty() ? sourceRoot : sourceRoots.get(0);
+        }
         List<Path> dependencyClasspath = mergePaths(buildDependencyClasspath(detectedBuildSystem),
                 existingJars(explicitDependencyJars),
                 existingJarsFromClasspathFile(classpathFileEntries),
@@ -238,6 +251,7 @@ public class ProjectAnalyzer {
                 .buildJavaVersion(buildJavaSelection.version())
                 .buildJavaEvidence(buildJavaSelection.evidence())
                 .buildAttempts(buildAttempts)
+                .moduleSourceSets(gradleBuildPlan.sourceSets())
                 .gradleModelReport(new GradleModelReport(false, false, false, !gradleBuildPlanDiagnostic.isBlank(), 0,
                         gradleBuildPlanDiagnostic.isBlank() ? List.of() : List.of(gradleBuildPlanDiagnostic),
                         List.of(), gradleBuildPlan))
@@ -643,6 +657,20 @@ public class ProjectAnalyzer {
         return projectPath;
     }
 
+    private List<Path> mergeRecoveredSourceRoots(List<Path> existing, List<Path> recovered) {
+        if (recovered.isEmpty()) return existing;
+        if (!gradleBuildPlan.sourceSets().isEmpty()) {
+            // A declared source set is authoritative even when an unused conventional directory exists.
+            return mergePaths(recovered, existing.stream()
+                    .filter(path -> org.assertlab.cocomut.source.SourceRootPolicy.isGenerated(projectPath, path)).toList());
+        }
+        // Replace a broad last-resort repository scan with positively recovered module roots.
+        List<Path> retained = existing.stream()
+                .filter(path -> !path.toAbsolutePath().normalize().equals(projectPath.toAbsolutePath().normalize()))
+                .toList();
+        return mergePaths(retained, recovered);
+    }
+
     private List<Path> findSourceRoots() throws IOException {
         LinkedHashSet<Path> roots = new LinkedHashSet<>();
         addIfDirectory(roots, projectPath.resolve("src/main/java"));
@@ -727,10 +755,7 @@ public class ProjectAnalyzer {
         try (var walk = Files.walk(projectPath, 10)) {
             for (Path dir : walk.filter(Files::isDirectory).toList()) {
                 String normalized = projectPath.relativize(dir).toString().replace('\\', '/');
-                boolean generated = normalized.contains("/target/generated-")
-                        || normalized.contains("/build/generated/sources/")
-                        || normalized.startsWith("target/generated-")
-                        || normalized.startsWith("build/generated/sources/");
+                boolean generated = org.assertlab.cocomut.source.SourceRootPolicy.isGenerated(projectPath, dir);
                 boolean testRoot = normalized.contains("generated-test-sources")
                         || normalized.contains("/test/") || normalized.endsWith("/test");
                 if (generated && testRoot == tests && containsJavaFiles(dir)) roots.add(dir);
@@ -738,7 +763,12 @@ public class ProjectAnalyzer {
         } catch (IOException ignored) {
             // Generated sources are optional enrichment.
         }
-        return new ArrayList<>(roots);
+        List<Path> minimal = new ArrayList<>();
+        roots.stream().sorted(java.util.Comparator.comparingInt(Path::getNameCount).thenComparing(Path::toString))
+                .forEach(root -> {
+                    if (minimal.stream().noneMatch(root::startsWith)) minimal.add(root);
+                });
+        return minimal;
     }
 
     private List<Path> findBuiltMavenSourceRoots(boolean tests) {

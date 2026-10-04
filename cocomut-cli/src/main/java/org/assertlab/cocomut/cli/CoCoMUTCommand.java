@@ -52,7 +52,7 @@ public final class CoCoMUTCommand implements Callable<Integer> {
     private Integer maxSourceFiles;
 
     @Option(names = "--source-set", defaultValue = "all",
-            description = "Filter methods by source set: all, main, test, integration_test, generated, example, unknown. Comma-separated values are allowed.")
+            description = "Filter methods by source set: all, main, test, integration_test, generated, example, unknown. Comma-separated values are allowed. Generated focal declarations require generated or an explicit generated source root.")
     private String sourceSet;
 
     @Option(names = "--package", split = ",", description = "Include package prefix, for example org.example.api.")

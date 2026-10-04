@@ -212,6 +212,8 @@
       "type": "object",
       "properties": {
         "kind": {"type": "string"},
+        "generated_sources": {"const": "explicit_only"},
+        "explicit_generated_roots": {"type": "array", "items": {"type": "string"}},
         "uri": {"type": "string"},
         "selector": {"type": "string"},
         "targets": {"type": "array"}
