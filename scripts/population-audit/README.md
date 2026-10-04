@@ -55,3 +55,25 @@ source-classpath requirements still reject fallback evidence.
 
 See [the combined-main audit receipt](../../docs/population-audit-25.md) for
 the available issue #25 evidence and its historical-cohort limitations.
+
+## Comparing method identities
+
+Replay the **actual CLI extraction manifest** when comparing a probe to CLI rows.
+Retain the source snapshot, CoCoMUT JAR, runtime JDK, ordered roots/classpath,
+requested compliance and effective backend attempts. Do not construct a manifest
+using the runner JDK version as the subject's Java version. The probe records
+normalized `source_model_inputs` so these differences are visible.
+
+URI equality is required for equivalent inputs and settings. Cross-compliance or
+cross-backend anonymous-class numbering and unresolved nested-type spelling are
+not a supported identity-stability guarantee. Keep original receipts and report
+changed identities separately; never rewrite them heuristically to make sets agree.
+
+The [controlled #50 receipt](../../docs/identity-audit-50.json) repeats two probe
+and two CLI runs of Commons Numbers: all four have exactly 2,310 identical URIs,
+no duplicates or omissions, and `no_classpath` mode. The original probe used
+Java 17 compliance; the CLI used Java 8. Changing only compliance reproduces the
+two anonymous-owner/nested-return-type discrepancies. Changing class-output order
+while retaining Java 8 does not. All 273 original Java-file hashes remain unchanged.
+No product identifier change is needed for that report. The historical #25
+receipts remain unchanged; its population audit stays closed.
