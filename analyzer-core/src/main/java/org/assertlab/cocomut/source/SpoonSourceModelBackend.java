@@ -2602,20 +2602,9 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             resolveExecutableJavadocReference(parsed, owner, executable, ref);
         } else if (spoonReference instanceof CtFieldReference<?> field) {
             resolveFieldJavadocReference(parsed, owner, field, ref);
-        } else if (spoonReference instanceof CtTypeReference<?> type) {
-            // Project identity requires lexical visibility even when Spoon
-            // supplies a declaration. Keep typed external names for JVM lookup.
+        } else if (spoonReference instanceof CtTypeReference<?>) {
+            // Typed guesses must not bypass source-level shadowing or ambiguity.
             resolveTypeReference(parsed, owner, target, ref);
-            String canonical = externalTypeName(type);
-            if ("unresolved".equals(ref.get("resolution"))
-                    && projectNestedTypeName(parsed, canonical).isBlank()) {
-                ExternalType external = resolveExternalType(parsed, owner, canonical);
-                if (external.resolved()) {
-                    ref.put("resolution", "external_symbol");
-                    ref.put("external_type", external.qualifiedName());
-                    ref.put("external_resolution", external.confidence());
-                }
-            }
         } else if (spoonReference instanceof CtPackageReference packageReference) {
             ref.put("kind", "type_reference");
             ref.put("resolution", "external_symbol");
@@ -3005,36 +2994,114 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         if (target.isBlank()) {
             return ExternalType.unresolved(rawType);
         }
-        // Javadoc references are source text, not typed AST references. Resolve
-        // unqualified targets in the same order a Java reader would: explicit
-        // imports, language-defined java.lang, wildcard imports, then cautious
-        // JDK probing only when the runtime can prove the symbol exists.
-        if (target.contains(".")) {
-            return classExists(parsed, target) ? ExternalType.resolved(target, "qualified_symbol")
-                    : ExternalType.unresolved(target);
+        String[] parts = target.replace('$', '.').split("\\.", 2);
+        String leading = parts[0];
+        String suffix = parts.length == 2 ? "." + parts[1] : "";
+        var lexical = scopedReferenceTypeName(owner, leading);
+        if (lexical.status() != InheritedJavadocResolver.TypeNameResolutionStatus.UNRESOLVED) {
+            if (lexical.status() == InheritedJavadocResolver.TypeNameResolutionStatus.AMBIGUOUS
+                    || lexical.canonicalName().startsWith("type-parameter:")
+                    || parsed.typesByQualifiedName().containsKey(lexical.canonicalName())) {
+                return ExternalType.unresolved(target);
+            }
+            return externalMemberPath(parsed, lexical.canonicalName(), suffix, "lexical_external_type");
         }
         ImportContext imports = importContext(parsed, owner);
-        String explicit = imports.explicit().get(target);
-        if (explicit != null && classExists(parsed, explicit)) {
-            return ExternalType.resolved(explicit, "explicit_import");
+        String explicit = imports.explicit().get(leading);
+        if (explicit != null) {
+            return externalMemberPath(parsed, explicit, suffix, "explicit_import");
         }
-        String javaLang = "java.lang." + target;
-        if (classExists(parsed, javaLang)) {
-            return ExternalType.resolved(javaLang, "implicit_java_lang");
+        String ownerPackage = owner != null && owner.getPackage() != null
+                ? owner.getPackage().getQualifiedName() : "";
+        String samePackage = ownerPackage.isBlank() ? leading : ownerPackage + "." + leading;
+        if (!qualifiedReferenceTypeName(parsed, samePackage).isBlank()) {
+            return ExternalType.unresolved(target);
         }
-        for (String packageName : imports.wildcard()) {
-            String candidate = packageName + "." + target;
-            if (classExists(parsed, candidate)) {
-                return ExternalType.resolved(candidate, "wildcard_import_symbol");
+        Class<?> local = externalClass(parsed, samePackage);
+        if (local != null) {
+            return externalMemberPath(parsed, local.getName(), suffix, "same_package_symbol");
+        }
+        // Resolve the visible outer first, including ambiguity across on-demand imports.
+        Set<String> candidates = new LinkedHashSet<>();
+        for (String prefix : java.util.stream.Stream.concat(
+                java.util.stream.Stream.of("java.lang"), imports.wildcard().stream()).toList()) {
+            String name = prefix + "." + leading;
+            String project = qualifiedReferenceTypeName(parsed, name);
+            Class<?> external = externalClass(parsed, name);
+            if (!project.isBlank()) candidates.add(project);
+            else if (external != null) candidates.add(external.getName());
+        }
+        if (!candidates.isEmpty()) {
+            if (candidates.size() != 1) return ExternalType.unresolved(target);
+            String name = candidates.iterator().next();
+            return parsed.typesByQualifiedName().containsKey(name) ? ExternalType.unresolved(target)
+                    : externalMemberPath(parsed, name, suffix, name.equals("java.lang." + leading)
+                            ? "implicit_java_lang" : "wildcard_import_symbol");
+        }
+        Class<?> qualified = externalClass(parsed, target);
+        if (qualified != null) return ExternalType.resolved(qualified.getName(), "qualified_symbol");
+        // Retain the existing bare-name JDK convenience lookup, but do not use
+        // it to invent visibility for a qualified outer/member path.
+        if (suffix.isBlank()) {
+            for (String prefix : COMMON_JDK_PACKAGES) {
+                Class<?> candidate = externalClass(parsed, prefix + "." + target);
+                if (candidate != null) candidates.add(candidate.getName());
             }
-        }
-        for (String packageName : COMMON_JDK_PACKAGES) {
-            String candidate = packageName + "." + target;
-            if (classExists(parsed, candidate)) {
-                return ExternalType.resolved(candidate, "common_jdk_probe");
+            if (candidates.size() == 1) {
+                return ExternalType.resolved(candidates.iterator().next(), "common_jdk_probe");
             }
         }
         return ExternalType.unresolved(rawType);
+    }
+
+    private static ExternalType externalMemberPath(ParsedProject parsed, String base, String suffix,
+                                                    String confidence) {
+        Class<?> type = externalClass(parsed, base);
+        if (type != null && !suffix.isBlank()) type = externalMemberPath(type, suffix.substring(1));
+        return type == null ? ExternalType.unresolved(base + suffix)
+                : ExternalType.resolved(type.getName(), confidence);
+    }
+
+    private static Class<?> externalMemberPath(Class<?> type, String path) {
+        for (String segment : path.split("\\.", -1)) {
+            Set<Class<?>> members = new LinkedHashSet<>();
+            // Reflection exposes the actual declaring class for inherited members.
+            for (Class<?> member : type.getClasses()) {
+                if (segment.equals(member.getSimpleName())) members.add(member);
+            }
+            // A direct declaration hides inherited names.
+            for (Class<?> member : type.getDeclaredClasses()) {
+                if (segment.equals(member.getSimpleName())) {
+                    if (!java.lang.reflect.Modifier.isPublic(member.getModifiers())) return null;
+                    members.clear();
+                    members.add(member);
+                    break;
+                }
+            }
+            if (members.size() != 1) return null;
+            type = members.iterator().next();
+        }
+        return type;
+    }
+
+    private static Class<?> externalClass(ParsedProject parsed, String spelling) {
+        try {
+            // Locate a real package-qualified outer, then traverse declared members;
+            // blindly changing dots to dollars can accept nonexistent source paths.
+            try { return classForName(parsed, spelling); }
+            catch (ClassNotFoundException ignored) { }
+            for (int dot = spelling.indexOf('.'); dot >= 0; dot = spelling.indexOf('.', dot + 1)) {
+                String prefix = spelling.substring(0, dot);
+                if (!prefix.contains(".")) continue;
+                Class<?> outer;
+                try { outer = classForName(parsed, prefix); }
+                catch (ClassNotFoundException ignored) { continue; }
+                return externalMemberPath(outer, spelling.substring(dot + 1));
+            }
+        } catch (LinkageError | SecurityException failure) {
+            ResourceFailures.rethrowIfPresent(failure);
+        }
+        return null;
     }
 
     private static String stripModulePrefix(String target) {
