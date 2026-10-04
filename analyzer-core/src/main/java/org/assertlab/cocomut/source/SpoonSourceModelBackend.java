@@ -1,5 +1,7 @@
 package org.assertlab.cocomut.source;
 
+import org.assertlab.cocomut.ResourceFailures;
+
 import spoon.Launcher;
 import spoon.javadoc.api.StandardJavadocTagType;
 import spoon.javadoc.api.elements.JavadocBlockTag;
@@ -36,6 +38,7 @@ import spoon.support.compiler.VirtualFile;
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -100,43 +103,103 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return Optional.empty();
         }
 
+        // The declaration and source text are mandatory. Resolve optional evidence
+        // independently so a missing related type cannot discard a selected row.
         CtType<?> owner = executable.getParent(CtType.class);
         String methodBody = sourceSlice(executable);
-        CommentAttempt parsedComment = docCommentAttempt(executable);
+        List<EnrichmentDiagnostic> diagnostics = new ArrayList<>();
+        CommentAttempt parsedComment = enrich("parsed_javadoc", diagnostics, () -> {
+            String text = executable.getDocComment();
+            return new CommentAttempt(text != null ? text.trim() : "", false);
+        }, new CommentAttempt("", true));
         RawCommentAttempt rawComment = rawDocCommentAttempt(parsed, executable);
         String parsedJavadoc = parsedComment.text();
         String rawJavadoc = rawComment.text().orElse(parsedJavadoc);
-        // Raw source is a lossless fallback when Spoon can model the method but
-        // cannot expose its comment through the typed Javadoc representation.
-        // Spoon 11 also drops the optional supertype from {@inheritDoc Type}.
+        // Raw source preserves comments when Spoon cannot expose them, including
+        // the explicit supertype target that Spoon drops from inheritDoc tags.
         String javadoc = parsedJavadoc.isBlank() || hasExplicitInheritDocTarget(rawJavadoc)
-                ? rawJavadoc
-                : parsedJavadoc;
-        List<JavadocElement> javadocElements = spoonJavadocElements(executable);
-        String typeJavadoc = owner != null ? docComment(owner) : "";
-        String typeHierarchy = owner != null ? typeHierarchy(owner) : "";
-        String hierarchyResolution = hierarchyResolution(owner);
-        TypeContext typeContext = owner != null
-                ? typeContext(parsed, owner, method.methodName(), method.signature(), method.constructor())
-                : TypeContext.empty();
+                ? rawJavadoc : parsedJavadoc;
+        List<JavadocElement> elements = parseJavadocElements(executable, diagnostics);
+        String typeJavadoc = enrich("type_javadoc", diagnostics,
+                () -> {
+                    String text = owner != null ? owner.getDocComment() : "";
+                    return text != null ? text.trim() : "";
+                }, "");
+        String typeHierarchy = enrich("type_hierarchy", diagnostics,
+                () -> owner != null ? typeHierarchy(owner) : "", "");
+        String hierarchyResolution = diagnostics.stream().anyMatch(d -> d.component().equals("type_hierarchy"))
+                ? "unavailable" : enrich("hierarchy_resolution", diagnostics, () -> {
+                    if (owner == null) return "missing";
+                    boolean unresolvedSuperclass = owner.getSuperclass() != null
+                            && owner.getSuperclass().getDeclaration() == null;
+                    boolean unresolvedInterface = owner.getSuperInterfaces().stream()
+                            .anyMatch(ref -> ref.getDeclaration() == null);
+                    return unresolvedSuperclass || unresolvedInterface ? "partial" : "resolved";
+                }, "unavailable");
+        TypeContext typeContext = enrich("type_context", diagnostics,
+                () -> owner != null
+                        ? typeContext(parsed, owner, method.methodName(), method.signature(), method.constructor())
+                        : TypeContext.empty(), TypeContext.empty());
+        List<String> reads = enrich("field_reads", diagnostics, () -> fieldReads(executable), List.of());
+        List<String> writes = enrich("field_writes", diagnostics, () -> fieldWrites(executable), List.of());
+        List<String> dynamic = enrich("dynamic_features", diagnostics, () -> dynamicFeatures(executable), List.of());
+        boolean elementsUnavailable = diagnostics.stream().anyMatch(d -> d.component().equals("javadoc_elements"));
+        if (elementsUnavailable) {
+            EnrichmentDiagnostic cause = diagnostics.stream().filter(d -> d.component().equals("javadoc_elements"))
+                    .findFirst().orElseThrow();
+            diagnostics.add(new EnrichmentDiagnostic("javadoc_metadata", cause.exceptionClass(), cause.message()));
+            diagnostics.add(new EnrichmentDiagnostic("documentation_metrics", cause.exceptionClass(), cause.message()));
+        }
+        Map<String, Object> metadata = elementsUnavailable ? unavailableEvidence() : enrich("javadoc_metadata", diagnostics,
+                () -> javadocMetadata(parsed, owner, executable, method, elements, javadoc, rawJavadoc,
+                        parsedComment, rawComment, diagnostics), unavailableEvidence());
+        Map<String, Object> metrics = elementsUnavailable ? unavailableEvidence() : enrich("documentation_metrics", diagnostics,
+                () -> documentationMetrics(method, elements, javadoc), unavailableEvidence());
+        return Optional.of(new SourceContext(method, methodBody, javadoc, typeJavadoc,
+                typeHierarchy, hierarchyResolution, typeContext.typeMethods(), reads, writes,
+                typeContext.sameTypeMethods(), typeContext.overloadGroup(), dynamic,
+                metadata, metrics, parsed.mode(), diagnostics));
+    }
 
-        return Optional.of(new SourceContext(
-                method,
-                methodBody,
-                javadoc,
-                typeJavadoc,
-                typeHierarchy,
-                hierarchyResolution,
-                typeContext.typeMethods(),
-                fieldReads(executable),
-                fieldWrites(executable),
-                typeContext.sameTypeMethods(),
-                typeContext.overloadGroup(),
-                dynamicFeatures(executable),
-                javadocMetadata(parsed, owner, executable, method, javadocElements, javadoc, rawJavadoc,
-                        parsedComment, rawComment),
-                documentationMetrics(method, javadocElements, javadoc),
-                parsed.mode()));
+    private static Map<String, Object> unavailableEvidence() {
+        return Map.of("availability", "unavailable");
+    }
+
+    private static List<JavadocElement> parseJavadocElements(
+            CtExecutable<?> executable, List<EnrichmentDiagnostic> diagnostics) {
+        try {
+            return enrich("javadoc_elements", diagnostics,
+                    () -> JavadocParser.forElement(executable), List.of());
+        } catch (AssertionError failure) {
+            // Spoon uses explicit AssertionError for malformed tags even without -ea.
+            // This is a parser failure; VM resource errors remain terminal.
+            ResourceFailures.rethrowIfPresent(failure);
+            diagnostics.add(EnrichmentDiagnostic.from("javadoc_elements", failure));
+            return List.of();
+        }
+    }
+
+    static <T> T enrich(String component, List<EnrichmentDiagnostic> diagnostics,
+                        java.util.function.Supplier<T> operation, T unavailable) {
+        try {
+            return operation.get();
+        } catch (RuntimeException failure) {
+            ResourceFailures.rethrowIfPresent(failure);
+            diagnostics.add(EnrichmentDiagnostic.from(component, failure));
+            return unavailable;
+        }
+    }
+
+    private Optional<SourceContext> extractDeclarationContext(ParsedProject parsed, String methodUri) {
+        CtExecutable<?> executable = parsed.executablesByUri().get(methodUri);
+        SourceMethod method = parsed.methodsByUri().get(methodUri);
+        if (executable == null || method == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new SourceContext(method, sourceSlice(executable),
+                rawDocComment(parsed, executable).orElseGet(() -> docComment(executable)), "", "", "unavailable", Map.of(),
+                List.of(), List.of(), List.of(), List.of(), List.of(), unavailableEvidence(), unavailableEvidence(),
+                parsed.mode(), List.of()));
     }
 
     private ParsedProject parse(ProjectModel project) throws IOException {
@@ -164,6 +227,11 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         @Override
         public Optional<SourceContext> extractContext(String methodUri) {
             return SpoonSourceModelBackend.this.extractContext(parsed, methodUri);
+        }
+
+        @Override
+        public Optional<SourceContext> extractDeclarationContext(String methodUri) {
+            return SpoonSourceModelBackend.this.extractDeclarationContext(parsed, methodUri);
         }
 
         @Override
@@ -239,38 +307,112 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     }
 
     private ParsedModels parseModels(ProjectModel project) throws IOException {
+        List<SourceModelAttempt> attempts = new ArrayList<>();
         Integer maxSourceFiles = maxSourceFiles();
-        if (maxSourceFiles != null) {
-            return parseJavaFilesWithLimit(allSourceRoots(project),
-                    complianceLevel(project.javaVersion()), maxSourceFiles, project);
+        ParsedModels parsed;
+        try {
+            parsed = maxSourceFiles != null
+                    ? parseJavaFilesWithLimit(allSourceRoots(project),
+                            complianceLevel(project.javaVersion()), maxSourceFiles, project, attempts)
+                    : parseCtModels(project, attempts);
+        } catch (RuntimeException | LinkageError | AssertionError failure) {
+            throw new SourceModelBuildException(failure, attempts);
         }
-
-        return parseCtModels(project);
+        parsed = reconcileSourceDeclarations(project, parsed, attempts, maxSourceFiles);
+        SourceParseStats stats = parsed.stats();
+        return new ParsedModels(parsed.models(), parsed.mode(),
+                new SourceParseStats(stats.discovered(), stats.parsed(), stats.failedFiles(),
+                        parsed.mode(), attempts, stats.recoveredFiles()));
     }
 
-    private ParsedModels parseCtModels(ProjectModel project) throws IOException {
+    private ParsedModels reconcileSourceDeclarations(ProjectModel project, ParsedModels parsed,
+            List<SourceModelAttempt> attempts, Integer maxSourceFiles) throws IOException {
+        int compliance = complianceLevel(project.javaVersion());
+        List<Path> files = javaFiles(allSourceRoots(project), maxSourceFiles == null ? 0 : maxSourceFiles);
+        List<CtModel> models = new ArrayList<>(parsed.models());
+        List<String> modes = new ArrayList<>(List.of(parsed.mode()));
+        Set<Path> failedFiles = new LinkedHashSet<>();
+        List<Path> recoveredFiles = new ArrayList<>();
+        var represented = SourceDeclarationAudit.executables(models);
+        for (Path file : files) {
+            Path normalized = file.toAbsolutePath().normalize();
+            SourceDeclarationAudit.SourceFile source;
+            try {
+                source = SourceDeclarationAudit.read(file, compliance, Charset.defaultCharset());
+            } catch (IOException failure) {
+                // An unreadable compilation unit must not discard other models
+                // or the attempt diagnostics already collected for this session.
+                failedFiles.add(file);
+                attempts.add(new SourceModelAttempt(List.of(diagnosticPath(project, file)), parsed.mode(),
+                        compliance, compliance, 0, "failed", failure.getClass().getName(),
+                        diagnosticMessage(project, failure), "declaration_audit", "source_read_failed"));
+                continue;
+            }
+            int missing = SourceDeclarationAudit.missing(source, represented.getOrDefault(normalized, List.of()));
+            if (!source.syntaxFailure().isEmpty()) {
+                failedFiles.add(file);
+                attempts.add(new SourceModelAttempt(List.of(diagnosticPath(project, file)), parsed.mode(),
+                        compliance, compliance, 0, "failed", "", source.syntaxFailure(),
+                        "declaration_audit", "source_syntax_error"));
+            } else if (missing > 0) {
+                attempts.add(new SourceModelAttempt(List.of(diagnosticPath(project, file)), parsed.mode(),
+                        compliance, compliance, 0, "incomplete", "",
+                        "Missing " + missing + " of " + source.declarations().size() + " source declarations",
+                        "declaration_audit", "source_declarations_missing"));
+                try {
+                    ModelBuild recovered = buildModel(List.of(file), compliance, project, attempts);
+                    var recoveredMethods = SourceDeclarationAudit.executables(List.of(recovered.model()));
+                    int stillMissing = SourceDeclarationAudit.missing(source,
+                            recoveredMethods.getOrDefault(normalized, List.of()));
+                    if (stillMissing == 0) {
+                        // Prefer the complete isolated model's declarations when
+                        // the combined model contains only part of this file.
+                        models.add(0, recovered.model());
+                        modes.add(recovered.mode());
+                        recoveredFiles.add(file);
+                    } else {
+                        failedFiles.add(file);
+                        attempts.add(new SourceModelAttempt(List.of(diagnosticPath(project, file)), recovered.mode(),
+                                compliance, compliance, 0, "failed", "",
+                                "Isolated recovery still lacks " + stillMissing + " source declarations",
+                                "declaration_audit", "source_declarations_missing"));
+                    }
+                } catch (RuntimeException | LinkageError | AssertionError failure) {
+                    failedFiles.add(file);
+                }
+            } else if (parsed.stats().failedFiles().contains(file)) {
+                failedFiles.add(file);
+            }
+        }
+        String mode = mergedMode(modes) + (maxSourceFiles == null ? "" : "_limited");
+        return new ParsedModels(models, mode,
+                new SourceParseStats(files.size(), files.size() - failedFiles.size(), new ArrayList<>(failedFiles),
+                        mode, List.of(), recoveredFiles));
+    }
+
+    private ParsedModels parseCtModels(ProjectModel project, List<SourceModelAttempt> attempts) throws IOException {
         List<Path> roots = allSourceRoots(project);
         List<Path> javaFiles = javaFiles(roots, 0);
         if (roots.isEmpty()) {
-            ModelBuild built = buildModel(List.of(), complianceLevel(project.javaVersion()), project);
+            ModelBuild built = buildModel(List.of(), complianceLevel(project.javaVersion()), project, attempts);
             return new ParsedModels(List.of(built.model()), built.mode(), SourceParseStats.empty());
         }
 
         try {
-            ModelBuild built = buildModel(roots, complianceLevel(project.javaVersion()), project);
+            ModelBuild built = buildModel(roots, complianceLevel(project.javaVersion()), project, attempts);
             return new ParsedModels(List.of(built.model()), built.mode(),
                     new SourceParseStats(javaFiles.size(), javaFiles.size(), List.of()));
-        } catch (RuntimeException combinedFailure) {
+        } catch (RuntimeException | LinkageError | AssertionError combinedFailure) {
             List<CtModel> models = new ArrayList<>();
             List<String> modes = new ArrayList<>();
             List<Path> failedFiles = new ArrayList<>();
             for (Path root : roots) {
                 try {
-                    ModelBuild built = buildModel(List.of(root), complianceLevel(project.javaVersion()), project);
+                    ModelBuild built = buildModel(List.of(root), complianceLevel(project.javaVersion()), project, attempts);
                     models.add(built.model());
                     modes.add(built.mode());
-                } catch (RuntimeException rootFailure) {
-                    ParsedModels parsedRoot = parseJavaFilesIndividually(root, complianceLevel(project.javaVersion()), project);
+                } catch (RuntimeException | LinkageError | AssertionError rootFailure) {
+                    ParsedModels parsedRoot = parseJavaFilesIndividually(root, complianceLevel(project.javaVersion()), project, attempts);
                     models.addAll(parsedRoot.models());
                     modes.add(parsedRoot.mode());
                     failedFiles.addAll(parsedRoot.stats().failedFiles());
@@ -285,10 +427,10 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     }
 
     private ParsedModels parseJavaFilesWithLimit(List<Path> roots, int complianceLevel, int maxSourceFiles,
-                                                  ProjectModel project)
+                                                  ProjectModel project, List<SourceModelAttempt> attempts)
             throws IOException {
         if (roots.isEmpty()) {
-            ModelBuild built = buildModel(List.of(), complianceLevel, project);
+            ModelBuild built = buildModel(List.of(), complianceLevel, project, attempts);
             return new ParsedModels(List.of(built.model()), built.mode() + "_limited", SourceParseStats.empty());
         }
         List<CtModel> models = new ArrayList<>();
@@ -297,15 +439,15 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         List<Path> failedFiles = new ArrayList<>();
         for (Path file : files) {
             try {
-                ModelBuild built = buildModel(List.of(file), complianceLevel, project);
+                ModelBuild built = buildModel(List.of(file), complianceLevel, project, attempts);
                 models.add(built.model());
                 modes.add(built.mode());
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException | LinkageError | AssertionError ignored) {
                 failedFiles.add(file);
             }
         }
         if (models.isEmpty()) {
-            ModelBuild built = buildModel(List.of(), complianceLevel, project);
+            ModelBuild built = buildModel(List.of(), complianceLevel, project, attempts);
             models = List.of(built.model());
             modes.add(built.mode());
         }
@@ -320,17 +462,17 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         return roots.stream().distinct().toList();
     }
 
-    private ParsedModels parseJavaFilesIndividually(Path root, int complianceLevel, ProjectModel project) throws IOException {
+    private ParsedModels parseJavaFilesIndividually(Path root, int complianceLevel, ProjectModel project, List<SourceModelAttempt> attempts) throws IOException {
         List<CtModel> models = new ArrayList<>();
         List<String> modes = new ArrayList<>();
         List<Path> files = javaFiles(List.of(root), 0);
         List<Path> failedFiles = new ArrayList<>();
         for (Path file : files) {
             try {
-                ModelBuild built = buildModel(List.of(file), complianceLevel, project);
+                ModelBuild built = buildModel(List.of(file), complianceLevel, project, attempts);
                 models.add(built.model());
                 modes.add(built.mode());
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException | LinkageError | AssertionError ignored) {
                 failedFiles.add(file);
             }
         }
@@ -339,7 +481,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
     }
 
     private static List<Path> javaFiles(List<Path> roots, int limit) throws IOException {
-        List<Path> files = new ArrayList<>();
+        Set<Path> files = new LinkedHashSet<>();
         for (Path root : roots) {
             if (!Files.exists(root)) {
                 continue;
@@ -349,54 +491,57 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                         .sorted()
                         .toList()) {
                     if (limit > 0 && files.size() >= limit) {
-                        return files;
+                        return List.copyOf(files);
                     }
-                    files.add(file);
+                    files.add(file.toAbsolutePath().normalize());
                 }
             }
         }
-        return files;
+        return List.copyOf(files);
     }
 
-    private ModelBuild buildModel(List<Path> inputs, int complianceLevel, ProjectModel project) {
-        Throwable initialFailure;
-        try {
-            return new ModelBuild(launcher(inputs, complianceLevel, project, true).buildModel(), "classpath");
-        } catch (RuntimeException | LinkageError failure) {
-            initialFailure = failure;
-        }
-
-        if (complianceLevel != 17) {
-            try {
-                return new ModelBuild(launcher(inputs, 17, project, true).buildModel(), "classpath");
-            } catch (RuntimeException | LinkageError ignored) {
-                // Retry without classpath below.
+    private ModelBuild buildModel(List<Path> inputs, int complianceLevel, ProjectModel project,
+                                  List<SourceModelAttempt> attempts) {
+        Throwable initialFailure = null;
+        int[] levels = complianceLevel == 17 ? new int[] {17} : new int[] {complianceLevel, 17};
+        for (boolean useClasspath : new boolean[] {true, false}) {
+            for (int level : levels) {
+                String mode = useClasspath ? "classpath" : "no_classpath";
+                List<String> inputNames = inputs.stream().map(path -> diagnosticPath(project, path)).toList();
+                int entries = useClasspath ? classpathEntries(project).size() : 0;
+                try {
+                    CtModel model = launcher(inputs, level, project, useClasspath).buildModel();
+                    attempts.add(new SourceModelAttempt(inputNames, mode, complianceLevel, level,
+                            entries, "success", "", ""));
+                    return new ModelBuild(model, mode);
+                } catch (RuntimeException | LinkageError | AssertionError failure) {
+                    if (initialFailure == null) initialFailure = failure;
+                    attempts.add(new SourceModelAttempt(inputNames, mode, complianceLevel, level,
+                            entries, "failed", failure.getClass().getName(), diagnosticMessage(project, failure)));
+                }
             }
         }
+        if (initialFailure instanceof RuntimeException runtimeFailure) throw runtimeFailure;
+        throw (Error) initialFailure;
+    }
 
-        try {
-            return new ModelBuild(launcher(inputs, complianceLevel, project, false).buildModel(), "no_classpath");
-        } catch (RuntimeException | LinkageError ignored) {
-            // Retry Java 17 no-classpath mode below when the project declares another level.
-        }
+    private static String diagnosticPath(ProjectModel project, Path path) {
+        Path root = project.projectPath().toAbsolutePath().normalize();
+        Path input = path.toAbsolutePath().normalize();
+        return (input.startsWith(root) ? root.relativize(input) : input).toString().replace('\\', '/');
+    }
 
-        if (complianceLevel != 17) {
-            try {
-                return new ModelBuild(launcher(inputs, 17, project, false).buildModel(), "no_classpath");
-            } catch (RuntimeException | LinkageError ignored) {
-                // Preserve the first failure, which best describes the requested analysis mode.
-            }
-        }
-
-        if (initialFailure instanceof RuntimeException runtimeFailure) {
-            throw runtimeFailure;
-        }
-        throw (LinkageError) initialFailure;
+    private static String diagnosticMessage(ProjectModel project, Throwable failure) {
+        String message = Objects.toString(failure.getMessage(), "");
+        message = message.replace(project.projectPath().toAbsolutePath().toString(), "<project>")
+                .replace(System.getProperty("user.home", "\u0000"), "<home>")
+                .replaceAll("[\\p{Cntrl}]", " ");
+        return message.length() > 2000 ? message.substring(0, 2000) : message;
     }
 
     static String mergedMode(List<String> modes) {
-        boolean classpath = modes.stream().anyMatch(mode -> mode.startsWith("classpath"));
-        boolean noClasspath = modes.stream().anyMatch(mode -> mode.startsWith("no_classpath"));
+        boolean classpath = modes.stream().anyMatch(mode -> mode.startsWith("classpath") || mode.startsWith("mixed"));
+        boolean noClasspath = modes.stream().anyMatch(mode -> mode.startsWith("no_classpath") || mode.startsWith("mixed"));
         if (classpath && noClasspath) {
             return "mixed";
         }
@@ -411,6 +556,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         launcher.getEnvironment().setIgnoreSyntaxErrors(true);
         launcher.getEnvironment().setShouldCompile(false);
         launcher.getEnvironment().setComplianceLevel(complianceLevel);
+        launcher.getEnvironment().setEncoding(Charset.defaultCharset());
         List<String> classpath = useClasspath ? classpathEntries(project) : List.of();
         if (!classpath.isEmpty()) {
             launcher.getEnvironment().setSourceClasspath(classpath.toArray(String[]::new));
@@ -456,7 +602,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         }
         try {
             Matcher matcher = Pattern.compile("(?m)^\\s*import\\s+(static\\s+)?([\\w.*]+)\\s*;")
-                    .matcher(Files.readString(sourceFile, StandardCharsets.UTF_8));
+                    .matcher(Files.readString(sourceFile, Charset.defaultCharset()));
             while (matcher.find()) {
                 String imported = matcher.group(2);
                 if (imported.endsWith(".*")) {
@@ -503,6 +649,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 erasedReturnType,
                 parameters,
                 annotations(executable),
+                methodModifiers(executable),
                 thrownExceptions(executable),
                 sourceSet(project, sourceFile),
                 executable instanceof CtConstructor<?>));
@@ -578,7 +725,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return "";
         }
         try {
-            String source = Files.readString(position.getFile().toPath(), StandardCharsets.UTF_8);
+            String source = Files.readString(position.getFile().toPath(), Charset.defaultCharset());
             int start = Math.max(0, position.getSourceStart());
             int end = Math.min(source.length(), position.getSourceEnd() + 1);
             if (end > start) {
@@ -647,6 +794,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             String doc = element.getDocComment();
             return new CommentAttempt(doc != null ? doc.trim() : "", false);
         } catch (Exception e) {
+            ResourceFailures.rethrowIfPresent(e);
             return new CommentAttempt("", true);
         }
     }
@@ -664,7 +812,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             Path sourceFile = position.getFile().toPath().toAbsolutePath().normalize();
             String source = parsed.sourceTextByFile().get(sourceFile);
             if (source == null) {
-                source = Files.readString(sourceFile, StandardCharsets.UTF_8);
+                source = Files.readString(sourceFile, Charset.defaultCharset());
                 parsed.sourceTextByFile().put(sourceFile, source);
             }
             int start = Math.max(0, Math.min(position.getSourceStart(), source.length()));
@@ -683,6 +831,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return new RawCommentAttempt(
                     Optional.of(cleanRawJavadoc(source.substring(open, close + 2))), false);
         } catch (Exception ignored) {
+            ResourceFailures.rethrowIfPresent(ignored);
             return new RawCommentAttempt(Optional.empty(), true);
         }
     }
@@ -889,10 +1038,12 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                                                        List<JavadocElement> elements,
                                                        String javadoc, String rawJavadoc,
                                                        CommentAttempt parsedComment,
-                                                       RawCommentAttempt rawComment) {
+                                                       RawCommentAttempt rawComment,
+                                                       List<EnrichmentDiagnostic> diagnostics) {
         Map<String, Object> metadata = new LinkedHashMap<>();
         String normalized = javadoc == null ? "" : javadoc.strip();
-        List<Map<String, Object>> references = javadocReferences(parsed, owner, executable, elements, normalized);
+        List<Map<String, Object>> references = enrich("javadoc_references", diagnostics,
+                () -> javadocReferences(parsed, owner, executable, elements, normalized), List.of());
         boolean usesInheritDoc = containsInheritDoc(
                 rawJavadoc == null || rawJavadoc.isBlank() ? normalized : rawJavadoc);
         boolean preserveExplicitTarget = hasExplicitInheritDocTarget(rawJavadoc);
@@ -915,12 +1066,22 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                 stringValue(declaredStructuredTags.get("parser")),
                 stringValue(declaredStructuredTags.get("parse_confidence")),
                 extractionFailed ? "source_javadoc_extraction_failed" : "");
-        InheritedJavadocResolver.Resolution inherited = executable instanceof CtMethod<?> ctMethod
+        InheritedJavadocResolver.Resolution inherited = enrich("inherited_javadoc", diagnostics,
+                () -> executable instanceof CtMethod<?> ctMethod
                 ? InheritedJavadocResolver.resolve(ctMethod, usesInheritDoc, declaredDocumentation,
                 candidate -> inheritedDocumentation(parsed, candidate),
                 SpoonSourceModelBackend::resolveJavadocTypeName,
                 SourceBackends.javadocInheritancePolicy())
-                : InheritedJavadocResolver.Resolution.notApplicable(executable, declaredDocumentation);
+                : InheritedJavadocResolver.Resolution.notApplicable(executable, declaredDocumentation), null);
+        if (inherited == null) {
+            Map<String, Object> effective = Map.of(
+                    "description", Map.of("text", "", "source", "indeterminate",
+                            "inheritance_mode", "unknown", "resolution", "indeterminate"),
+                    "type_params", List.of(), "params", List.of(), "return", List.of(),
+                    "throws", List.of(), "resolution", "partial");
+            inherited = new InheritedJavadocResolver.Resolution("indeterminate", false, List.of(),
+                    effective, 0, 0, false);
+        }
         metadata.put("since", structuredList(declaredStructuredTags, "since"));
         metadata.put("see", referenceTargetsByTag(references, "see"));
         metadata.put("inline_links", inlineReferenceTargets(references));
@@ -1099,7 +1260,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         CtType<?> declaration;
         try {
             declaration = reference.getTypeDeclaration();
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException | LinkageError | AssertionError ignored) {
             declaration = null;
         }
         if (declaration == null) {
@@ -1160,7 +1321,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                     }
                 });
             }
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException | LinkageError | AssertionError ignored) {
             // Incomplete import metadata leaves the source spelling unresolved.
         }
         return new ImportNameResolution(explicit, onDemand);
@@ -1203,7 +1364,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                     }
                     pending.addAll(declaration.getSuperInterfaces());
                 }
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException | LinkageError | AssertionError ignored) {
                 // A shadow type can still be matched by its existing reference.
             }
         }
@@ -1592,7 +1753,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             return false;
         }
         try {
-            return Files.readString(sourceFile, StandardCharsets.UTF_8).contains(text);
+            return Files.readString(sourceFile, Charset.defaultCharset()).contains(text);
         } catch (IOException e) {
             return false;
         }
@@ -2091,6 +2252,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         try {
             return JavadocParser.forElement(element);
         } catch (RuntimeException | AssertionError | StackOverflowError ignored) {
+            ResourceFailures.rethrowIfPresent(ignored);
             return List.of();
         }
     }
@@ -3602,6 +3764,16 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         } catch (Exception e) {
             return annotation.toString();
         }
+    }
+
+    private static List<String> methodModifiers(CtExecutable<?> executable) {
+        List<String> result = new ArrayList<>(executable instanceof CtModifiable modifiable
+                ? modifiers(modifiable) : List.of());
+        // Spoon stores the interface default keyword separately from ModifierKind.
+        if (executable instanceof CtMethod<?> method && method.isDefaultMethod()) {
+            result.add("default");
+        }
+        return result.stream().distinct().sorted().toList();
     }
 
     private static List<String> modifiers(CtModifiable modifiable) {

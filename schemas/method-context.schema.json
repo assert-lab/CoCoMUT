@@ -26,6 +26,8 @@
           "type": "string",
           "description": "Canonical CoCoMUT method URI: relative/path.java#qualified.Type.method(erasedParamTypes):erasedReturnType"
         },
+        "enrichment_status": {"enum": ["complete", "partial"], "description": "Whether optional enrichment completed without exceptions; complete does not guarantee all references resolved."},
+        "enrichment_diagnostics": {"type": "array", "items": {"$ref": "#/$defs/enrichmentDiagnostic"}, "description": "Each component listed is unavailable, not a successfully computed empty result."},
         "method_name": {"type": "string"},
         "source_set": {"type": "string"},
         "signature": {"type": "string"},
@@ -34,6 +36,7 @@
         "qualified_name": {"type": "string"},
         "line_number": {"type": "integer"},
         "parameters": {"type": "array"},
+        "modifiers": {"type": "array", "items": {"type": "string"}, "uniqueItems": true, "description": "Method or constructor modifiers, sorted alphabetically; includes implicit modifiers exposed by the source model."},
         "annotations": {"type": "array"},
         "throws": {"type": "array"},
         "lines_of_code": {
@@ -125,6 +128,7 @@
     "documentation_metrics": {
       "type": "object",
       "properties": {
+        "availability": {"const": "unavailable", "description": "Explicitly unavailable component; consult MUT.enrichment_diagnostics for the cause."},
         "parser": {
           "type": "string",
           "description": "Parser path used for documentation metrics, normally spoon-javadoc."
@@ -138,13 +142,17 @@
     },
     "javadoc_metadata": {
       "type": "object",
-      "required": [
+      "anyOf": [
+        {"required": ["availability"], "properties": {"availability": {"const": "unavailable"}}},
+        {"required": [
         "structured_tags", "declared_structured_tags", "effective_structured_tags",
         "uses_inheritdoc", "inheritdoc_policy", "javadoc_inheritance", "inheritdoc_resolution",
         "inherited_javadoc_candidates", "inheritdoc_candidate_count",
         "inheritdoc_documented_candidate_count", "inheritdoc_candidates_truncated"
+      ]}
       ],
       "properties": {
+        "availability": {"const": "unavailable", "description": "Consult MUT.enrichment_diagnostics for the failure cause."},
         "see": {"type": "array"},
         "inline_links": {"type": "array"},
         "javadoc_references": {
@@ -212,6 +220,16 @@
     }
   },
   "$defs": {
+    "enrichmentDiagnostic": {
+      "type": "object",
+      "required": ["component", "exception_class", "message"],
+      "properties": {
+        "component": {"type": "string"},
+        "exception_class": {"type": "string"},
+        "message": {"type": "string", "maxLength": 1000}
+      },
+      "additionalProperties": false
+    },
     "javadocInheritancePolicy": {
       "type": "object",
       "required": ["policy_id", "specification_version", "implementation_version", "defaulted", "granularity", "mode"],

@@ -70,6 +70,7 @@ public class JsonGeneratorTest {
                 .methodUri("1")
                 .methodName("testMethod")
                 .typeName("com.example.MyClass")
+                .modifiers(List.of("public", "static"))
                 .methodBody("@Override\npublic void testMethod() { }")
                 .javadoc("Test method")
                 .typeJavadoc("Test type")
@@ -92,6 +93,7 @@ public class JsonGeneratorTest {
         assertTrue("Method code should include annotations/body", root.path("MUT").path("code").asText().contains("@Override"));
         assertTrue("Method code should include body", root.path("MUT").path("code").asText().contains("testMethod()"));
         JsonNode mut = root.path("MUT");
+        assertEquals(MAPPER.valueToTree(List.of("public", "static")), mut.path("modifiers"));
         assertEquals("Test type", mut.path("type_javadoc").asText());
         assertEquals("MyClass extends BaseClass",
                 mut.path("type_hierarchy").path("hierarchy_detail").asText());

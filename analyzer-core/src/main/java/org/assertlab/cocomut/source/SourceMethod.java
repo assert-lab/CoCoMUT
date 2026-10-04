@@ -17,12 +17,14 @@ public record SourceMethod(
         String erasedReturnType,
         List<SourceParameter> parameters,
         List<String> annotations,
+        List<String> modifiers,
         List<String> thrownExceptions,
         String sourceSet,
         boolean constructor) {
     public SourceMethod {
         erasedReturnType = erasedReturnType != null ? erasedReturnType : returnType;
         parameters = parameters != null ? List.copyOf(parameters) : List.of();
+        modifiers = modifiers != null ? List.copyOf(modifiers) : List.of();
         annotations = annotations != null ? List.copyOf(annotations) : List.of();
         thrownExceptions = thrownExceptions != null ? List.copyOf(thrownExceptions) : List.of();
         sourceSet = sourceSet != null ? sourceSet : "unknown";

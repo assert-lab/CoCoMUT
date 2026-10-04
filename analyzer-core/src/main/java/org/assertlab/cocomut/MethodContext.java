@@ -1,5 +1,6 @@
 package org.assertlab.cocomut;
 
+import org.assertlab.cocomut.source.EnrichmentDiagnostic;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -30,6 +31,7 @@ public class MethodContext {
     private final int linesOfCode;
     private final int cyclomatic;             // lexical branch-keyword estimate
     private final List<String> annotations;
+    private final List<String> modifiers;
     private final List<String> thrownExceptions;
     private final List<String> fieldReads;
     private final List<String> fieldWrites;
@@ -42,6 +44,7 @@ public class MethodContext {
     private final String sourceBackendMode;
     private final String hierarchyResolution;
     private final String sourceSet;
+    private final List<EnrichmentDiagnostic> enrichmentDiagnostics;
 
     private MethodContext(Builder builder) {
         this.methodUri = Objects.requireNonNull(builder.methodUri, "methodUri cannot be null");
@@ -61,6 +64,7 @@ public class MethodContext {
         this.callGraph = builder.callGraph;
         this.linesOfCode = builder.linesOfCode;
         this.cyclomatic = builder.cyclomatic;
+        this.modifiers = List.copyOf(builder.modifiers);
         this.annotations = Collections.unmodifiableList(new ArrayList<>(builder.annotations));
         this.thrownExceptions = Collections.unmodifiableList(new ArrayList<>(builder.thrownExceptions));
         this.fieldReads = Collections.unmodifiableList(new ArrayList<>(builder.fieldReads));
@@ -73,6 +77,7 @@ public class MethodContext {
         this.sourceBackend = builder.sourceBackend != null ? builder.sourceBackend : "";
         this.sourceBackendMode = builder.sourceBackendMode != null ? builder.sourceBackendMode : "";
         this.hierarchyResolution = builder.hierarchyResolution != null ? builder.hierarchyResolution : "";
+        this.enrichmentDiagnostics = List.copyOf(builder.enrichmentDiagnostics);
         this.sourceSet = builder.sourceSet != null ? builder.sourceSet : "unknown";
     }
 
@@ -145,6 +150,10 @@ public class MethodContext {
         return cyclomatic;
     }
 
+    public List<String> getModifiers() {
+        return modifiers;
+    }
+
     public List<String> getAnnotations() {
         return annotations;
     }
@@ -197,6 +206,10 @@ public class MethodContext {
         return sourceSet;
     }
 
+    public List<EnrichmentDiagnostic> getEnrichmentDiagnostics() {
+        return enrichmentDiagnostics;
+    }
+
     public boolean hasJavadoc() {
         return javadoc != null && !javadoc.isEmpty();
     }
@@ -242,6 +255,7 @@ public class MethodContext {
         private int linesOfCode = 0;
         private int cyclomatic = 1;
         private List<String> annotations = List.of();
+        private List<String> modifiers = List.of();
         private List<String> thrownExceptions = List.of();
         private List<String> fieldReads = List.of();
         private List<String> fieldWrites = List.of();
@@ -254,6 +268,7 @@ public class MethodContext {
         private String sourceBackendMode = "";
         private String hierarchyResolution = "";
         private String sourceSet = "unknown";
+        private List<EnrichmentDiagnostic> enrichmentDiagnostics = List.of();
 
         public Builder methodUri(String methodUri) {
             this.methodUri = methodUri;
@@ -359,6 +374,11 @@ public class MethodContext {
             return this;
         }
 
+        public Builder modifiers(List<String> modifiers) {
+            this.modifiers = modifiers != null ? List.copyOf(modifiers) : List.of();
+            return this;
+        }
+
         public Builder annotations(List<String> annotations) {
             this.annotations = annotations != null ? new ArrayList<>(annotations) : List.of();
             return this;
@@ -416,6 +436,11 @@ public class MethodContext {
 
         public Builder hierarchyResolution(String hierarchyResolution) {
             this.hierarchyResolution = hierarchyResolution;
+            return this;
+        }
+
+        public Builder enrichmentDiagnostics(List<EnrichmentDiagnostic> diagnostics) {
+            this.enrichmentDiagnostics = diagnostics != null ? List.copyOf(diagnostics) : List.of();
             return this;
         }
 

@@ -1,5 +1,6 @@
 package org.assertlab.cocomut;
 
+import org.assertlab.cocomut.source.EnrichmentDiagnostic;
 import org.assertlab.cocomut.source.ProjectModel;
 import org.assertlab.cocomut.source.SourceAnalysisSession;
 import org.assertlab.cocomut.source.SourceBackends;
@@ -34,6 +35,11 @@ public class ContextExtractor {
     private final ProjectModel projectModel;
     private final SourceModelBackend sourceBackend;
     private final SourceAnalysisSession sourceSession;
+    private final Map<String, List<EnrichmentDiagnostic>> failures = new java.util.LinkedHashMap<>();
+
+    public Map<String, List<EnrichmentDiagnostic>> getExtractionFailures() {
+        return Map.copyOf(failures);
+    }
 
     public ContextExtractor(ProjectMetadata projectMetadata, CallGraphGenerator callGraphGenerator) {
         this(projectMetadata, callGraphGenerator, null);
@@ -65,12 +71,45 @@ public class ContextExtractor {
                             : sourceBackend.extractContext(projectModel, methodUri);
             if (sourceContext.isPresent()) {
                 MethodContext context = fromSourceContext(method, sourceContext.get());
+                if (!context.getEnrichmentDiagnostics().isEmpty()) {
+                    failures.put(methodUri, context.getEnrichmentDiagnostics());
+                }
                 cache.put(methodUri, context);
                 return context;
             }
 
+            failures.put(methodUri, List.of(new EnrichmentDiagnostic(
+                    "target_declaration", "", "Selected declaration is unavailable in the source session")));
             return null;
         } catch (Exception e) {
+            ResourceFailures.rethrowIfPresent(e);
+            var diagnostic = EnrichmentDiagnostic.from("source_enrichment", e);
+            failures.put(methodUri, List.of(diagnostic));
+            try {
+                java.util.Optional<SourceContext> declaration;
+                if (sourceSession != null) {
+                    declaration = sourceSession.extractDeclarationContext(methodUri);
+                } else {
+                    try (SourceAnalysisSession session = sourceBackend.open(projectModel)) {
+                        declaration = session.extractDeclarationContext(methodUri);
+                    }
+                }
+                if (declaration.isPresent()) {
+                    SourceContext base = declaration.get();
+                    SourceContext preserved = new SourceContext(base.method(), base.methodBody(), base.javadoc(),
+                            base.typeJavadoc(), base.typeHierarchy(), "unavailable", base.typeMethods(),
+                            base.fieldReads(), base.fieldWrites(), base.sameTypeMethods(), base.overloadGroup(),
+                            base.dynamicFeatures(), base.javadocMetadata(), base.documentationMetrics(),
+                            base.sourceBackendMode(), List.of(diagnostic));
+                    MethodContext context = fromSourceContext(method, preserved);
+                    cache.put(methodUri, context);
+                    return context;
+                }
+            } catch (Exception declarationFailure) {
+                ResourceFailures.rethrowIfPresent(declarationFailure);
+                failures.put(methodUri, List.of(diagnostic,
+                        EnrichmentDiagnostic.from("target_declaration", declarationFailure)));
+            }
             System.err.println("[ContextExtractor] Failed to extract context for method "
                     + methodUri + " (" + method.getMethodName() + "): " + e.getMessage());
             return null;
@@ -79,9 +118,17 @@ public class ContextExtractor {
 
     private MethodContext fromSourceContext(MethodInfo method, SourceContext sourceContext) {
         SourceMethod sourceMethod = sourceContext.method();
-        CallGraphResult callGraph = callGraphGenerator == null
-                ? null
-                : callGraphGenerator.getCachedResult(method.getMethodUri());
+        List<EnrichmentDiagnostic> diagnostics =
+                new java.util.ArrayList<>(sourceContext.enrichmentDiagnostics());
+        CallGraphResult callGraph = null;
+        try {
+            if (callGraphGenerator != null) {
+                callGraph = callGraphGenerator.getCachedResult(method.getMethodUri());
+            }
+        } catch (RuntimeException failure) {
+            ResourceFailures.rethrowIfPresent(failure);
+            diagnostics.add(EnrichmentDiagnostic.from("call_graph", failure));
+        }
         String methodBody = sourceContext.methodBody();
 
         return new MethodContext.Builder()
@@ -112,6 +159,7 @@ public class ContextExtractor {
                 .callGraph(callGraph)
                 .linesOfCode(countLinesOfCode(methodBody))
                 .cyclomatic(calculateCyclomaticComplexity(methodBody))
+                .modifiers(sourceMethod.modifiers())
                 .annotations(sourceMethod.annotations())
                 .thrownExceptions(sourceMethod.thrownExceptions())
                 .fieldReads(sourceContext.fieldReads())
@@ -124,6 +172,7 @@ public class ContextExtractor {
                 .sourceBackend(sourceBackend.name())
                 .sourceBackendMode(sourceContext.sourceBackendMode())
                 .hierarchyResolution(sourceContext.hierarchyResolution())
+                .enrichmentDiagnostics(diagnostics)
                 .sourceSet(sourceMethod.sourceSet())
                 .build();
     }
@@ -201,6 +250,7 @@ public class ContextExtractor {
 
     public void clearCache() {
         cache.clear();
+        failures.clear();
     }
 
     public Map<String, Integer> getCacheStats() {

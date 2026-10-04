@@ -1,5 +1,6 @@
 package org.assertlab.cocomut;
 
+import org.assertlab.cocomut.source.EnrichmentDiagnostic;
 import org.assertlab.cocomut.source.ProjectModel;
 import org.assertlab.cocomut.source.SourceAnalysisSession;
 import org.assertlab.cocomut.source.SourceBackends;
@@ -70,11 +71,16 @@ final class Orchestrator {
     private List<MethodInfo> analysisUniverseMethods;
     private List<MethodInfo> methodInfos;
     private CallGraphGenerator callGraphGenerator;
+    private java.util.function.BiFunction<ProjectMetadata, CallGraphGenerator.Algorithm, CallGraphGenerator>
+            callGraphGeneratorFactory = CallGraphGenerator::new;
     private Map<String, CallGraphResult> callGraphResults;
     private Map<String, MethodContext> methodContexts;
+    private Map<String, List<EnrichmentDiagnostic>> contextExtractionDiagnostics = Map.of();
     private Map<String, String> contextExtractionFailures = new LinkedHashMap<>();
     private final Set<FailureCode> failureCodes = new LinkedHashSet<>();
     private boolean partialWithoutFailure;
+    private boolean requireSourceClasspath;
+    private boolean sourceClasspathRejected;
     private ExtractionManifest.GitInfo gitAtStart;
 
     Orchestrator(Path projectPath) {
@@ -106,6 +112,7 @@ final class Orchestrator {
         this.explicitClasspathFiles = request.classpathFiles();
         this.explicitSourceRoots = request.sourceRoots();
         this.explicitTestSourceRoots = request.testSourceRoots();
+        this.requireSourceClasspath = request.requireSourceClasspath();
         this.javadocInheritancePolicy = request.javadocInheritancePolicy();
         this.javadocInheritancePolicyDefaulted = request.javadocInheritancePolicyDefaulted();
     }
@@ -118,6 +125,13 @@ final class Orchestrator {
     Orchestrator(ContextRequest request, ProjectMetadata metadata, RunSnapshot runSnapshot) {
         this(request, metadata);
         this.runSnapshot = runSnapshot;
+    }
+
+    // Package-private dependency seam for deterministic failures without exhausting the test JVM.
+    Orchestrator(ContextRequest request, ProjectMetadata metadata, RunSnapshot runSnapshot,
+                 java.util.function.BiFunction<ProjectMetadata, CallGraphGenerator.Algorithm, CallGraphGenerator> factory) {
+        this(request, metadata, runSnapshot);
+        this.callGraphGeneratorFactory = Objects.requireNonNull(factory, "factory cannot be null");
     }
 
     Orchestrator setCallGraphAlgorithm(CallGraphGenerator.Algorithm algorithm) {
@@ -204,7 +218,10 @@ final class Orchestrator {
             currentPhase = 5;
             if (!executePhase5()) { executionReport.put("status", "FAILED"); executionReport.put("failed_at_phase", 5); return false; }
 
-            if (failureCodes.isEmpty() && !partialWithoutFailure) {
+            if (sourceClasspathRejected) {
+                executionReport.put("status", "FAILED");
+                failureCodes.add(FailureCode.SOURCE_CLASSPATH_REQUIRED);
+            } else if (failureCodes.isEmpty() && !partialWithoutFailure) {
                 executionReport.put("status", "SUCCESS");
                 success = true;
             } else {
@@ -243,14 +260,27 @@ final class Orchestrator {
         executionReport.put("error_type", failure.getClass().getName());
         executionReport.put("error_message", throwableSummary(failure));
         executionReport.put("error_stacktrace", stackTracePrefix(failure, 80));
-        failureCodes.add(failureCodeForUnhandledFailure(phase));
+        failureCodes.add(failureCodeForUnhandledFailure(phase, failure));
+        if (phase == 3) {
+            recordCallGraphInitializationDiagnostic();
+            executionReport.put("phase_3_available", false);
+            executionReport.put("phase_3_algorithm", callGraphAlgorithm.toString());
+            executionReport.put("phase_3_effective_algorithm", callGraphAlgorithm.toString());
+        }
     }
 
     static FailureCode failureCodeForUnhandledFailureForTest(int phase) {
-        return failureCodeForUnhandledFailure(phase);
+        return failureCodeForUnhandledFailure(phase, null);
     }
 
-    private static FailureCode failureCodeForUnhandledFailure(int phase) {
+    static FailureCode failureCodeForUnhandledFailureForTest(int phase, Throwable failure) {
+        return failureCodeForUnhandledFailure(phase, failure);
+    }
+
+    private static FailureCode failureCodeForUnhandledFailure(int phase, Throwable failure) {
+        if (ResourceFailures.find(failure) != null) {
+            return FailureCode.ANALYSIS_RESOURCE_EXHAUSTED;
+        }
         return switch (phase) {
             case 1 -> FailureCode.METADATA_RESOLUTION_FAILED;
             case 2 -> FailureCode.SOURCE_ANALYSIS_FAILED;
@@ -440,22 +470,31 @@ final class Orchestrator {
      * Phase 3: Build call graph once and store for reuse in Phase 4.
      */
     private boolean executePhase3() {
+        executionReport.put("phase_3_max_heap_bytes", Runtime.getRuntime().maxMemory());
         try {
             CallGraphGenerator.Algorithm effectiveAlgorithm = callGraphAlgorithm;
-            callGraphGenerator = new CallGraphGenerator(projectMetadata, effectiveAlgorithm);
-            if (!callGraphGenerator.initialize()) {
+            callGraphGenerator = callGraphGeneratorFactory.apply(projectMetadata, effectiveAlgorithm);
+            boolean initialized = callGraphGenerator.initialize();
+            recordCallGraphInitializationDiagnostic();
+            if (!initialized) {
+                CallGraphGenerator.InitializationDiagnostic diagnostic = callGraphGenerator.getInitializationDiagnostic();
                 callGraphResults = new HashMap<>();
                 callGraphGenerator = null;
                 partialWithoutFailure = true;
+                failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
                 executionReport.put("phase_3_available", false);
                 executionReport.put("phase_3_degraded", true);
                 executionReport.put("phase_3_algorithm", callGraphAlgorithm.toString());
                 executionReport.put("phase_3_effective_algorithm", effectiveAlgorithm.toString());
                 executionReport.put("phase_3_warning",
-                        "Static bytecode analysis could not be initialized; "
+                        "Static bytecode analysis could not be initialized"
+                                + (diagnostic == null ? "" : ": "
+                                        + (diagnostic.exceptionClass() == null ? "" : diagnostic.exceptionClass() + ": ")
+                                        + Objects.toString(diagnostic.message(), diagnostic.status())) + "; "
                                 + "records will be emitted without caller/callee context.");
                 executionReport.put("phase_3_call_graph_artifact_exists", false);
                 executionReport.put("phase_3_call_graphs_generated", 0);
+                executionReport.put("phase_3_focal_methods_matched_to_bytecode", 0);
                 executionReport.put("phase_3_non_empty_call_graphs", 0);
                 executionReport.put("phase_3_call_edges_generated", 0);
                 return true;
@@ -511,16 +550,23 @@ final class Orchestrator {
             }
             return true;
         } catch (Exception e) {
+            ResourceFailures.rethrowIfPresent(e);
+            recordCallGraphInitializationDiagnostic();
             callGraphGenerator = null;
             callGraphResults = new HashMap<>();
             partialWithoutFailure = true;
+            failureCodes.add(FailureCode.CALL_GRAPH_UNAVAILABLE);
             executionReport.put("phase_3_available", false);
             executionReport.put("phase_3_degraded", true);
             executionReport.put("phase_3_algorithm", callGraphAlgorithm.toString());
             executionReport.put("phase_3_effective_algorithm", callGraphAlgorithm.toString());
             executionReport.put("phase_3_warning",
-                    "Static bytecode analysis failed: " + e.getMessage()
+                    "Static bytecode analysis failed: " + throwableSummary(e)
                             + "; records will be emitted without caller/callee context.");
+            executionReport.put("phase_3_error", throwableSummary(e));
+            executionReport.put("phase_3_exception_class", e.getClass().getName());
+            executionReport.put("phase_3_exception_message", e.getMessage());
+            System.err.println("[Orchestrator] " + executionReport.get("phase_3_warning"));
             executionReport.put("phase_3_call_graph_artifact_exists", false);
             executionReport.put("phase_3_call_graphs_generated", 0);
             executionReport.put("phase_3_focal_methods_matched_to_bytecode", 0);
@@ -528,6 +574,13 @@ final class Orchestrator {
             executionReport.put("phase_3_call_edges_generated", 0);
             return true;
         }
+    }
+
+    private void recordCallGraphInitializationDiagnostic() {
+        if (callGraphGenerator == null || callGraphGenerator.getInitializationDiagnostic() == null) {
+            return;
+        }
+        executionReport.put("phase_3_initialization", callGraphGenerator.getInitializationDiagnostic().asMap());
     }
 
     static boolean requiresPartialForBytecodeMatching(long matchedMethods, long selectedMethods) {
@@ -541,6 +594,7 @@ final class Orchestrator {
         try {
             ContextExtractor extractor = new ContextExtractor(projectMetadata, callGraphGenerator, sourceSession);
             methodContexts = extractor.extractContextForMethods(methodInfos);
+            contextExtractionDiagnostics = extractor.getExtractionFailures();
             contextExtractionFailures = missingContextFailures(methodInfos, methodContexts);
 
             executionReport.put("phase_4_contexts_extracted", methodContexts.size());
@@ -637,12 +691,40 @@ final class Orchestrator {
 
     private void openSourceSession() throws java.io.IOException {
         SourceModelBackend backend = SourceBackends.spoon();
-        sourceSession = backend.open(projectModel);
+        try {
+            sourceSession = backend.open(projectModel);
+        } catch (org.assertlab.cocomut.source.SourceModelBuildException failure) {
+            executionReport.put("source_model_attempts", failure.attempts().stream()
+                    .map(org.assertlab.cocomut.source.SourceModelAttempt::asMap).toList());
+            executionReport.put("source_backend_mode", "unavailable");
+            executionReport.put("require_source_classpath", requireSourceClasspath);
+            executionReport.put("source_classpath_requirement_satisfied", false);
+            throw failure;
+        }
         executionReport.put("source_backend", backend.name());
         var stats = sourceSession.parseStats();
+        executionReport.put("source_backend_mode", stats.mode());
+        executionReport.put("source_model_attempts", stats.modelAttempts().stream()
+                .map(org.assertlab.cocomut.source.SourceModelAttempt::asMap).toList());
+        executionReport.put("require_source_classpath", requireSourceClasspath);
+        for (var attempt : stats.modelAttempts()) {
+            System.out.println("Source model attempt: " + attempt.asMap());
+        }
+        boolean degraded = !stats.mode().startsWith("classpath");
+        if (degraded) {
+            failureCodes.add(FailureCode.SOURCE_CLASSPATH_DEGRADED);
+            sourceClasspathRejected = requireSourceClasspath;
+        }
+        executionReport.put("source_classpath_requirement_satisfied", !degraded);
         executionReport.put("source_files_discovered", stats.discovered());
         executionReport.put("source_files_parsed", stats.parsed());
         executionReport.put("source_files_failed", stats.failed());
+        executionReport.put("source_files_recovered", stats.recoveredFiles().size());
+        executionReport.put("recovered_source_files", stats.recoveredFiles().stream()
+                .map(this::relativePathString).toList());
+        if (!stats.recoveredFiles().isEmpty()) {
+            failureCodes.add(FailureCode.SOURCE_MODEL_RECOVERED);
+        }
         if (stats.failed() > 0) {
             failureCodes.add(FailureCode.SOURCE_PARSE_FAILED);
             Path failures = writeFailedSourceFiles(stats.failedFiles());
@@ -787,7 +869,8 @@ final class Orchestrator {
         Map<String, String> failures = new LinkedHashMap<>();
         Set<String> extracted = actual != null ? actual.keySet() : Set.of();
         for (MethodInfo method : expected) {
-            if (!extracted.contains(method.getMethodUri())) {
+            if (!extracted.contains(method.getMethodUri())
+                    || !actual.get(method.getMethodUri()).getEnrichmentDiagnostics().isEmpty()) {
                 failures.put(method.getMethodUri(), "CONTEXT_EXTRACTION_FAILED");
             }
         }
@@ -812,6 +895,15 @@ final class Orchestrator {
                 node.put("signature", method.getMethodSignature());
                 node.put("source_file", method.getSourceFile().toString());
                 node.put("line_number", method.getLineNumber());
+                MethodContext context = methodContexts.get(method.getMethodUri());
+                if (context != null) {
+                    node.put("row_preserved", true);
+                    node.set("enrichment_diagnostics", OBJECT_MAPPER.valueToTree(context.getEnrichmentDiagnostics()));
+                } else {
+                    node.put("row_preserved", false);
+                    node.set("enrichment_diagnostics", OBJECT_MAPPER.valueToTree(
+                            contextExtractionDiagnostics.getOrDefault(method.getMethodUri(), List.of())));
+                }
                 writer.write(OBJECT_MAPPER.writeValueAsString(node));
                 writer.newLine();
             }
@@ -1089,6 +1181,7 @@ final class Orchestrator {
         request.put("max_source_files", maxSourceFiles);
         request.put("call_graph", callGraphAlgorithm.toString());
         request.put("build_policy", buildPolicy.toString());
+        request.put("require_source_classpath", requireSourceClasspath);
         request.put("javadoc_inheritance_policy", javadocInheritancePolicy.id());
         request.put("javadoc_inheritance_specification_version",
                 javadocInheritancePolicy.specificationVersion());

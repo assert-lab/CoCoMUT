@@ -43,6 +43,9 @@ return_type               Source return type
 erased_return_type        Erased return type used in method_uri
 qualified_name            Qualified declaring type plus method name
 parameters                Parameter objects with name, source type, erased_type, modifiers, annotations
+enrichment_status         complete or partial optional enrichment; complete does not imply fully resolved symbols
+enrichment_diagnostics    Unavailable components with exception_class and concise message
+modifiers                 Sorted method/constructor modifiers, including implicit source-model modifiers
 annotations               Method annotations
 throws                    Declared thrown exception types
 code                      Method/constructor source without leading Javadoc; annotations are kept
@@ -238,6 +241,22 @@ The manifest is intentionally separate from the JSONL rows. Dataset rows remain
 method-centric, while repository revision, build policy, and artifact hashes are
 auditable at extraction-run granularity.
 
+The manifest's `execution` object retains the extraction report fields.
+Optional `phase_3_initialization` evidence has `status` (`success`,
+`no_bytecode`, `failed`) and `stage` (`input_locations`, `java_view`,
+`class_loading`). Failed attempts include `exception_class` and `message`
+(empty when the exception has no message). `classpath_entry` is present only
+when the failing input-location construction identifies a path reliably.
+`phase_3_max_heap_bytes` records the runtime heap limit. Exceptions during
+graph generation after initialization use `phase_3_exception_class` and
+`phase_3_exception_message` (nullable), plus the readable `phase_3_error`.
+These are compatible optional additions under schema version `0.5.0`.
+
+Recoverable call-graph failures use `PARTIAL` and `CALL_GRAPH_UNAVAILABLE`,
+retaining source rows. Resource exhaustion uses `ERROR` and
+`ANALYSIS_RESOURCE_EXHAUSTED` while preserving the failed phase and error
+type/message; it is distinct from missing bytecode or incompatible bytecode.
+
 Each hash entry has `{role, sha256, status, errors}`. `sha256` is a 64-character
 hex digest when `status` is `ok`; it is `null` for `empty`, `missing`, or
 `error`. Artifact hashes do not include host-specific absolute paths. The
@@ -404,3 +423,27 @@ metadata.schema_version
 
 If a field is renamed, removed, or changes meaning before a release, update this
 README, the schema file, the emitter, and sample output together.
+
+For optional enrichment failure semantics and component-to-field mappings, see
+[the symbol model](../docs/symbol-model.md). Preserved rows still count as context
+failures in the extraction report and method-context failure artifact.
+
+### Source-model diagnostics in the extraction report
+
+The report retains `source_backend_mode`, `source_model_attempts`,
+`require_source_classpath`, and `source_classpath_requirement_satisfied`.
+Attempt objects contain `inputs` (project-relative paths), `mode`,
+`requested_compliance`, `effective_compliance`, `classpath_entries`, `outcome`,
+`exception_class`, and `message`. Exception messages have control characters and
+local project/home prefixes removed and are capped at 2,000 characters.
+No-classpath/mixed models produce `SOURCE_CLASSPATH_DEGRADED`; strict requests
+also produce `SOURCE_CLASSPATH_REQUIRED` and a failed run. These report additions
+retain the existing method-context and manifest schema versions.
+
+Source declaration auditing adds `source_files_recovered` (count) and
+`recovered_source_files` (project-relative paths). Recovered model loss produces
+`SOURCE_MODEL_RECOVERED`/PARTIAL. Unrecoverable coverage or syntax failures are
+counted in `source_files_failed` and `failed_source_files.jsonl`. Attempt entries
+now expose `stage` (`model_build` or `declaration_audit`) and `diagnostic_code`;
+audit codes are separate from Java `exception_class` names. Existing schema
+versions remain unchanged.

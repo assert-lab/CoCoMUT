@@ -128,12 +128,17 @@ public final class CoCoMUTCommand implements Callable<Integer> {
             description = "Exact test source root to parse. Useful with --skip-build and explicit test bytecode.")
     private java.util.List<Path> testSourceRoots;
 
+    @Option(names = "--require-source-classpath",
+            description = "Reject no-classpath or mixed source analysis; retain partial artifacts and diagnostics.")
+    private boolean requireSourceClasspath;
+
     @Override
     public Integer call() throws Exception {
         ContextRequest.Scope selectedScope = toScope(entryPoints ? "entry-points" : scope);
 
         ContextRequest.Builder builder = ContextRequest.builder()
                 .projectRoot(project)
+                .requireSourceClasspath(requireSourceClasspath)
                 .scope(selectedScope)
                 .callGraphAlgorithm(toCallGraphAlgorithm(callGraph))
                 .maxMethods(maxMethods)
