@@ -4,7 +4,7 @@ Product baseline: `bee9d6cbb492fed20d4e02d6dc24580525657e83`, after the
 Gradle launch/selection/root, source-model and enrichment-preservation changes
 were merged. This audit checks the named field-test reproductions in
 [#25](https://github.com/assert-lab/CoCoMUT/issues/25); it does not establish
-recovery of the original 11,733 declarations in the unidentified 25-project run.
+recovery of the original 11,733 declarations in the 25-project OE25 run.
 The [compact machine-readable receipt](population-audit-25.json) includes the
 JAR/source snapshot hashes, declaration counts and CLI URI reconciliations.
 
@@ -84,10 +84,22 @@ reports/manifests, and exact URI reconciliation. `verification.json` records the
 tool JAR hash, subject HEAD/status, source-snapshot digest and counts. Large
 inventories/JSONL outputs are kept outside Git.
 
-The original issue does not identify its 25 repositories/commits or supply its
-javac/JavaParser comparison. A saved OE25 cohort has older schema 0.3.0 outputs
-without original-run commit receipts; a separate evaluation archive contains 20
-pinned subjects. Neither has been established as the reported 25-project run.
-Substituting either would not account for the original 7,469 within-file losses
-and 4,264 declarations in 402 omitted files. Keep #25 open for that historical
-reconciliation; the named later reproductions above are verified independently.
+The user subsequently identified the original cohort as OE25. The public
+[TOGBench project/version table](https://github.com/assert-lab/TOGBench#projects)
+lists the same 25 repositories as the saved OE25 cohort, after normalizing
+release names such as `commons-lang3` to repository names such as
+`apache/commons-lang`. The
+[identification receipt](oe25-cohort-identification.json) records the public
+repository revision, published versions and exact 25/25 repository-name match.
+TOGBench contains developer-written OE25dev tests; it establishes the shared
+subject-system list, rather than reproducing the original generated-test dataset
+or the historical CoCoMUT run.
+
+The repository-list gap is resolved. Exact source revisions for the original
+CoCoMUT comparison and its javac/JavaParser results remain unverified. The saved
+OE25 outputs use schema 0.3.0 and lack original-run commit receipts; a separate
+evaluation archive contains 20 pinned subjects. Published dataset versions must
+not be silently substituted for the actual extraction revisions. Keep #25 open
+for the 25-project audit and reconciliation of its 7,469 within-file losses plus
+4,264 declarations in 402 omitted files; the named later reproductions above
+are verified independently.
