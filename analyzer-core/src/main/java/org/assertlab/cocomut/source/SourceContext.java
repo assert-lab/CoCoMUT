@@ -19,8 +19,10 @@ public record SourceContext(
         Map<String, Object> javadocMetadata,
         Map<String, Object> documentationMetrics,
         String sourceBackendMode,
-        List<EnrichmentDiagnostic> enrichmentDiagnostics) {
+        List<EnrichmentDiagnostic> enrichmentDiagnostics,
+        List<SourceCallee> callees) {
     public SourceContext {
+        callees = callees != null ? List.copyOf(callees) : List.of();
         enrichmentDiagnostics = enrichmentDiagnostics != null ? List.copyOf(enrichmentDiagnostics) : List.of();
         typeMethods = typeMethods != null ? Map.copyOf(typeMethods) : Map.of();
         fieldReads = fieldReads != null ? List.copyOf(fieldReads) : List.of();

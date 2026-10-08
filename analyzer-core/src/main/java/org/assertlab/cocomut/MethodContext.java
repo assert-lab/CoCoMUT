@@ -27,6 +27,7 @@ public class MethodContext {
     private final String typeJavadoc;         // Declaring-type Javadoc
     private final String typeHierarchy;       // Type inheritance hierarchy
     private final Map<String, String> typeMethods;  // Methods declared in the type
+    private final List<org.assertlab.cocomut.source.SourceCallee> callees;
     private final CallGraphResult callGraph;  // Call graph from Phase 3
     private final int linesOfCode;
     private final int cyclomatic;             // lexical branch-keyword estimate
@@ -62,6 +63,7 @@ public class MethodContext {
         this.typeHierarchy = builder.typeHierarchy != null ? builder.typeHierarchy : "";
         this.typeMethods = builder.typeMethods;
         this.callGraph = builder.callGraph;
+        this.callees = List.copyOf(builder.callees);
         this.linesOfCode = builder.linesOfCode;
         this.cyclomatic = builder.cyclomatic;
         this.modifiers = List.copyOf(builder.modifiers);
@@ -80,6 +82,8 @@ public class MethodContext {
         this.enrichmentDiagnostics = List.copyOf(builder.enrichmentDiagnostics);
         this.sourceSet = builder.sourceSet != null ? builder.sourceSet : "unknown";
     }
+
+    public List<org.assertlab.cocomut.source.SourceCallee> getCallees() { return callees; }
 
     // Getters
     public String getMethodUri() {
@@ -229,7 +233,7 @@ public class MethodContext {
                 ", cyclomatic=" + cyclomatic +
                 ", hasJavadoc=" + hasJavadoc() +
                 ", callerCount=" + (callGraph != null ? callGraph.getCallerCount() : 0) +
-                ", calleeCount=" + (callGraph != null ? callGraph.getCalleeCount() : 0) +
+                ", calleeCount=" + callees.size() +
                 '}';
     }
 
@@ -251,6 +255,7 @@ public class MethodContext {
         private String typeJavadoc = "";
         private String typeHierarchy;
         private Map<String, String> typeMethods = Map.of();
+        private List<org.assertlab.cocomut.source.SourceCallee> callees = List.of();
         private CallGraphResult callGraph;
         private int linesOfCode = 0;
         private int cyclomatic = 1;
@@ -356,6 +361,11 @@ public class MethodContext {
             Map<String, String> updated = new HashMap<>(this.typeMethods);
             updated.put(methodName, signature);
             this.typeMethods = Collections.unmodifiableMap(updated);
+            return this;
+        }
+
+        public Builder callees(List<org.assertlab.cocomut.source.SourceCallee> callees) {
+            this.callees = callees != null ? List.copyOf(callees) : List.of();
             return this;
         }
 

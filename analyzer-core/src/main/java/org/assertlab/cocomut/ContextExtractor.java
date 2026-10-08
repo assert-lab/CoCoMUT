@@ -49,7 +49,7 @@ public class ContextExtractor {
                             SourceAnalysisSession sourceSession) {
         this.projectMetadata = Objects.requireNonNull(projectMetadata, "projectMetadata cannot be null");
         // Source context remains useful when bytecode call-graph construction is
-        // unavailable. In that case caller/callee fields are emitted empty and
+        // unavailable. Source callees remain available; graph caller fields are empty and
         // the run-level report records the degraded phase separately.
         this.callGraphGenerator = callGraphGenerator;
         this.cache = new HashMap<>();
@@ -100,7 +100,7 @@ public class ContextExtractor {
                             base.typeJavadoc(), base.typeHierarchy(), "unavailable", base.typeMethods(),
                             base.fieldReads(), base.fieldWrites(), base.sameTypeMethods(), base.overloadGroup(),
                             base.dynamicFeatures(), base.javadocMetadata(), base.documentationMetrics(),
-                            base.sourceBackendMode(), List.of(diagnostic));
+                            base.sourceBackendMode(), List.of(diagnostic), base.callees());
                     MethodContext context = fromSourceContext(method, preserved);
                     cache.put(methodUri, context);
                     return context;
@@ -157,6 +157,7 @@ public class ContextExtractor {
                 .typeHierarchy(sourceContext.typeHierarchy())
                 .sourceTypeMethods(sourceContext)
                 .callGraph(callGraph)
+                .callees(sourceContext.callees())
                 .linesOfCode(countLinesOfCode(methodBody))
                 .cyclomatic(calculateCyclomaticComplexity(methodBody))
                 .modifiers(sourceMethod.modifiers())
