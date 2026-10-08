@@ -268,7 +268,7 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
                         java.util.function.Supplier<T> operation, T unavailable) {
         try {
             return operation.get();
-        } catch (RuntimeException failure) {
+        } catch (RuntimeException | LinkageError failure) {
             ResourceFailures.rethrowIfPresent(failure);
             diagnostics.add(EnrichmentDiagnostic.from(component, failure));
             return unavailable;
@@ -3164,24 +3164,31 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
 
     private static Class<?> externalMemberPath(Class<?> type, String path) {
         for (String segment : path.split("\\.", -1)) {
-            Set<Class<?>> members = new LinkedHashSet<>();
-            // Reflection exposes the actual declaring class for inherited members.
-            for (Class<?> member : type.getClasses()) {
-                if (segment.equals(member.getSimpleName())) members.add(member);
-            }
-            // A direct declaration hides inherited names.
-            for (Class<?> member : type.getDeclaredClasses()) {
-                if (segment.equals(member.getSimpleName())) {
-                    if (!java.lang.reflect.Modifier.isPublic(member.getModifiers())) return null;
-                    members.clear();
-                    members.add(member);
-                    break;
-                }
-            }
+            Set<Class<?>> members = externalMemberTypes(type, segment, new LinkedHashSet<>());
             if (members.size() != 1) return null;
             type = members.iterator().next();
+            if (!java.lang.reflect.Modifier.isPublic(type.getModifiers())) return null;
         }
         return type;
+    }
+
+    private static Set<Class<?>> externalMemberTypes(Class<?> type, String name, Set<Class<?>> visited) {
+        if (type == null || !visited.add(type)) return Set.of();
+        // Apply hiding at every ancestor, not just at the originally named type.
+        // getClasses() flattens these paths and can expose both hidden declarations.
+        for (Class<?> member : type.getDeclaredClasses()) {
+            if (name.equals(member.getSimpleName())) return Set.of(member);
+        }
+        Set<Class<?>> members = new LinkedHashSet<>(externalMemberTypes(type.getSuperclass(), name, visited));
+        for (Class<?> parent : type.getInterfaces()) {
+            members.addAll(externalMemberTypes(parent, name, visited));
+        }
+        // Keep unrelated interface declarations ambiguous, but eliminate a
+        // declaration hidden by a more specific declaring type on another path.
+        Set<Class<?>> candidates = Set.copyOf(members);
+        members.removeIf(candidate -> candidates.stream().anyMatch(other -> other != candidate
+                && candidate.getDeclaringClass().isAssignableFrom(other.getDeclaringClass())));
+        return members;
     }
 
     private static Class<?> externalClass(ParsedProject parsed, String spelling) {
@@ -3200,6 +3207,9 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             }
         } catch (LinkageError | SecurityException failure) {
             ResourceFailures.rethrowIfPresent(failure);
+            // Missing classes are an ordinary unresolved lookup; broken loaded
+            // classes are unavailable evidence and must reach enrichment diagnostics.
+            throw failure;
         }
         return null;
     }

@@ -379,6 +379,14 @@ instead of treating all external `Class#member` refs as generic member refs.
 
 ## External Reference Limitation
 
+External nested-type lookup applies member-type hiding at every ancestor before
+checking ambiguity. For example, if `Parent.Inner` hides `Grand.Inner`, an
+inheriting `Child.Inner` resolves to `Parent.Inner`; unrelated inherited member
+types remain unresolved when ambiguous. A missing dependency encountered while
+loading or traversing an external type is recorded as an enrichment diagnostic.
+Selected method rows survive with unavailable reference evidence and a partial
+outcome; direct or wrapped resource errors remain terminal.
+
 CoCoMUT intentionally stops external references at symbol identity. For example,
 `@see java.util.regex.Matcher#replaceAll(String)` may be classified as an
 external method reference, but CoCoMUT does not try to load JDK/dependency source
