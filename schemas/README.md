@@ -462,6 +462,13 @@ receiver, `animal.speak()` refers to its resolved source declaration, without
 expanding it to overriding Dog/Cat implementations. Inherited methods retain
 their actual declaring type.
 
+Anonymous-class allocations such as `new Base(...) { ... }` use the selected
+superclass constructor from Spoon's implicit `super(...)` binding. The generated
+anonymous constructor is not exported as a separate callee. This also applies
+to external constructors such as `new ArrayList<String>() {}`; calls inside the
+anonymous class's methods remain excluded from the enclosing method's callees.
+If the selected constructor cannot be resolved, the reference remains unresolved.
+
 Resolved declarations are deduplicated by `target_uri`. Project declarations
 retain their `method_uri`; resolved external declarations use `java:` target
 identities and `resolution=resolved_external`, with no project method URI.

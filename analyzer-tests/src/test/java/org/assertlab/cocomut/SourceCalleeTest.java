@@ -10,6 +10,59 @@ import static org.junit.Assert.*;
 
 public class SourceCalleeTest {
     @Test
+    public void anonymousAllocationsResolveSelectedSuperclassConstructor() throws Exception {
+        Path root = Files.createTempDirectory("anonymous-source-callees");
+        try {
+            Path source = root.resolve("src/main/java/demo/Example.java");
+            Files.createDirectories(source.getParent());
+            Files.writeString(source, """
+                    package demo;
+                    public class Example {
+                        public static class Base {
+                            public Base() {}
+                            public Base(String value) {}
+                            public Base(int value) {}
+                        }
+                        static void hidden() {}
+                        public Object ordinary() { return new Base(); }
+                        public Object anonymous() { return new Base() { void ignored() { hidden(); } }; }
+                        public Object overloaded() { return new Base("value") { void ignored() { hidden(); } }; }
+                        public Object external() { return new java.util.ArrayList<String>() {}; }
+                        public Object externalOverloaded() { return new java.util.ArrayList<String>(4) {}; }
+                    }
+                    """);
+            Path classes = Files.createDirectories(root.resolve("target/classes"));
+            assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null,
+                    "-d", classes.toString(), source.toString()));
+            var metadata = new ProjectMetadata.Builder().projectName("fixture").projectPath(root).buildSystem("unknown")
+                    .javaVersion("17").sourceRoot(source.getParent()).sourceRoots(List.of(source.getParent()))
+                    .mainClassOutputs(List.of(classes)).build();
+            try (var session = SourceBackends.spoon().open(ProjectModel.from(metadata))) {
+                for (String name : List.of("ordinary", "anonymous", "overloaded", "external", "externalOverloaded")) {
+                    var method = session.methods().stream().filter(m -> m.methodName().equals(name)).findFirst().orElseThrow();
+                    var callees = session.extractContext(method.methodUri()).orElseThrow().callees();
+                    assertEquals(name + ": " + callees, 1, callees.size());
+                    var callee = callees.get(0);
+                    boolean external = name.startsWith("external");
+                    assertEquals(name + ": " + callee, external ? "resolved_external" : "resolved", callee.resolution());
+                    assertEquals(external ? "java.util.ArrayList" : "demo.Example$Base", callee.declaringType());
+                    String parameters = name.equals("overloaded") ? "java.lang.String"
+                            : name.equals("externalOverloaded") ? "int" : "";
+                    assertEquals((external ? "ArrayList" : "Base") + "(" + parameters + "):void", callee.signature());
+                    assertEquals(external ? "" : "src/main/java/demo/Example.java#demo.Example$Base."
+                            + callee.signature(), callee.methodUri());
+                    assertEquals(external ? "java:java.util.ArrayList#" + callee.signature()
+                            : callee.methodUri(), callee.targetUri());
+                }
+            }
+        } finally {
+            try (var paths = Files.walk(root)) {
+                for (Path path : paths.sorted(Comparator.reverseOrder()).toList()) Files.delete(path);
+            }
+        }
+    }
+
+    @Test
     public void sourceDeclarationsAreDeduplicatedAndIndependentOfDispatch() throws Exception {
         Path root = Files.createTempDirectory("source-callees");
         try {

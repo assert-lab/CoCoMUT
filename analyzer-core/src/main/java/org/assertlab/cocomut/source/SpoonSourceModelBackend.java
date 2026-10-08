@@ -167,10 +167,9 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         for (spoon.reflect.code.CtAbstractInvocation<?> invocation : focal.getElements(
                 new TypeFilter<>(spoon.reflect.code.CtAbstractInvocation.class))) {
             if (invocation.isImplicit() || !belongsToExecutable(invocation, focal)) continue;
-            CtExecutableReference<?> reference = invocation.getExecutable();
             SourceCallee callee;
             try {
-                callee = sourceCallee(parsed, reference);
+                callee = sourceCallee(parsed, sourceInvocationReference(invocation));
             } catch (RuntimeException failure) {
                 ResourceFailures.rethrowIfPresent(failure);
                 callee = new SourceCallee("unresolved", "", "", "", "", invocation.toString(),
@@ -182,6 +181,29 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
             declarations.putIfAbsent(key, callee);
         }
         return List.copyOf(declarations.values());
+    }
+
+    private static CtExecutableReference<?> sourceInvocationReference(
+            spoon.reflect.code.CtAbstractInvocation<?> invocation) {
+        CtExecutableReference<?> reference = invocation.getExecutable();
+        if (!(invocation instanceof spoon.reflect.code.CtNewClass<?> creation)
+                || creation.getAnonymousClass() == null
+                || creation.getAnonymousClass().getSuperclass() == null) return reference;
+        CtExecutable<?> declaration = reference.getExecutableDeclaration();
+        if (!(declaration instanceof CtConstructor<?> constructor) || constructor.getBody() == null) return reference;
+        // Spoon binds new Base(...) {} to an implicit anonymous constructor.
+        // Its super invocation carries the selected overload, including generic
+        // and varargs adaptation. Use that binding instead of guessing from args.
+        for (var statement : constructor.getBody().getStatements()) {
+            if (statement instanceof spoon.reflect.code.CtInvocation<?> superCall
+                    && superCall.getExecutable().isConstructor()
+                    && superCall.getExecutable().getDeclaringType() != null
+                    && superCall.getExecutable().getDeclaringType().getQualifiedName().equals(
+                            creation.getAnonymousClass().getSuperclass().getQualifiedName())) {
+                return superCall.getExecutable();
+            }
+        }
+        return reference;
     }
 
     private static boolean belongsToExecutable(CtElement element, CtExecutable<?> focal) {
