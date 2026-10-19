@@ -10,6 +10,63 @@ import static org.junit.Assert.*;
 
 public class ExternalNestedJavadocTest {
     @Test
+    public void directParentAndChildInterfacesKeepBothNestedDeclarationsAmbiguous() throws Exception {
+        Path root = Files.createTempDirectory("nested-interface-path-ambiguity");
+        try {
+            Path dependency = root.resolve("Types.java");
+            Files.writeString(dependency, """
+                    package dep;
+                    public class Types {
+                        public interface Parent { class Inner {} }
+                        public interface Child extends Parent { class Inner {} }
+                        public static class Both implements Parent, Child {}
+                        public static class Reverse implements Child, Parent {}
+                        public static class OnlyChild implements Child {}
+                    }
+                    """);
+            Path classes = Files.createDirectories(root.resolve("dependency-classes"));
+            assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null,
+                    "-d", classes.toString(), dependency.toString()));
+            Path proof = root.resolve("Proof.java");
+            Files.writeString(proof, "class Proof { dep.Types.OnlyChild.Inner valid; }");
+            assertEquals(0, ToolProvider.getSystemJavaCompiler().run(null, null, null,
+                    "-cp", classes.toString(), "-d", root.resolve("proof").toString(), proof.toString()));
+            for (String owner : List.of("Both", "Reverse")) {
+                Files.writeString(proof, "class Proof { dep.Types." + owner + ".Inner ambiguous; }");
+                var errors = new java.io.ByteArrayOutputStream();
+                assertNotEquals(owner, 0, ToolProvider.getSystemJavaCompiler().run(null, null, errors,
+                        "-cp", classes.toString(), "-d", root.resolve("proof").toString(), proof.toString()));
+            }
+            Path source = root.resolve("src/main/java/Example.java");
+            Files.createDirectories(source.getParent());
+            Files.writeString(source, """
+                    import dep.Types;
+                    class Example {
+                        /** {@link Types.Both.Inner} {@link Types.Reverse.Inner}
+                         * {@link Types.Child.Inner} {@link Types.OnlyChild.Inner} */
+                        public void focal() {}
+                    }
+                    """);
+            try (var session = SourceBackends.spoon().open(ProjectModel.from(metadata(root, source, classes)))) {
+                var method = session.methods().stream().filter(m -> m.methodName().equals("focal")).findFirst().orElseThrow();
+                @SuppressWarnings("unchecked")
+                var refs = (List<Map<String,Object>>) session.extractContext(method.methodUri()).orElseThrow()
+                        .javadocMetadata().get("javadoc_references");
+                assertEquals(4, refs.size());
+                for (int i = 0; i < 2; i++) {
+                    assertEquals(refs.get(i).toString(), "unresolved", refs.get(i).get("resolution"));
+                    assertEquals("unresolved", refs.get(i).get("external_resolution"));
+                    assertFalse(refs.get(i).containsKey("type_uri"));
+                }
+                for (int i = 2; i < 4; i++) {
+                    assertEquals("external_symbol", refs.get(i).get("resolution"));
+                    assertEquals("dep.Types$Child$Inner", refs.get(i).get("external_type"));
+                }
+            }
+        } finally { deleteTree(root); }
+    }
+
+    @Test
     public void inheritedNestedDeclarationsHideAncestorsBeforeAmbiguityCheck() throws Exception {
         Path root = Files.createTempDirectory("inherited-nested-hiding");
         try {

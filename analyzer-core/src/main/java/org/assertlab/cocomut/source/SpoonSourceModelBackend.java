@@ -3098,11 +3098,9 @@ final class SpoonSourceModelBackend implements SourceModelBackend {
         for (Class<?> parent : type.getInterfaces()) {
             members.addAll(externalMemberTypes(parent, name, visited));
         }
-        // Keep unrelated interface declarations ambiguous, but eliminate a
-        // declaration hidden by a more specific declaring type on another path.
-        Set<Class<?>> candidates = Set.copyOf(members);
-        members.removeIf(candidate -> candidates.stream().anyMatch(other -> other != candidate
-                && candidate.getDeclaringClass().isAssignableFrom(other.getDeclaringClass())));
+        // Hiding is local to each inheritance path. If a type directly implements
+        // Parent and Child, both declarations survive even when Child extends
+        // Parent. Only identical declarations reached by a diamond deduplicate.
         return members;
     }
 

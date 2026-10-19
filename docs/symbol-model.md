@@ -381,8 +381,11 @@ instead of treating all external `Class#member` refs as generic member refs.
 
 External nested-type lookup applies member-type hiding at every ancestor before
 checking ambiguity. For example, if `Parent.Inner` hides `Grand.Inner`, an
-inheriting `Child.Inner` resolves to `Parent.Inner`; unrelated inherited member
-types remain unresolved when ambiguous. A missing dependency encountered while
+inheriting `Child.Inner` resolves to `Parent.Inner`. Hiding is applied within each
+inheritance path: if two interfaces both declare `Inner`, a class directly
+implementing both retains an ambiguous `Inner` even if one interface extends the
+other. Shared declarations reached through a diamond are deduplicated.
+Ambiguous references remain unresolved. A missing dependency encountered while
 loading or traversing an external type is recorded as an enrichment diagnostic.
 Selected method rows survive with unavailable reference evidence and a partial
 outcome; direct or wrapped resource errors remain terminal.
