@@ -1,0 +1,66 @@
+{
+  "subject_commit": "ac3f3fa500b419b5d39e2da26ff890ec19f47eeb",
+  "java_version": "8",
+  "jar_sha256": "2be7e555c5d727c28b43c4ecc8c608832017dbcdb30282551304c0d559d8c8cc",
+  "results": [
+    {
+      "run": "probe-0",
+      "rows": 2310,
+      "duplicates": 0,
+      "mode": "no_classpath",
+      "uris_sha256": "8ea0a7e794a60d2f997e0ae73c115c889c3056681dd84b8f3bc1fbdad8f2192e",
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "run": "cli-0",
+      "rows": 2310,
+      "duplicates": 0,
+      "mode": "no_classpath",
+      "uris_sha256": "8ea0a7e794a60d2f997e0ae73c115c889c3056681dd84b8f3bc1fbdad8f2192e",
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "run": "probe-1",
+      "rows": 2310,
+      "duplicates": 0,
+      "mode": "no_classpath",
+      "uris_sha256": "8ea0a7e794a60d2f997e0ae73c115c889c3056681dd84b8f3bc1fbdad8f2192e",
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "run": "cli-1",
+      "rows": 2310,
+      "duplicates": 0,
+      "mode": "no_classpath",
+      "uris_sha256": "8ea0a7e794a60d2f997e0ae73c115c889c3056681dd84b8f3bc1fbdad8f2192e",
+      "missing": [],
+      "unexpected": []
+    }
+  ],
+  "compliance_isolation": [
+    {
+      "name": "original-order-java8",
+      "exit": 0,
+      "missing": [],
+      "unexpected": []
+    },
+    {
+      "name": "cli-order-java17",
+      "exit": 0,
+      "missing": [
+        "commons-numbers-examples/examples-jmh/src/main/java/org/apache/commons/numbers/examples/jmh/gamma/GammaContinuedFractionPerformance.java#org.apache.commons.numbers.examples.jmh.gamma.GammaContinuedFractionPerformance$BaseData$25837.get():org.apache.commons.numbers.fraction.GeneralizedContinuedFraction.Coefficient",
+        "commons-numbers-examples/examples-jmh/src/main/java/org/apache/commons/numbers/examples/jmh/gamma/GammaContinuedFractionPerformance.java#org.apache.commons.numbers.examples.jmh.gamma.GammaContinuedFractionPerformance$BaseData$26610.get():org.apache.commons.numbers.fraction.GeneralizedContinuedFraction.Coefficient"
+      ],
+      "unexpected": [
+        "commons-numbers-examples/examples-jmh/src/main/java/org/apache/commons/numbers/examples/jmh/gamma/GammaContinuedFractionPerformance.java#org.apache.commons.numbers.examples.jmh.gamma.GammaContinuedFractionPerformance$BaseData$5.get():org.apache.commons.numbers.fraction.GeneralizedContinuedFraction$Coefficient",
+        "commons-numbers-examples/examples-jmh/src/main/java/org/apache/commons/numbers/examples/jmh/gamma/GammaContinuedFractionPerformance.java#org.apache.commons.numbers.examples.jmh.gamma.GammaContinuedFractionPerformance$BaseData$6.get():org.apache.commons.numbers.fraction.GeneralizedContinuedFraction$Coefficient"
+      ]
+    }
+  ],
+  "original_java_files_verified_unchanged": 273,
+  "artifact_root": "ale@100.85.158.27:~/agent-runs/cocomut-remaining/issue50/",
+  "conclusion": "Aligned inputs yield identical URI sets. Changing only compliance to 17 reproduces both URI changes; restoring compliance 8 with original class-output order eliminates them."
+}
