@@ -625,9 +625,9 @@ public class OrchestratorTest {
         for (String key : java.util.List.of("status", "failure_codes", "failed_at_phase", "error_type", "phase_3_error",
                 "phase_3_initialization", "phase_3_max_heap_bytes", "phase_3_exception_class", "phase_3_exception_message")) {
             if (report.containsKey(key)) {
-                assertEquals("Persisted report must agree with in-memory diagnostics for " + key,
+                assertDiagnosticEquals("Persisted report must agree with in-memory diagnostics for " + key,
                         mapper.valueToTree(report.get(key)), reportNode.path(key));
-                assertEquals("Manifest must retain report diagnostics for " + key,
+                assertDiagnosticEquals("Manifest must retain report diagnostics for " + key,
                         reportNode.path(key), manifestNode.path("execution").path(key));
             }
         }
@@ -637,6 +637,31 @@ public class OrchestratorTest {
                 .getInstance(com.networknt.schema.SpecVersion.VersionFlag.V202012)
                 .getSchema(mapper.readTree(schemaPath.toFile()));
         assertTrue("Failure manifests must conform to the current schema", schema.validate(manifestNode).isEmpty());
+    }
+
+    private static void assertDiagnosticEquals(String message,
+            com.fasterxml.jackson.databind.JsonNode expected,
+            com.fasterxml.jackson.databind.JsonNode actual) {
+        if (expected.isIntegralNumber()) {
+            // JSON parsing chooses integer width by value, not the original Java number type.
+            assertTrue(message + " must be an integral number", actual.isIntegralNumber());
+            assertEquals(message, expected.bigIntegerValue(), actual.bigIntegerValue());
+        } else {
+            assertEquals(message, expected, actual);
+        }
+    }
+
+    @Test
+    public void diagnosticComparisonAcceptsIntegerWidthsButRejectsInvalidValues() throws Exception {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var expected = mapper.valueToTree(1073741824L);
+        assertDiagnosticEquals("heap", expected, mapper.readTree("1073741824"));
+        for (String invalid : java.util.List.of("1073741825", "1073741824.0", "\"1073741824\"", "null")) {
+            var actual = mapper.readTree(invalid);
+            assertThrows(AssertionError.class, () -> assertDiagnosticEquals("heap", expected, actual));
+        }
+        assertThrows(AssertionError.class,
+                () -> assertDiagnosticEquals("heap", expected, mapper.createObjectNode().path("missing")));
     }
 
     @Test
