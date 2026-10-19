@@ -233,7 +233,7 @@ public class JsonGeneratorTest {
         assertTrue("Every call edge should expose bytecode target URI", content.contains("\"target_uri\""));
         assertTrue("Every call edge should expose target kind", content.contains("\"target_kind\""));
         assertTrue("Unresolved call edge should expose raw signature as provenance", content.contains("\"raw_signature\""));
-        assertTrue("Unresolved call edge should expose an unresolved reason", content.contains("\"unresolved_reason\""));
+
         assertTrue("Should contain call graph algorithm", content.contains("\"CHA\""));
 
         JsonNode root = MAPPER.readTree(content);
@@ -245,11 +245,8 @@ public class JsonGeneratorTest {
         assertEquals("com.example.Main", resolved.path("declaring_type").asText());
         assertFalse(resolved.has("declaring_class"));
 
-        JsonNode unresolved = root.path("callees").get(0);
-        assertEquals("Unresolved edges must not fake a source method URI", "",
-                unresolved.path("method_uri").asText());
-        assertEquals("jdk_method", unresolved.path("target_kind").asText());
-        assertTrue("Unresolved edges still get a stable bytecode URI",
-                unresolved.path("target_uri").asText().startsWith("bytecode://java.io.PrintStream.println"));
+        assertEquals("Graph targets are not source callees", 0, root.path("callees").size());
+        assertEquals(0, root.path("metadata").path("callee_count").asInt());
+        assertEquals(1, root.path("metadata").path("call_graph").path("callee_count").asInt());
     }
 }

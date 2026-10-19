@@ -504,6 +504,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
     <select id="filterCallTargetKind">
       <option value="">Any</option>
       <option value="project_method">project_method</option>
+      <option value="unresolved">unresolved</option>
       <option value="unresolved_project_method">unresolved_project_method</option>
       <option value="jdk_method">jdk_method</option>
       <option value="external_method">external_method</option>
@@ -517,6 +518,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
     <select id="filterCallResolution">
       <option value="">Any</option>
       <option value="resolved">resolved</option>
+      <option value="resolved_external">resolved_external</option>
       <option value="unresolved">unresolved</option>
       <option value="ambiguous">ambiguous</option>
       <option value="candidate">candidate</option>
@@ -786,7 +788,8 @@ function recordCallEdges(record) {
 function countBy(items, field) {
   const counts = {};
   for (const item of items) {
-    const key = item && item[field] ? String(item[field]) : "missing";
+    const value = item && (item[field] || (field === "target_kind" ? item.kind : ""));
+    const key = value ? String(value) : "missing";
     counts[key] = (counts[key] || 0) + 1;
   }
   return Object.fromEntries(Object.entries(counts).sort());
@@ -1460,7 +1463,7 @@ def has_call_edge_field(record: dict[str, Any], field: str, value: str) -> bool:
             resolution = str(edge.get("resolution") or "")
             if "ambiguous" in resolution or edge.get("candidate_method_uris"):
                 return True
-        actual = edge.get(field) or "missing"
+        actual = edge.get(field) or (edge.get("kind") if field == "target_kind" else None) or "missing"
         if actual == value:
             return True
     return False

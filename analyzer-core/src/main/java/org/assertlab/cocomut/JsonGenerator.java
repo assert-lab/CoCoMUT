@@ -117,11 +117,10 @@ public class JsonGenerator {
         }
         json.set("MUT", mutNode);
 
-        // Callers/Callees: normalized call-edge objects. Resolved project edges
-        // use method_uri as identity; raw SootUp signatures are provenance only.
+        // Callers retain graph semantics; callees are source-referenced declarations.
         CallGraphResult cg = context.getCallGraph();
         json.set("callers", buildCallerCalleeArray(cg != null ? cg.getCallers() : Set.of()));
-        json.set("callees", buildCallerCalleeArray(cg != null ? cg.getCallees() : Set.of()));
+        json.set("callees", buildSourceCallees(context));
 
         // Metadata
         ObjectNode metadata = objectMapper.createObjectNode();
@@ -133,7 +132,7 @@ public class JsonGenerator {
         metadata.put("call_graph_tool", "SootUp");
         metadata.put("call_graph_algorithm", cg != null ? cg.getAlgorithm() : "N/A");
         metadata.put("caller_count", cg != null ? cg.getCallerCount() : 0);
-        metadata.put("callee_count", cg != null ? cg.getCalleeCount() : 0);
+        metadata.put("callee_count", context.getCallees().size());
         metadata.put("generation_time_ms", cg != null ? cg.getGenerationTime() : 0);
         metadata.put("type_hierarchy_included", true);
         ObjectNode callGraphNode = objectMapper.createObjectNode();
@@ -156,6 +155,7 @@ public class JsonGenerator {
         provenance.put("source_backend", context.getSourceBackend());
         provenance.put("source_backend_mode", context.getSourceBackendMode());
         provenance.put("javadoc_extraction", context.getSourceBackend());
+        provenance.put("callees", "source_declarations");
         provenance.put("call_graph", cg != null ? "sootup_" + cg.getAlgorithm().toLowerCase() : "not_available");
         provenance.put("compiled_project", cg != null);
         provenance.put("hierarchy_resolution", context.getHierarchyResolution());
@@ -224,6 +224,26 @@ public class JsonGenerator {
         node.set("source_context", sourceContext);
 
         return node;
+    }
+
+    private ArrayNode buildSourceCallees(MethodContext context) {
+        ArrayNode array = objectMapper.createArrayNode();
+        for (var callee : context.getCallees()) {
+            ObjectNode node = objectMapper.createObjectNode();
+            node.put("kind", callee.kind());
+            node.put("method_uri", callee.methodUri());
+            node.put("target_uri", callee.targetUri());
+            node.put("declaring_type", callee.declaringType());
+            node.put("method_name", callee.methodName());
+            node.put("signature", callee.signature());
+            node.put("resolution", callee.resolution());
+            if (!callee.unresolvedReason().isBlank()) node.put("unresolved_reason", callee.unresolvedReason());
+            MethodContext target = allContexts.get(callee.methodUri());
+            node.put("context_in_output", target != null);
+            if (target != null) node.set("context", buildMethodNode(target));
+            array.add(node);
+        }
+        return array;
     }
 
     private ArrayNode buildCallerCalleeArray(Set<CallGraphEdge> edges) {

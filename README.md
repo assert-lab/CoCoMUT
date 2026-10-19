@@ -87,8 +87,9 @@ Each JSONL row contains:
 - declared Javadoc tags, ordered inherited-documentation evidence, and a
   separate item-level effective view under the recorded
   `jdk25-standard-doclet` policy, with segment-level provenance;
-- callers/callees from static bytecode analysis, with project source joins when
-  the bytecode target maps to one unique source method;
+- source-referenced callee declarations, deduplicated by resolved identity;
+- callers from static bytecode analysis, with project source joins when the
+  bytecode target maps to one unique source method;
 - provenance fields describing backend mode, resolution confidence, failures,
   warnings, and selected target.
 

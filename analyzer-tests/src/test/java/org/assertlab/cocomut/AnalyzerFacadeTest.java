@@ -75,7 +75,7 @@ public class AnalyzerFacadeTest {
             if ("prefix".equals(edge.path("method_name").asText())) {
                 privateHelperResolvedOutsideOutput = edge.path("method_uri").asText().contains("prefix()")
                         && !edge.path("context_in_output").asBoolean(true)
-                        && "project_method".equals(edge.path("target_kind").asText());
+                        && "project_method".equals(edge.path("kind").asText());
             }
         }
         assertTrue("Filtered private helper should resolve but not embed context",
