@@ -212,3 +212,14 @@ add or extend features such as module prefixes, inline `{@return ...}`,
 `{@snippet ...}`, and Markdown documentation comments; CoCoMUT treats
 version-specific features explicitly instead of inferring rules from one
 repository.
+
+## External nested types
+
+External type links resolve the visible outer type before traversing its public
+nested members. Fully qualified `java.util.Map.Entry`, imported `Map.Entry`, and
+directly imported `Entry` resolve to the external binary identity
+`java.util.Map$Entry`, without a project `type_uri`. The same lookup applies to
+classes in the project's dependency classpath; inherited member types retain
+their actual declaring class. Lexical shadowing, type parameters, missing members
+and ambiguous on-demand imports do not become successful external links through
+a typed-parser fallback.
